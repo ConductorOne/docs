@@ -1,0 +1,398 @@
+---
+title: Set up a ServiceNow connector
+og:title: Set up a ServiceNow connector - ConductorOne docs
+og:description: Integrate your ServiceNow instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance for ServiceNow. Integrate your ServiceNow instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: ServiceNow
+---
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>        |       
+| Groups       | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>        | 
+| Roles        | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>        |
+
+The ServiceNow connector supports [automatic account provisioning](/product/admin/account-provisioning).
+
+This connector does not support account deprovisioning. You must deprovision accounts directly in ServiceNow.
+
+This connector can also be configured to automatically create and update ServiceNow tickets to track manual provisioning assignments. Go to [Configure ServiceNow as an external ticketing provider](/product/admin/external-ticketing#configure-servicenow-as-an-external-ticketing-provider) to learn more.
+
+## Gather ServiceNow credentials 
+
+Configuring the connector requires you to pass in credentials generated in ServiceNow. Gather these credentials before you move on. 
+
+<Steps>
+<Step>
+You'll need your ServiceNow deployment, which is found in the URL of your ServiceNow instance. For example, if your URL is https://example12345.service-now.com, your deployment ID is **example12345**.
+</Step>
+<Step>
+You'll also need the username and password for a user who has either the **Admin** role in ServiceNow or an [access control list](https://docs.servicenow.com/bundle/vancouver-platform-security/page/administer/contextual-security/concept/exploring-access-control-list.html) able to access the following ServiceNow tables: 
+
+      - `sys_user` - Users
+      - `sys_user_role` - Roles
+      - `sys_user_group` - Groups
+      - `sys_user_grmember` - Group membership
+      - `sys_user_has_role` - User roles
+      - `sys_group_has_role` - Group roles
+</Step>
+</Steps>
+
+### Credentials and configuration for external ticketing
+
+If you're [configuring ServiceNow as an external ticketing provider](/product/admin/external-ticketing#configure-servicenow-as-an-external-ticketing-provider), follow these additional steps. 
+
+#### Configure permissions needed for the ServiceNow table API
+
+<Steps>
+<Step>
+In the ServiceNow admin portal, navigate to **All** > **Access Analyzer**. 
+</Step>
+<Step>
+Fill out the form as follows: 
+
+   * **Analyze by**: User
+   * **Select user**: choose the user you're using for the ConductorOne integration (with the access control list permissions defined above)
+   * **Rule type**: Table (record)
+   * **Select table**: Choice 
+</Step>
+<Step>
+Click **Analyze permissions**. 
+</Step>
+<Step>
+Look for the `read` permission in the **Operation** column. Check the **Overall Access** for that permission.
+</Step>
+<Step>
+If access is blocked for a permission, click the permission's name. 
+</Step>
+<Step>
+View the necessary roles under **Required ACL Roles** and assign any missing roles to your user by following the instructions in the **Assign user roles** section below.
+</Step>
+<Step>
+Repeat steps 2 through 6 to add the **Tag** and **Label Entry** tables. Each of these tables needs the `read`, `write`, and `create` permissions. Here's a table summarizing all the required permissions: 
+
+| Table                     | Permissions needed  | Reason                                                                                                                                                                               |
+| :--- | :--- | :--- |
+| Choice (`sys_choice`)       | Read                | Used to configure request state mappings in your external provisioner config. We monitor the ServiceNow request for this state so we can close the task in ConductorOne accordingly. |
+| Tag (`label`)               | Create, read, write | Used to create a tag with the provided label in your provisioner config to help you filter requests made by ConductorOne.                                                            |
+| Label Entry (`label_entry`) | Create, read, write | Used to tag requests with the provided label in your provisioner config to help you filter requests made by ConductorOne.                                                            |
+
+<Tip>
+**Note:** The `label_entry` table has **write** ACLs for the `table` and `table_key` fields. This configuration can be changed
+by an admin. If this can’t be done, we can still make the ServiceNow request, but will not be able to add a tag. For
+instructions on how to change the ACLs, see the **Change the `label_entry` table ACLs** section below.
+</Tip>
+</Step>
+</Steps>
+
+#### Configure permissions needed for the ServiceNow service catalog API
+
+<Steps>
+<Step>
+In the ServiceNow admin portal, navigate to **All** > **Access Analyzer**. 
+</Step>
+<Step>
+Fill out the form as follows: 
+
+   * **Analyze by**: User
+   * **Select user**: choose the user you're using for the ConductorOne integration (with the access control list permissions defined above)
+   * **Rule type**: REST endpoints
+   * **REST endpoint**: `/api/sn_sc/servicecatalog/items`
+   * **REST endpoint method**: GET
+</Step>
+<Step>
+Click **Analyze permissions**. 
+</Step>
+<Step>
+Confirm that the operation executed successfully. If not, click the link under **Operation**. 
+</Step>
+<Step>
+View the necessary roles under **Required ACL Roles** and assign any missing roles to your user by following the instructions in the **Assigning user roles** section below.
+</Step>
+<Step>
+Repeat steps 2 through 5 to add the three additional endpoints and methods shown in the table below, subbing in a valid catalog ID for the \<CATALOG ITEM ID> parameter. 
+</Step>
+</Steps>
+
+| API endpoint                                                | REST method | Reason                                                                                       |
+| :--- | :--- | :--- |
+| `/api/sn_sc/servicecatalog/items`                             | GET         | Used to sync your catalog items to ConductorOne.                                             |
+| `/api/sn_sc/servicecatalog/items/<CATALOG ITEM ID>`           | GET         | Used to fetch the catalog item configured for your ConductorOne external ticket provisioner. |
+| `/api/sn_sc/servicecatalog/items/<CATALOG ITEM ID>/variables` | GET         | Used to get the variables required to make a ServiceNow request.                             |
+| `/api/sn_sc/servicecatalog/items/<CATALOG ITEM ID>/order_now` | POST        | Used to create the ServiceNow request.                                                       |
+
+#### Assign user roles 
+
+Follow these steps if you need to assign missing user roles to the user you'll use for the ConductorOne integration. 
+
+<Steps>
+<Step>
+In the ServiceNow admin portal, navigate to **All** > **System Security** > **Users and Groups** > **Users**. 
+</Step>
+<Step>
+Search for your user and click the **User ID** link. 
+</Step>
+<Step>
+Find the **Roles** section and click **Edit**. 
+</Step>
+<Step>
+Search for the role and click the **>** to add it to the user's roles list. 
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+Repeat these steps as necessary to add additional roles. 
+
+#### Change the `label_entry` table ACLs 
+
+Follow these steps if you need to update the `label_entry` table ACLs. 
+
+<Steps>
+<Step>
+In the ServiceNow admin portal, navigate to your profile icon and click **Elevate Role**. 
+</Step>
+<Step>
+Click the **Security Admin** checkbox and click **Update**. 
+</Step>
+<Step>
+Navigate to **All** > **System Security** > **Access Control (ACL)**. 
+</Step>
+<Step>
+Search for **label_entry.table** and click the **write** operation. 
+</Step>
+<Step>
+Uncheck the **Active** checkbox and click **Update**. 
+</Step>
+<Step>
+Repeat steps 4 and 5 to update **label_entry.table_key**. 
+</Step>
+</Steps>
+#### Change the `sys_choice.*` table ACLs 
+
+Follow these steps if you need to update the `sys_choice` table ACLs. 
+
+<Steps>
+<Step>
+In the ServiceNow admin portal, navigate to your profile icon and click **Elevate Role**. 
+</Step>
+<Step>
+Click the **Security Admin** checkbox and click **Update**. 
+</Step>
+<Step>
+Navigate to **All** > **System Security** > **Access Control (ACL)**. 
+</Step>
+<Step>
+Search for **sys_choice.read** and click the **read** operation. 
+</Step>
+<Step>
+In the **Conditions** section of the page, find the **Role** table and double-click **Insert a new row**. 
+</Step>
+<Step>
+Add a role that is already assigned to your user. 
+</Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions. 
+
+## Configure the ServiceNow connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of ServiceNow credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **ServiceNow** and click **Add**. 
+</Step>
+<Step>
+Choose how to set up the new ServiceNow connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+**Optional.** In the **Allowed emails domains** field, enter the email domain or domains (such as `acme.com` and `contractors.acme.com`) associated with the accounts that you want ConductorOne to sync. 
+
+   To add multiple allowed domains, press **Enter** between each domain. 
+
+   If you leave this field blank, ConductorOne will sync all accounts in your ServiceNow instance, regardless of the email domain associated with the account. 
+</Step>
+<Step>
+In the **Deployment** field, enter the ServiceNow deployment ID.
+</Step>
+<Step>
+In the **Password** and **Username** fields, enter the credentials for your ServiceNow account. 
+
+   The user whose credentials you enter must have either the **Admin** role in ServiceNow or an [access control list](https://docs.servicenow.com/bundle/vancouver-platform-security/page/administer/contextual-security/concept/exploring-access-control-list.html) able to access the following ServiceNow tables: 
+
+      - `sys_user` - Users
+      - `sys_user_role` - Roles
+      - `sys_user_group` - Groups
+      - `sys_user_grmember` - Group membership
+      - `sys_user_has_role` - User roles
+      - `sys_group_has_role` - Group roles
+</Step>
+<Step>
+**Optional.** If you want to automatically create ServiceNow tickets to track provisioning tasks, click to **Enable external ticket processing**. [Read more about external ticketing system integrations here.](/product/admin/external-ticketing) 
+
+   If you enable this option, you can add a **Catalog ID** or **Category ID** in the relevant fields to filter down catalog items. These fields are optional, but ConductorOne only syncs 100 catalog items, so filtering is recommended.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+
+**That's it!** Your ServiceNow connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use the [ServiceNow](https://github.com/ConductorOne/baton-servicenow) connector, hosted and run in your own environment.**
+
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new ServiceNow connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new ServiceNow connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret. 
+
+   Carefully copy and save these credentials. We'll use them in Step 2. 
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your ServiceNow connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-servicenow-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-servicenow-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # ServiceNow credentials
+  BATON_DEPLOYMENT: <URL of the ServiceNow deployment>
+  BATON_PASSWORD: <Password to the ServiceNow account>
+  BATON_USERNAME: <Username for the ServiceNow account>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include if you want to limit account syncing to only accounts associated with an email domain listed here
+  # Note: include each allowed domain as a separate entry
+  BATON_ALLOWED_DOMAINS: <Email domain, such as "acme.com">
+  BATON_ALLOWED_DOMAINS: <Email domain, such as "contractors.acme.com">
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-servicenow.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-servicenow
+  labels:
+    app: baton-servicenow
+spec:
+  selector:
+    matchLabels:
+      app: baton-servicenow
+  template:
+    metadata:
+      labels:
+        app: baton-servicenow
+        baton: true
+        baton-app: servicenow
+    spec:
+      containers:
+      - name: baton-servicenow
+        image: ghcr.io/conductorone/baton-servicenow:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-servicenow-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files. 
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the ServiceNow connector to. ServiceNow data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your ServiceNow connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>

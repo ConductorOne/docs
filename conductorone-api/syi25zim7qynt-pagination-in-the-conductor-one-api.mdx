@@ -1,0 +1,79 @@
+---
+title: Pagination in the ConductorOne API
+description: "When making `LIST` or `SEARCH` requests to the ConductorOne API, use the `page_size` and `page_token` parameters to navigate through the list of results."
+---
+
+## Using page\_size
+
+Include the `page_size` parameter to tell the API how many search or list results to show on each page.
+
+**`page_size` accepts a number between 10 and 100.**
+
+- If you enter a number smaller than 10, the system will return 10 results per page.
+- If you enter a number larger than 100, the system will return 100 results per page.
+- The default value is 25.
+
+## Using page\_token
+
+If your query returns more results than will fit on one page of the size you specified with `page_size`, you'll see a unique `nextPageToken` value at the bottom of the response. Include this value with the `page_token` parameter in your next request to see the next page of results.
+
+You do not need to include `page_token` in your initial request (or you can include it but leave it empty), but you must do so for each subsequent request.
+
+Here's a simplified example of using `page_token` to navigate a list of results:
+
+```bash First request
+
+curl --request GET \
+  --url 'https://example.conductor.one/api/v1/apps/sample/entitlements?page_size=50'
+```
+
+```json First response
+{
+  "list": [
+    {
+      "appEntitlement": {
+        // List of 50 app entitlements with their details.
+      }
+  ],
+  "nextPageToken": "samplepaggetoken1"
+}
+```
+
+
+```bash Second request
+
+curl --request GET \
+  --url 'https://example.conductor.one/api/v1/apps/sample/entitlements?page_size=50&page_token=samplepagetoken1'
+```
+
+<Tip>
+**Note:** For this `GET` example, the `page_size` and `page_token` are included in the query. For `POST` requests, `page_size` and `page_token` are included in the body instead.
+</Tip>
+
+```json Second response
+"list": [
+    {
+      "appEntitlement": {
+        // List of 50 more app entitlements with their details.
+    }
+  ],
+  "nextPageToken": "samplepaggetoken2"
+}
+```
+```bash Third request
+
+curl --request GET \
+  --url 'https://example.conductor.one/api/v1/apps/sample/entitlements?page_size=50&page_token=samplepagetoken2'
+```
+```json Third response
+{
+  "list": [
+    {
+      "appEntitlement": {
+        // List of 26 more app entitlements with their details.
+    }
+  ],
+  "nextPageToken": ""
+  // An empty nextPageToken is printed in the third response because the user has reached the end of the list of results.
+}
+```

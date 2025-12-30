@@ -1,0 +1,755 @@
+---
+title: Integrate an external ticketing system
+og:title: Integrate an external ticketing system - ConductorOne docs
+og:description: Integrate your external ticketing system with ConductorOne to automatically create, track, and update helpdesk tickets for provisioning tasks. 
+description: Integrate your external ticketing system with ConductorOne to automatically create, track, and update helpdesk tickets for provisioning tasks. 
+sidebarTitle: External ticketing
+---
+
+## Configure Jira Cloud as an external ticketing provider 
+
+This process walks you through configuring an external ticketing integration with Jira Cloud. Once set up, ConductorOne automatically creates Jira tickets to track provisioning assignments on the entitlements you choose. ConductorOne will track the status of the Jira ticket, and will update the status of the access request in ConductorOne accordingly. 
+
+### Step 1: Set up the Jira Cloud connector
+
+<Steps>
+<Step>
+Follow the documentation to [set up the Jira Cloud connector](/baton/jira-cloud). 
+</Step>
+<Step>
+During configuration, check the box to **Enable external ticket provisioning**.
+</Step>
+</Steps>
+
+
+### Step 2: Configure the external ticket provisioner integration
+
+<Steps>
+<Step>
+In ConductorOne, click **Settings** > **External ticketing**.
+</Step>
+<Step>
+Click **Add ticket provisioner**.
+</Step>
+<Step>
+Select Jira Cloud as the ticket provisioner and give it a display name.
+</Step>
+<Step>
+Click **Create and add details**. A new configuration page opens. 
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+In the **Schema** field, select the Jira issue type that you want new issues to be created in. 
+</Step>
+<Step>
+**Optional.** Add a ticket title and description that will be applied to all Jira issues created by ConductorOne.
+
+   <Tip>
+   To customize your ticket titles and descriptions so they include specific information about the request, see [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates).   
+   </Tip>
+</Step>
+<Step>
+Add a ticket label. This label (tag) will be added to Jira issues created by ConductorOne.
+</Step>
+<Step>
+Based on the Jira issue type you specified above, a list of custom fields is shown. Map these fields to the fields in a Jira issue. Except where noted, all fields are required. 
+</Step>
+<Step>
+Add provision state mappings. ConductorOne will monitor the status of the Jira issue and update the access request task in ConductorOne accordingly.
+
+   - **Mark complete**: When a Jira issue transitions to this status, ConductorOne will complete the provisioning step on the task.
+
+   - **Mark errored**: When a Jira issue transitions to this status, ConductorOne will mark the provisioning step as errored and fall back to manual provisioning.
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+### Step 3: Configure entitlement provisioning settings
+
+<Steps>
+<Step>
+In ConductorOne, click **Applications**.
+</Step>
+<Step>
+Select an application and click **Entitlements**.
+</Step>
+<Step>
+Click the **...** (more actions) menu for your selected entitlement and select **Edit provisioning**. 
+</Step>
+<Step>
+In the **Configure provisioning** drawer, select the **External ticketing** provisioning method. 
+</Step>
+<Step>
+Select the Jira Cloud external ticket provisioner configuration you created.
+</Step>
+<Step>
+**Optional.** Add any instructions you want to include in the Jira tickets ConductorOne will create about how to provision this access. 
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+Repeat this process for other entitlements as needed. 
+
+**That's it!** Now, when a user requests access to the entitlement, ConductorOne will automatically create a Jira issue. ConductorOne will monitor the status of the Jira issue, and once the Jira issue transitions to its completed status, the provisioning step will be marked complete in ConductorOne as well.
+
+## Configure Jira Data Center as an external ticketing provider
+
+This process walks you through configuring an external ticketing integration with Jira Data Center. Once set up, ConductorOne automatically creates Jira tickets to track provisioning assignments on the entitlements you choose. ConductorOne will track the status of the Jira ticket, and will update the status of the access request in ConductorOne accordingly. 
+
+### Step 1: Generate a personal access token in Jira Data Center
+
+<Steps>
+<Step>
+In Jira Data Center, navigate to your profile by clicking on your profile icon and selecting **Profile**.
+</Step>
+<Step>
+Navigate to the **Personal Access Tokens** section.
+</Step>
+<Step>
+Click **Create token**.
+</Step>
+<Step>
+Give your token a name, such as "ConductorOne".
+</Step>
+<Step>
+Click **Create**. The new personal access token is generated.
+</Step>
+<Step>
+Carefully copy and save the new token. You'll use it in Step 3.
+</Step>
+</Steps>
+### Step 2: Set up the Baton connector
+
+<Warning>
+This task requires the **Connector Administrator** or **Super Administrator** role in ConductorOne.
+</Warning>
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**. 
+</Step>
+<Step>
+Choose how to set up the new Baton connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+</Step>
+<Step>
+Click **Next**.
+
+   If you selected someone else as the connector owner, that person will be notified to take over this process from this point.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new set of credentials. Carefully copy the Client ID and Secret. You’ll use them in Step 3.
+</Step>
+</Steps>
+### Step 3: Set up the Jira Data Center Baton connector 
+
+Install the [Jira Data Center Baton connector](https://github.com/ConductorOne/baton-jira-datacenter), passing in the credentials generated in Steps 1 and 2. Brew and Docker options are available.
+
+#### Brew
+
+<Steps>
+<Step>
+Install the Jira Data Center Baton connector: 
+
+ ```bash
+   brew install conductorone/baton/baton
+   conductorone/baton/baton-jira-datacenter
+ ```
+</Step>
+<Step>
+Run the connector by passing in the credentials generated in Steps 1 and 2. Enable external ticket provisioning by adding the `--ticketing` flag:
+
+ ```bash
+   BATON_C1_API_HOST=<CONDUCTOR_ONE_API_DOMAIN> baton-jira-datacenter
+   --client-id <CLIENT ID> --client-secret <SECRET> --instance-url
+   <JIRA_INSTANCE_URL> --access-token <JIRA_ACCESS_TOKEN> --ticketing
+ ```
+</Step>
+</Steps>
+
+#### Docker
+
+```docker
+docker run --rm -v $(pwd):/out \
+-e BATON_C1_API_HOST=<conductor-one-domain> \
+-e BATON_CLIENT_ID=<client-id> \
+-e BATON_CLIENT_SECRET=<client-secret> \
+-e BATON_ACCESS_TOKEN=<jira-access-token> \
+-e BATON_INSTANCE_URL=<jira-instance-url> \
+-e BATON_TICKETING=true \
+ghcr.io/conductorone/baton-jira-datacenter:latest -f "/out/sync.c1z"
+```
+
+### Step 4: Configure the external ticket provisioner integration
+
+<Steps>
+<Step>
+In ConductorOne, click **Settings** > **External ticketing**.
+</Step>
+<Step>
+Click **Add ticket provisioner**.
+</Step>
+<Step>
+Select Jira Data Center as the ticket provisioner and give it a display name.
+</Step>
+<Step>
+Click **Create and add details**. A new configuration page opens. 
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+In the **Schema** field, select the Jira issue type that you want new issues to be created in. 
+</Step>
+<Step>
+**Optional.** Add a ticket title and description that will be applied to all Jira issues created by ConductorOne.
+
+<Tip>
+To customize your ticket titles and descriptions so they include specific information about the request, see [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates).   
+</Tip>
+</Step>
+<Step>
+Add a ticket label. This label (tag) will be added to Jira issues created by ConductorOne.
+</Step>
+<Step>
+Based on the Jira issue type you specified above, a list of custom fields is shown. Map these fields to the fields in a Jira issue. Except where noted, all fields are required. 
+</Step>
+<Step>
+Add provision state mappings. ConductorOne will monitor the status of the Jira issue and update the access request task in ConductorOne accordingly.
+
+   - **Mark complete**: When a Jira issue transitions to this status, ConductorOne will complete the provisioning step on the task.
+
+   - **Mark errored**: When a Jira issue transitions to this status, ConductorOne will mark the provisioning step as errored and fall back to manual provisioning.
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+### Step 5: Configure entitlement provisioning settings
+
+<Steps>
+<Step>
+In ConductorOne, click **Applications**.
+</Step>
+<Step>
+Select an application and click **Entitlements**.
+</Step>
+<Step>
+Click the **...** (more actions) menu for your selected entitlement and select **Edit provisioning**. 
+</Step>
+<Step>
+In the **Configure provisioning** drawer, select the **External ticketing** provisioning method. 
+</Step>
+<Step>
+Select the Jira Data Center external ticket provisioner configuration you created.
+</Step>
+<Step>
+**Optional.** Add any instructions you want to include in the Jira tickets ConductorOne will create about how to provision this access. 
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+Repeat this process for other entitlements as needed. 
+
+**That's it!** Now, when a user requests access to the entitlement, ConductorOne will automatically create a Jira issue. ConductorOne will monitor the status of the Jira issue, and once the Jira issue transitions to the “Done” status, the provisioning step will be marked complete in ConductorOne as well.
+
+## Configure ServiceNow as an external ticketing provider
+
+This process walks you through configuring an external ticketing integration with ServiceNow. Once set up, ConductorOne will automatically create ServiceNow items to track provisioning assignments on the entitlements you choose. ConductorOne will track the status of the ServiceNow item, and will update the status of the access request in ConductorOne accordingly. 
+
+### Step 1: Set up the ServiceNow connector
+
+<Steps>
+<Step>
+Follow the documentation to [set up the ServiceNow connector](/baton/servicenow). 
+</Step>
+<Step>
+During configuration, check the box to **Enable external ticket provisioning**.
+</Step>
+<Step>
+**Optional.** Add a catalog ID and/or category ID to filter down catalog items. These fields are optional, but ConductorOne only syncs 100 catalog items, so filtering is recommended. 
+</Step>
+</Steps>
+### Step 2: Configure the external ticket provisioner integration
+
+<Steps>
+<Step>
+In ConductorOne, click **Settings** > **External ticketing**.
+</Step>
+<Step>
+Click **Add ticket provisioner**.
+</Step>
+<Step>
+Select ServiceNow as the ticket provisioner and give it a display name.
+</Step>
+<Step>
+Click **Create and add details**. A new configuration page opens. 
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+In the **Schema** field, select the catalog item that you want requests to be created for.
+</Step>
+<Step>
+**Optional.** Add a ticket title and description. If added, the title and description will be added to all ServiceNow requested items created by ConductorOne.
+
+   <Tip>
+   To customize your ticket titles and descriptions so they include specific information about the request, see [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates).   
+   </Tip>
+</Step>
+<Step>
+Add a ticket label. This label (tag) will be added to ServiceNow requested items created by ConductorOne.
+</Step>
+<Step>
+Based on the schema you specified above, a list of custom fields is shown. Map these fields to the fields in a ServiceNow requested item. Except where noted, all fields are required.
+
+You can also use ServiceNow's `ref` variables here, but the `sys_id` must be used to populate the value.
+</Step>
+<Step>
+Add provision state mappings. ConductorOne will monitor the status of the ServiceNow requested item and update the access request task in ConductorOne.
+
+   - **Mark complete**: When a ServiceNow requested item transitions to this status, ConductorOne will mark the provisioning step on the task complete.
+
+   - **Mark errored**: When a ServiceNow requested item transitions to this status, ConductorOne will mark the provisioning step as errored and fall back to manual provisioning.
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+### Step 3: Configure entitlement provisioning settings
+
+<Steps>
+<Step>
+In ConductorOne, click **Applications**.
+</Step>
+<Step>
+Select an application and click **Entitlements**.
+</Step>
+<Step>
+Click the **...** (more actions) menu for your selected entitlement and select **Edit provisioning**.
+</Step>
+<Step>
+In the **Configure provisioning** drawer, select the **External ticketing** provisioning method.
+</Step>
+<Step>
+Select the ServiceNow external ticket provisioner configuration you created.
+</Step>
+<Step>
+**Optional.** Add any instructions you want to include in the ServiceNow item about how to provision this access.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+Repeat this process for other entitlements as needed. 
+
+**That's it!** Now, when a user requests access to the entitlement, ConductorOne will automatically create a ServiceNow requested item. ConductorOne will monitor the status of the ServiceNow requested item, and once the ServiceNow requested item transitions to the “Done” status, the provisioning step will be marked complete in ConductorOne as well.
+
+## Configure Freshservice as an external ticketing provider
+
+This process walks you through configuring an external ticketing integration with Freshservice. Once set up, ConductorOne will automatically create Freshservice tickets to track provisioning assignments on the entitlements you choose. ConductorOne will track the status of the Freshservice ticket, and will update the status of the access request in ConductorOne accordingly. 
+
+### Step 1: Set up the Freshservice connector
+
+<Steps>
+<Step>
+Follow the documentation to [set up the Freshservice connector](/baton/freshservice).
+</Step>
+<Step>
+During configuration, check the box to **Enable external ticket provisioning**.
+</Step>
+<Step>
+**Optional.** Add a service category ID to filter down category items.
+
+   This field is optional, but ConductorOne only syncs 100 category items, so filtering is recommended. You can find the full list of categories by navigating to `https://<YOUR FRESHSERVICE SUBDOMAIN>.freshservice.com/api/v2/service_catalog/categories`.
+</Step>
+</Steps>
+
+### Step 2: Configure the external ticket provisioner integration
+
+<Steps>
+<Step>
+In ConductorOne, click **Settings** > **External ticketing**.
+</Step>
+<Step>
+Click **Add ticket provisioner**.
+</Step>
+<Step>
+Select Freshservice as the ticket provisioner and give it a display name.
+</Step>
+<Step>
+Click **Create and add details**. A new configuration page opens.
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+In the **Schema** field, select the catalog item that you want requests to be created for.
+</Step>
+<Step>
+**Optional.** Add a ticket title and description. If added, the title and description will be added to all Freshservice tickets created by ConductorOne.
+
+<Tip>
+To customize your ticket titles and descriptions so they include specific information about the request, see [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates).   
+</Tip>
+</Step>
+<Step>
+Add a ticket label. This label (tag) will be added to Freshservice tickets created by ConductorOne.
+</Step>
+<Step>
+Based on the schema you chose above, a list of custom fields is shown. Map these fields to the fields in a Freshservice ticket. Except where noted, all fields are required.
+
+You can use the variables listed in the [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates) section below to configure fields that pull a Freshservice data source.
+</Step>
+<Step>
+Add provision state mappings. ConductorOne will monitor the status of the Freshservice ticket and update the access request task in ConductorOne.
+
+- **Mark complete**: When a Freshservice ticket transitions to this status, ConductorOne will mark the provisioning step on the task complete.
+
+- **Mark errored**: When a Freshservice ticket transitions to this status, ConductorOne will mark the provisioning step as errored and fall back to manual provisioning.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+
+### Step 3: Configure entitlement provisioning settings
+
+<Steps>
+<Step>
+In ConductorOne, click **Applications**.
+</Step>
+<Step>
+Select an application and click **Entitlements**.
+</Step>
+<Step>
+Click the **...** (more actions) menu for your selected entitlement and select **Edit provisioning**.
+</Step>
+<Step>
+In the **Configure provisioning** drawer, select the **External ticketing** provisioning method.
+</Step>
+<Step>
+Select the Freshservice external ticket provisioner configuration you created.
+</Step>
+<Step>
+**Optional.** Add any instructions you want to include in the Freshservice ticket about how to provision this access.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+Repeat this process for other entitlements as needed. 
+
+**That's it!** Now, when a user requests access to the entitlement, ConductorOne will automatically create a Freshservice ticket. ConductorOne will monitor the status of the Freshservice ticket, and it transitions to the “Done” status, the provisioning step will be marked complete in ConductorOne as well.
+
+## Configure Linear as an external ticketing provider
+
+This process walks you through configuring an external ticketing integration with Linear. Once set up, ConductorOne will automatically create Linear tickets to track provisioning assignments on the entitlements you choose. ConductorOne will track the status of the Linear ticket, and will update the status of the access request in ConductorOne accordingly. 
+
+### Step 1: Set up the Linear connector
+
+<Steps>
+<Step>
+Follow the documentation to [set up the Linear connector](/baton/linear). 
+</Step>
+<Step>
+During configuration, check the box to **Enable external ticket provisioning**.
+</Step>
+</Steps>
+
+### Step 2: Configure the external ticket provisioner integration
+
+<Tip>
+If needed, you can set up multiple ticket provisioning integrations scoped to different teams in your organization, all linked to the same Linear connector.  
+</Tip>
+
+<Steps>
+<Step>
+In ConductorOne, click **Settings** > **External ticketing**.
+</Step>
+<Step>
+Click **Add ticket provisioner**.
+</Step>
+<Step>
+Select Linear as the ticket provisioner and give it a display name.
+</Step>
+<Step>
+Click **Create and add details**. A new configuration page opens.
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+In the **Schema** field, select the catalog item that you want requests to be created for.
+</Step>
+<Step>
+**Optional.** Add a ticket title and description. If added, the title and description will be added to all Linear tickets created by ConductorOne.
+   <Tip>
+   To customize your ticket titles and descriptions so they include specific information about the request, see [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates).   
+   </Tip>
+</Step>
+<Step>
+**Optional.** Add a ticket label. This label will be added to Linear tickets created by ConductorOne. If this label does not already exist in Linear, it will be created. 
+
+</Step>
+<Step>
+Based on the schema you chose above, a list of custom fields is shown. Map these fields to the fields in a Linear ticket. All fields are optional.
+
+   | Custom field       | Description                                                                                                                                                                                                                                 |
+   | :--- | :--- |
+   | priority           | The priority of the issue. 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low.                                                                                                                                                      |
+   | assigneeId         | The identifier of the user to assign the issue to.                                                                                                                                                                                          |
+   | cycleId            | The cycle associated with the issue.                                                                                                                                                                                                        |
+   | projectId          | The project associated with the issue.                                                                                                                                                                                                      |
+   | projectMilestoneId | The project milestone associated with the issue.                                                                                                                                                                                            |
+   | stateId            | The team state of the issue.                                                                                                                                                                                                                |
+   | subscriberIds      | The identifiers of the users subscribing to this ticket.                                                                                                                                                                                    |
+   | templateId         | The identifier of a template the issue should be created from. If other values are provided in the input, they will override template values.<br/><br/>NOTE: The settings above (such as priority, stateId, labels) will override the template. |
+
+   To look up identifiers in Linear: 
+
+   1. In Linear, navigate to the item (such as user, team, project, cycle, template).
+
+   2. Press **CMD+K** or **CTRL+K** to open command search. 
+
+   3. Search for "Copy model UUID" and select the item. 
+
+   4. Select the model to copy.  
+
+</Step>
+<Step>
+Add provision state mappings. ConductorOne will monitor the status of the Linear ticket and update the access request task in ConductorOne accordingly. The list of states is based on the Linear team selected above.
+
+   - **Mark complete**: When a Linear ticket transitions to this status, ConductorOne will mark the provisioning step on the task complete.
+
+   - **Mark errored**: When a Linear ticket transitions to this status, ConductorOne will mark the provisioning step as errored and fall back to manual provisioning.
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+### Step 3: Configure entitlement provisioning settings
+
+<Steps>
+<Step>
+In ConductorOne, click **Applications**.
+</Step>
+<Step>
+Select an application and click **Entitlements**.
+</Step>
+<Step>
+Click the **...** (more actions) menu for your selected entitlement and select **Edit provisioning**.
+</Step>
+<Step>
+In the **Configure provisioning** drawer, select the **External ticketing** provisioning method.
+</Step>
+<Step>
+Select the Linear external ticket provisioner configuration you created.
+</Step>
+<Step>
+**Optional.** Add any instructions you want to include in the Linear ticket about how to provision this access.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+
+Repeat this process for other entitlements as needed. 
+
+**That's it!** Now, when a user requests access to the entitlement, ConductorOne will automatically create a Linear ticket. ConductorOne will monitor the status of the Linear ticket, and it transitions to the “Done” status, the provisioning step will be marked complete in ConductorOne as well.
+
+## Configure HaloITSM as an external ticketing provider
+
+This process walks you through configuring an external ticketing integration with HaloITSM. Once set up, ConductorOne will automatically create HaloITSM tickets to track provisioning assignments on the entitlements you choose. ConductorOne will track the status of the HaloITSM ticket, and will update the status of the access request in ConductorOne accordingly. 
+
+### Step 1: Set up the HaloITSM connector
+
+<Steps>
+<Step>
+Follow the documentation to [set up the HaloITSM connector](/baton/halo-itsm). 
+</Step>
+<Step>
+During configuration, check the box to **Enable external ticket provisioning**.
+</Step>
+</Steps>
+
+### Step 2: Configure the external ticket provisioner integration
+
+<Steps>
+<Step>
+In ConductorOne, click **Settings** > **External ticketing**.
+</Step>
+<Step>
+Click **Add ticket provisioner**.
+</Step>
+<Step>
+Select HaloITSM as the ticket provisioner and give it a display name.
+</Step>
+<Step>
+Click **Create and add details**. A new configuration page opens.
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+In the **Schema** field, select the catalog item that you want requests to be created for.
+</Step>
+<Step>
+**Optional.** Add a ticket title and description. If added, the title and description will be added to all HaloITSM tickets created by ConductorOne.
+
+   <Tip>
+   To customize your ticket titles and descriptions so they include specific information about the request, see [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates).   
+   </Tip>
+</Step>
+<Step>
+Add a ticket label. This label (tag) will be added to HaloITSM tickets created by ConductorOne.
+</Step>
+<Step>
+Based on the schema you chose above, a list of custom fields is shown. Map these fields to the fields in a HaloITSM ticket. Except where noted, all fields are required.
+
+   You can use the variables listed in the [Customizing ticket templates](/product/admin/external-ticketing#customizing-ticket-templates) section below to configure fields that pull a HaloITSM data source.
+</Step>
+<Step>
+Add provision state mappings. ConductorOne will monitor the status of the HaloITSM ticket and update the access request task in ConductorOne.
+
+   - **Mark complete**: When a HaloITSM ticket transitions to this status, ConductorOne will mark the provisioning step on the task complete.
+
+   - **Mark errored**: When a HaloITSM ticket transitions to this status, ConductorOne will mark the provisioning step as errored and fall back to manual provisioning.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+
+### Step 3: Configure entitlement provisioning settings
+
+<Steps>
+<Step>
+In ConductorOne, click **Applications**.
+</Step>
+<Step>
+Select an application and click **Entitlements**.
+</Step>
+<Step>
+Click the **...** (more actions) menu for your selected entitlement and select **Edit provisioning**. 
+</Step>
+<Step>
+In the **Configure provisioning** drawer, select the **External ticketing** provisioning method. 
+</Step>
+<Step>
+Select the HaloITSM external ticket provisioner configuration you created.
+</Step>
+<Step>
+**Optional.** Add any instructions you want to include in the HaloITSM ticket about how to provision this access. 
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+Repeat this process for other entitlements as needed. 
+
+**That's it!** Now, when a user requests access to the entitlement, ConductorOne will automatically create a HaloITSM ticket. ConductorOne will monitor the status of the HaloITSM ticket, and it transitions to the “Done” status, the provisioning step will be marked complete in ConductorOne as well.
+
+## Customizing ticket templates 
+
+You can pull data from ConductorOne into your external ticketing system so that each ticket shows specific details about the access request, user, application, and entitlement. The variables listed below can be used when setting up the ticket template fields in ConductorOne to generate a unique, customized title and description for each external ticket.
+
+For example, using this template in the **Description** field:
+
+`Please grant {{ .Subject.Email }} the {{ .Entitlement.Name }} entitlement in {{.App.Name}}.`
+
+Results in message in the ticket's description field such as: 
+
+`Please grant john.doe@example.com the Super Administrator Role Member entitlement in Okta.`
+
+You can also use `if/else` statements to form more complex conditional templates. For example, this template: 
+
+`Please {{ if .IsGrantTicket }}grant{{ else }}revoke{{ end }} the {{ .Entitlement.Name }} entitlement in {{ .App.Name }} {{ if .IsGrantTicket  }}to{{else}}from{{end}} {{ .Subject.Email }}` 
+
+And this template: 
+
+`Please {{ if eq .TicketType "Grant" }}grant{{ else }}revoke{{ end }} the {{ .Entitlement.Name }} entitlement in {{ .App.Name }} {{ if eq .TicketType "Grant" }}to{{else}}from{{end}} {{ .Subject.Email }}`
+
+Each result in these messages: 
+
+* For a request: `Please grant the Super Administrator Role Member entitlement in Okta to john.doe@example.com`
+
+* For a revocation: `Please revoke the Super Administrator Role Member entitlement in Okta from john.doe@example.com`
+
+Fields
+- `{{ .Description }}`: The description (reason for) of the access request.
+- `{{ .Id }}`: The unique ticket ID for the access request.
+- `{{ .LengthOfAccess }}`: How long access is requested for.
+- `{{ .Instructions }}`: The instructions on the entitlement provisioning settings.
+- `{{ .BundleName }}` The bundle name for an access request that was made a part of a bundle request.  
+- `{{ .IsGrantTicket }}` Returns true if the ticket is a grant ticket, false otherwise.
+- `{{ .IsRevokeTicket}}` Returns true if the ticket is a revoke ticket, false otherwise. 
+- `{{ .TicketType }}` Returns the type of the ticket (possible values: Revoke, Grant). 
+
+Subject
+- `{{ .Subject.Id }}`: The unique ID of the ConductorOne user.
+- `{{ .Subject.DisplayName }}`: The display name of the ConductorOne user.
+- `{{ .Subject.Email }}`: The email address of the ConductorOne user.
+- `{{ .Subject.JobTitle }}`: The job title of the ConductorOne user.
+- `{{ .Subject.Department }}`: The department of the ConductorOne user.
+- `{{ .Subject.Attributes.< CUSTOM USER ATTRIBUTE > }}`: Any [custom user attribute](/product/admin/attributes) that you’ve set up in ConductorOne.
+
+User
+- `{{ .User.Id }}`: The unique ID of the user.
+- `{{ .User.DisplayName }}`: The display name of the user.
+- `{{ .User.Email }}`: The email address of the user.
+- `{{ .User.JobTitle }}`: The job title of the user.
+- `{{ .User.Department }}`: The department the user works in.
+- `{{ .User.Profile.< CUSTOM USER ATTRIBUTE > }}`: Any [custom user attribute](/product/admin/attributes) for a user’s application account.
+
+App
+- `{{ .App.Id }}`: The unique ID of the application.
+- `{{ .App.Name }}`: The name of the application.
+
+Entitlement
+- `{{ .Entitlement.Id }}`: The unique ID of the entitlement.
+- `{{ .Entitlement.Name }}`: The name of the entitlement.
+- `{{ .Entitlement.Description }}`: A description of the entitlement.
+
+RequestedFor
+- `{{ .RequestedFor.Id }}`: The ID of the user in your external ticketing system.
+
+RequestedData
+- `{{ .RequestedData.< FIELD ID FROM REQUEST FORM > }}`: The information collected by the specified field in a [request form](/product/admin/customize-requests#collect-additional-information-from-requestors-using-request-forms).
+
+
+
+
+   

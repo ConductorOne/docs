@@ -1,0 +1,513 @@
+---
+title: Set up a Teleport connector
+og:title: Set up a Teleport connector - ConductorOne docs
+og:description: Integrate your Teleport instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance and just-in-time provisioning for Teleport. Integrate your Teleport instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: Teleport
+---
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          |  
+| Roles        | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          | 
+| Nodes        | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           | 
+| Apps         | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           |      
+| Databases    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           |
+
+The Teleport connector supports [automatic account provisioning](/product/admin/account-provisioning).
+
+Due to Teleport's security rules, it is not possible to auto-generate and assign passwords to newly created accounts. When a new Teleport account is created by ConductorOne, a password reset link (associated with a token) will be sent to a [vault](/product/admin/vaults). This allows the user to configure the password for their new account.
+
+This connector does not support account deprovisioning. You must deprovision accounts directly in Teleport.
+
+## Configure the Teleport connector
+
+This connector only supports a self-hosted setup. **Follow these instructions to use the [Teleport](https://github.com/ConductorOne/baton-teleport) connector, hosted and run in your own environment.**
+
+See [the connector's README file](https://github.com/ConductorOne/baton-teleport/blob/main/README.md) for information on alternative setup methods. 
+
+This guide walks you through setting up the Baton Teleport connector in Kubernetes to run continuously and sync with ConductorOne. The connector uses certificate-based authentication via `tbot` and connects to ConductorOne using client credentials.
+
+### Prerequisites
+
+Before you begin, make sure you have: 
+
+- A Kubernetes cluster with `kubectl` access
+- A Teleport cluster with admin access
+- The `tctl` CLI tool configured for your Teleport cluster
+
+### Step 1: ConductorOne setup
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+</Warning>
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Teleport connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret. Carefully copy and save these credentials. 
+</Step>
+</Steps>
+
+### Step 2: Create Teleport bot and token
+
+First, create the bot resource in Teleport:
+
+```yaml
+# bot.yaml
+kind: bot
+version: v1
+metadata:
+  name: baton-bot
+spec:
+  roles: ["access", "auditor", "editor"]  # Required roles for baton-teleport connector
+```
+
+Apply the bot configuration:
+
+```bash
+tctl create -f bot.yaml
+```
+
+Next, create the join token. First, get your Kubernetes cluster's JWKS:
+
+```bash
+# Start kubectl proxy in a separate terminal
+kubectl proxy -p 8080
+
+# In another terminal, get the JWKS
+curl -s http://localhost:8080/openid/v1/jwks
+```
+
+Create the token configuration:
+
+```yaml
+# bot-token.yaml
+kind: token
+version: v2
+metadata:
+  name: baton-bot-token
+spec:
+  roles: [Bot]
+  bot_name: baton-bot
+  join_method: kubernetes
+  kubernetes:
+    type: static_jwks
+    static_jwks:
+      jwks: |
+        # Replace with the JWKS data from the curl command above
+        {"keys":[{"use":"sig","kty":"RSA","kid":"...","alg":"RS256","n":"...","e":"AQAB"}]}
+    allow:
+    - service_account: "default:tbot"  # Adjust namespace:serviceaccount as needed
+```
+
+Apply the token:
+
+```bash
+tctl create -f bot-token.yaml
+```
+
+### Step 3: Create shared storage
+
+Create persistent storage for sharing certificates between `tbot` and `baton-teleport`:
+
+```yaml expandable
+# shared-storage.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: tbot-certs-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /tmp/tbot-certs
+  persistentVolumeReclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tbot-certs-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+Apply the storage:
+
+```bash
+kubectl apply -f shared-storage.yaml
+```
+
+### Step 4: Create RBAC for tbot
+
+Create service account and RBAC permissions:
+
+```yaml
+# k8s-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tbot
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tbot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: tbot
+  namespace: default
+```
+
+Apply RBAC:
+
+```bash
+kubectl apply -f k8s-rbac.yaml
+```
+
+### Step 5: Deploy `tbot`
+
+Create the `tbot` configuration:
+
+```yaml expandable
+# tbot-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tbot-config
+  namespace: default
+data:
+  tbot.yaml: |
+    version: v2
+    onboarding:
+      join_method: kubernetes
+      token: baton-bot-token
+    storage:
+      type: memory
+    proxy_server: YOUR_TELEPORT_CLUSTER:443  # Replace with your Teleport proxy address
+    outputs:
+    - type: identity
+      destination:
+        type: directory
+        path: /opt/machine-id
+    - type: kubernetes
+      destination:
+        type: directory
+        path: /opt/machine-id
+      kubernetes_cluster: YOUR_CLUSTER_NAME  # Replace with your Teleport cluster name
+```
+
+Create the `tbot` deployment:
+
+```yaml expandable
+# tbot-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tbot
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tbot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tbot
+    spec:
+      containers:
+        - name: tbot
+          image: public.ecr.aws/gravitational/tbot-distroless:18.2.2
+          args:
+            - start
+            - -c
+            - /config/tbot.yaml
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: KUBERNETES_TOKEN_PATH
+              value: /var/run/secrets/tokens/join-sa-token
+            - name: TELEPORT_ANONYMOUS_TELEMETRY
+              value: "1"
+          volumeMounts:
+            - mountPath: /config
+              name: config
+            - mountPath: /var/run/secrets/tokens
+              name: join-sa-token
+            - mountPath: /opt/machine-id
+              name: tbot-certs
+      serviceAccountName: tbot
+      volumes:
+        - name: config
+          configMap:
+            name: tbot-config
+        - name: join-sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: join-sa-token
+                  expirationSeconds: 600
+                  audience: YOUR_TELEPORT_CLUSTER  # Replace with your Teleport cluster name
+        - name: tbot-certs
+          persistentVolumeClaim:
+            claimName: tbot-certs-pvc
+```
+
+Apply `tbot`:
+
+```bash
+kubectl apply -f tbot-config.yaml
+kubectl apply -f tbot-deployment.yaml
+```
+
+### Step 6: Deploy Baton Teleport connector
+
+```yaml expandable
+# baton-teleport.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: baton-teleport-script
+  namespace: default
+data:
+  run-baton.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "=== Baton Teleport Connector Setup ==="
+    echo "Certificates mounted at: /opt/machine-id"
+    echo "Output directory: /out"
+
+    # Install dependencies
+    apt-get update && apt-get install -y curl tar
+
+    # Download and install baton-teleport
+    if [ ! -f /usr/local/bin/baton-teleport ]; then
+        echo "Installing baton-teleport..."
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "x86_64" ]; then
+            ARCH="amd64"
+        elif [ "$ARCH" = "aarch64" ]; then
+            ARCH="arm64"
+        fi
+
+        # Note: Adjust this URL based on actual release location
+        curl -L -o /tmp/baton-teleport.tar.gz \
+            "https://github.com/ConductorOne/baton-teleport/releases/latest/download/baton-teleport_linux_${ARCH}.tar.gz" || \
+        {
+            echo "Please manually install baton-teleport binary"
+            echo "Available at: https://github.com/ConductorOne/baton-teleport/releases"
+            tail -f /dev/null
+        }
+
+        if [ -f /tmp/baton-teleport.tar.gz ]; then
+            tar -xzf /tmp/baton-teleport.tar.gz -C /tmp/
+            mv /tmp/baton-teleport /usr/local/bin/
+            chmod +x /usr/local/bin/baton-teleport
+        fi
+    fi
+
+    echo "=== Starting Baton Teleport Connector ==="
+    echo "Connecting to ConductorOne..."
+
+    # Run the connector continuously with C1 credentials
+    exec /usr/local/bin/baton-teleport \
+        --teleport-proxy-address="$TELEPORT_PROXY_ADDRESS" \
+        --teleport-key-path="$TELEPORT_IDENTITY_FILE" \
+        --client-id="$BATON_CLIENT_ID" \
+        --client-secret="$BATON_CLIENT_SECRET" \
+        --provisioning \
+        --log-level=info
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-teleport
+  namespace: default
+  labels:
+    app: baton-teleport
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: baton-teleport
+  template:
+    metadata:
+      labels:
+        app: baton-teleport
+    spec:
+      containers:
+      - name: baton-teleport
+        image: ubuntu:22.04
+        command: ["/bin/bash"]
+        args: ["/scripts/run-baton.sh"]
+        env:
+        - name: TELEPORT_PROXY_ADDRESS
+          value: "YOUR_TELEPORT_CLUSTER:443"  # Replace with your proxy address
+        - name: TELEPORT_IDENTITY_FILE
+          value: "/opt/machine-id/identity"
+        - name: BATON_CLIENT_ID
+          value: "YOUR_CLIENT_ID"  # Replace with your ConductorOne client ID
+        - name: BATON_CLIENT_SECRET
+          value: "YOUR_CLIENT_SECRET"  # Replace with your ConductorOne client secret
+        volumeMounts:
+        - name: tbot-certs
+          mountPath: /opt/machine-id
+          readOnly: true
+        - name: output
+          mountPath: /out
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: tbot-certs
+        persistentVolumeClaim:
+          claimName: tbot-certs-pvc
+      - name: output
+        emptyDir: {}
+      - name: scripts
+        configMap:
+          name: baton-teleport-script
+          defaultMode: 0755
+```
+
+Apply the baton-teleport deployment:
+
+```bash
+kubectl apply -f baton-teleport.yaml
+```
+
+### Step 7: Deploy and monitor the connector
+
+Apply the baton-teleport deployment:
+
+```bash
+kubectl apply -f baton-teleport.yaml
+```
+
+The connector will start automatically and run continuously, performing the following actions:
+
+<Steps>
+<Step>
+Install the `baton-teleport` binary (if not available via releases)
+</Step>
+<Step>
+Connect to ConductorOne using your client credentials
+</Step>
+<Step>
+Poll for tasks from ConductorOne periodically
+</Step>
+<Step>
+Execute sync tasks when requested by ConductorOne
+</Step>
+<Step>
+Handle provisioning requests when access needs to be granted/revoked
+</Step>
+<Step>
+Send results back to ConductorOne instead of writing to local files
+</Step>
+</Steps>
+
+## Manual binary installation
+
+If the automatic download fails, you can manually install the binary:
+
+```bash
+# Option 1: Build from source
+git clone git@github.com:ConductorOne/baton-teleport.git
+cd baton-teleport
+GOOS=linux GOARCH=amd64 go build -o baton-teleport-linux ./cmd/baton-teleport
+kubectl cp baton-teleport-linux $(kubectl get pod -l app=baton-teleport -o jsonpath='{.items[0].metadata.name}'):/usr/local/bin/baton-teleport
+kubectl exec deployment/baton-teleport -- chmod +x /usr/local/bin/baton-teleport
+
+# Then restart the deployment
+kubectl rollout restart deployment/baton-teleport
+```
+
+## Verification steps
+
+<Steps>
+<Step title="Check tbot is running:">
+   ```bash
+   kubectl get pods -l app.kubernetes.io/name=tbot
+   kubectl logs deployment/tbot
+   ```
+</Step>
+<Step title="Verify certificates are generated:">
+   ```bash
+   kubectl exec deployment/baton-teleport -- ls -la /opt/machine-id
+   ```
+</Step>
+<Step title="Check baton-teleport is running:">
+   ```bash
+   kubectl get pods -l app=baton-teleport
+   kubectl logs deployment/baton-teleport
+   ```
+</Step>
+<Step title="Verify connector connectivity:">
+   The logs should show:
+   - Successful connection to ConductorOne
+   - Periodic polling for tasks
+   - Any sync or provisioning activities
+</Step>
+</Steps>
+## Troubleshooting
+
+- **tbot CrashLoopBackOff**: Check that the bot has roles assigned and JWKS is correct
+- **Certificate access issues**: Verify PVC is mounted and tbot is writing to `/opt/machine-id`
+- **Connection issues**: Ensure proxy address is correct and network policies allow outbound connections
+
+## Customization
+
+- Adjust bot roles based on what Teleport resources you need to access
+- Modify resource limits based on your cluster capacity
+- Update Teleport cluster and proxy addresses throughout the configuration
+- Consider using secrets for sensitive configuration instead of environment variables
+
+
+

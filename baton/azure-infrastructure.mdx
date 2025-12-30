@@ -1,0 +1,361 @@
+---
+title: "Set up an Azure Infrastructure connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Azure Infrastructure. Integrate your Azure Infrastructure instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:title: "Set up an Azure Infrastructure connector"
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Azure Infrastructure. Integrate your Azure Infrastructure instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Microsoft Azure Infrastructure"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Tenants | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Subscriptions | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Enterprise applications | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Managed identities | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Resource groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Resource group roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Storage accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Containers | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+
+The Microsoft Azure Infrastructure connector works optimally when connected to a tenant licensed with either Microsoft Entra ID P2 or Microsoft Entra ID Governance. Other license types are supported, but the connector is not able to provide the same level of detail in all synced information. See the instructions below about using the **Skip Entra ID P2 License Features** configuration option if you do not have one of these license types.
+
+## Gather Azure Infrastructure credentials
+
+Configuring the connector requires you to pass in credentials generated in Azure Infrastructure. Gather these credentials before you move on.
+
+<Warning>
+A user with at least the **Cloud Application Administrator** permission in Azure must perform this task.
+</Warning>
+
+### Create a new application
+
+<Steps>
+  <Step>
+  In Microsoft Entra admin center, navigate to **App registrations**.
+  </Step>
+  <Step>
+  Click **New registration**.
+  </Step>
+  <Step>
+  Give the application a name, such as "ConductorOne", and select the relevant supported account type. You do not need to set a redirect URI.
+  </Step>
+  <Step>
+  Click **Register**.
+  </Step>
+  <Step>
+  The new app is created. Carefully copy and save the **Application (client) ID** and the **Directory (tenant) ID** shown on the application summary page.
+  </Step>
+  <Step>
+  Next, we'll generate a client secret for this app. Click **Certificates & secrets**.
+  </Step>
+  <Step>
+  Click **\+ New client secret**.
+  </Step>
+  <Step>
+  Give the client secret a description and set its expiration.
+  </Step>
+  <Step>
+  Click **Add**.
+  </Step>
+  <Step>
+  The client secret is generated. Carefully copy and save the **Secret Value**.
+  </Step>
+</Steps>
+
+### Give the new application API permissions
+
+<Steps>
+  <Step>
+  Click **API permissions**.
+  </Step>
+  <Step>
+  Click **\+ Add permissions** > **Microsoft Graph**.
+  </Step>
+  <Step>
+  Click **Application permissions**. Select each permission in the relevant set below:
+
+  To sync access data:
+
+  ```bash
+  Application.Read.All
+  AppRoleAssignment.ReadWrite.All # Microsoft does not make a read-only AppRoleAssignment permission available 
+  AuditLog.Read.All
+  Directory.Read.All
+  Group.Read.All
+  GroupMember.Read.All
+  MailboxSettings.Read
+  RoleAssignmentSchedule.Read.Directory
+  RoleEligibilitySchedule.Read.Directory
+  RoleManagement.Read.All
+  RoleManagement.Read.Directory
+  RoleManagementAlert.Read.Directory
+  RoleManagementPolicy.Read.AzureADGroup
+  RoleManagementPolicy.Read.Directory
+  ServicePrincipalEndpoint.Read.All
+  User.Read.All
+  User.ReadBasic.All
+  PrivilegedAccess.Read.AzureAD
+  PrivilegedAccess.Read.AzureADGroup
+  PrivilegedAccess.Read.AzureResources
+  ```
+
+  To sync access data and provision access:
+
+  ```bash
+  Application.ReadWrite.All
+  AppRoleAssignment.ReadWrite.All
+  AuditLog.Read.All
+  Directory.ReadWrite.All
+  Group.ReadWrite.All
+  GroupMember.ReadWrite.All
+  MailboxSettings.ReadWrite
+  RoleAssignmentSchedule.Read.Directory
+  RoleEligibilitySchedule.Read.Directory
+  RoleManagement.Read.All
+  RoleManagement.ReadWrite.Directory
+  RoleManagementAlert.Read.Directory
+  RoleManagementPolicy.Read.AzureADGroup
+  RoleManagementPolicy.Read.Directory
+  ServicePrincipalEndpoint.ReadWrite.All
+  User.ReadWrite.All
+  User.ReadBasic.All
+  PrivilegedAccess.Read.AzureAD
+  PrivilegedAccess.Read.AzureADGroup
+  PrivilegedAccess.Read.AzureResources
+  ```
+  </Step>
+</Steps>
+
+<Warning>
+**Additional permission requirements:**
+
+- To sync subscription resources: The application must be granted at least **Reader** permissions on the subscription.
+- To provision subscription roles: The **Owner** role is required to provision access to other roles in the subscription.
+</Warning>
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Azure Infrastructure connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Azure Infrastructure credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+  </Step>
+  <Step>
+  Search for **Azure Infrastructure** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Azure Infrastructure connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+    If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  Find the **Settings** area of the page and click **Edit**.
+  </Step>
+  <Step>
+  Paste the client ID into the **Client ID** field.
+  </Step>
+  <Step>
+  Paste the client secret into the **Client secret** field.
+  </Step>
+  <Step>
+  Paste the tenant ID into the **Tenant ID** field.
+  </Step>
+  <Step>
+  **Optional.** Check the box if you want the connector to attempt to get **Mailbox settings** for users to determine user purpose. (This is helpful if you need to sort out non-human identities such as conference rooms or devices.)
+  </Step>
+  <Step>
+  **Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
+  </Step>
+  <Step>
+  Enter your domain for the Microsoft Graph API in the **Graph domain** field. The default is `graph.microsoft.com`.
+  </Step>
+  <Step>
+  **Optional.** Check the box if you want to **Skip unused roles**.
+  </Step>
+  <Step>
+  **Optional.** Check the box if you want to **Skip syncing storage containers**.
+  </Step>
+  <Step>
+  **Optional.** Check the box if you want to **Enable syncing external resources** (identities from a shared identity source).
+  </Step>
+  <Step>
+  If you are **NOT** running Azure infrastructure on an **Entra ID P2** or **Entra ID Governance** license, click to enable **Skip Entra ID P2 License Features**. If this option is not checked and you do not have one of the license types above, the connector will fail to sync properly.
+  </Step>
+  <Step>
+  Click **Save**.
+  </Step>
+  <Step>
+  **If enabling external resource sync**, complete these additional steps:
+    1. In the **Shared identity source** area of the page, click **Edit**.
+    2. Select the connector from which you want to pull identities.
+    3. **Optional.** Limit the identities pulled from the connector you selected to only those with a certain entitlement by setting the entitlement.
+    4. Click **Save**.
+  </Step>
+  <Step>
+  The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+  </Step>
+</Steps>
+
+**That's it!** Your Azure Infrastructure connector is now pulling access data into ConductorOne.
+
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the [Azure Infrastructure](https://github.com/ConductorOne/baton-azure-infrastructure) connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Azure Infrastructure connector
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Connectors** > **Add connector**.
+  </Step>
+  <Step>
+  Search for **Baton** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Azure Infrastructure connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+    If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  In the **Settings** area of the page, click **Edit**.
+  </Step>
+  <Step>
+  Click **Rotate** to generate a new Client ID and Secret.
+    Carefully copy and save these credentials. We'll use them in Step 2.
+  </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Azure Infrastructure connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-azure-infrastructure-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-azure-infrastructure-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Azure Infrastructure credentials
+  BATON_AZURE_CLIENT_ID: <Azure application (client) ID>
+  BATON_AZURE_CLIENT_SECRET: <Azure application client secret>
+  BATON_AZURE_TENANT_ID: <Azure application directory (tenant) ID>
+  BATON_GRAPH_DOMAIN: <Microsoft Graph API domain (default is graph.microsoft.com)>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include if you want the connector to attempt to get mailbox settings for users to determine user purpose
+  BATON_MAILBOXSETTINGS: true
+
+  # Optional: include if you want to skip syncing Active Directory Server groups
+  BATON_SKIP_AD_GROUPS: true
+
+  # Optional: include if you want to skip syncing unused roles
+  BATON_SKIP_UNUSED_ROLES: true
+
+  # Optional: include if you want to skip syncing storage containers
+  BATON_SKIP_SYNC_STORAGE_CONTAINERS: true
+
+  # Optional: include if you want to pull identities from a shared identity source
+  BATON_ENABLE_SYNC_EXTERNAL_RESOURCES_VIA_BATON_ID: true
+  BATON_FILE: <The path to the c1z file that contains identities to sync>
+
+  # Include if you're using a license other than 'Microsoft Entra ID P2' or 'Microsoft Entra ID Governance'
+  BATON_SKIP_ENTRA_ID_P2_LICENSE_FEATURES: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-azure-infrastructure.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-azure-infrastructure
+  labels:
+    app: baton-azure-infrastructure
+spec:
+  selector:
+    matchLabels:
+      app: baton-azure-infrastructure
+  template:
+    metadata:
+      labels:
+        app: baton-azure-infrastructure
+        baton: true
+        baton-app: azure-infrastructure
+    spec:
+      containers:
+      - name: baton-azure-infrastructure
+        image: ghcr.io/conductorone/baton-azure-infrastructure:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-azure-infrastructure
+        envFrom:
+        - secretRef:
+            name: baton-azure-infrastructure-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+  <Step>
+  Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+  </Step>
+  <Step>
+  Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Azure Infrastructure connector to. Azure Infrastructure data should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
+
+**That's it!** Your Azure Infrastructure connector is now pulling access data into ConductorOne.
+
+</Tab>
+</Tabs>

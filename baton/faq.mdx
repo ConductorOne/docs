@@ -1,0 +1,110 @@
+---
+title: "Connectors overview and FAQ"
+sidebarTitle: "FAQ"
+description: "Learn how connectors work under the hood and get answers to frequently asked questions."
+---
+
+<Tip>
+**What’s ConductorOne’s IP address?**
+
+ConductorOne has these associated IP addresses:
+- `35.85.212.195`
+- `35.82.205.32`
+- `52.33.197.26`
+- `54.68.132.142`
+</Tip>
+
+## What are connectors?
+
+Connectors allow the ConductorOne platform to connect to any SaaS, IaaS, on-prem, or infrastructure tool for the purposes of managing and automating access control. Connectors synchronize data for identities, resources, and access rights, and can orchestrate access changes (such as provisioning accounts) back to the system.
+
+Connectors are also designed to integrate with any software stack. This includes software-as-a-service applications, infrastructure-as-a-service environments, on-premises apps and directories, cloud directories, and infrastructure such as databases.
+
+## How do connectors work?
+
+Connectors are the connective tissue between a SaaS, IaaS, database, or other technology, and the ConductorOne access control plane. Connectors work by “talking” to a technology stack and extracting identity, resources, entitlements, and grants into a format that can be ingested into the ConductorOne platform. While extracting those different objects, a graph is built of the relationship between resources (parent-child relationship) and between identities and entitlements (grants). This provides a full picture of the current state of identity and access within the boundaries of an application or technology stack.
+
+## Connector capabilities
+
+Connectors can perform a variety of actions based on how they’re structured. Read on to learn about the different capabilities connectors can have. See the individual connectors’ documentation for additional details on what each can do.
+
+### Syncing
+
+Syncing keeps data consistent between ConductorOne and your integrated systems. Once set up, a connector regularly retrieves access data (such as accounts, groups, roles, and orgs) from the integrated system and updates the records in the corresponding application in ConductorOne. Syncing ensures ConductorOne has an accurate and up-to-date view of user identities and their assigned permissions. All connectors can sync.
+
+Specifically, ConductorOne syncs:
+
+- **Accounts**, or the user accounts within the integrated system.
+- **Resources**, or the specific pieces of access (such as group membership or role assignment) in the integrated system and which accounts they’re assigned to.
+
+Syncing is a read-only operation. Most connectors use syncs that are scheduled to run at regular intervals. Some connectors support **continuous sync**, which pulls new data as it becomes available rather than waiting for the next iteration of a set schedule. You can also start a sync on demand on any connector’s integration page.
+
+### Sync issue or failure notifications
+
+If a connector experiences three consecutive sync failures, an automated email alert is immediately dispatched to the designated owner, letting yoy take action quickly to correct the issue.
+
+We’ll also automatically pause a connector’s sync cycle and alert you if significant data anomalies are detected (such as if the number of synced resources decreases by half between one sync and the next). This setting is on by default, but you can configure it by navigating to an app’s **Configure connector** > **Advanced** tab.
+
+### Provisioning
+
+Provisioning automates the process of granting or revoking user access in your connected systems. Once an access change is approved in ConductorOne, a connector with provisioning capabilities makes access changes in the integrated system.
+
+For example, upon approval in ConductorOne, provisioning can automatically create a new employee’s user account in Active Directory and assign them to the relevant Active Directory groups.
+
+Specifically, ConductorOne can provision:
+
+- **Entitlements** by granting a specific user permission to a specific account, such as granting Justin Thyme’s account push permission on the Project-Puffin repo in GitHub.
+- **Accounts** by creating a brand-new account in the integrated system.
+
+Provisioning is a write operation from ConductorOne to the integrated system. Not all connectors can provision accounts or all the resource types the connector syncs. You can decide whether or not to enable provisioning on provisioning-capable connectors.
+
+### Ticketing
+
+Select connectors for helpdesk ticketing systems can also be configured to automatically create tickets to track manual provisioning assignments. ConductorOne tracks the status of the tickets it creates and updates the status of the access request in ConductorOne accordingly.
+
+Ticketing is a read-write operation from ConductorOne to the integrated ticketing system.
+
+To learn more about configuring ticketing, check out [External ticketing](/product/admin/external-ticketing).
+
+## Frequently asked questions about connectors
+
+<AccordionGroup>
+    <Accordion title="What are my connector hosting options?">
+    ConductorOne offers two hosting methods for connectors:
+
+    - **Cloud-hosted connectors** are the built-in, no-code connectors hosted directly in the ConductorOne tenant and provided via our SaaS service. They are configured on the **Connectors** page of ConductorOne.
+    - **Self-hosted connectors** are connectors that are hosted and run in your own environment. To learn more about your options for deploying self-hosted connectors, go to the [Deploy self-hosted connectors](/baton/deploy) page.
+    Each connector’s documentation shows which hosting methods are available.
+    </Accordion>
+
+    <Accordion title="How should I host my connectors?">
+    Docker is recommended for ease of management, but the hosting environment doesn’t matter to ConductorOne. Use whatever best fits your existing setup (Windows/Linux, Docker hosting options, on-prem vs. cloud, etc.). Our Customer Success team is happy to talk through your options with you.
+    </Accordion>
+
+    <Accordion title="What are the resource recommendations for connectors?">
+    - **CPU:** Connectors don’t perform CPU-intensive tasks, so performance won’t improve with more CPU. One CPU (or even a fractional allocation) is sufficient.
+    - **Memory (RAM):** Connectors typically use less than 100MB of RAM. We recommend allocating 250–500MB for large or critical connectors, although this is more conservative than necessary.
+    </Accordion>
+
+    <Accordion title="Can connectors run in different modes?">
+    Connectors can be run in different modes depending on your goals and needs. All connectors can be run in **read-only mode**, which pulls identity, resource, and access rights data from the application. Some connectors can alternatively be run in **read-write (provision) mode**, which additionally allows ConductorOne to manage provisioning and deprovisioning for the connected technology.
+
+    All connectors support read-only mode, and certain connectors support read-write mode. Permissions needed to run the connector and connector-specific setup instructions are provided in the connector’s documentation.
+    </Accordion>
+
+    <Accordion title="How do connectors ingest data?">
+    Data from the application or technology needs to be ingested into the ConductorOne platform. Connectors sync and store data in a custom data format: the `.c1z` file format. This file contains all of the identity graph data for a system.
+
+    When using cloud connectors, the `.c1z` file is an implementation detail and is never seen or touched by the end user. When using self-hosted connectors, the `.c1z` file must be transported to the ConductorOne service to be ingested.
+    </Accordion>
+
+    <Accordion title="How do I set up high availability (HA) for my connectors?">
+    You can run multiple instances of the same connector without any additional configuration, aside from sharing the same client ID/secret. Connectors check in with ConductorOne roughly every 60 seconds to ask for work, and ConductorOne distributes tasks in a round-robin manner. This creates a worker-queue/load-balancer-like architecture. If one connector instance goes down, others will automatically handle all subsequent work requests from ConductorOne.
+    </Accordion>
+
+    <Accordion title="Where are sync state files stored?">
+    The relevant file is `sync.c1z`. By default, the connector stores this in a temporary folder determined by the host operating system (the location varies). You can specify a custom location for the `sync.c1z` file using a command-line flag. For example, in a Docker setup, you can map a volume to the container and specify a path to store the file. The `sync.c1z` file will then be stored in that mapped location.
+
+    Note that the file is deleted after each sync, so it only exists while a sync is in progress (for connectors running in service mode).
+    </Accordion>
+</AccordionGroup>

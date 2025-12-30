@@ -1,0 +1,316 @@
+---
+title: "Set up an Active Directory connector"
+og:title: "Set up an Active Directory connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Active Directory. Integrate your on-prem Active Directory server with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Active Directory. Integrate your on-prem Active Directory server with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Microsoft Active Directory"
+---
+
+## Availability
+
+The Active Directory connector supports Windows and Linux.
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+The Active Directory connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
+
+When a new account is created by ConductorOne, the account's password will be sent to a [vault](/product/admin/vaults).
+
+## Integrate your Active Directory domain
+
+This process uses the Active Directory connector, hosted and run in your own environment. [Contact ConductorOne's support team](/baton/active-directory/) to download the latest version of the connector.
+
+Once `baton-active-directory` is installed and the integration is set up, Baton runs as a service in your environment. The service maintains contact with ConductorOne, syncs and uploads data at regular intervals, and passes that data to the ConductorOne UI, where you and your colleagues can use it to run access reviews and manage access requests for the application.
+
+### Requirements
+
+- A Windows server to host `baton-active-directory` This server needs minimum requirements to run in most environment. It doesn't need a dedicated server
+	- Two to four core vCPU
+	- Four to eight gigabytes of RAM
+	- Windows minimum required storage
+- Outbound network connectivity to port `443` to your ConductorOne tenant
+- An Active Directory service account
+	- For syncing only, the AD account needs read access only
+	- For access provisioning, the account needs permissions to modify group membership
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Baton connector:
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** section of the page and click **Edit**.
+</Step>
+<Step>
+Click on Rotate to generate a new `client-id` and a `client-secret` for the connector. Make sure you copy both as the `client-secret` will not be visible once you click Ok.
+</Step>
+<Step>
+Click Ok
+</Step>
+<Step>
+Next to the `Not Connected` label, click on the word **Baton**. This will take you to the application page.
+	- Click on pencil icon next at the top of the page to update the application name and type `Active Directory`
+	- This will update the application name and the connector name, and the application icon will also resemble Active Directory once connected.
+</Step>
+</Steps>
+
+## Configure the `baton-active-directory`
+
+### Step 1: Create an Active Directory service account
+
+The Active Directory Connector needs a service accounts to connect to Active Directory. The account needs read permissions to AD and Logon As a Service rights. The latter can be configured via GPO, or if using a privileged account to setup the connector, that step will happen automatically.
+
+#### Entitlement provisioning permissions
+
+For entitlement provisioning support, the service account needs to have delegated rights on your AD forest to manage groups membership
+
+<Steps>
+	<Step>
+	Open ADUC or run the command `dsa.msc` from the command line
+	</Step>
+	<Step>
+	Right click on your forest root, or if you only want to provision into groups in a particular OU right click on that OU
+	</Step>
+	<Step>
+	Select Delegate Control
+	</Step>
+	<Step>
+	Add the service account running the `baton-active-directory` service
+	</Step>
+	<Step>
+	From the Task to Delegate check the box for `Modify the membership of a group`
+	</Step>
+	<Step>
+	Click Next, then Finish
+	</Step>
+</Steps>
+
+This delegation will grant the service account the ability to provision and deprovision access from Active Directory groups, but it excludes special built-in groups like:
+
+- Administrators
+- Domain Admins
+- Enterprise Admins
+- Schema Admins
+
+If you wish to manage those, you must perform the following operation:
+
+<Steps>
+<Step>
+For each group you want the service account to Control:
+	<Steps>
+		<Step>
+		Right Click on the group
+		</Step>
+		<Step>
+		Click on the Security tab
+		</Step>
+		<Step>
+		Click Advanced
+		</Step>
+		<Step>
+		Click Add
+		</Step>
+		<Step>
+		Click on Select a principal, and choose the `baton-active-directory` service account
+		</Step>
+		<Step>
+		Grant the account `Write Members` permissions
+		</Step>
+	</Steps>
+</Step>
+<Step>
+Run the following powershell script **from a domain controller with a domain admin credential** to ensure AdminSDHolder doesn't remove the permission after 60 minutes:
+
+```powershell
+$domain = "REPLACE_WITH_YOUR_DOMAIN"
+$samAccountName = "REPLACE_WITH_YOUR_SERVICE_ACCOUNT"
+$adminSDHolderPath = "CN=AdminSDHolder,CN=System," + (Get-ADDomain).DistinguishedName
+
+$acl = Get-Acl "AD:\$adminSDHolderPath"
+$identity = New-Object System.Security.Principal.NTAccount("$domain\$samAccountName")
+
+$rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+    $identity,
+    [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+    [System.Security.AccessControl.AccessControlType]::Allow,
+    [Guid]"bf967a9c-0de6-11d0-a285-00aa003049e2",  # GUID for 'member' attribute, don't change
+    [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None
+)
+
+$acl.AddAccessRule($rule)
+Set-Acl -Path "AD:\$adminSDHolderPath" -AclObject $acl
+
+Write-Host "Successfully granted '$identity' permission to modify group memberships in AdminSDHolder." -ForegroundColor Green
+```
+</Step>
+</Steps>
+
+#### Account provisioning permissions
+
+<Steps>
+	<Step>
+		Open ADUC or run the command `dsa.msc` from the command line
+		</Step>
+		<Step>
+		Right click on your forest root, or if you only want to provision accounts in a particular OU right click on that OU
+		</Step>
+		<Step>
+		Select Delegate Control
+		</Step>
+		<Step>
+		Add the service account running the `baton-active-directory` service
+		</Step>
+		<Step>
+		From the Task to Delegate check the box for `Create, delete, and manager user accounts`
+		</Step>
+		<Step>
+		Click Next, then Finish
+	</Step>
+</Steps>
+
+
+### Step 2: Install `baton-active-directory`
+
+#### Connector modes
+
+The Active Directory connector can be run in either LDAP mode (default) or WinLDAP mode.
+
+Both modes can sync and provision the same resources, but WinLDAP mode supports additional authentication methods. LDAP mode uses a Golang LDAP library to connect to the Active Directory server. WinLDAP mode uses Windows system calls. If LDAP mode does not connect (usually because your AD server requires more secure authentication methods), then try running the connector with `--mode=winldap`.
+
+<Steps>
+<Step>
+[Contact ConductorOne's support team](/baton/active-directory/) to download the latest version of the connector.
+</Step>
+<Step>
+On the host designated to run the connector, create a folder in `C:\Program Files` called `ConductorOne`
+</Step>
+<Step>
+Extract the `baton-active-directory.exe` from the zip archive, and copy it to the `ConductorOne` folder
+</Step>
+<Step>
+Install and set up the connector by running:
+
+	```console
+	baton-active-directory.exe setup
+	```
+
+	<Warning>
+	**To use ConductorOne to provision Accounts and into Active Directory groups:** 
+	
+	Be sure to edit the YAML config by adding `provisioning: true` property to the config file. The setup command will not prompt you for it.
+	</Warning>
+</Step>
+</Steps>
+
+You'll be prompted to provide:
+
+```console
+domain (string)                    required: The fully-qualified Windows domain to connect with. Example: "baton.example.com"
+sitename (string)                  Optional: The sitename to connect to, if not set conects to all DCs. Example: "US-DC-01"
+base-dn (string)                   required: The base DN to search from. Example: "DC=baton,DC=example,DC=com"
+ldaps-port (int)                   Optional: If you are using LDAPS, this is the port for the server to connect to. By default we try to connect to '636'. (default 636)
+ldaps (boolean)                    Optional: Indicates if you are using LDAPS.
+mode (string)                      Optional: The connection mode to talk to the domain. Must be ldap or winldap. (default "winldap")
+user-search-dn (string)            Optional: The DN to search for users. Example: "OU=Users,DC=baton,DC=example,DC=com". Defaults to the Base DN. ($BATON_USER_SEARCH_DN)
+user-search-filter (string)        Optional: The filter to search for users. Example: "(&(objectCategory=person)(objectClass=user))"  (default "(&(objectCategory=person)(objectClass=user))")
+group-search-dn (string)           Optional: The DN to search for groups. Example: "OU=Groups,DC=baton,DC=example,DC=com. Defaults to the Base DN."
+group-search-filter (string)       Optional: The filter to search for groups. Example: "(objectCategory=group)" (default "(objectCategory=group)")
+skip-ous (strings)                 Optional: A list of DNs for OUs to skip when searching for users and groups. Example: "OU=Test Groups,OU=baton-dev,DC=baton-dev,DC=d2,DC=ductone,DC=com"
+only-ous (strings)                 Optional: A list of DNs for OUs to sync when searching for users and groups. Example: "OU=Test Groups,OU=baton-dev,DC=baton-dev,DC=d2,DC=ductone,DC=com"
+```
+
+Run `baton-active-directory --help` to see the list of flags to be used when passing your credentials to the connector.
+
+The config file is written to `C:\ProgramData\ConductorOne\baton-active-directory\config.yaml`, and is formed like the following:
+
+<Warning>
+If you make changes to the config file then a service restart is required for the changes to take effect
+</Warning>
+
+```yaml
+base-dn: dc=baton-dev,dc=d2,dc=ductone,dc=com
+domain: baton-dev.d2.ductone.com
+mode: winldap
+client-id: clean-ogre-26349@insulator.conductor.one/ccc
+client-secret: secret-token:conductorone.com:v1:...
+# Include this line if you want to use this connector to provision into groups and account creation
+provisioning: true
+```
+
+The log file is written to `C:\ProgramData\ConductorOne\baton-active-directory\baton.log`.
+
+<Steps>
+<Step>
+Grant the service account `Modify` folder permissions to `C:\ProgramData\ConductorOne` so it can write to the `baton.log` file
+	- **failing to do step 5 will result in a service start error**
+</Step>
+<Step>
+Launch the Services console and locate the service named `baton-active-directory`
+	<Steps>
+		<Step>
+		Double click to open properties
+		</Step>
+		<Step>
+		Change the Startup type to `Automatic`
+		</Step>
+		<Step>
+		Navigate to the `Log On` tab and click on `This account`
+		</Step>
+		<Step>
+		Click `Browse` and type your service account name (samAccountName) in the input field
+		</Step>
+		<Step>
+		Click `Check Names`, and ensure it validated the right account. If you're presented with an account selection screen, carefully choose the account you created in the previous steps
+		</Step>
+		<Step>
+		Enter the service account's password and confirm it.
+		</Step>
+		<Step>
+		Click Apply
+		</Step>
+		<Step>
+		Navigate back to the `General` Tab, and click `Start` to start the `baton-active-directory` service
+		</Step>
+	</Steps>
+</Step>
+</Steps>
+
+### Step 3: Manage the `baton-active-directory` Windows service
+
+<Steps>
+<Step>
+Once you have provided this information, a new Windows service named `baton-active-directory` will be created in the Stopped state. You can now use the `.\baton-active-directory` command to manage the service.
+	- To start the service, run `.\baton-active-directory start`.
+	- To stop the service, run `.\baton-active-directory stop`.
+	- To check the status of the service, run `.\baton-active-directory status`.
+	- To remove the service, run `.\baton-active-directory remove`.
+
+</Step>
+<Step>
+The connector syncs current data, uploads it to ConductorOne, and prints a `Task complete!` message when finished.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Active Directory connector to. Active Directory data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>

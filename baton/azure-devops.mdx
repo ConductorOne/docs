@@ -1,0 +1,291 @@
+---
+title: "Set up an Azure DevOps connector"
+og:title: "Set up an Azure DevOps connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Azure DevOps. Integrate your Azure DevOps instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Azure DevOps. Integrate your Azure DevOps instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Microsoft Azure DevOps"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Service accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Service principals | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Projects | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+The Azure DevOps connector supports [automatic account provisioning](/product/admin/account-provisioning).
+
+This connector does not support account deprovisioning. You must deprovision accounts directly in Azure DevOps.
+
+## Gather Azure DevOps credentials
+
+Configuring the connector requires you to pass in credentials generated in Azure DevOps. Gather these credentials before you move on.
+
+<Warning>
+A user with **Project Collection Administrator** role at the organization level and **Project Administrator** role at the project level must perform this task.
+</Warning>
+
+You can authenticate the Azure DevOps connector by registering a web app and signing in with OAuth, or by using a personal access token. Follow the relevant set of instructions below to create your preferred set of credentials.
+
+### Option 1: Register a web application
+
+<Steps>
+  <Step>
+  In Azure DevOps, navigate to **App registrations** and create a new app.
+  </Step>
+  <Step>
+  Give the new app a name and select the **Accounts in any organizational directory** option.
+  </Step>
+  <Step>
+  Enter `https://accounts.conductor.one/oauth/callback` as a **Web** redirect URI.
+  </Step>
+  <Step>
+  Click **Register**.
+  </Step>
+  <Step>
+  Carefully copy and save the application (client) ID.
+  </Step>
+  <Step>
+  Click **Certificates & secrets** and create a new secret.
+  </Step>
+  <Step>
+  Carefully copy and save the secret **Value** (not the secret ID).
+  </Step>
+  <Step>
+  Finally, click **API permissions** and select **Azure DevOps**.
+  </Step>
+  <Step>
+  Give the app the following permissions:
+    - user\_impersonation (Azure DevOps only allows delegated permissions)
+    - vso.graph\_manage
+    - vso.memberentitlementmanagement\_write
+    - vso.profile
+  </Step>
+  <Step>
+  Click **Add permissions**.
+  </Step>
+  <Step>
+  Carefully copy and save your **Azure tenant ID** and **organization URL**.
+  </Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+### Option 2: Create a personal access token
+
+<Steps>
+  <Step>
+  In Azure DevOps, navigate to your users settings (the person icon in the top menu bar) and select **personal access tokens**.
+  </Step>
+  <Step>
+  Click **\+ New Token**.
+  </Step>
+  <Step>
+  Give the new token a name, such as "ConductorOne", then select the relevant organization and set an expiration date.
+  </Step>
+  <Step>
+  Under **Scopes**, select **Custom defined** and set the relevant set of scopes:
+    To give the connector READ (sync only) permissions:
+    - **Graph: Read** - Enables all Graph API read operations (users, groups, service principals, memberships, storage keys, descriptors, subject queries)
+    - **Project and Team: Read** - Enables all Core API read operations (projects, teams, team members)
+    To give the connector READ/WRITE (sync and provision) permissions:
+    - **Graph: Read & manage** - Enables all Graph API read and write operations (users, groups, service principals, memberships, storage keys, descriptors, subject queries)
+    - **Member Entitlement Management: Read & write** - Enables all Entitlements API read and write operations (list, create, and update user entitlements and licenses)
+    - **Project and Team: Read** - Enables all Core API read operations (projects, teams, team members)
+    To enable incremental sync (optional):
+    - **Audit Log: Read** - Required if you want to enable the incremental sync feature, which syncs only changes since the last sync
+  </Step>
+  <Step>
+  Click **Create**.
+  </Step>
+  <Step>
+  The new token is created. Carefully copy and save the token.
+  </Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Azure DevOps connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Azure DevOps credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+  </Step>
+  <Step>
+  Search for **Azure DevOps** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Azure DevOps connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+    If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  Find the **Settings** area of the page and click **Edit**.
+  </Step>
+  <Step>
+  Select your method of authenticating to Azure DevOps and click either **OAuth** or **Username and password**.
+    If you chose **OAuth**:
+    1. Enter your organization URL, Azure tenant ID, OAuth client ID, and OAuth client secret in the relevant fields.
+    2. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
+    3. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
+    4. Click **Save**.
+    5. Click **Login with OAuth**.
+    6. Log in and authorize ConductorOne with your Salesforce instance.
+    7. You will then be redirected back to the Salesforce setup page in ConductorOne, where you'll see an authorization message.
+    If you chose **Personal access token**:
+    1. Paste your Azure DevOps organization URL in the format `https://dev.azure.com/{Your_Organization}` into the **Organization URL** field.
+    2. Paste the token into the **Personal Access Token** field.
+    3. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
+    4. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
+    5. Click **Save**.
+  </Step>
+  <Step>
+  The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+  </Step>
+</Steps>
+
+**That's it!** Your Azure DevOps connector is now pulling access data into ConductorOne.
+
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the [Azure DevOps](https://github.com/ConductorOne/baton-azure-devops) connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Azure DevOps connector
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Connectors** > **Add connector**.
+  </Step>
+  <Step>
+  Search for **Baton** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Azure DevOps connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+    If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  In the **Settings** area of the page, click **Edit**.
+  </Step>
+  <Step>
+  Click **Rotate** to generate a new Client ID and Secret.
+    Carefully copy and save these credentials. We'll use them in Step 2.
+  </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Azure DevOps connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-azure-devops-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-azure-devops-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Azure DevOps credentials
+  BATON_ORGANIZATION_URL: <Your Azure DevOps organization URL, formed like https://dev.azure.com/{Your_Organization}>
+  BATON_PAT: <Azure DevOps personal access token>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include if you want to sync grant sources
+  BATON_SKIP_UNUSED_ROLES: true
+
+  # Optional: include to read audit logs and capture updates between full syncs (requires Audit Log: Read permission)
+  BATON_ENABLE_INCREMENTAL_SYNC: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-azure-devops.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-azure-devops
+  labels:
+    app: baton-azure-devops
+spec:
+  selector:
+    matchLabels:
+      app: baton-azure-devops
+  template:
+    metadata:
+      labels:
+        app: baton-azure-devops
+        baton: true
+        baton-app: azure-devops
+    spec:
+      containers:
+      - name: baton-azure-devops
+        image: ghcr.io/conductorone/baton-azure-devops:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-azure-devops
+        envFrom:
+        - secretRef:
+            name: baton-azure-devops-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+  <Step>
+  Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+  </Step>
+  <Step>
+  Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Azure DevOps connector to. Azure DevOps data should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
+
+**That's it!** Your Azure DevOps connector is now pulling access data into ConductorOne.
+
+</Tab>
+</Tabs>

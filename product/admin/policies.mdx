@@ -1,0 +1,279 @@
+---
+title: Policies
+og:title: Policies - ConductorOne docs
+og:description: Policies are re-usable bundles of instructions for how access will be requested, reviewed, and revoked.
+description: Policies are re-usable bundles of instructions for how access will be requested, reviewed, and revoked.
+---
+
+## What are policies?
+
+Policies are reusable rule sets that define a process for requesting, reviewing, or revoking access. Policies are **extremely** powerful, as they allow you to bundle similar processes into a single policy that can be reused across applications, resources, and entitlements. 
+
+Here are just a few examples of the many kinds of policies that can be created in ConductorOne:
+
+| Policy name | Policy type | What it does | Used for |
+| :---------- | :---------- | :----------- | :-------- |
+| IT Essentials | Request | Auto-approves requests for internal employees. Uses manager approval for contractors and 3rd parties | Essential collaboration apps |
+| AWS Infra | Request | Two step approval requiring team lead + AWS account owner | AWS account access |
+| App Owner Certification | Review | Routes access reviews to application owners | Finance apps | 
+| Leaver Confirmation | Revoke | Routes role "leaver" changes to the user's manager to confirm before removing or changing access | All leaver changes |
+
+By default, all ConductorOne tenants are created with a set of built-in **best practice** policies. If these policies don't meet your needs, you can create as many custom policies as you require. 
+
+### Policy types
+
+There are three policy types in ConductorOne:
+
+- **Request**: Used for granting access to roles, apps, resources, and entitlements
+- **Review**: Used to define access review workflows
+- **Revoke**: Used for revoking access
+
+### Policy rules
+
+Policies are built on rule sets. Policy rules allow you to build review, request, and revocation workflows in which a single policy's instructions vary based on the context of the request.
+
+For example, here's an "IT Essentials" access request policy. This policy has two rules:
+
+- For contractors and third parties - access requires manager approval
+- For employees - access is auto-approved
+
+Rules allow for configuring pre-approvals or complex rule logic based on an extensible set of conditions. This allows you to streamline your access management process by reducing risk while removing the time and effort of unnecessary manual approvals.
+
+### The baseline rule
+
+Each policy starts with a "baseline" rule. You can add up to 16 additional rules. The baseline rule sets the action to be taken if no other rules are present or if no other rules match. ConductorOne reads policies from top to bottom, taking action as soon as it finds a matching condition. When forming your conditional policy, make sure you organize the rules you create from most to least specific.
+
+Here's an example. This request policy has three rules plus a baseline:
+
+- **Rule 1:** If the user is a contractor, auto-deny the request.
+
+- **Rule 2:** If the user's job title is Designer, assign the request to the head of Engineering.
+
+- **Rule 3:** If the user works in the Engineering department, auto-approve the request.
+
+- **Baseline rule:** If the user does not match any of the rules above, assign the request to the user's manager.
+
+Based on the construction of this policy, a user with the job title Designer who works in the Engineering department will have their request assigned to the head of Engineering. If Rule 2 and Rule 3 were reversed, however, the same user would have their request auto-approved.
+
+### Other actions you can include in policy rules
+
+Policies can also fire webhooks, wait until conditions are true, and more. This extensibility is extremely powerful for scenarios such as:
+
+- Waiting until security training is complete before granting access
+- Sending a notification on approval
+- Changing the approval flow dynamically using an external system's logic
+
+Each of these is created as a step in a policy rule. 
+
+## Create a new policy
+
+ConductorOne provides built-in policies to get you started. You can view these and any other policies currently saved in your ConductorOne instance on the **Policies** page. 
+
+If the existing policies don't match the workflow you need, you can edit them or create a whole new policy.
+
+### Step 1: Set up the new policy
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** > **Policies**.
+</Step>
+<Step>
+Click **New policy**.
+</Step>
+<Step>
+Give your policy a name and an optional description.
+</Step>
+<Step>
+Select the relevant policy type from the **Policy type** menu.
+</Step>
+<Step>
+Click **Continue**. The policy's details page opens.
+</Step>
+</Steps>
+
+Click the pencil icons in the policy's header if you want to edit the policy's name or description. 
+
+### Step 2: Add policy rules
+<Steps>
+<Step>
+Click **Manage rules** in the **Rules** section of the page.
+</Step>
+<Step>
+Click **Insert a rule above** to add a conditional rule to your policy.
+</Step>
+<Step>
+In the **If this condition matches:** box, choose how to form your policy rule:
+
+
+   - Use the **Basic** condition builder to construct a rule from a combination of entitlements and [profile attributes](/product/admin/attributes), with the option to add **and** and **or** statements to refine the rule.
+   <Tip>
+   **Supported attributes in the basic condition builder** The value input field in the basic condition builder currently only supports string values. Certain attributes are stored as enums (fixed lists of values) or arrays (multiple values), which cannot be correctly parsed when entered as a simple string in the basic builder. If you use these attributes in the basic builder, the system will treat the input as a literal string, and the policy or membership rule may not behave as expected.
+
+   The following attributes are not supported in the basic condition builder:
+
+   - Additional Employee ID
+   - Additional Username
+   - Additional Email
+   - Directory Status
+   - Manager Email
+
+   If you need to use any of the attributes listed above, you must compose a CEL expression in the **Expression** field.
+   </Tip>
+   - Use the **Expression** field to to compose a [CEL expression](/product/admin/expressions) that describes the membership rule.
+</Step>
+<Step>
+In the **Then perform this action:** section of the rule, select an automatic action (the exact actions vary by policy type) or **Execute a workflow** to wait for a condition to be met or assign the task to a reviewer workflow (see below).
+
+   If necessary, click **Add step** to add additional actions or workflows to the rule.
+</Step>
+<Step>
+Repeat the **Add another rule** process, adding as many conditional rules as needed. If necessary, you can use the arrow keys to change the order of your rules.
+
+   Remember, for best results place more specific rules before less specific rules.
+</Step>
+<Step>
+Edit the [baseline rule](/product/admin/policies#the-baseline-rule). The baseline rule can be set to take an automatic action (the exact actions vary by policy type), or to assign the task to reviewers, as described below.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+### Step 3: Define the rule steps
+
+If you choose the **Execute a workflow** option for your policy rule, here's what to do:
+
+<Steps>
+<Step>
+Choose **Assign for review** or **Wait for**, then skip ahead to the relevant instructions below. 
+</Step>
+</Steps>
+
+#### Wait for condition, duration, or time of day
+
+<Steps>
+<Step>
+Select **Condition** (wait until a specified thing happens), **Duration** (wait for a certain amount of time), or **Time of day** (wait until a certain time in the next 24 hours). 
+</Step>
+<Step>
+If you chose **Condition**, follow these steps: 
+
+      1. Give the condition a name. 
+
+      2. Enter a [CEL expression](/product/admin/expressions) that describes the condition that must be met before the policy is allowed to move forward. 
+
+      3. **Optional.** Enter a comment that will be posted on the task's details view during the wait period. This helps users and other reviewers understand what needs to happen to move the task forward. 
+
+      4. Select the timeout period for the wait step. 
+
+      5. **Optional.** Enter a comment that will be posted on the task's details view if the wait period times out before the condition is met. 
+
+</Step>
+<Step>
+If you chose **Duration**, follow these steps: 
+
+      1. Select the duration. Built-in options include from one hour (the minimum duration allowed) to one month (the maximum duration allowed). Choose **Custom** to set a duration of your choosing between these limits. 
+
+      2. **Optional.** Enter a comment that will be posted on the task's details view during the wait period. This helps users and other reviewers understand why the task is paused.
+
+</Step>
+<Step>
+If you chose **Time of day**, follow these steps: 
+
+      1. Set the time when the task should move forward. All times are in UTC.  
+
+      2. **Optional.** Enter a comment that will be posted on the task's details view during the wait period. This helps users and other reviewers understand why the task is paused.
+</Step>
+</Steps>
+If needed, click **Add reviewer step** to add either another wait condition check or a reviewer flow that will begin once the condition has been met or timed out.  
+
+#### Assign for review
+
+1. Select a reviewer:
+
+   - **User:** ConductorOne will assign the task to the specific individual or individuals who you select as reviewers.
+
+   - **Group:** ConductorOne will assign the task to the members of the selected group. Only one member needs to complete the task, but all members will be notified. If there are more then 128 members in the selected group, the task will not notify the group's members, but will instead use the fallback reviewer.
+
+   - **Manager:** ConductorOne will identify the user's manager (via the information pulled from your company's identity provider) and assign them the task.
+
+   - **Account owner:** The task will be assigned to the user identified as the owner of the application account in ConductorOne. In almost all cases, selecting this option results in a self-review of the access.
+
+   - **App owner:** The task will be assigned to the owner or owners set for the application in ConductorOne.
+
+   - **Entitlement owner:** The task will be assigned to the owner or owners set for the entitlement in ConductorOne.
+
+   - **Resource owner:** The task will be assigned to the owner or owners set for the resource in ConductorOne.
+
+   - **Expression:** ConductorOne will evaluate the Common Expression Language (CEL) expression you enter here and assign the task to the returned user or users. See [Write conditional policy rules](/product/admin/expressions) for examples and more instructions.
+
+   - **Webhook:** ConductorOne will fire a synchronous webhook which can be used to drive notifications or change the policy steps. See [Webhooks](/product/admin/webhooks) for instructions on setting up webhooks. 
+
+2. If you selected **Manager**, **Group**, **Account owner**, or **Entitlement owner**, you have the option to provide a fallback reviewer. In the event that ConductorOne cannot identify the specified reviewer on a task (or the task is assigned to a group with more than 128 members), the system will fall back to the secondary reviewer you set here.
+
+   - If you check **Permit reviewer to reassign task** on the policy, the fallback reviewer can then reassign the task to an appropriate contact.
+
+   - Multiple fallback reviewers can be listed, but only one needs to take action.
+
+   - The fallback reviewer for a group can be a different group. 
+
+3. Set whether the reviewer (or the fallback reviewer, if applicable) can reassign the task, and whether reassigned tasks require a reason for their reassignment.
+
+   Use the **Limit reassignment to** field to create an allowlist of users who the task can be reassigned to. If the task can be reassigned to any user, leave this field blank. 
+
+3. Set whether this step allows the task to be reassigned to an assigned delegate, either a [delegate set by an admin](/product/admin/delegate#set-a-delegate-for-another-user), such as for an executive or employee out on long-term leave, or a [delegate set by an individual user](/product/admin/delegate#set-your-own-delegate) while they are out of office.  
+
+4. Set whether a reviewer can complete a review that they are the subject of. (This option is not available for **Account owner** reviews since these reviews are generally self-reviews.)
+
+4. **Request and review policies only.** Set whether this step requires a distinct approver. This means a user who approved an earlier step in the workflow cannot approve this step, ensuring a different set of eyes reviews each stage.
+
+   If **Require distinct approvers** is enabled, the system automatically assigns the task to an approver who has not previously approved the request. If the policy can't find a distinct approver, it will automatically route the approval to fallback users (Campaign Admins or Super Admins).
+
+5. Set whether approvals and denials require the reviewer to enter a justification for their choice.
+
+6. **Optional.** If desired, check to enable **Trigger SLA violation after** and set the timeframe for a service-level agreement (SLA) fallback procedure to kick in. If no action has been taken on the task when the time elapses, select what happens next:
+
+   * Use a new policy (select the policy from the list)
+   
+   * Be reassigned to a different user or users (select the users from the list)
+
+   Finally, enter a comment that will be added to each task when the SLA fallback procedure is used. 
+
+If needed, click **Add step** to add either another approval step (for instance, if first a account owner self-review and then a manager approval is required) or a wait condition that will pause the policy's progress until a certain benchmark is met.  
+
+### Step 4: Add follow-up steps 
+
+For review tasks only.
+
+1. In the **Follow-up steps** section of the page, set whether ConductorOne should automatically create a revoke task if the access review is denied.
+
+**That's it!** Your policy is now ready for use. You can review or edit the policy's details any time by clicking on its name on the **Policies** page.
+
+## Duplicate an existing policy 
+
+If you don't want to write a new policy from scratch, you can duplicate an existing policy and edit it to meet your needs. 
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** > **Policies**.
+</Step>
+<Step>
+Locate the policy you want to duplicate and click the **...** (more actions) menu, then select **Duplicate**.
+
+<Tip>
+**You cannot change a duplicated policy's type.** 
+
+Make sure the policy you duplicate is of the same policy type (review, request, or revoke) that you need to create.  
+</Tip>
+
+</Step>
+<Step>
+Edit the policy's name and description, as needed. 
+</Step>
+<Step>
+Click **Continue**. The policy's details page opens.
+</Step>
+<Step>
+Follow the instructions above to edit existing policy rules and steps, or to add additional rules and steps as needed. 
+</Step>
+</Steps>
+

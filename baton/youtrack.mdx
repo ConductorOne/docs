@@ -1,0 +1,206 @@
+---
+title: Set up YouTrack connector
+og:title: Set up YouTrack connector - ConductorOne docs
+og:description: Integrate your YouTrack instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance and just-in-time provisioning for YouTrack. Integrate your YouTrack instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: "YouTrack"
+---
+
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :--- | :--- | :--- |
+| Account | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |   |
+| Group | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |   |
+
+**Additional functionality:**
+
+_None._
+
+## Gather YouTrack configuration information
+
+Configuring the connector requires you to pass in information from YouTrack. Gather these configuration details before you move on.
+
+Here's the information you'll need:
+
+* Base URL
+* Permanent Token
+
+See the YouTrack docs for information on how to acquire credentials: [View the documentation](https://www.jetbrains.com/help/youtrack/devportal/Manage-Permanent-Token.html#obtain-permanent-token)
+
+This connector requires the following scopes:
+
+  * YouTrack Administration
+
+<Card title="Learn how to set the scopes" icon="book"  horizontal href="https://www.jetbrains.com/help/youtrack/devportal/Manage-Permanent-Token.html#obtain-permanent-token" />
+
+## Configure the YouTrack connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of YouTrack configuration information gathered by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **YouTrack** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new YouTrack connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Enter the configuration information from the previous section.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+**That's it!** Your YouTrack connector is now pulling access data into ConductorOne.
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the YouTrack connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new YouTrack connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new YouTrack connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+   Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your YouTrack connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-youtrack-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-youtrack-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+  # YouTrack config
+  BATON_YOUTRACK_BASE_URL: <Base URL for your YouTrack instance (e.g. https://company.youtrack.cloud)>
+  BATON_YOUTRACK_TOKEN: <Permanent Token for your YouTrack instance>
+
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-youtrack.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-youtrack
+  labels:
+    app: baton-youtrack
+spec:
+  selector:
+    matchLabels:
+      app: baton-youtrack
+  template:
+    metadata:
+      labels:
+        app: baton-youtrack
+        baton: true
+        baton-app: youtrack
+    spec:
+      containers:
+      - name: baton-youtrack
+        image: ghcr.io/conductorone/baton-youtrack:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-youtrack-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the YouTrack connector to. YouTrack data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your YouTrack connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>

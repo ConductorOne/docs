@@ -1,0 +1,236 @@
+---
+title: "Deploy self-hosted connectors"
+description: "Connectors can be hosted in your own infrastructure."
+og:title: "Deploy self-hosted connectors"
+og:description: "Connectors can be hosted in your own infrastructure."
+sidebarTitle: "Deploy self-hosted connectors"
+---
+
+## Should I use self-hosted connectors?
+
+You might want to self-host and deploy connectors in your own environment if one or more of the following is true:
+
+- The technology does not expose its APIs (such as in the case of a PostgreSQL database).
+- The technology or application does not have a line of sight to ConductorOne’s platform and it would be inappropriate to expose that app to the internet.
+- You can’t or don’t want to provide ConductorOne with the API keys or credentials for the technology.
+- You need to control the sync schedule or some other aspect of the connector.
+- You wish to extend the connector’s capabilities, such as by supporting additional resources in a SaaS.
+
+In any of these scenarios, the best option is to deploy a connector in your own environment. All of our pre-built connectors are available in the [Baton project](https://github.com/conductorone). These connectors are provided to allow for self-hosting and modification.
+
+## Run a self-hosted connector in service mode
+
+Integrating your self-hosted connector with ConductorOne creates the most seamless and fully automated method of uploading your application’s data. Once the self-hosted connector is set up, the connector’s Baton service runs in your environment. The service maintains contact with ConductorOne, syncs and uploads data at regular intervals, and passes that data to the ConductorOne UI, where you and your colleagues can use it to run access reviews and facilitate access requests for the application.
+
+### Step 1: Locate or generate connector credentials
+
+<Steps>
+    <Step>
+    Navigate to the GitHub repo for the Baton connector you’re using. Go to [Baton connectors](https://github.com/conductorone) and search for the connector you need. If you can’t locate the connector you’re looking for, contact our Support team.
+    </Step>
+    <Step>
+    In the **Prerequisites** section of the GitHub repo’s README file, find the list of credentials you’ll need to set up the Baton connector.
+    </Step>
+    <Step>
+    Locate or create and save the necessary credentials. We’ll use them in Step 2.
+    <Tip>
+    **Need help locating the necessary credentials?** 
+    
+    See the corresponding [connector doc](/product/integrations).
+    </Tip>
+    </Step>
+</Steps>
+
+### Step 2: Install the Baton connector
+
+<Steps>
+    <Step>
+    Use the commands shown in the connector’s README file to install the connector, passing in the credentials generated in Step 1 as appropriate. Brew, Docker, and source command options are available.
+    
+    Run `baton-<APP> --help` to see the list of flags to be used when passing your credentials to the connector.
+    </Step>
+</Steps>
+
+### Step 3: Set up the Baton connector
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **Baton** and click **Add**.
+    </Step>
+    <Step>
+    Choose whether to add the Baton connector to an existing application in ConductorOne (and select the app of your choice) or to create a new application.
+	
+    Once configuration is complete, the application’s name will change from Baton to the name of the Baton connector you’ve integrated.
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. You can change the owner later, if necessary.
+    </Step>
+    <Step>
+    Click **Create and add details**.
+
+	If you selected someone else as the owner, that person will be notified to take over this process from this point.
+    </Step>
+    <Step>
+    Find the **Settings** area of the page and click **Edit**.
+    </Step>
+    <Step>
+    Click **Rotate** to generate a new set of credentials. Carefully copy the Client ID and Secret. You’ll use them in Step 4.
+    </Step>
+</Steps>
+
+
+#### Optional: Set a shared identity source
+
+If you want to pull identities from an existing connector, complete these additional steps:
+
+<Steps>
+    <Step>
+    In the **Shared identity source** area of the page, click **Edit**.
+    </Step>
+    <Step>
+    Select the connector from which you want to pull identities.
+    </Step>
+    <Step>
+    Click **Save**.
+    </Step>
+</Steps>
+
+### Step 4: Add credentials to your self-hosted connector
+
+*In this section we’ll use the `baton-okta` connector as an example, but you can sub in the connector of your choice.*
+
+<Steps>
+    <Step>
+    On the server or VM where your self-hosted connector is running, pass in the Client ID and Secret generated in Step 3 by running `--client-id <CLIENT ID> --client-secret <SECRET>`.
+	Run `baton-okta --help` to see the list of flags to be used when passing your credentials to the connector.
+    </Step>
+    <Step>
+    The connector syncs current data, uploads it to ConductorOne, and prints a `Task complete!` message when finished.
+    </Step>
+    <Step>
+    Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Baton connector to. The data should be found on the **Resources** and **Accounts** tabs, as appropriate.
+    </Step>
+</Steps>
+
+## Run a self-hosted connector in periodic upload mode
+
+As an alternative to running a self-hosted connector in service mode, you can set up a self-hosted connector and periodically upload its data to ConductorOne, either manually or automatically.
+
+### Step 1: Locate or generate connector credentials
+
+
+<Steps>
+    <Step>
+    Navigate to the GitHub repo for the connector you’re using. Go to [Baton connectors](https://github.com/conductorone) to access the GitHub repos for all available connectors.
+    </Step>
+    <Step>
+    In the **Prerequisites** section of the GitHub repo’s README file, find the list of credentials you’ll need to set up the Baton connector.
+    </Step>
+    <Step>
+    Locate or create and save the necessary credentials. We’ll use them in Step 2.
+    <Tip>
+    **Need help locating the necessary credentials?** 
+    
+    See the corresponding [connector doc](/product/integrations).
+    </Tip>
+    </Step>
+</Steps>
+
+### Step 2: Install the connector and sync data
+
+<Steps>
+    <Step>
+    Use the commands shown in the connector’s README file to install the connector, passing in the credentials generated in Step 1 as appropriate. Brew, Docker, and source command options are available.
+
+    Run `baton-<APP> --help` to see the list of flags to be used when passing your credentials to the connector.
+    </Step>
+</Steps>
+
+Each installation method includes a `resources` command. This command runs the sync on the connector and stores the gathered data in a `sync.c1z` file.
+
+Now that you’ve collected the connector data, you can choose to manually upload the data to ConductorOne or to sync the data to an S3 bucket integrated with ConductorOne. The next step walks through each option.
+
+### Step 3: Upload data to ConductorOne
+
+You can upload your application’s data either manually our automatically. Follow the instructions below to set up your chosen method.
+
+### Option 1: Manually upload connector data
+
+Manually uploading data to ConductorOne from an self-hosted connector is ideal when testing data ingested from the connector before automating the data upload process, or for times when you only need a single data sync.
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to an existing application you wish to add the connector data to, or create a new application.
+	- **To create a new application,** follow the steps in [Create custom applications](/product/admin/applications).
+	- **To use an existing application,** click **Applications**. On the **Managed apps** tab, select the application’s name from the list.
+    </Step>
+    <Step>
+    On the application’s page, scroll down to the **Connectors** area of the page.
+    </Step>
+    <Step>
+    Click **Import app data** and select **From file**.
+    </Step>
+    <Step>
+    Click **Choose file** and select the `sync.c1z` file.
+    </Step>
+</Steps>
+
+Once the upload is complete, ConductorOne adds the information pulled from the connector about accounts, groups, roles, resources, and grants (as relevant) to the application.
+
+To update the information in ConductorOne, re-run the `resources` command and re-upload the file to ConductorOne using the process above.
+
+### Option 2: Automatically sync connector data to an S3 bucket
+
+The most convenient option is to automate the process of running of the sync and ingestion of the data into ConductorOne. You can automatically pull connector data into an application by using an AWS S3 bucket as a data source.
+
+<Tip>
+**Before you begin:** 
+
+Complete Steps 1-3 in [Set up an external data source](/product/admin/external-datasources).
+</Tip>
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to an existing application you wish to add the connector data to, or create a new application.
+	- **To create a new application,** follow the steps to [create a new app](/product/admin/applications#create-a-new-application).
+	- **To use an existing application,** click **Applications**. On the **Managed apps** tab, select the application’s name from the list.
+    </Step>
+    <Step>
+    On the application’s page, scroll down to the **Connectors** area of the page.
+    </Step>
+    <Step>
+    Click **Import app data** and select **From data source**.
+    </Step>
+    <Step>
+    Choose the data source you set up in Step 1 from the **Choose a datasource** dropdown.
+    </Step>
+    <Step>
+    In the **File name** field, enter `sync.c1z`.
+    </Step>
+    <Step>
+    Create a new file named `sync.sh` and make the file executable by running the following: `chmod +x sync.sh`.
+    </Step>
+    <Step>
+    Copy and paste the code below into the `sync.sh` file, adapting it to suit the Baton connector you’re using. See the connector’s README file for more information. We’ve used the `baton-okta` connector as an example here:
+
+    ```bash
+	#!/bin/bash
+	set -e
+	export BATON_API_TOKEN=oktaAPIToken
+	export BATON_DOMAIN=domain-1234.okta.com
+	export AWS_ACCESS_KEY_ID="your AWS access key"
+	export AWS_SECRET_ACCESS_KEY="your AWS secret access key"
+	export AWS_REGION="us-west-2"
+	export BATON_FILE="s3://my-bucket/baton-sync.c1z"
+	baton-okta
+	```
+
+	This script syncs data from the connector (in this case, Okta) and uploads it to your configured S3 bucket. Once the upload is complete, ConductorOne adds the information pulled from the connector about accounts, groups, roles, resources, and grants (as relevant) to the application.
+    </Step>
+</Steps>
+
+You can run the script on demand, or set up a scheduler to run it periodically. The S3 bucket syncs with ConductorOne once an hour.
+

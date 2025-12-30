@@ -1,0 +1,496 @@
+---
+title: CEL expressions examples
+og:title: CEL expressions examples - ConductorOne docs
+og:description: Practical examples, common patterns, and real-world use cases for CEL expressions in ConductorOne.
+description: Practical examples, common patterns, and real-world use cases for CEL expressions in ConductorOne.
+---
+
+## Common patterns and examples
+
+### Employee vs contractor identification
+
+```cel
+// Check if user is an employee
+subject.email.endsWith("@company.com")
+
+// Check if user is a contractor
+!subject.email.endsWith("@company.com")
+
+// Check if user is a contractor with specific domain
+subject.email.endsWith("@contractor.com")
+```
+
+### Department-based access control
+
+```cel
+// Single department
+subject.department == "Engineering"
+
+// Multiple departments
+subject.department == "Engineering" || subject.department == "IT"
+
+// Exclude specific department
+subject.department != "HR"
+```
+
+### User status and type filtering
+
+```cel
+// Active users only
+subject.status == UserStatus.ENABLED
+
+// Human users only (exclude service accounts)
+subject.type == UserType.HUMAN
+
+// Service accounts only
+subject.type == UserType.SERVICE || subject.type == UserType.SYSTEM
+```
+
+### Manager-based routing
+
+```cel
+// Route to manager
+c1.directory.users.v1.FindByEmail(subject.manager)
+
+// Route to manager's manager (skip-level)
+c1.directory.users.v1.GetManagers(c1.directory.users.v1.FindByEmail(subject.manager))
+
+// Route to user's manager AND skip-level manager
+[c1.directory.users.v1.GetByID(c1.directory.users.v1.GetByID(subject.managerId).managerId), c1.directory.users.v1.GetByID(subject.managerId)]
+```
+
+### Access conflict detection
+
+```cel
+// Check for any access conflicts
+task.analysis.hasConflictViolations
+
+// Check for specific access conflict
+"conflict123" in task.analysis.conflictViolations
+```
+
+### Time-based access control
+
+```cel
+// Permanent access
+task.isGrantPermanent == true
+
+// Temporary access (more than 2 hours)
+task.isGrantPermanent == false && task.grantDuration > duration("2h")
+
+// Short-term access (less than 1 day)
+task.grantDuration < duration("24h")
+```
+
+### Task origin routing
+
+```cel
+// Requests from Slack
+task.origin == TaskOrigin.SLACK
+
+// Requests not from web interface
+task.origin != TaskOrigin.WEBAPP
+
+// API-created requests
+task.origin == TaskOrigin.API
+```
+
+### Custom user attributes
+
+```cel
+// Check custom attribute
+subject.attributes.contractor == "true"
+
+// Check if custom attribute exists
+has(subject.attributes.securityClearance)
+
+// Conditional logic based on custom attribute
+has(subject.attributes.director) ? subject.attributes.director == "boss@company.com" : subject.manager == "manager@company.com"
+```
+
+### Operators 
+
+CEL supports common Boolean operators, like  `!`, `<`, `>`, `<=`, `>=`, `||`, `&&`, `==`, `!=`, and `in`. All operators work as they do in C, and `in` functions as a "list contains" operator. 
+
+CEL allows for basic arithmetic operations, with `+`, `-`, `*`, and `\` for adding, subtracting, multiplying, and dividing. 
+
+CEL also supports ternary operators, similar to C or JavaScript. These are formed as "If this ? then check this : otherwise check this".
+
+## Example condition expressions
+
+### Basic syntax examples
+
+These examples show fundamental CEL syntax and operators:
+
+**Simple comparisons:**
+```cel
+subject.email == "user@company.com"
+subject.department == "Engineering"
+subject.status == UserStatus.ENABLED
+```
+
+**Boolean operators:**
+```cel
+subject.status == UserStatus.ENABLED && subject.department == "IT"
+subject.department == "Engineering" || subject.department == "IT"
+!subject.email.endsWith("@company.com")
+```
+
+**Function calls:**
+```cel
+c1.user.v1.HasApp(subject, "app123")
+c1.user.v1.HasEntitlement(subject, "app123", "entitlement456")
+```
+
+**Ternary operators:**
+```cel
+subject.department == "IT" ? subject : c1.directory.users.v1.FindByEmail(subject.manager)
+```
+
+### Advanced examples
+
+**Complex conditional logic:**
+```cel
+has(subject.attributes.director) ? 
+  subject.attributes.director == "boss@company.com" : 
+  subject.manager == "manager@company.com"
+```
+
+**Access conflict detection:**
+```cel
+task.analysis.hasConflictViolations
+"conflict123" in task.analysis.conflictViolations
+```
+
+**Time-based access:**
+```cel
+task.isGrantPermanent == false && task.grantDuration > duration("2h")
+```
+
+**Access profile enrollment:**
+```cel
+c1.user.v1.AutomaticallyGrantedFromEnrollment(subject, entitlement.appId, entitlement.id)
+```
+
+### Expressions that return users
+
+**Simple user returns:**
+```cel
+subject  // Self-approval
+c1.directory.users.v1.FindByEmail(subject.manager)  // Route to manager
+```
+
+**Conditional user routing:**
+```cel
+subject.department == "IT" ? subject : c1.directory.users.v1.FindByEmail(subject.manager)
+```
+
+**Complex nested routing:**
+```cel
+has(subject.profile.propThatOnlyExistsSometimes) ? 
+  subject.profile.propThatOnlyExistsSometimes == "Value That Happens" ? 
+    c1.directory.users.v1.FindByEmail("some.email@company.com") : 
+    c1.directory.users.v1.GetByID("user123") : 
+  c1.directory.users.v1.GetByID("fallback123")
+```
+
+## Real-world policy examples
+
+These examples are based on actual customer requests and common use cases. Use them as starting points for your own policies, adapting the logic to match your organization's needs.
+
+### Access control and security
+
+#### Proactively check for potential access conflicts
+
+**Customer scenario:** A financial services company needs to prevent users from having conflicting access that could violate compliance requirements.
+
+**Business problem:** Users requesting access that would create security conflicts need special review by the security team.
+
+**Expected outcome:** Access requests with conflicts are automatically routed to security for manual review.
+
+**Condition expressions:**
+
+```cel
+// Route any request with access conflicts to security team
+task.analysis.hasConflictViolations
+
+// Route specific access conflicts to security team
+"conflict123" in task.analysis.conflictViolations
+```
+
+#### Route access requests based on where they were created
+
+**Customer scenario:** A healthcare company wants to ensure that access requests from external systems (like Slack) receive additional scrutiny.
+
+**Business problem:** Requests from non-web interfaces may be less secure or properly vetted.
+
+**Expected outcome:** External requests are routed to managers for review, while web requests can be auto-approved.
+
+**Condition expressions:**
+
+```cel
+// Route Slack requests to manager for review
+task.origin == TaskOrigin.SLACK
+
+// Route non-web requests to manager for review
+task.origin != TaskOrigin.WEBAPP
+```
+
+### User management and routing
+
+#### Custom review flow for contractors
+
+**Customer scenario:** A technology company has both full-time employees and contractors, and needs different approval workflows for each.
+
+**Business problem:** Contractors require manager approval for all access, while employees can self-approve low-risk access.
+
+**Expected outcome:** Contractors are routed to their manager, employees can self-approve.
+
+**Condition expression:**
+
+```cel
+// Route contractors to manager, employees to self-review
+!subject.email.endsWith("@company.com")
+```
+
+#### Assign a skip-level review
+
+**Customer scenario:** A large enterprise needs to ensure that high-privilege access requests are reviewed by senior management, not just direct managers.
+
+**Business problem:** Some access requests require approval from higher-level management for security and compliance.
+
+**Expected outcome:** High-privilege requests are routed to the manager's manager for review.
+
+**Condition expression:**
+
+```cel
+// Route to manager's manager (skip-level review)
+c1.directory.users.v1.GetManagers(c1.directory.users.v1.FindByEmail(subject.manager))
+```
+
+### Automation and efficiency
+
+#### Pre-approve access based on group membership
+
+**Customer scenario:** A software company wants to automatically approve access for users who already have similar access in related systems.
+
+**Business problem:** Users with existing access to similar systems can be trusted with related access without manual review.
+
+**Expected outcome:** Users with existing access are automatically approved for related access.
+
+**Condition expression:**
+
+```cel
+// Auto-approve if user has access to related app and entitlement
+c1.user.v1.HasApp(subject, "okta-app-id") && 
+c1.user.v1.HasEntitlement(subject, "jira-app-id", "admin-role-id")
+```
+
+#### Pre-approve access for employees who are currently on call
+
+**Customer scenario:** A technology company needs to ensure on-call engineers can quickly access production systems during emergencies.
+
+**Business problem:** On-call engineers need immediate access to production systems without waiting for approval.
+
+**Expected outcome:** Users currently on-call are automatically approved for production access.
+
+**Condition expression:**
+
+```cel
+// Auto-approve if user is in any on-call rotation
+c1.user.v1.HasEntitlement(subject, "pagerduty-app-id", "oncall-schedule-1") || 
+c1.user.v1.HasEntitlement(subject, "pagerduty-app-id", "oncall-schedule-2")
+```
+
+#### Auto-certify low-risk access
+
+**Customer scenario:** A consulting company wants to automatically certify access for employees who have proven trustworthy with similar access.
+
+**Business problem:** Regular access reviews are time-consuming for low-risk access that employees clearly need.
+
+**Expected outcome:** Low-risk access is automatically certified for trusted employees.
+
+**Condition expression:**
+
+```cel
+// Auto-certify if user has Google Workspace access and is in Engineering
+c1.user.v1.HasApp(subject, "google-workspace-app-id") && 
+subject.department == "Engineering"
+```
+
+### Time-based access control
+
+#### Approve access based on grant length
+
+**Customer scenario:** A financial services company needs different approval workflows for temporary vs permanent access.
+
+**Business problem:** Temporary access is lower risk and can be auto-approved, while permanent access requires manual review.
+
+**Expected outcome:** Short-term access is auto-approved, permanent access requires manager review.
+
+**Condition expressions:**
+
+```cel
+// Route permanent access to manager for review
+task.isGrantPermanent == true
+
+// Auto-approve temporary access over 2 hours
+task.isGrantPermanent == false && task.grantDuration > duration("2h")
+```
+
+### Advanced user assignment
+
+#### Assign request to users with the same entitlement
+
+**Customer scenario:** A software company wants to assign access reviews to users who already have the same access, as they understand the requirements best.
+
+**Business problem:** Users with existing access are best qualified to review requests for the same access.
+
+**Expected outcome:** Access requests are assigned to users who already have the same access.
+
+**Condition expressions:**
+
+```cel
+// Assign to users with specific entitlement
+c1.directory.apps.v1.GetEntitlementMembers("app-id", "entitlement-id")
+
+// Assign to users with the same entitlement being requested
+c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.id)
+```
+
+### System account management
+
+#### Create a group of all system and agent accounts
+
+**Customer scenario:** A technology company needs to manage all system and service accounts separately from human users.
+
+**Business problem:** System accounts require different management policies than human user accounts.
+
+**Expected outcome:** All system and service accounts are automatically grouped for specialized management.
+
+**Condition expression:**
+
+```cel
+// Include all system and service accounts
+subject.type == UserType.SERVICE || subject.type == UserType.SYSTEM
+```
+
+### Time-based access control
+
+Time functions enable sophisticated date and time-based policies. These examples use time functions to implement common temporal access patterns.
+
+#### Check if user was hired recently
+
+**Customer scenario:** A tech company wants to automatically grant onboarding access to users hired in the last 7 days.
+
+**Business problem:** New employees need temporary access to onboarding resources during their first week.
+
+**Expected outcome:** Users with hire dates in the last 7 days automatically get access.
+
+**Condition expression:**
+
+```cel
+// In Dynamic Groups: Include users hired in the last 7 days (using profile field)
+has(subject.profile.hire_date) && 
+time.parse(subject.profile.hire_date, TimeFormat.DATE) > now() - duration("168h")
+```
+
+#### Auto-approve during business hours
+
+**Customer scenario:** A financial services company wants to auto-approve low-risk requests during business hours but require manual review after hours.
+
+**Business problem:** After-hours requests may need additional scrutiny when security teams are not immediately available.
+
+**Expected outcome:** Requests during business hours (9 AM - 5 PM ET) are auto-approved.
+
+**Condition expression:**
+
+```cel
+// Auto-approve requests during business hours (9 AM - 5 PM Eastern Time)
+time.format(now(), "15", "America/New_York") >= "09" &&
+time.format(now(), "15", "America/New_York") < "17"
+```
+
+#### Route weekend requests differently
+
+**Customer scenario:** A healthcare company needs to route weekend access requests to on-call managers instead of regular managers.
+
+**Business problem:** Regular managers may not be available on weekends to approve urgent access requests.
+
+**Expected outcome:** Weekend requests are routed to on-call approvers.
+
+**Condition expression:**
+
+```cel
+// Check if today is Saturday or Sunday in company timezone
+time.format(now(), "Monday", "America/New_York") == "Saturday" ||
+time.format(now(), "Monday", "America/New_York") == "Sunday"
+```
+
+#### Check if contract end date is approaching
+
+**Customer scenario:** An enterprise needs to identify contractors whose contracts are ending soon for access review.
+
+**Business problem:** Contractors with expiring contracts should have their access reviewed before their last day.
+
+**Expected outcome:** Contractors with contracts ending in 30 days are included in review group.
+
+**Condition expression:**
+
+```cel
+// In Dynamic Groups: Users whose contract end date is within 30 days
+has(subject.profile.contract_end_date) &&
+time.parse(subject.profile.contract_end_date, TimeFormat.DATE) - now() < duration("720h")
+```
+
+#### Alert on inactive users
+
+**Customer scenario:** A company wants to automatically flag users who haven't logged in for 90 days for access review.
+
+**Business problem:** Inactive users with access pose a security risk and should have their access reviewed or revoked.
+
+**Expected outcome:** Users inactive for 90+ days are automatically included in a review group.
+
+**Condition expression:**
+
+```cel
+// In Dynamic Groups: Include users who haven't logged in for 90 days
+has(subject.profile.last_login) &&
+now() - time.parse(subject.profile.last_login, TimeFormat.RFC3339) > duration("2160h")
+```
+
+#### Check if it's end of quarter
+
+**Customer scenario:** A company wants to trigger special access reviews at the end of each fiscal quarter.
+
+**Business problem:** Quarterly compliance reviews need to happen in Q4 (October-December).
+
+**Expected outcome:** Policy activates during Q4 months.
+
+**Condition expression:**
+
+```cel
+// Check if current month is October or later (Q4)
+int(time.format(now(), "01")) >= 10
+```
+
+#### Validate date fields in profile
+
+**Customer scenario:** A company stores hire dates in custom profile fields and wants to validate they're not in the future.
+
+**Business problem:** Invalid hire dates can cause issues with onboarding automations.
+
+**Expected outcome:** Only users with valid past hire dates are processed.
+
+**Condition expression:**
+
+```cel
+// Check if hire date is valid and in the past
+has(subject.profile.hire_date) &&
+time.try_parse(subject.profile.hire_date, TimeFormat.DATE, now()) <= now()
+```
+
+## Related documentation
+
+- **[Write condition expressions](/product/admin/expressions)** - Introduction to CEL expressions and where they're used
+- **[CEL expressions reference](/product/admin/expressions-reference)** - Complete reference for all available objects, functions, and time functions

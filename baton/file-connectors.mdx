@@ -1,0 +1,234 @@
+---
+title: "Import application data from a file"
+description: "Import data from any application using flat file uploads or by syncing from an external data source."
+og:title: "Import application data from a file"
+og:description: "Import data from any application using flat file uploads or by syncing from an external data source."
+sidebarTitle: "File connectors"
+---
+
+<Tip>
+**Quick tips for success when uploading files to ConductorOne:**
+
+    - Use **.xlsx**, **.csv**, or **.c1z** file format.
+    - Include a **User ID** column in your file, or map a data value in your source file to the **User ID** column.
+    - Map your source file’s data values to ConductorOne’s expected data values.
+</Tip>
+
+## What are file connectors?
+
+File connectors sync application data from apps that do not have an automated connector available, such as non-API-enabled, legacy, or homegrown on-prem apps.
+
+You can add file connectors to ConductorOne in two ways:
+
+- Manually, by uploading a file.
+- Automatically, by syncing data from an [external datasource](/product/admin/external-datasources).
+
+<Tip>
+**Note:** 
+
+ConductorOne allows you to add more than one connector to an application. This is useful if entitlement, user, or permission data is extracted from the target application with multiple exports.
+</Tip>
+
+## Supported file formats
+
+Application data can be imported into ConductorOne using three different file formats:
+
+- Comma Separated Value (.csv) files (values can be either comma- or tab-separated)
+- Excel (.xlsx) files
+- ConductorOne Baton (.c1z) files: these files are generated using the [Baton protocol](/baton/faq)
+
+Other file formats will not upload successfully.
+
+## Creating Excel and CSV files
+
+ConductorOne allows for custom configurations in your Excel or CSV file, as each file can be dynamically mapped into different data elements in ConductorOne, such as username, email, or manager.
+
+You can use one of our templates as a starting point:
+
+<Columns cols={2}>
+<Card title="Identity-focused template" icon="user" href="/images/product/assets/C1IdentityDataTemplate.xlsx">
+Use this template if your data is organized by accounts or users.
+</Card>
+
+<Card title="Entitlement-focused template" icon="shield-check" href="/images/product/assets/C1EntitlementDataTemplate.xlsx">
+Use this template if your data is organized by entitlements or permissions.
+</Card>
+</Columns>
+
+Use this template if your data is organized by entitlements or permissions.### Expected data valuesConductorOne looks for the following column names to automatically understand and process the data in your uploaded file. You can give the columns in your file any names you like and manually [map the data values](/baton/file-connectors#map-data-values), but if you use the column names listed below, they will be automatically understood and processed by ConductorOne without further intervention from you.
+
+**For identity-focused files:**
+
+| Column name | Required? | Notes |
+| :--- | :--- | :--- |
+| Last Name |  |  |
+| First Name |  |  |
+| Full Name |  | You can use the “Full name” column instead of separate columns for first and last names if this is how the app’s data is organized |
+| User ID | Yes | If there is no native user ID for the application, use the email address or username associated with the account |
+| Username |  |  |
+| Email Address | Yes | Email addresses are used to match users across their application accounts |
+| User Status |  | The user’s account status in the app |
+| Manager ID |  |  |
+
+**For grant-focused files:**
+
+| Column name | Required? | Notes |
+| :--- | :--- | :--- |
+| Resource Type | Yes |  |
+| Resource Name | Yes |  |
+| Entitlement | Yes |  |
+| Entitlement Description |  |  |
+| Entitlement Display Name | Strongly recommended |  |
+| Entitlement Slug | Strongly recommended | [A short term that describes the access right or permission](/product/admin/managing-entitlements#rename-the-entitlement), which is shown throughout ConductorOne. |
+
+**Can be included in either file type:**
+
+| Column name | Required? | Notes |
+| :--- | :--- | :--- |
+| Groups |  | A comma-separated list of the app groups the user is part of |
+| Roles |  | A comma-separated list of the app roles assigned to the user |
+| User Type |  | Used for designating service and system accounts |
+| Account Owner |  | Used to note the owner of a service or system account |
+| Last Login |  | See the list of accepted date/time formats below |
+
+A few fields are required. Most critically, to successfully upload account information you must either include a “User ID” column in your file or [map a data value](/baton/file-connectors#map-data-values) in your source file to the **User ID** column. The other required fields are noted above.
+
+### Designate service and system accounts in your file
+
+Follow this process to designate service accounts and system accounts in your file and associate these special accounts with the human user responsible for each one.
+
+<Steps>
+    <Step>
+    Add a column titled **User Type** and a column titled **Account Owner** to your file.
+    Make sure to use these exact column titles so ConductorOne understands how to process the data.
+    </Step>
+    <Step>
+    In the **User Type** column, use **Service** and **System** to designate these special account types. Any account that is not specifically designated will be interpreted as a user account.
+    </Step>
+    <Step>
+    In the **Account Owner** column, add the email address for the human user responsible for each service or system account.
+    </Step>
+</Steps>
+
+These fields will map account types and account owners respectively, and this information will be reflected in the **Accounts** tab of the application.
+
+<Tip>
+**Why is this process necessary?** 
+
+Options for mapping account type and account owner information to the column names of your choice have not yet been added to the [**Set mappings** page](/baton/file-connectors#map-data-values). We’re planning to make this change soon. In the meantime, use the exact column headers **User Type** and **Account Owner** in your spreadsheet so ConductorOne can correctly understand and process the information.
+</Tip>
+
+### Import last login info
+
+To import last login data for accounts in the app, create the header “Last Login” in your CSV file. (If you use this exact header, you won’t need to [map the data value](/baton/file-connectors#map-data-values).) Then, populate the column with last login dates.
+
+The following date formats are accepted:
+
+| Format String | Description |
+| :--- | :--- |
+| `"2006-01-02 15:04:05"` | MySQL, PostgreSQL |
+| `"2006-01-02 15:04:05.000"` | MySQL, SQL Server |
+| `"2006-01-02 15:04:05.000000"` | PostgreSQL |
+| `"2006-01-02 15:04:05.000000000"` | Precision formats |
+| `"2006-01-02T15:04:05Z"` | ISO8601 |
+| `"2006-01-02T15:04:05.000Z"` | ISO8601 with ms |
+| `"2006-01-02T15:04:05.000-07:00"` | ISO8601 with timezone |
+| `"2006-01-02"` | Date only |
+| `"01/02/2006 15:04:05"` | US format |
+| `"02/01/2006 15:04:05"` | European format |
+| `"01/02/2006"` | US short date |
+| `"02/01/2006"` | European short date |
+| `"Jan 02, 2006 15:04:05"` | Oracle format |
+| `"02-JAN-2006 15:04:05"` | Oracle format (uppercase month) |
+| `"02-Jan-2006 15:04:05"` | Oracle format (mixed case month) |
+| `"02-JAN-06 15:04:05"` | Oracle short year |
+| `"02-Jan-06 15:04:05"` | Oracle short year (mixed case) |
+| `"02-01-2006"` | Oracle date only (day-month-year) |
+| `"02-01-06"` | Oracle date only (day-month-short year) |
+| `"January 02, 2006 15:04:05"` | Long month name |
+| `"2006-01-02-15.04.05.000000"` | DB2 format |
+
+## Using .c1z files
+
+Files in the [ConductorOne Baton file format](/baton/faq) are supported natively for application data uploads in a non-lossy format. In other words, the .c1z file preserves all resource metadata, hierarchy, and grant structures that are discovered in an application. When uploading a .c1z file, there is no need to configure file mappings. ConductorOne understands and ingests the application data automatically.
+
+## Add a file connector to an app
+
+To add file data to an application:
+
+<Steps>
+    <Step>
+    Navigate to a ConductorOne application and find the **Connectors** area of the page.
+    </Step>
+    <Step>
+    Click **Import app data** and choose your import method:
+    - **From file:** Upload your Excel, CSV, or c1z file.
+    - **From data source:** Select your external data source and enter the name of your file, then click **Import**.
+    </Step>
+</Steps>
+
+ConductorOne will now begin ingesting the data into the ConductorOne application. To review the detected delta between files, click **View logs** on the connector.
+
+<Tip>
+**You can upload data to any application, even if the application has another connector.** 
+
+This allows you to digest all entitlements for an app, even if an existing connector does not sync all of the needed account or resource data.
+</Tip>
+
+## Map data values
+
+When you upload a custom spreadsheet, the data values in your file might not automatically be matched with ConductorOne attributes. For example, a data file that includes a column titled “Last” for a user’s last name might not automatically be understood by ConductorOne, which expects the data in that column to be titled “Last Name”. You can avoid needing to map data values by using the column headers listed in the table above.
+
+To ensure that the data in your spreadsheet maps accurately into ConductorOne’s system, map your spreadsheet’s values to those used by ConductorOne.
+
+<Steps>
+    <Step>
+    From either the Connectors page or an app’s details page, locate the file connector.
+    </Step>
+    <Step>
+    Click the **…** (more actions) menu and select **Set mappings**.
+    </Step>
+    <Step>
+    In the **Set data value mappings** drawer, choose the data values from your source file that align with the data values used by ConductorOne.
+	<Tip>
+    **Mapping a source file value to each ConductorOne value is not required.** 
+    
+    You can leave values that do not apply to your source file’s data unmapped. However, any values in the source file that are not mapped to a ConductorOne data value will not be imported.
+    </Tip>
+    </Step>
+    <Step>
+    Once you’ve mapped the data values, click **Set mappings** to save them.
+    </Step>
+</Steps>
+
+When you set the mappings, ConductorOne automatically reprocesses the data with the changed mappings. You can see the output of the changes by viewing the log.
+
+## Refresh or replace file data
+
+Periodically, you may need to refresh data in your file connector, whether to prepare for upcoming access review campaigns or simply to refresh the source of truth of accounts and permissions in ConductorOne. Doing so it as simple as replacing the current uploaded file with a more current version.
+
+<Tip>
+**Do I need to redo the data mappings each time I replace a file?** 
+
+No, your data mappings are preserved across uploads. You’ll only need to change data mappings after replacing a file if the file’s contents have changes the mapping pattern.
+</Tip>
+
+To refresh application data in a file connector:
+
+<Steps> 
+    <Step>
+    From the **Applications** page, navigate to the relevant application.
+    </Step>
+    <Step>
+    Locate the **Connectors** section on the **Setup** tab.
+    </Step>
+    <Step>
+    Find the previously uploaded file, which is listed as a file connector, and click **Replace file**.
+    </Step>
+    <Step>
+    Upload the updated file. Check the log to see the output of the changes.
+    </Step>
+</Steps>
+
+**That’s it!** The updated data is processed and loaded into the application.
+

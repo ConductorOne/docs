@@ -1,0 +1,328 @@
+---
+title: "Set up an Azure Kubernetes Service connector"
+og:title: "Set up an Azure Kubernetes Service connector"
+description: "ConductorOne provides identity governance for Azure Kubernetes Service. Integrate your Azure Kubernetes Service instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "ConductorOne provides identity governance for Azure Kubernetes Service. Integrate your Azure Kubernetes Service instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Microsoft Azure Kubernetes Service"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Cluster roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Namespaces | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+
+## Gather Azure Kubernetes Service credentials
+
+Configuring the connector requires you to pass in credentials generated in Azure Kubernetes Service. Gather these credentials before you move on.
+
+<Warning>
+To create a Service Principal in Azure Kubernetes Service the user must have the following permissions:
+
+- Application.ReadWrite.All
+- Directory.ReadWrite.All
+
+Roles that grant these permissions include:
+
+- Azure AD Administrator
+- Application Administrator
+- Cloud Application Administrator
+
+To assign a role to the Service Principal, the user must have Azure resource-level permissions, typically at the subscription, resource group, or AKS resource level:
+
+- Microsoft.Authorization/roleAssignments/write permission
+</Warning>
+
+### Look up your Azure subscription ID and cluster resource group name
+
+<Steps>
+  <Step>
+  In Azure, search for and navigate to your cluster's home page.
+  </Step>
+  <Step>
+  On the **Overview** tab, locate the **Essentials** section.
+  </Step>
+  <Step>
+  Make a note of the cluster's resource group name and subscription ID.
+  </Step>
+</Steps>
+
+### Look up your tenant ID
+
+<Steps>
+  <Step>
+  In the main search bar, click **Tenant properties**.
+  </Step>
+  <Step>
+  Make a note of the tenant ID.
+  </Step>
+</Steps>
+
+### Create a Service Principal
+
+If desired, you can use an existing Service Principal. Follow these steps if you want to create a new one.
+
+<Steps>
+  <Step>
+  In Entra admin center, navigate to **App registrations**.
+  </Step>
+  <Step>
+  Click **\+ New registration**.
+  </Step>
+  <Step>
+  Give the application a name, such as "ConductorOne".
+  </Step>
+  <Step>
+  Select the supported account type appropriate for your organization. For most internal automation, "Accounts in this organizational directory only (Single tenant)" is sufficient.
+  </Step>
+  <Step>
+  You do not need to set a redirect URI.
+  </Step>
+  <Step>
+  Click **Register**.
+  </Step>
+  <Step>
+  The new app is created. Carefully copy and save the **Application (client) ID** and the **Directory (tenant) ID** shown on the application summary page.
+  </Step>
+  <Step>
+  Next, we'll generate a client secret for this app. Click **Certificates & secrets**.
+  </Step>
+  <Step>
+  Click **\+ New client secret**.
+  </Step>
+  <Step>
+  Give the client secret a description and set its expiration.
+  </Step>
+  <Step>
+  Click **Add**.
+  </Step>
+  <Step>
+  The client secret is generated. Carefully copy and save the **Secret Value**.
+  </Step>
+</Steps>
+
+### Assign Azure RBAC permissions to the Service Principal
+
+Next, grant this Service Principal the **Reader** role at the subscription level so it can discover and read all your AKS cluster information.
+
+<Steps>
+  <Step>
+  In the Azure portal's search bar, type "Subscriptions" and select the relevant Azure subscription.
+  </Step>
+  <Step>
+  In the left-hand menu of your Subscription, select **Access control (IAM)**.
+  </Step>
+  <Step>
+  Click **\+ Add** > **Add role assignment**.
+  </Step>
+  <Step>
+  On the **Role** tab, search for and select the **Reader** role.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  On the **Members** tab, ensure **User, group, or service principal** is selected for **Assign access to**.
+  </Step>
+  <Step>
+  Click **\+ Select members**.
+  </Step>
+  <Step>
+  In the **Select members** pane, search for and select the name of your App Registration.
+  </Step>
+  <Step>
+  Click **Select** at the bottom of the pane.
+  </Step>
+  <Step>
+  Click **Review + assign** at the bottom.
+  </Step>
+</Steps>
+
+Allow time for the new role to propagate. Azure role assignments can take several minutes (typically five to 15, sometimes up to 30) to fully propagate.
+
+### Make sure your Service Principal has cluster access
+
+The Service Principal must have access to the cluster in Azure and the proper permissions defined in the cluster.
+
+<Steps>
+  <Step>
+  In Azure, navigate to the cluster's admin page and click **Access control (IAM)**.
+  </Step>
+  <Step>
+  Locate **Role assignments** add a new assignment for your Service Principal. Commonly used roles are "Azure Kubernetes Service Cluster User Role" and "Azure Kubernetes Service Cluster Admin Role".
+  </Step>
+</Steps>
+
+Be aware that propagation of this assignment may take some time (up to multiple hours) depending on the size and complexity of your cluster.
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Azure Kubernetes Service connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Azure Kubernetes Service credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+  </Step>
+  <Step>
+  Search for **Azure Kubernetes Service** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Azure Kubernetes Service connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+    If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  Find the **Settings** area of the page and click **Edit**.
+  </Step>
+  <Step>
+  Enter the Azure Kubernetes Service credentials into the relevant fields.
+  </Step>
+  <Step>
+  Click **Save**.
+  </Step>
+  <Step>
+  The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+  </Step>
+</Steps>
+
+**That's it!** Your Azure Kubernetes Service connector is now pulling access data into ConductorOne.
+
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the [Azure Kubernetes Service](https://github.com/ConductorOne/baton-aks) connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Azure Kubernetes Service connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Azure Kubernetes Service connector:
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+	Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Azure Kubernetes Service connector deployment:
+
+#### Secrets configuration
+
+```yaml
+# baton-aks-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-aks-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Azure Kubernetes Service credentials
+  BATON_SUBSCRIPTION_ID: <Azure subscription ID>
+  BATON_RESOURCE_GROUP: <Resource group name of the cluster>
+  BATON_CLUSTER_NAME: <Name of the cluster to sync>
+  BATON_TENANT_ID: <The directory (tenant) ID where your service principal is registered>
+  BATON_SP_CLIENT_ID: <The Application (client) ID of your service principal>
+  BATON_SP_CLIENT_SECRET: <The client (Service Principal) secret>
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-aks.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-aks
+  labels:
+    app: baton-aks
+spec:
+  selector:
+    matchLabels:
+      app: baton-aks
+  template:
+    metadata:
+      labels:
+        app: baton-aks
+        baton: true
+        baton-app: aks
+    spec:
+      containers:
+      - name: baton-aks
+        image: ghcr.io/conductorone/baton-aks:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-aks
+        envFrom:
+        - secretRef:
+            name: baton-aks-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Azure Kubernetes Service connector to. Azure Kubernetes Service data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your Azure Kubernetes Service connector is now pulling access data into ConductorOne.
+
+</Tab>
+</Tabs>

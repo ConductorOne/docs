@@ -1,0 +1,370 @@
+---
+title: Set up a Workday Accounts connector
+og:title: Set up a Workday Accounts connector - ConductorOne docs
+og:description: Integrate your Workday instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance and just-in-time provisioning for Workday. Integrate your Workday instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: Workday Account
+---
+
+## Which Workday connector should I use? 
+
+ConductorOne offers two Workday connectors: Workday and Workday Accounts. How you want to work with Workday in ConductorOne will determine which one you should set up.
+
+* **[Workday connector](/baton/workday)**: This connector is the best choice if you want to use Workday as a [directory](/product/admin/directory). You’ll also need it if you want to enable access requests for Workday role and group assignments. 
+
+* **[Workday Accounts connector](/baton/workday-wql)**: This connector utilizes the Workday Query Language (WQL), which allows it to pull a different data set than the Workday connector. Workday Accounts is the best choice if you want to review who has what kind of access to Workday in your organization, including account type and service center assignments. 
+
+| Resource                                          | Workday connector\* | Workday Accounts connector |
+| :--- | :--- | :--- |
+| Accounts                                          | Sync                | Sync                             |
+| Roles                                             | Sync                |                                  |
+| Security groups                                   | Sync                | Sync                             |
+| Account type (Implementers and Integration Users) |                     | Sync                             |
+| Service centers                                   |                     | Sync                             |
+
+*If the Workday connector is configured using a custom report, it can also pull in information on the account owner’s organization, title, and manager.
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           |       
+| Security groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    |   | 
+| User-based security groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>  | 
+| Account type    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    |   | 
+| Service center  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    |   | 
+
+## Gather Workday credentials 
+
+Configuring the connector requires you to pass in credentials generated in Workday. Gather these credentials before you move on. 
+
+<Warning>
+A user with the permission to create a new API client in Workday must perform this task.
+</Warning>
+
+### Look up your Workday REST API endpoint
+
+<Steps>
+<Step>
+In Workday, use the search bar to look up "View API Clients". Make sure to select this name from the results, not the similarly named "Register API Client". 
+</Step>
+<Step>
+Carefully copy and save the Workday REST API endpoint.  
+</Step>
+</Steps>
+
+### Create a new Workday API client
+
+<Steps>
+<Step>
+In Workday, use the search bar to look up "Register API Client for Integrations". Make sure to select this name from the results, not the similarly named "Register API Client". 
+</Step>
+<Step>
+In the modal that appears, give the new API client a name, such as "ConductorOne integration". 
+</Step>
+<Step>
+In the **Scopes** box, select **Custom Objects** and search for "System". Select **System** and click **OK**. The System scope is required to access the WQL API.
+</Step>
+<Step>
+The newly created client's client ID and client secret are shown. Carefully copy and save these credentials. 
+
+   **Do not** click **Done** at the bottom of the page yet.
+</Step>
+</Steps>
+
+#### Create a refresh token
+
+<Steps>
+<Step>
+Next, click the three dots icon next to the client name and navigate to **API Client** > **Manage Refresh Tokens for Integrations**. 
+</Step>
+<Step>
+Select the Workday account you want to associate with the token and click **OK**. 
+</Step>
+<Step>
+On the **Delete or Regenerate Refresh Token** page, scroll down and check the **Generate New Refresh Token** box. 
+</Step>
+<Step>
+Click **OK**. 
+</Step>
+<Step>
+Carefully copy and save the new refresh token. 
+</Step>
+</Steps>
+
+#### Create a new security group
+
+<Steps>
+<Step>
+Still in Workday, use the search bar to look up "Maintain Permissions for Security Group". 
+</Step>
+<Step>
+In the **Maintain Permissions for Security Group** modal, make sure the **Maintain** button is selected. 
+</Step>
+<Step>
+In the **Source Security Group** field, navigate to **By Type** > **Integration System Security Group**. 
+</Step>
+<Step>
+Create a new security group. Give it a name, such as "ConductorOne WQL integration security group". 
+</Step>
+<Step>
+On the new group's **Domain Security Policy Permissions** tab, leave the **Select All** box checked. 
+</Step>
+<Step>
+Click the **+** icon to create new rows, and fill them out as follows: 
+
+| View/Modify Access | Domain Security Policy                    | Functional Areas | Purpose                                |
+| :--- | :--- | :--- | :--- |
+| View Only          | WQL for Workday Extend                    | System           | (Required) WQL API Access              |
+| View Only          | Workday Accounts                          | System           | (Required) Accounts, Implementers      |
+| View Only          | Worker Data: Public Worker Reports        | Staffing         | Worker Info (title, managers)          |
+| View Only          | Security Configuration                    | System           | Security Groups                        |
+| View Only          | Security Administration                   | System           | Account: Most Recent Sign-on            |
+| View Only          | Manage: Service Center                    | System           | Service Centers                        |
+| Get and Put        | User-Based Security Group Administration  | System           | User-Based Security Group Provisioning |
+</Step>
+<Step>
+Click **OK**. 
+
+   Security group permissions will not take effect until they are activated in the following steps.
+</Step>
+</Steps>
+
+#### Activate pending security policy changes 
+
+<Steps>
+<Step>
+Next, activate the security policy changes. Search for "Activate Pending Security Policy Changes". 
+</Step>
+<Step>
+Add a comment about the change you're making and click **OK**. 
+</Step>
+<Step>
+Review the changes. If everything looks good, click the **Confirm** checkbox, then click **OK**. 
+</Step>
+</Steps>
+
+#### Assign the security group to the Workday account
+
+<Steps>
+<Step>
+Still in Workday, use the search bar to look up "View Workday Account" and select the Workday account you used when generating the refresh token. 
+</Step>
+<Step>
+Click the three dots icon next to the account name and navigate to **Security Profile** > **Assign Integration System Security Groups**. 
+</Step>
+<Step>
+Select the security group you created and click **OK**. 
+</Step>
+</Steps>
+
+### Optional: Look up security group types
+
+If you want ConductorOne to sync specific non-user-based security group types (such as `Role-Based Security Group (Constrained)` and `Integration System Security Group`), you'll need to gather the list of these types. 
+
+Non-user-based security group types are defined and configured in Workday, and their exact names vary based on how your Workday instance is configured. Remember that security group type names are cases-sensitive. 
+
+**That's it!** Next, move on to the connector configuration instructions. 
+
+## Configure the Workday Accounts connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Workday Accounts credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+   <Step>
+   In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+   </Step>
+   <Step>
+   Search for **Workday Accounts** and click **Add**. 
+   </Step>
+   <Step>
+   Choose how to set up the new Workday Accounts connector: 
+
+      * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+      * Add the connector to a managed app (select from the list of existing managed apps)
+      * Create a new managed app
+   </Step>
+   <Step>
+   Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+      If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+
+   </Step>
+   <Step>
+   Click **Next**.
+   </Step>
+   <Step>
+   Find the **Settings** area of the page and click **Edit**.
+   </Step>
+   <Step>
+   Enter the endpoint you looked up in the **Workday REST API Endpoint** field. 
+   </Step>
+   <Step>
+   Enter the **Client ID**, **Client secret**, and **Refresh token** in the relevant fields.
+   </Step>
+   <Step>
+   **Optional.** If desired, click the checkbox to **Sync service centers**. 
+   </Step>
+   <Step>
+   **Optional.** If desired, click the checkbox to **Sync user-based security groups**. 
+
+      * If you select this option, you may enter an optional list of the user-based security groups that you want to sync in the **User-based security groups** field. 
+   </Step>
+   <Step>
+   **Optional.** Enter the list of (non-user-based) security group types you want to sync in the **Other security group types** field. Remember that security group type names are case-sensitive. 
+   </Step>
+   <Step>
+   **Optional.** Enter the list of (non-user-based) security groups you want to sync in the **Other security groups** field. Remember that security group names are case-sensitive.  
+   </Step>
+   <Step>
+   Click **Save**.
+   </Step>
+   <Step>
+   The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+   </Step>
+</Steps>
+
+**That's it!** Your Workday Accounts connector is now pulling access data into ConductorOne.
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the Workday Accounts connector, hosted and run in your own environment. [Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector and get detailed setup instructions.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Workday Accounts connector
+
+<Steps>
+   <Step>
+   In ConductorOne, navigate to **Connectors** > **Add connector**.
+   </Step>
+   <Step>
+   Search for **Baton** and click **Add**.
+   </Step>
+   <Step>
+   Choose how to set up the new Workday Accounts connector: 
+
+      * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+      * Add the connector to a managed app (select from the list of existing managed apps)
+
+      * Create a new managed app
+   </Step>
+   <Step>
+   Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+      If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+   </Step>
+   <Step>
+   Click **Next**.
+   </Step>
+   <Step>
+   In the **Settings** area of the page, click **Edit**.
+   </Step>
+   <Step>
+   Click **Rotate** to generate a new Client ID and Secret. 
+
+      Carefully copy and save these credentials. We'll use them in Step 2. 
+   </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Workday Accounts connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-workday-wql-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-workday-wql-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Workday credentials
+  BATON_WORKDAY_REST_API_ENDPOINT: <Workday REST API endpoint>
+  BATON_WORKDAY_CLIENT_ID: <Workday API client ID>
+  BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret>
+  BATON_WORKDAY_REFRESH_TOKEN: <Workday API client refresh token>
+
+  # Optional: include if you want to sync resource IDs
+  BATON_SYNC_RESOURCES: <List of the resource IDs to sync>
+
+  # Optional: include if you want to sync service centers
+  BATON_SYNC_SERVICE_CENTERS: true
+
+  # Optional: include if you want to sync user-based security groups (default is true)
+  BATON_SYNC_USER_BASED_SECURITY_GROUPS: true
+
+  # Optional: include if you want to limit the synced user-based security groups to the types listed here
+  BATON_USER_BASED_SECURITY_GROUP_FILTER: <List of user-based security group types to sync>
+
+  # Optional: include if you want to limit the synced security groups to the groups listed here
+  BATON_SECURITY_GROUP_FILTER: <List of the names of other security groups to sync>
+
+  # Optional: include if you want to limit the synced security groups to the types listed here
+  BATON_SECURITY_GROUP_TYPE_FILTER: <List of other security group types to sync>
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-workday-wql.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-workday-wql
+  labels:
+    app: baton-workday-wql
+spec:
+  selector:
+    matchLabels:
+      app: baton-workday-wql
+  template:
+    metadata:
+      labels:
+        app: baton-workday-wql
+        baton: true
+        baton-app: workday-wql
+    spec:
+      containers:
+      - name: baton-workday-wql
+        image: ghcr.io/conductorone/baton-workday-wql:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-workday-wql-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files. 
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Workday Accounts connector to. Workday Accounts data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+
+**That's it!** Your Workday Accounts connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>

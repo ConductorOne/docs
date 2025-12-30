@@ -1,0 +1,218 @@
+---
+title: "Set up an Okta connector"
+og:title: "Set up an Okta connector"
+description: "Integrate your Okta instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access."
+og:description: "Integrate your Okta instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access."
+sidebarTitle: "Okta (v1)"
+---
+
+<Tip>
+ **A newer version of this connector is available.** This version of the connector is no longer available for installation. If you're setting up an Okta connector with ConductorOne for the first time, use the [v2 version](/baton/okta-v2).
+</Tip>
+
+## Capabilities
+
+- Sync user identities from Okta to ConductorOne
+- Promote identities from application users to ConductorOne users
+
+- Resources supported:
+  - Groups
+  - Org roles (requires a super admin token)
+  - Application assignments
+
+- Provisioning supported:
+  - Group membership
+  - Application assignment
+
+Depending on the permissions of the Okta API Token, ConductorOne has different functionality that it can provide. See the next section for more information.
+
+### API token permissions and ConductorOne capabilities
+
+ConductorOne's capabilities depend on the permissions of the API token used to set up the connector:
+
+| ConductorOne capability | Read-only admin token | Read-only + app admin + group admin token | Super admin token |
+| :--- | :--- | :--- | :--- |
+| Review group membership | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Provision group membership | | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Review application assignment | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Provision application assignment | | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Review admin roles | | | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+## Add a new Okta connector
+
+<Warning>
+This task requires either the **Connector Administrator** or **Super Administrator** role in ConductorOne.
+</Warning>
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+
+<Step>
+Search for **Okta** and click **Add**.
+</Step>
+
+<Step>
+Choose how to set up the new Okta connector:
+
+  - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+  - Add the connector to a managed app (select from the list of existing managed apps)
+  - Create a new managed app
+</Step>
+
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+<Warning>
+An Okta connector owner must have the following permissions:
+
+- **Connector Administrator** or **Super Administrator** role in ConductorOne
+- **Read Only Admin** or **Super Admin** role in Okta
+</Warning>
+</Step>
+
+<Step>
+Click **Next**.
+</Step>
+</Steps>
+
+### Next steps
+
+- **If you are the connector owner**, proceed to [Configure your Okta connector](/baton/v1/okta#configure-your-okta-connector) for instructions on integrating Okta with ConductorOne.
+
+- **If someone else is the connector owner**, ConductorOne will notify them by email that their help is needed to complete the setup process.
+
+## Configure your Okta connector
+
+<Warning>
+A user with the **Connector Administrator** or **Super Administrator** role in ConductorOne and **Read Only Admin** or **Super Admin** role in Okta must perform this task.
+</Warning>
+
+<Warning>
+You can skip Steps 1 and 2 and proceed to Step 3 if you already have an API token generated with **Super Admin, Read Only Admin** or a combination of **Read Only/App Admin/Group Admin** privileges. To learn more about Okta roles, visit [https://help.okta.com/en/prod/Content/Topics/Security/administrators-admin-comparison.htm](https://help.okta.com/en/prod/Content/Topics/Security/administrators-admin-comparison.htm)
+</Warning>
+
+### (Optional) Step 1: Create a service account for the API token
+
+If desired, you can create a service account user in Okta that has the permissions for the API token.
+
+<Steps>
+<Step>
+Navigate to **Directory > People** and click **Add person**.
+
+<Frame>
+  <img src="/images/product/assets/okta-token-1.png" alt="" />
+</Frame>
+</Step>
+
+<Step>
+Enter the necessary user details to create a user. You might want to use identifiers that make it easily recognizable as a service account, such as First Name: ReadOnly, Last Name: ServiceUser.
+</Step>
+
+<Step>
+Set the **Password** for the account and store it securely in a vault.
+
+<Frame>
+  <img src="/images/product/assets/okta-token-2.png" alt="" />
+</Frame>
+</Step>
+
+<Step>
+Navigate to **Security > Administrator** and click **Add administrator**.
+
+<Frame>
+  <img src="/images/product/assets/okta-token-3.png" alt="" />
+</Frame>
+</Step>
+
+<Step>
+Enter the email address for your newly created Service Account to select the user.
+</Step>
+
+<Step>
+Select the administrator roles to grant: Read Only Admin, Super Administrator, or a combination of Read Only + Application Admin + Group Admin.
+
+<Frame>
+  <img src="/images/product/assets/okta-token-4.png" alt="" />
+</Frame>
+</Step>
+
+<Step>
+Click **Add Administrator**.
+</Step>
+</Steps>
+
+### Step 2: Create an API token
+
+<Tip>
+When **creating** an API token, Okta assigns the permissions of the _currently logged-in user_ to the token. If, for example, you wish to use a Read Only Admin-scoped API token, you must log in to Okta as a user with the Read Only Admin role assigned.
+</Tip>
+
+<Steps>
+<Step>
+Log into Okta with the account you'll use to generate the API token.
+The account must have **Read Only Administrator,** **Super Administrator,** or a combination of **Read Only/App Admin/Group Admin** privileges. The permissions on the API token affects what features and functionality are available from ConductorOne. Before you begin, review the chart in [API permissions and ConductorOne capabilities](/baton/okta-v2#api-token-permissions-and-conductorone-capabilities) to make sure you're creating a token with the right permissions for your needs.
+</Step>
+
+<Step>
+In the Okta console, navigate to **Security > API** and click **Tokens**.
+
+<Frame>
+  <img src="/images/product/assets/okta-token-5.png" alt="" />
+</Frame>
+</Step>
+
+<Step>
+Click **Create Token**.
+</Step>
+
+<Step>
+Give your token a name, such as **ConductorOne** and click **Create Token**.
+</Step>
+
+<Step>
+Copy and save the new API token.
+</Step>
+</Steps>
+
+### Step 3: Add your Okta credentials to ConductorOne
+
+<Steps>
+<Step>
+In ConductorOne, navigate to the Okta connector by either:
+
+  - Clicking the **Set up connector** link in the email you received about configuring the connector.
+  - Navigate to **Connectors** > **Okta** (if there is more than one **Okta** listed, click the one with your name listed as owner and the status **Not connected**).
+</Step>
+
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+
+<Step>
+Enter your Okta domain (the URL of your Okta instance is `<YOUR DOMAIN>.okta.com`) into the **Okta domain** field.
+</Step>
+
+<Step>
+Paste your API token into the **API key** field.
+</Step>
+
+<Step>
+**Optional.** If you want ConductorOne to skip syncing inactive child apps, or to sync deprovisioned users, click the checkboxes accordingly.
+</Step>
+
+<Step>
+Click **Save**.
+</Step>
+
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your Okta connector is now pulling access data into ConductorOne.
+
+### What's next?
+
+If Okta is your company's identity provider (meaning that it is used to SSO into other software), the connector sync will automatically create applications in ConductorOne for all of your SCIMed software. Before you move on, review the [Create applications](/product/admin/applications) page for important information about how to set up connectors for the SCIMed apps.

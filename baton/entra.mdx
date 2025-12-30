@@ -1,0 +1,491 @@
+---
+title: "Set up a Microsoft Entra ID connector"
+og:title: "Set up a Microsoft Entra ID connector"
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Entra ID. Integrate your Entra ID instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+description: "ConductorOne provides identity governance and just-in-time provisioning for Entra ID. Integrate your Entra ID instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Microsoft Entra ID"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>* |
+| Enterprise applications | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Directory roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Licenses | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Managed identities | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+
+The Entra ID connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). 
+
+When a new account is created by ConductorOne, the account's password will be sent to a [vault](/product/admin/vaults).
+
+*Due to limitations of the Microsoft Graph API, the connector cannot provision Mail Enabled Security groups or Distribution groups. 
+
+## Gather Entra ID credentials 
+
+Configuring the connector requires you to pass in credentials generated in Entra ID. Gather these credentials before you move on. 
+
+<Tip>
+If you prefer to set up a cloud-hosted Entra ID connector using OAuth, skip ahead to the **OAuth** tab below.
+</Tip>
+
+<Warning>
+A user with the **Global Administrator** permission in Entra ID must perform this task.
+</Warning>
+
+### Create a new Entra application 
+<Steps>
+<Step>
+In Entra admin center, navigate to **App registrations**.
+</Step>
+<Step>
+Click **+ New registration**. 
+</Step>
+<Step>
+Give the application a name, such as "ConductorOne", and select the supported account type relevant to your Entra installation. You do not need to set a redirect URL. 
+</Step>
+<Step>
+Click **Register**. 
+</Step>
+<Step>
+The new app is created. Carefully copy and save the **Application (client) ID** and the **Directory (tenant) ID** shown on the application summary page.
+</Step>
+<Step>
+Next, we'll generate a client secret for this app. Click **Certificates & secrets**. 
+</Step>
+<Step>
+Click **+ New client secret**. 
+</Step>
+<Step>
+Give the client secret a description and set its expiration. 
+</Step>
+<Step>
+Click **Add**. 
+</Step>
+<Step>
+The client secret is generated. Carefully copy and save the **Secret Value**.  
+</Step>
+</Steps>
+### Give the new Entra app API permissions
+<Steps>
+<Step>
+Click **API permissions**.
+</Step>
+<Step>
+Click **+ Add permissions** > **Microsoft Graph**. 
+</Step>
+<Step>
+Click **Application permissions**. Select each permission in the relevant set below: 
+
+   To sync access data: 
+
+   ```bash
+   Application.Read.All
+   AuditLog.Read.All
+   Directory.Read.All
+   Group.Read.All
+   GroupMember.Read.All
+   MailboxSettings.Read
+   RoleAssignmentSchedule.Read.Directory
+   RoleEligibilitySchedule.Read.Directory
+   RoleManagement.Read.All
+   RoleManagement.Read.Directory
+   RoleManagementAlert.Read.Directory
+   RoleManagementPolicy.Read.AzureADGroup
+   RoleManagementPolicy.Read.Directory
+   ServicePrincipalEndpoint.Read.All
+   User.Read.All
+   User.ReadBasic.All
+   ```
+
+   To sync access data and provision/deprovision access:
+
+   ```bash
+   Application.ReadWrite.All
+   AppRoleAssignment.ReadWrite.All
+   AuditLog.Read.All
+   Directory.ReadWrite.All
+   Group.ReadWrite.All
+   GroupMember.ReadWrite.All
+   MailboxSettings.ReadWrite
+   RoleAssignmentSchedule.Read.Directory
+   RoleEligibilitySchedule.Read.Directory
+   RoleManagement.Read.All
+   RoleManagement.ReadWrite.Directory
+   RoleManagementAlert.Read.Directory
+   RoleManagementPolicy.Read.AzureADGroup
+   RoleManagementPolicy.Read.Directory
+   ServicePrincipalEndpoint.ReadWrite.All
+   Synchronization.ReadWrite.All
+   User.ReadWrite.All
+   User.ReadBasic.All
+   User.EnableDisableAccount.All 
+   ```
+   
+   To deprovision users who have a privileged role assigned to them, the app requires, in addition to the stated permissions, a privileged role such as Global Administrator or Privileged Authentication Administrator. 
+</Step>
+<Step>
+Navigate to **Identity** > **Applications** > **Enterprise applications** > **All applications**.
+</Step>
+<Step>
+Locate your new **ConductorOne** app.
+
+   <Tip>
+   If the app doesn't appear in the list right away, wait a minute and click **Refresh**.
+   </Tip>
+
+ On the app's page, click **Permissions** on the left side.
+</Step>
+<Step>
+ Click **Grant admin consent for ...**.
+</Step>
+</Steps>
+**That's it!** Next, move on to the connector configuration instructions. 
+
+## Optional: Configure exchange groups provisioning 
+
+To set up the connector to support provisioning members to exchange groups, which are distribution lists and mailed security groups, follow these steps:
+
+<Tip>
+Note:ovisioning users as owners of exchange groups is not supported; users can only be added as members.
+</Tip>
+<Steps>
+<Step>
+In the Microsoft Entra Admin Center, navigate to **App registrations** and click the name of the app you created for this connector. 
+</Step>
+<Step>
+ In the application dashboard, click **API permissions** > **Add a permission**. 
+</Step>
+<Step>
+ Select **APIs my organization uses**. Search for and select "Office 365 Exchange Online" (the application ID is 00000002-0000-0ff1-ce00-000000000000). 
+</Step>
+<Step>
+Click on **Application permissions**. Search for and select "Exchange" and enable the **Exchange.ManageAsApp** permission.
+</Step>
+<Step>
+Click **Add permissions**. 
+</Step>
+<Step>
+When prompted to grant admin consent, click **Yes**. 
+</Step>
+<Step>
+Next, grant global permissions. Navigate to **Admin Center** > **Roles & admins**. 
+</Step>
+<Step>
+Search for and select "Exchange Administrator", then click **Add assignments**.
+</Step>
+<Step>
+Click **No member selected**, then find the application used for this connector on the **Enterprise applications**tab and click **Select**. 
+</Step>
+<Step>
+Click **Next**. 
+</Step>
+<Step>
+On the **Settings** tab, select **Active as the **Assignment type**. 
+</Step>
+<Step>
+Check **Permanently assigned** and add a justification, such as:
+   
+   Required to allow the ConductorOne connector to grant and revoke memberships for managed distribution lists and mail-enabled security groups, both managed by Exchange.
+</Step>
+<Step>
+Click **Assign**. 
+</Step>
+</Steps>
+**That's it!** Your connector is now ready to allow the provisioning of users as members in exchange groups.
+   
+## Configure the Entra ID connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Entra ID credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Entra ID** and click **Add**. 
+</Step>
+<Step>
+Choose how to set up the new Entra ID connector: 
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Select **Client secret**.
+</Step>
+<Step>
+Paste the tenant ID into the **Entra tenant ID** field.
+</Step>
+<Step>
+Paste the client ID into the **Entra client ID** field.
+</Step>
+<Step>
+Paste the client secret into the **Entra client secret** field.
+</Step>
+<Step>
+**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
+</Step>
+<Step>
+**Optional** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
+</Step>
+<Step>
+**Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**. 
+
+   The usage data feature requires a Microsoft Entra ID P1 or P2 license. Usage data collection is not supported on Microsoft Entra ID Free licenses. 
+</Step>
+<Step>
+**Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in ConductorOne.  
+</Step>
+<Step>
+**Optional.** Click to **Disable resource changed event feed**. These logs are enabled by default. 
+
+   Make sure to disable this feed if the `List directoryAudits` API endpoint is [not supported in your location](https://learn.microsoft.com/en-us/graph/api/directoryaudit-list?view=graph-rest-1.0&tabs=http). 
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+**That's it!** Your Entra ID connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="OAuth">
+**Follow these instructions to set up a built-in, no-code connector hosted by ConductorOne using OAuth.**
+
+### Step 1: Log in with OAuth
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Entra ID** and click **Add**. 
+</Step>
+<Step>
+Choose how to set up the new Entra ID connector: 
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Select **OAuth**. 
+</Step>
+<Step>
+Specify the ID of the Entra tenant you're integrating in the **Entra tenant ID** field. 
+</Step>
+<Step>
+**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**. 
+</Step>
+<Step>
+**Optional** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
+</Step>
+<Step>
+**Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**. 
+
+   The usage data feature requires a Microsoft Entra ID P1 or P2 license. Usage data collection is not supported on Microsoft Entra ID Free licenses. 
+</Step>
+<Step>
+**Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in ConductorOne. 
+</Step>
+<Step>
+Click **Login with OAuth**. 
+</Step>
+<Step>
+Log in and authorize ConductorOne with your Entra ID instance.
+
+   In order for the integration to work properly, you must consent to all permissions:
+
+   <Frame>
+   <img src="/images/product/assets/azure-3.png" alt="" />
+   </Frame>
+</Step>
+</Steps>
+### Step 2: Grant permissions to the ConductorOne app
+<Steps>
+<Step>
+In the Entra ID control panel, go to **Enterprise Applications**.
+
+   <Frame>
+   <img src="/images/product/assets/azure-4.png" alt="" />
+   </Frame>
+</Step>
+<Step>
+Click the **ConductorOne Integration** app (not to be confused with the **ConductorOne SSO** app, which is used to log into ConductorOne, not to synchronize your data).
+
+   If the ConductorOne Integration app doesn't appear in the list of apps right away, wait a minute and click **Refresh**.
+</Step>
+<Step>
+On the **ConductorOne Integration** page, click **Permissions** on the left side.
+
+   <Frame>
+   <img src="/images/product/assets/azure-5.png" alt="" />
+   </Frame>
+</Step>
+</Steps>
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use the Entra ID connector, hosted and run in your own environment. [Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector and get detailed setup instructions.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Entra ID connector
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Entra ID connector: 
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret. 
+
+   Carefully copy and save these credentials. We'll use them in Step 2. 
+</Step>
+</Steps>
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Entra ID connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-microsoft-entra-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-microsoft-entra-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Entra ID credentials
+  BATON_ENTRA_CLIENT_ID: <Entra ID application (client) ID>
+  BATON_ENTRA_CLIENT_SECRET: <Entra ID client secret>
+  BATON_ENTRA_TENANT_ID: <Entra ID directory (tenant) ID>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include if you want to skip syncing Active Directory Server groups
+  BATON_SKIP_AD_GROUPS: true
+
+  # Optional: include if you want to connect to a domain other than graph.microsoft.com
+  BATON_GRAPH_DOMAIN: <Microsoft Graph API domain>
+
+  # Optional: include if you want to disable audit logs 
+  BATON_ENABLE_AUDIT_LOG_FEED: false
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-microsoft-entra.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-microsoft-entra
+  labels:
+    app: baton-microsoft-entra
+spec:
+  selector:
+    matchLabels:
+      app: baton-microsoft-entra
+  template:
+    metadata:
+      labels:
+        app: baton-microsoft-entra
+        baton: true
+        baton-app: microsoft-entra
+    spec:
+      containers:
+      - name: baton-microsoft-entra
+        image: ghcr.io/conductorone/baton-microsoft-entra:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-microsoft-entra-secrets
+```
+
+### Step 3: Deploy the connector
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files. 
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Entra ID connector to. Entra ID data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+**That's it!** Your Entra ID connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>
+
+### What's next?
+
+If Entra ID is your company's identity provider (meaning that it is used to SSO into other software), the integration sync will automatically create applications in ConductorOne for all of your SCIMed software. Before you move on, review the [Create applications](/product/admin/applications) page for important information about how to set up integrations with the SCIMed apps.
+
+

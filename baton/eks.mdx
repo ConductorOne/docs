@@ -1,0 +1,690 @@
+---
+title: "Set up an Amazon Elastic Kubernetes Service connector"
+description: "ConductorOne provides identity governance for EKS. Integrate your EKS instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:title: "Set up an Amazon Elastic Kubernetes Service connector"
+og:description: "ConductorOne provides identity governance for EKS. Integrate your EKS instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Amazon EKS"
+---
+
+<Warning>
+**Important note on hosting:** 
+
+To run in cloud-hosted mode, this connector requires network access to Kubernetes, AKS, and EKS, and you may need to configure firewall rules. If this isn't desirable or possible, you must run the connector in self-hosted mode.
+</Warning>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="circle-info" /> |  |
+| Groups | <Icon icon="circle-info" /> |  |
+| IAM roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Cluster roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Namespaces | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Namespace roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Access policies | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+<Icon icon="circle-info" /> This connector pulls account and group information from the AWS connector. You'll configure this relationship when setting up the connector.
+
+## Before you begin
+
+This connector requires you to have a working [AWS](/baton/aws-v2) connector. If you haven't already done so, set up the AWS connector before you proceed.
+
+You'll also need the AWS CLI installed and configured, and `kubectl` configured to connect to your EKS cluster.
+
+## Gather EKS credentials
+
+Configuring the connector requires you to pass in credentials generated in EKS. The EKS connector requires different credentials based on your chosen hosting method:
+
+| Credential | Cloud-hosted | Self-hosted | Notes |
+| :--- | :--- | :--- | :--- |
+| Region | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Cluster name | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Access key |  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Access key secret |  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Assume role ARN | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | The configuration process varies by hosting method. |
+
+Gather the relevant set of credentials before you move on.
+
+### (Cloud and self-hosted) Look up your region and cluster name
+
+<Steps>
+    <Step>
+    Log into the AWS Management Console.
+    </Step>
+    <Step>
+    In the top right corner of the screen, make a note of your region.
+    </Step>
+    <Step>
+    Next, navigate to the Amazon EKS service page (you can search for "EKS" to get there quickly).
+    </Step>
+    <Step>
+    On the EKS dashboard, click **Clusters**.
+    </Step>
+    <Step>
+    A list of the clusters in the current region is shown. Make a note of the name of the cluster you want to integrate with ConductorOne.
+    </Step>
+</Steps>
+
+If you want to integrate multiple clusters, you must set up an EKS connector for each one.
+
+### (Self-hosted) Look up an AWS IAM access key and secret
+
+<Steps>
+    <Step>
+    Navigate to **IAM (Identity and Access Management)** > **Users** and select the user you want to generate the key for.
+    </Step>
+    <Step>
+    Click **Security credentials** and find the **Access keys** section of the page.
+    </Step>
+    <Step>
+    Click **Create access key**, and choose use cases as relevant (these do not impact the scope of the key itself).
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    Click **Create access key**.
+    </Step>
+</Steps>
+
+### (Cloud-hosted) Generate an Assume Role ARN
+
+This process has several steps, and we'll walk through them together.
+
+#### Get a ConductorOne-provided External ID
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **Amazon EKS** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new AWS connector:
+
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    Find the **Settings** area of the page and click **Edit**.
+    </Step>
+    <Step>
+    Copy and save the External ID populated in the **External ID** field.
+    </Step>
+</Steps>
+
+#### Create a custom IAM role
+
+<Steps>
+    <Step>
+    In a new browser tab, sign in to your AWS Account using your existing credentials or SSO.
+    </Step>
+    <Step>
+    Navigate to the [IAM Dashboard](https://us-east-1.console.aws.amazon.com/iamv2/home?) and select **Access Management** > **Roles** > **Create Role**.
+    </Step>
+    <Step>
+    Select **Custom Trust Policy** and paste the following into the Trust Policy JSON editor, replacing `EXTERNAL_ID_FROM_C1_INTEGRATIONS_PAGE` with the External ID from ConductorOne.
+
+```json expandable
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::765656841499:role/ConductorOneService"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "sts:ExternalId": "EXTERNAL_ID_FROM_C1_INTEGRATIONS_PAGE"
+        }
+      }
+    }
+  ]
+}
+```
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    *Skip* **Add permissions** and click **Next**.
+    </Step>
+    <Step>
+    Give the role a name, such as **ConductorOneIntegration**.
+    </Step>
+    <Step>
+    Add any tags relevant to your organization and click **Create Role**.
+    </Step>
+    <Step>
+    Find the newly created role, and click on it to view the role details page.
+    </Step>
+    <Step>
+    Under **Permissions Policies**, click **Add Permissions** and select **Create Inline Policy**.
+    </Step>
+    <Step>
+    Switch to the **JSON Editor** tab and paste the following policy into the editor:
+
+```json expandable
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:GetRole",
+                "iam:ListRoles",
+                "iam:PassRole",
+                "iam:GetPolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies",
+                "iam:TagRole",
+                "iam:GetOpenIDConnectProvider",
+                "iam:ListOpenIDConnectProviders",
+                "iam:TagOpenIDConnectProvider",
+                "iam:GetContextKeysForPrincipalPolicy",
+                "iam:SimulatePrincipalPolicy"
+            ],
+            "Effect": "Allow",
+            "Resource": "*",
+            "Sid": "ConductorOneReadAccess"
+        },
+        {
+            "Sid": "AccessToSSOProvisionedRoles",
+            "Effect": "Allow",
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:GetRole",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies"
+            ],
+            "Resource": "arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*"
+        },
+        {
+            "Sid": "IAMListPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "iam:ListRoles",
+                "iam:ListPolicies",
+                "iam:ListAccessKeys"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "eks:DescribeCluster",
+                "eks:DescribeClusterVersions",
+                "eks:DescribeNodegroup",
+                "eks:AssociateIdentityProviderConfig",
+                "eks:ListTagsForResource",
+                "eks:ListClusters",
+                "eks:ListNodegroups",
+                "eks:AccessKubernetesApi",
+                "eks:AssociateAccessPolicy",
+                "eks:ListAssociatedAccessPolicies",
+                "eks:AssociateIdentityProviderConfig",
+                "eks:DescribeAccessEntry",
+                "eks:ListAccessEntries",
+                "eks:ListAccessPolicies",
+                "eks:DescribeAddon",
+                "eks:DescribeAddonVersions",
+                "eks:DescribeAddonConfiguration",
+                "eks:CreateAccessEntry",
+                "eks:AssociateAccessPolicy",
+                "eks:DisassociateAccessPolicy"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+    </Step>
+    <Step>
+    Click **Review Policy**.
+    </Step>
+    <Step>
+    Give the policy a name, such as **ConductorOnePermissions** and click **Create Policy**.
+    </Step>
+    <Step>
+    Copy the **Role ARN** for the role we created, it should look like: `arn:aws:iam::NNNNNNNNNN:role/ConductorOneIntegration`.
+    </Step>
+</Steps>
+
+### (Self-hosted) Generate an Assume Role ARN
+
+<Steps>
+    <Step>
+    Sign in to your AWS Account using your existing credentials or SSO.
+    </Step>
+    <Step>
+    Navigate to the [IAM Dashboard](https://us-east-1.console.aws.amazon.com/iamv2/home?) and select **Access Management** > **Roles** > **Create Role**.
+    </Step>
+    <Step>
+    Select **Custom Trust Policy** and paste the following into the Trust Policy JSON editor
+
+```json
+{
+ "Version": "2012-10-17",
+ "Statement": [
+      {
+         "Sid": "Statement1",
+         "Effect": "Allow",
+            "Principal": {
+               "AWS": "<YOUR_USER_ARN>"
+            },
+            "Action": "sts:AssumeRole"
+      }
+   ]
+}
+```
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    *Skip* **Add permissions** and click **Next**.
+    </Step>
+    <Step>
+    Give the role a name, such as **ConductorOneIntegration**.
+    </Step>
+    <Step>
+    Add any tags relevant to your organization and click **Create Role**.
+    </Step>
+    <Step>
+    Find the newly created role, and click on it to view the role details page.
+    </Step>
+    <Step>
+    Under **Permissions Policies**, click **Add Permissions** and select **Create Inline Policy**.
+    </Step>
+    <Step>
+    Switch to the **JSON Editor** tab and paste the following policy into the editor:
+
+```json expandable
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:GetRole",
+                "iam:ListRoles",
+                "iam:PassRole",
+                "iam:GetPolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies",
+                "iam:TagRole",
+                "iam:GetOpenIDConnectProvider",
+                "iam:ListOpenIDConnectProviders",
+                "iam:TagOpenIDConnectProvider",
+                "iam:GetContextKeysForPrincipalPolicy",
+                "iam:SimulatePrincipalPolicy"
+            ],
+            "Effect": "Allow",
+            "Resource": "*",
+            "Sid": "ConductorOneReadAccess"
+        },
+        {
+            "Sid": "AccessToSSOProvisionedRoles",
+            "Effect": "Allow",
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:GetRole",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies"
+            ],
+            "Resource": "arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*"
+        },
+        {
+            "Sid": "IAMListPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "iam:ListRoles",
+                "iam:ListPolicies",
+                "iam:ListAccessKeys"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "eks:DescribeCluster",
+                "eks:DescribeClusterVersions",
+                "eks:DescribeNodegroup",
+                "eks:AssociateIdentityProviderConfig",
+                "eks:ListTagsForResource",
+                "eks:ListClusters",
+                "eks:ListNodegroups",
+                "eks:AccessKubernetesApi",
+                "eks:AssociateAccessPolicy",
+                "eks:ListAssociatedAccessPolicies",
+                "eks:AssociateIdentityProviderConfig",
+                "eks:DescribeAccessEntry",
+                "eks:ListAccessEntries",
+                "eks:ListAccessPolicies",
+                "eks:DescribeAddon",
+                "eks:DescribeAddonVersions",
+                "eks:DescribeAddonConfiguration",
+                "eks:CreateAccessEntry",
+                "eks:AssociateAccessPolicy",
+                "eks:DisassociateAccessPolicy"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+    </Step>
+    <Step>
+    Click **Review Policy**.
+    </Step>
+    <Step>
+    Give the policy a name, such as **ConductorOnePermissions** and click **Create Policy**.
+    </Step>
+    <Step>
+    Copy the **Role ARN** for the role we created, it should look like: `arn:aws:iam::NNNNNNNNNN:role/ConductorOneIntegration`.
+    </Step>
+</Steps>
+
+## Assign the role permissions within the cluster
+
+Once you have created the role, you need to assign it permissions inside the cluster. You can do this by editing the `aws-auth` configmap and mapping the created role to the cluster-admin user or any cluster user/group with admin privileges. For more restricted, granular permissions, you can create a custom ClusterRole that has read-only permissions.
+
+To use the connector for role provisioning, the assumed IAM role must be part of the `system:masters` group.
+
+You can see the current state of your aws-auth configmap by running:
+
+```bash
+kubectl get configmap -n kube-system aws-auth -o yaml
+```
+
+Fetch the current state and save it to a file:
+
+```bash
+kubectl get configmap -n kube-system aws-auth -o yaml > aws-auth-full.yaml
+```
+
+Edit the file in an editor of your choice, adding the corresponding mappings in the `mapRoles` section:
+
+```yaml expandable
+apiVersion: v1
+data:
+  mapRoles: |
+    - groups:
+      - test-group-1
+      rolearn: arn:aws:iam::1234567:role/ExampleEntry
+      username: example-role-username
+    # Add your new entry here
+    # - rolearn: YOUR_ROLE_ARN
+    #   username: any unique name, can be YOUR_ROLE_ARN
+    #   groups:
+    #   - readers
+    - rolearn: arn:aws:iam::123456789012:role/your-admin-role
+      username: admin
+      groups:
+      - system:masters
+  mapUsers: |
+    - groups:
+      - test-group-1
+      userarn: arn:aws:iam::1234567:user/test-user
+      username: test-user-1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+```
+
+WARNING: This action replaces the original aws-auth configmap. Be sure to check your changes before applying them:
+
+```bash
+kubectl apply -f aws-auth-full.yaml
+```
+
+Next, create a cluster role. This example has the permissions to read-only all resources from the cluster:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+name: read-only-access-cluster-role
+rules:
+- apiGroups: [""]
+resources: ["pods", "services", "configmaps", "namespaces", "secrets", "endpoints", "persistentvolumeclaims", "serviceaccounts"]
+verbs: ["get", "list", "watch"]
+- apiGroups: ["apps", "batch", "extensions", "networking.k8s.io", "rbac.authorization.k8s.io"]
+resources: ["deployments", "replicasets", "statefulsets", "jobs", "cronjobs", "ingresses", "rolebindings", "clusterrolebindings", "roles", "clusterroles"]
+verbs: ["get", "list", "watch"]
+```
+
+Apply the new cluster role. This action adds the role to the cluster:
+
+```bash
+kubectl apply -f reader-role.yaml
+```
+
+Now lets create the cluster role binding. This binds a kubernetes group or user to a ClusterRole:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: reader-role-binding
+subjects:
+- kind: Group
+  name: readers # <- The name of the group you mapped the ARN role to in the configmap
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: read-only-access # <- Name of the cluster role you created
+  apiGroup: rbac.authorization.k8s.io
+```
+
+And apply the yaml to the cluster:
+
+```bash
+kubectl apply -f reader-role-binding.yaml
+```
+
+**For provisioning roles and cluster roles** it might be necessary to edit the `aws-auth` configmap. Since this configmap lives in `kube-system` namespace, special permissions are required. You need to be part of the `system:masters` group in Kubernetes. The members of this group have full administrative permissions over the entire cluster (including edit resources in the `kube-system` namespace where the `aws-auth` configmap resides). Note: The cluster creator is automatically added to this group.
+
+To add a role to the system:masters group you can follow the process above to edit the configmap and add an entry in the `mapRoles` field.
+
+Example entry:
+
+```yaml
+- rolearn: arn:aws:iam::123456789012:role/your-admin-role
+  username: admin
+  groups:
+    - system:masters
+```
+
+Be aware that cluster role binding may take some time to propagate in the cluster.
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the EKS connector
+
+<Warning>
+**To complete this task, you'll need:**
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of EKS credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **AWS Elastic Kubernetes Service** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new EKS connector:
+
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    Find the **Settings** area of the page and click **Edit**.
+    </Step>
+    <Step>
+    Enter the EKS credentials into the relevant fields.
+    </Step>
+    <Step>
+    Finally, tell the connector where to find the identities that will be used for this app in ConductorOne.
+
+	1. In the **Shared identity source** area of the page, click **Edit**.
+	2. Select your AWS v2 connector.
+	3. **Optional.** Limit the identities pulled from the connector you selected to only those with a certain entitlement by setting the entitlement.
+	4. Click **Save**.
+    </Step>
+    <Step>
+    Click **Save**.
+    </Step>
+    <Step>
+    The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+    </Step>
+</Steps>
+
+**That's it!** Your EKS connector is now pulling access data into ConductorOne.
+</Tab>
+<Tab title="Self-hosted">
+**Follow these instructions to use the [EKS](https://github.com/ConductorOne/baton-eks) connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new EKS connector
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Connectors** > **Add connector**.
+    </Step>
+    <Step>
+    Search for **Baton** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new EKS connector:
+
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    In the **Settings** area of the page, click **Edit**.
+    </Step>
+    <Step>
+    Click **Rotate** to generate a new Client ID and Secret.
+	Carefully copy and save these credentials. We'll use them in Step 2.
+    </Step>
+    <Step>
+    Finally, tell the connector where to find the identities that will be used for this app in ConductorOne.
+
+	1. In the **Shared identity source** area of the page, click **Edit**.
+	2. Select your AWS v2 connector.
+	3. **Optional.** Limit the identities pulled from the connector you selected to only those with a certain entitlement by setting the entitlement.
+	4. Click **Save**.
+    </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your EKS connector deployment:
+
+#### Secrets configuration
+
+```yaml
+# baton-eks-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-eks-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # EKS credentials
+  BATON_EKS_ACCESS_KEY: <EKS access key>
+  BATON_EKS_SECRET_ACCESS_KEY: <EKS access key secret>
+  BATON_EKS_REGION: <Name of the AWS account region>
+  BATON_EKS_ASSUME_ROLE_ARN: <TARN of the IAM role to assume>
+  BATON_EKS_CLUSTER_NAME: <Name of the EKS cluster>
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-eks.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-eks
+  labels:
+    app: baton-eks
+spec:
+  selector:
+    matchLabels:
+      app: baton-eks
+  template:
+    metadata:
+      labels:
+        app: baton-eks
+        baton: true
+        baton-app: eks
+    spec:
+      containers:
+      - name: baton-eks
+        image: ghcr.io/conductorone/baton-eks:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-eks-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+    <Step>
+    Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+    </Step>
+    <Step>
+    Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the EKS connector to. EKS data should be found on the **Entitlements** and **Accounts** tabs.
+    </Step>
+</Steps>
+
+**That's it!** Your EKS connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>

@@ -1,0 +1,272 @@
+---
+title: "Set up a GitHub Enterprise connector"
+og:title: "Set up a GitHub Enterprise connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for GitHub Enterprise. Integrate your GitHub Enterprise instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for GitHub Enterprise. Integrate your GitHub Enterprise instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "GitHub Enterprise"
+---
+
+<Tip>
+**GitHub versus GitHub Enterprise: which integration should I use?** Follow the instructions on this page if your organization accesses GitHub at a custom domain.
+
+If you at access GitHub at `github.com`, go to the [GitHub](/baton/github-v2) integration.
+</Tip>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Repositories | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Teams | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Orgs | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Org roles/Enterprise licenses* | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Secrets - API keys | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+
+The GitHub Enterprise connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). New accounts will send an invitation to the account owner; if an invitation is pending, the account status will be shown as **Unspecified**. 
+
+*Organization roles are also referred to as "enterprise licenses" in GitHub's documentation. 
+
+[This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page. 
+
+## Gather GitHub Enterprise credentials 
+
+Configuring the connector requires you to pass in credentials generated in GitHub Enterprise. Gather these credentials before you move on. To set up the GitHub Enterprise connector, you can choose to create either a personal access token (classic) or a fine-grained access token.
+
+### Option 1: Use a personal access token (classic)
+
+Follow these instructions to integrate your GitHub Enterprise instance by using a [GitHub Enterprise personal access token (classic)](https://docs.github.com/en/enterprise-cloud@latest/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#types-of-personal-access-tokens).
+
+<Warning>
+A user with **Enterprise Owner** access in GitHub Enterprise must perform this task.
+</Warning>
+
+<Tip>
+If you're using SAML single sign-on, avoid a `You must grant your Personal Access token access to this organization` error by following the [Authorizing a personal access token for use with SAML single sign-on](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-saml-single-sign-on/authorizing-a-personal-access-token-for-use-with-saml-single-sign-on) instructions in the GitHub documentation.
+</Tip>
+
+<Steps>
+<Step>
+In GitHub Enterprise, click your profile photo, then click **Settings**.
+</Step>
+<Step>
+In the left sidebar, select **Developer settings**.
+</Step>
+<Step>
+Click **Personal access tokens > Tokens (classic)**.
+</Step>
+<Step>
+Click **Generate new token > Generate new token (classic)**.
+</Step>
+<Step>
+Name your token (for example, **ConductorOne Integration**). Optionally, add a token expiration date.
+</Step>
+<Step>
+Select the following **Scopes:**
+
+   - **repo** - select all
+   - **admin:org** - select all if using ConductorOne for GitHub Enterprise provisioning (see the note below), or **read:org**
+   - **user** - select all
+   - **admin:enterprise** - select **read:enterprise**
+
+   <Warning>
+   The **write::org** scope is used by ConductorOne when automatically provisioning and deprovisioning GitHub Enterprise access on your behalf. **If you do not want ConductorOne to perform these tasks for you, do not give your token this scope.**
+   </Warning>
+</Step>
+<Step>
+Click **Generate token**. Copy and save the new token.
+</Step>
+</Steps> 
+
+<Warning>
+If you use SAML SSO, you must authorize the PAT using [these instructions](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-saml-single-sign-on/authorizing-a-personal-access-token-for-use-with-saml-single-sign-on).
+</Warning>
+
+**That's it!** Next, move on to the connector configuration instructions. 
+ 
+### Option 2: Use a GitHub app
+
+Follow these instructions to integrate your GitHub instance by using a [GitHub app](https://docs.github.com/en/apps/creating-github-apps/about-creating-github-apps/about-creating-github-apps).
+
+This process creates a GitHub app that is only available to your GitHub organization, then generates an installation token for that app, which can be used to integrate the GitHub organization with ConductorOne. This creates the equivalent of a personal access token, but does not tie the token to a specific identity.
+
+**If you want to integrate multiple GitHub organizations with ConductorOne, you must create an app and set up a connector for each one.**
+
+<Warning>
+A user with the **Org Owner** permission in the GitHub organization to be integrated with ConductorOne must perform this task.
+</Warning>
+
+<Steps>
+<Step>
+In GitHub, navigate to **Your organizations** > **Settings**.
+</Step>
+<Step>
+In the left sidebar, select **Developer settings**.
+</Step>
+<Step>
+Click **GitHub Apps**.
+</Step>
+<Step>
+Click **New GitHub App**.
+</Step>
+<Step>
+Give the app a globally unique name, such as "c1-integration-`<org name>`". There is a 34 character limit.
+</Step>
+<Step>
+In the **Homepage URL** field, enter a placeholder URL such as `http://example.com`. Because this app is not public, it does not have or need a website to direct other users to, so we can use a placeholder URL.
+</Step>
+<Step>
+In the **Callback URL** field, enter a placeholder URL such as `http://example.com`. This app will not use a callback, so we can use a placeholder URL.
+</Step>
+<Step>
+Check the **Expire user authorization tokens** and **Enable Device Flow** checkboxes to enable these settings.
+</Step>
+<Step>
+In the **Webhook** section of the page, uncheck the **Active** checkbox to disable this setting.
+</Step>
+<Step>
+In the **Permissions** section of the page, give the app the following permissions:
+
+    - Repository permissions:
+
+      - **Administration**: Read and write access
+      - **Metadata**: Read-only access
+
+    - Organization permissions:
+
+      - **Custom organization roles**: Read and write access
+      - **Members**: Read and write access
+
+   - Enterprise permissions:
+
+      - **Enterprise administration**: Read-only access
+</Step>
+<Step>
+In the **Where can this app be installed?** section of the page, choose **Only on this account**. This limits the app's scope to the GitHub Enterprise organization you've set it up on.
+</Step>
+<Step>
+Click **Create GitHub App**. The app is created.
+</Step>
+<Step>
+On the app's details page, carefully copy and save the **App ID**.
+</Step>
+<Step>
+Scroll down to the **Private keys** section of the app's page and click **Generate a private key**.
+</Step>
+<Step>
+Carefully save the private key file.
+</Step>
+<Step>
+Finally, install the new app on your GitHub organization. Navigate to **Developer Settings** > **GitHub Apps**.
+</Step>
+<Step>
+Find your app and click **Edit** > **Install App**.
+</Step>
+<Step>
+Click **Install** next to the GitHub organization where you want to install the app.
+</Step>
+<Step>
+Select the repositories the app can act on.
+</Step>
+<Step>
+Click **Install**.
+</Step>
+</Steps> 
+
+**That's it!** Next, move on to the connector configuration instructions. 
+
+## Configure the GitHub Enterprise connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of GitHub Enterprise credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **GitHub Enterprise** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new GitHub Enterprise connector:
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+If you're using a personal access token to set up the connector:
+
+   1. Click **Personal access token**.
+
+   1. In the **Instance URL** field, enter the URL of your GitHub Enterprise instance.
+
+   1. Paste the token you generated into the **Personal access token** field.
+
+   1. **Optional.** If you want to sync only specific organizations, enter the organizations' names in the **Organizations** field. If you do not specify specific organizations, ConductorOne will sync all organizations.
+
+   1. **Optional.** If you want to sync roles for only some enterprises, add the names of the enterprises in the **Enterprises to sync enterprise roles for** field.
+
+   1. **Optional.** If you do not want to include archived repos in syncs, click to enable **Omit archived repositories**.
+</Step>
+<Step>
+If you're using a GitHub app to set up the connector:
+
+   1. Click **GitHub app**.
+
+   1. In the **Instance URL** field, enter the URL of your GitHub Enterprise instance.
+
+   1. Enter your app ID into the **GitHub app ID** field.
+
+   1. Click **Choose file** and upload your private key file.
+
+   1. In the **Organization** field, enter the name of the GitHub organization associated with the GitHub app. **You must enter a single organization name in this field or the connector configuration will fail.**
+
+   1. **Optional.** If you want to sync roles for only some enterprises, add the names of the enterprises in the **Enterprises to sync enterprise roles for** field.
+
+   1. **Optional.** If you do not want to include archived repos in syncs, click to enable **Omit archived repositories**.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your GitHub Enterprise connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use a connector, hosted and run in your own environment.**
+
+*Self-hosted connector not currently available.*
+</Tab>
+</Tabs>
+
+
+
+
+
+
