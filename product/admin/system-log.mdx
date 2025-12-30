@@ -1,0 +1,86 @@
+---
+title: ConductorOne system logs
+og:title: ConductorOne system logs - ConductorOne docs
+og:description: Export system log data on every call made to the ConductorOne API
+description: Access ConductorOne system log via API or export log data for storage or usage in SIEM.
+sidebarTitle: System logs
+---
+
+## What's included in ConductorOne system logs? 
+
+System logs include a record of actions taken by the ConductorOne API. The ConductorOne API is used for all app-level actions and captures both end-user and administrative activities. 
+
+ConductorOne system logs are stored in OCSF (Open Cybersecurity Schema Framework), a leading open-source data format developed by AWS, IBM, and Splunk. Learn more about OCSF by viewing the [OCSF schema documentation](https://schema.ocsf.io). 
+
+## How do I get access to the system logs? 
+
+System logs are stored internally in ConductorOne and can be [accessed via API](/product/developer/api/) or exported to an [external data source](/product/admin/external-datasources) such as an S3 bucket. 
+
+## Where can I see a list of all the API events included in the system logs?
+
+You can download our authoritative list of API events, which is presented in Sigma Detection Format. 
+
+* **YAML format**: Go to `<YOUR CONDUCTORONE TENANT URL>/api/v1/ocsf-events.yaml`
+
+* **JSON format**: Go to `<YOUR CONDUCTORONE TENANT URL>/api/v1/ocsf-events.json`
+
+## Sync ConductorOne system logs into your SIEM
+
+Follow this process to import ConductorOne logs into your security information and event management (SIEM) platform.
+
+<Warning>
+This task requires the **Super Administrator** role in ConductorOne. 
+</Warning>
+
+### Step 1: Create an external data source
+
+If you haven't already done so, [create an external data source](/product/admin/external-datasources) to sync the system logs to. 
+
+<Tip>
+**Reusing an existing external data source?** 
+
+If you're reusing an existing data source that you've already created and integrated with ConductorOne, ensure that it was created with the ability to accept writes. For example, for S3 buckets, the policy will require the `"s3:PutObject"` permission.
+</Tip>
+
+### Step 2: Create a system log exporter
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** > **System log** and click **Add exporter**. 
+</Step>
+<Step>
+Set up the new exporter:
+
+   - Give the exporter a name, such as "System log to S3".
+   - Select the **Datasource** you created in Step 1. 
+   - **Optional.** Input an file prefix. 
+   - Select your output format and compression algorithm. 
+</Step>
+
+<Step>
+Click **Save**. 
+</Step>
+</Steps>
+
+Your system log exporter will now run every four to five minutes. You'll see a **Waiting** status indicator between runs, and an **Error** status indicator if anything's amiss. 
+
+A new log file is generated for each run, each containing up to 2.5mb of uncompressed data. In a full day of activity, you should expect roughly 280 files to be exported to your external data source.
+
+### Step 3: Connect your SIEM
+
+This step will vary depending on the SIEM that you are using. In general terms, however, you will want to add the datasource to your SIEM. 
+
+A partial list of SIEM directions:
+- [Import S3 buckets into Panther](https://docs.panther.com/data-onboarding/data-transports/aws/s3)
+- [Import S3 buckets into Splunk](https://splunkbase.splunk.com/app/1876)
+
+## Reading system log files
+
+ConductorOne system logs use the Open Cybersecurity Schema Framework (OCSF) to format log events. Check out the OCSF documentation for full details of [OCSF API activity formatting](https://schema.ocsf.io/1.3.0/classes/api_activity?extensions=), but here are a few key details to help you quickly make sense of ConductorOne system log output. 
+
+- **"activity_id"**: The "activity_id" entry in a log line tells you what type of API call activity triggered the event. By filtering logs by these activity IDs, you can zero in on key types of activity in the ConductorOne system. 
+
+   - "activity_id":1 - "Create" activity
+   - "activity_id":2 - "Read" activity
+   - "activity_id":3 - "Update" activity 
+   - "activity_id":4 - "Delete" activity 

@@ -1,0 +1,149 @@
+---
+title: Configure account provisioning
+og:title: Configure account provisioning - ConductorOne docs
+og:description: Certain ConductorOne connectors can be configured to automatically create new accounts. 
+description: Certain ConductorOne connectors can be configured to automatically create new accounts. 
+sidebarTitle: Provisioning new accounts
+---
+
+## Supported connectors
+
+Consult the [Connector capabilities index](/baton/capabilities) to see the list of connectors that support automatic account provisioning and deprovisioning. Connectors with account provisioning support are marked with a 👤 symbol. Those that also support account deprovisioning are marked with a 🫥 symbol.
+
+**This list is growing!** We're actively working to add account provisioning and deprovisioning support to more connectors. 
+
+## How does ConductorOne create new accounts? 
+
+When manually creating a new account in an application, you enter the information the app requires, such as an email address, full name, or location. Once configured using the process below, ConductorOne can automatically look up and provide that information to the application, which creates the new account. Read on to learn how it all works under the hood! 
+
+### Part 1: Account information is defined in a schema 
+
+For purposes of this explanation, we'll say that SampleApp requires a first name, last name, and email in order to make a new account. 
+
+First, a **schema** is added to the SampleApp connector code that tells ConductorOne what information is required in order to make a new user account. We've written the schemas for you in the supported systems listed above, but you can write your own as part of developing a connector. A schema looks like this: 
+
+```go expandable
+AccountCreationSchema: &v2.ConnectorAccountCreationSchema{
+			FieldMap: map[string]*v2.ConnectorAccountCreationSchema_Field{
+				"first_name": {
+					DisplayName: "First Name",
+					Required:    true,
+					Description: "This first name will be used for the user.",
+					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
+						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
+					},
+					Placeholder: "First name",
+					Order:       1,
+				},
+				"last_name": {
+					DisplayName: "Last Name",
+					Required:    true,
+					Description: "This last name will be used for the user.",
+					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
+						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
+					},
+					Placeholder: "Last name",
+					Order:       2,
+				},
+				"email": {
+					DisplayName: "Email",
+					Required:    true,
+					Description: "This email will be used as the login for the user.",
+					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
+						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
+					},
+					Placeholder: "Email",
+					Order:       3,
+				},
+			},
+```
+
+Note that the schema contains three fields, which spell out the information needed to create the new account. All three of the fields above are required, but fields can be marked `Required: false` if the information is optional.
+
+### Part 2: CEL expressions pull in the required information 
+
+Next, you'll tell ConductorOne how to use the accumulated user data in the system to create new accounts. To do this, you'll set up mappings that use CEL expressions to pull and format the user data to meet the application's requirements for a new account. 
+
+That's a little complicated, so let's look at an example. Here's the account provisioning setup screen for SampleApp. As you can see, the three fields set in the schema are shown here: first name, last name, and email. The notations to the right of the screen (`str`) show that the system expects each of these values as strings. 
+
+<Frame>
+<img src="/images/product/assets/account-provisioning-1.png" alt="Account provisioning setup drawer with three required mapping fields shown."/>
+</Frame>
+
+Here's the same form with the source values (in the form of CEL expressions) filled in. (More about how to form these CEL expressions below.) As you can see, clicking **Test** on each line helps you validate that the CEL expression is formatted correctly and is pulling in the information as expected. 
+
+<Frame>
+<img src="/images/product/assets/account-provisioning-2.png" alt="Account provisioning setup drawer with CEL expressions added to the three required mapping fields and a tooltip showing the test information for the email field."/>
+</Frame>
+
+Now that this configuration is set up, ConductorOne can pull the required info in the expected format and send it to SampleApp to create a new account. 
+
+## Writing CEL expressions for mappings 
+
+The [CEL expressions](/product/admin/expressions) you enter when setting up mappings pull the relevant account data from the accumulated store of user data in ConductorOne. This means that much of the user data you'll want to reference is pulled from your [directory apps](/product/admin/directory).  
+
+The `subject` object expressions (where `subject` refers to the ConductorOne user) are especially helpful here. In particular, you might need to use the CEL expression `subject.attributes.<ATTRIBUTE>` where `<ATTRIBUTE>` can be replaced by any profile attributes pulled in from the relevant directory apps. You can see the available profile attributes by navigating to any user's details page. 
+
+### Why can't ConductorOne write these CEL expressions for me? 
+
+Because of the variety of ways that information is labeled and pulled in from the many directory apps ConductorOne supports, there is significant variation in the way the CEL expressions must be formed. Additionally, based on the requirements and best practices of your organization, you might need the data returned in a specific format. One size, unfortunately, does not fit all. 
+
+Our Customer Success team is happy to lend a hand if you're struggling to set up your CEL expressions. You might also find it useful to work with an AI tool if you're unfamiliar with CEL syntax. 
+
+## Configure account provisioning 
+
+<Tip>
+**Before you begin:** 
+
+Set up the connector for a supported system following the instructions linked above. 
+</Tip>
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Applications**. 
+
+</Step>
+<Step>
+On the **Managed apps** tab, locate and click on the application you want to configure. 
+</Step>
+
+<Step>
+On the app's **Controls** tab, locate the **Access management** section of the page. Click **Edit** next to **Grant access**. The provisioning configuration drawer opens.  
+</Step>
+
+<Step>
+Select **Connector** from the dropdown, then select the connector you set up for this app. The **Mappings** panel is shown. 
+
+
+   The mapping fields are pulled directly from the account provisioning schema in the connector's code. These are the values that the application requires in order to create a new account. 
+</Step>
+<Step>
+Write [CEL expressions](/product/admin/expressions) to tell ConductorOne how to find the information required by the schema. 
+</Step>
+<Step>
+If needed, add additional mapping fields by clicking **Add mapping**. 
+</Step>
+<Step>
+Validate your CEL expressions by clicking **Test** at the right of the page.
+</Step>
+
+<Step>
+If the connector automatically generates starter passwords for new accounts, you can save these in a vault. (Follow these instructions to [set up a vault](/product/admin/vaults) if you haven't done so already.) In the **Password storage** area of the page, select **Save to vault** and select the correct vault. 
+</Step>
+
+<Step>
+When your mapping fields are complete and have been validated, click **Save**. 
+</Step>
+</Steps>
+
+**That's it!** Now when a user requests a new account in this app, it will be provisioned automatically. If set up, the new account's password will be saved to the vault you specified, and will be included on the **Accounts** tab on the user's **Requests** page. Only the user and the vault owner can decrypt the new account password. 
+
+## Frequently asked questions about automatic account provisioning
+
+<AccordionGroup>
+<Accordion title="Can ConductorOne update the accounts it creates?">
+
+If a user's key data (such as their name or location) changes, ConductorOne does not currently have a mechanism to update the information on an automatically created account. The user's account information must be updated in the connected software, and the change will be pulled into ConductorOne on the next connector sync. 
+
+</Accordion>
+</AccordionGroup>

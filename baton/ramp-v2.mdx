@@ -1,0 +1,186 @@
+---
+title: Set up a Ramp connector
+og:title: Set up a Ramp connector - ConductorOne docs
+og:description: Integrate your Ramp instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance for Ramp. Integrate your Ramp instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: Ramp
+---
+
+<Tip>
+**This is an updated and improved version of the Ramp connector!** If you're setting up Ramp with ConductorOne for the first time, you're in the right place. 
+</Tip>
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :----------- | :--- | :-------- |
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           |       
+| Roles        | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    |   |
+
+## Configure the Ramp connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- The **Administrator** role in Ramp 
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Ramp** and click **Add**. 
+</Step>
+<Step>
+Choose how to set up the new Ramp connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Click **Login with OAuth**.
+</Step>
+<Step>
+Log in and authorize ConductorOne with your Ramp instance.
+</Step>
+<Step>
+You will then be redirected back to the Ramp setup page in ConductorOne, where you'll see an authorization message.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your Ramp connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use the [Ramp](https://github.com/ConductorOne/baton-ramp) connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Ramp connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Ramp connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret. 
+
+Carefully copy and save these credentials. We'll use them in Step 2. 
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Ramp connector deployment:
+
+#### Secrets configuration
+
+```yaml
+# baton-ramp-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-ramp-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Ramp credentials
+  BATON_TOKEN: <Ramp API token>
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-ramp.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-ramp
+  labels:
+    app: baton-ramp
+spec:
+  selector:
+    matchLabels:
+      app: baton-ramp
+  template:
+    metadata:
+      labels:
+        app: baton-ramp
+        baton: true
+        baton-app: ramp
+    spec:
+      containers:
+      - name: baton-ramp
+        image: ghcr.io/conductorone/baton-ramp:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-ramp-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files. 
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Ramp connector to. Ramp data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your Ramp connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>
+

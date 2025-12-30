@@ -1,0 +1,541 @@
+---
+title: CEL expressions reference
+og:title: CEL expressions reference - ConductorOne docs
+og:description: Complete reference for CEL expression objects, functions, and usage contexts in ConductorOne.
+description: Complete reference for CEL expression objects, functions, and usage contexts in ConductorOne.
+---
+
+## Functions
+
+These library functions let you interact with the ConductorOne system to look up whether a user has access to a certain application or entitlement, or to find the user or list of users who should review a task.
+
+### User library functions
+
+| Function | Accepts | Returns | Availability |
+|:----------|:---------|:---------|:--------------|
+| `c1.user.v1.HasApp` | user, app ID | Boolean | Policies, Groups, Automations, Account provisioning |
+| `c1.user.v1.HasEntitlement` | user, app ID, entitlement ID | Boolean | Policies, Groups, Automations, Account provisioning |
+| `c1.user.v1.GrantedFromEnrollment` | user, app ID, entitlement ID | Boolean | Policy conditions only |
+| `c1.user.v1.AutomaticallyGrantedFromEnrollment` | user, app ID, entitlement ID | Boolean | Policy conditions only |
+| `c1.user.v1.ListAppUsersForUser` | user, app ID | List of AppUser | Automations, Account provisioning |
+
+### Directory library functions
+
+| Function | Accepts | Returns | Availability |
+|:----------|:---------|:---------|:--------------|
+| `c1.directory.users.v1.FindByEmail` | email | user | Policies, Groups, Automations, Account provisioning |
+| `c1.directory.users.v1.GetByID` | user ID | user | Policies, Groups, Automations, Account provisioning |
+| `c1.directory.users.v1.GetManagers` | user | list of users | Policies, Groups, Automations, Account provisioning |
+| `c1.directory.users.v1.DirectReports` | user or list of users | list of users | Policies, Groups, Automations, Account provisioning |
+| `c1.directory.groups.v1.FindByName` | group name | group | Policies, Groups, Automations, Account provisioning |
+| `c1.directory.apps.v1.GetEntitlementMembers` | app ID, entitlement ID | list of users | Policies, Groups, Automations, Account provisioning |
+
+<Tip>
+Go to an application or entitlement's details page to look up its ID, or use [Cone](/product/cli/install/). 
+</Tip>
+
+<Info>
+**Function availability varies by context.** 
+
+Note that automation triggers do NOT have access to directory or user library functions - they can only access the `ctx.trigger` object and basic enums.
+</Info>
+
+### Time functions
+
+ConductorOne provides comprehensive time functions for working with dates and times in CEL expressions. These functions are available in **all CEL contexts** (Policies, Groups, Automations, Account provisioning).
+
+#### Core time functions
+
+| Function | Description | Example |
+|:----------|:-------------|:---------|
+| `now()` | Get current timestamp | `now() > timestamp("2025-01-01T00:00:00Z")` |
+| `time.parse(value, layout)` | Parse time from string (UTC) | `time.parse("2025-10-22", TimeFormat.DATE)` |
+| `time.parse(value, layout, timezone)` | Parse time with timezone | `time.parse("2025-10-22 14:30:00", TimeFormat.DATETIME, "America/New_York")` |
+| `time.format(timestamp, layout)` | Format timestamp to string (UTC) | `time.format(now(), TimeFormat.RFC3339)` |
+| `time.format(timestamp, layout, timezone)` | Format with timezone | `time.format(now(), "Monday", "America/New_York")` |
+| `time.unix(seconds)` | Convert Unix timestamp (seconds) | `time.unix(1734787200)` |
+| `time.unix_ms(milliseconds)` | Convert Unix milliseconds | `time.unix_ms(1734787200123)` |
+| `time.start_of(timestamp, unit)` | Get start of period | `time.start_of(now(), "day")` |
+| `time.start_of(timestamp, unit, timezone)` | Get start of period in timezone | `time.start_of(now(), "week", "America/New_York")` |
+| `time.end_of(timestamp, unit)` | Get end of period | `time.end_of(now(), "month")` |
+
+**Time units for start_of/end_of:**
+- `"day"` - Start/end of day (midnight)
+- `"week"` - Start/end of week (Monday/Sunday)
+- `"month"` - Start/end of month
+- `"quarter"` - Start/end of quarter (Jan/Apr/Jul/Oct)
+- `"year"` - Start/end of year
+
+#### TimeFormat constants
+
+| Constant | Format | Example Output |
+| :--- | :--- | :--- |
+| `TimeFormat.RFC3339` | ISO 8601 / RFC 3339 | `2025-10-22T14:30:00Z` |
+| `TimeFormat.DATE` | Date only | `2025-10-22` |
+| `TimeFormat.DATETIME` | Date and time | `2025-10-22 14:30:00` |
+| `TimeFormat.TIME` | Time only | `14:30:00` |
+
+You can also use custom Go time layouts like `"2006-01-02"` or `"Monday, January 2, 2006"`.
+
+#### Common time patterns
+
+**Check if date is recent:**
+```cel 
+// Check if user's hire date is within last 30 days (if stored in profile)
+has(subject.profile.hire_date) &&
+time.parse(subject.profile.hire_date, TimeFormat.DATE) > now() - duration("720h")
+
+// Account modified this month (in automations)
+has(ctx.trigger.newAccount.updated_at) &&
+timestamp(ctx.trigger.newAccount.updated_at) >= time.start_of(now(), "month")
+```
+
+**Business hours checking:**
+```cel
+// Check if it's business hours (9 AM - 5 PM ET)
+time.format(now(), "15", "America/New_York") >= "09" &&
+time.format(now(), "15", "America/New_York") < "17"
+
+// Check if it's after hours
+time.format(now(), "15", "America/New_York") >= "17" ||
+time.format(now(), "15", "America/New_York") < "09"
+```
+
+**Day of week checking:**
+```cel
+// Check if it's a weekend
+time.format(now(), "Monday", "America/New_York") == "Saturday" ||
+time.format(now(), "Monday", "America/New_York") == "Sunday"
+
+// Check if it's a weekday
+!(time.format(now(), "Monday") == "Saturday" || time.format(now(), "Monday") == "Sunday")
+```
+
+**Parsing profile date fields:**
+```cel
+// Parse contract end date and check if within 30 days
+has(subject.profile.contract_end_date) &&
+time.parse(subject.profile.contract_end_date, TimeFormat.DATE) - now() < duration("720h")
+
+// Check if hire date is in the past
+has(subject.profile.hire_date) &&
+time.parse(subject.profile.hire_date, TimeFormat.DATE) < now()
+```
+
+**Working with timezones:**
+```cel
+// Start of day in company timezone
+time.start_of(now(), "day", "America/New_York")
+
+// Format date in user's timezone
+time.format(now(), TimeFormat.DATETIME, "Europe/London")
+```
+
+<Warning>
+**Important:** 
+
+The `now()` function returns the same value throughout a single expression evaluation. All timestamps are stored in UTC internally; timezone parameters only affect parsing and formatting.
+</Warning>
+
+## Objects
+
+### Subject object
+
+The "subject" variable refers to the ConductorOne user. 
+
+#### Most common fields
+
+These fields are used in the majority of condition expressions:
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `subject.email` | string | User's email address | `subject.email.endsWith("@company.com")` | Distinguish between employees and contractors |
+| `subject.department` | string | User's department | `subject.department == "Engineering"` | Department-based access control |
+| `subject.status` | enum | User's active status | `subject.status == UserStatus.ENABLED` | Check if user is active |
+| `subject.type` | enum | User type (human, service, system) | `subject.type == UserType.HUMAN` | Filter by user type |
+
+#### Identity and contact fields
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `subject.id` | string | Unique user identifier | `subject.id == "user123"` | Specific user targeting |
+| `subject.email.startsWith` | string | Email prefix check | `subject.email.startsWith("admin")` | Admin user identification |
+| `subject.email.endsWith` | string | Email domain check | `subject.email.endsWith("@company.com")` | Employee vs contractor |
+| `subject.manager` | string | User's manager email | `subject.manager == "boss@company.com"` | Manager-based routing |
+
+#### Organizational fields
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `subject.jobTitle` | string | User's job title | `subject.jobTitle == "Senior Developer"` | Role-based access |
+| `subject.employmentType` | string | Employment type | `subject.employmentType == "Full Time"` | Employment status checks |
+| `subject.employmentStatus` | string | Employment status | `subject.employmentStatus == "Active"` | Active employee verification |
+
+#### Status and directory fields
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `subject.directoryStatus` | enum | Directory sync status | `subject.directoryStatus == UserStatus.ENABLED` | Directory health checks |
+| `subject.profile` | map[string]interface{} | Profile attributes | `subject.profile.department == "IT"` | Custom profile data access |
+| `subject.attributes.<CUSTOM_USER_ATTRIBUTE>` | varies | Custom user attributes | `subject.attributes.contractor == "true"` | Custom business logic |
+
+#### Enum values reference
+
+**UserStatus values:**
+- `UserStatus.ENABLED` - User is active
+- `UserStatus.DISABLED` - User is disabled  
+- `UserStatus.DELETED` - User is deleted
+
+**UserType values:**
+- `UserType.HUMAN` - Regular human user
+- `UserType.AGENT` - Automated agent
+- `UserType.SERVICE` - Service account
+- `UserType.SYSTEM` - System account
+
+<Tip>
+**Use custom user attributes.** 
+
+You can write condition expressions that leverage the custom user attributes you've set up in ConductorOne. Any [custom user attribute](/product/admin/attributes) can be passed in to the `subject.attributes.<CUSTOM USER ATTRIBUTE>` property and used in your condition expressions. 
+</Tip>
+
+### User object
+
+The user object is used when referencing other users in the system (not the current subject).
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `user.id` | string | Unique user identifier | `user.id == "user123"` | Specific user targeting |
+| `user.email` | string | User's email address | `user.email.endsWith("@company.com")` | Email-based filtering |
+| `user.displayName` | string | User's display name | `user.displayName == "John Doe"` | Name-based identification |
+| `user.username` | string | User's username | `user.username == "johndoe"` | Username-based filtering |
+| `user.department` | string | User's department | `user.department == "Engineering"` | Department-based grouping |
+| `user.jobTitle` | string | User's job title | `user.jobTitle == "Manager"` | Role-based filtering |
+| `user.status` | UserStatus enum | User's active status | `user.status == UserStatus.ENABLED` | Active user verification |
+| `user.directoryStatus` | UserStatus enum | Directory sync status | `user.directoryStatus == UserStatus.ENABLED` | Directory health checks |
+| `user.employmentType` | string | Employment type | `user.employmentType == "Full Time"` | Employment status filtering |
+| `user.employmentStatus` | string | Employment status | `user.employmentStatus == "Active"` | Active employee verification |
+| `user.profile` | JSON | Profile attributes | `user.profile.department == "IT"` | Custom profile data access |
+
+### Task object
+
+The task object is used in policy expressions to reference the current access request or task.
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `task.id` | string | Unique task identifier | `task.id == "task123"` | Specific task targeting |
+| `task.numericId` | string | Numeric task identifier | `task.numericId == "12345"` | Numeric task reference |
+| `task.displayName` | string | Human-readable task name | `task.displayName == "Access Request"` | Task identification |
+| `task.origin` | TaskOrigin enum | Where the task was created | `task.origin == TaskOrigin.SLACK` | Route based on creation source |
+| `task.isGrantPermanent` | Boolean | Whether access is permanent | `task.isGrantPermanent == true` | Permanent vs temporary access |
+| `task.grantDuration` | duration | How long access is granted | `task.grantDuration > duration("2h")` | Time-based access control |
+| `task.analysis` | analysis | Task analysis data | `task.analysis.hasConflictViolations` | Access conflict detection |
+
+#### TaskOrigin values:
+- `TaskOrigin.WEBAPP` - Created in ConductorOne web interface
+- `TaskOrigin.SLACK` - Created via Slack integration
+- `TaskOrigin.API` - Created via API
+- `TaskOrigin.JIRA` - Created via Jira integration
+- `TaskOrigin.COPILOT` - Created via Copilot
+- `TaskOrigin.PROFILE_MEMBERSHIP_AUTOMATION` - Created by automation
+- `TaskOrigin.TIME_REVOKE` - Created by time-based revocation
+
+### Task analysis object
+
+The task analysis object provides information about potential access conflicts and other analysis data.
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `task.analysis.id` | string | Analysis identifier | `task.analysis.id == "analysis123"` | Specific analysis reference |
+| `task.analysis.hasConflictViolations` | Boolean | Whether conflicts exist | `task.analysis.hasConflictViolations` | Check for access conflicts |
+| `task.analysis.conflictViolations` | array of strings | List of conflict IDs | `"conflict123" in task.analysis.conflictViolations` | Specific conflict detection |
+
+### Entitlement object
+
+The `entitlement` object can only be used in CEL expressions in policies. It does not work when writing CEL expressions to form ConductorOne groups.
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `entitlement.id` | string | Entitlement identifier | `entitlement.id == "entitlement123"` | Specific entitlement reference |
+| `entitlement.appId` | string | Application identifier | `entitlement.appId == "app123"` | Application-specific logic |
+
+### IP address object
+
+The IP address object is used for network-based access control and filtering.
+
+| Field | Data type | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- | :--- |
+| `ip.is4` | Boolean | Whether IP is IPv4 | `ip.is4` | IPv4-specific logic |
+| `ip.is6` | Boolean | Whether IP is IPv6 | `ip.is6` | IPv6-specific logic |
+| `ip.isPrivate` | Boolean | Whether IP is private | `ip.isPrivate` | Internal network access |
+| `ip.isLoopback` | Boolean | Whether IP is loopback | `ip.isLoopback` | Localhost detection |
+| `ip.isGlobalUnicast` | Boolean | Whether IP is global unicast | `ip.isGlobalUnicast` | Public IP detection |
+| `ip.isMulticast` | Boolean | Whether IP is multicast | `ip.isMulticast` | Multicast traffic detection |
+| `ip.isInterfaceLocalMulticast` | Boolean | Whether IP is interface local multicast | `ip.isInterfaceLocalMulticast` | Local multicast detection |
+| `ip.isLinkLocalMulticast` | Boolean | Whether IP is link local multicast | `ip.isLinkLocalMulticast` | Link local multicast detection |
+| `ip.isUnspecified` | Boolean | Whether IP is unspecified | `ip.isUnspecified` | Invalid IP detection | 
+
+### IP CIDR object
+
+The IP CIDR object is used for network range-based access control and filtering.
+
+| Function | Description | Example usage | Common use cases |
+| :--- | :--- | :--- | :--- |
+| `cidr('10.1.2.0/24').contains(ip('1.2.3.4'))` | Check if IP is within CIDR range | `cidr('10.1.2.0/24').contains(ip('10.1.2.5'))` | Network-based access control |
+| `ip('10.1.2.5').within(cidr('10.1.2.0/24'))` | Check if IP is within CIDR range | `ip('10.1.2.5').within(cidr('10.1.2.0/24'))` | Alternative syntax for range checking |
+| `cidr('10.1.2.0/24', '5.4.3.2/32')` | Create CIDR range with multiple networks | `cidr('10.1.2.0/24', '5.4.3.2/32')` | Multiple network range definition |
+
+## Object usage reference
+
+Understanding where each object can be used helps you write effective CEL expressions for different ConductorOne features.
+
+### Quick object reference table
+
+| Object | Policies | Groups | Automations | Campaigns | Account provisioning |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| subject | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>* | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| user | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>* | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| task | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| task.analysis | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| entitlement | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| ctx | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| ip | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| ip CIDR | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+
+\* In Automations, user data is accessed through the `ctx` object (e.g., `ctx.trigger.newUser`, `ctx.trigger.oldUser`)
+
+### Subject object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Groups <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Automations <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Campaigns <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Account provisioning  
+**Description:** References the current user in the context  
+**Usage:** The most commonly used object across all CEL expression contexts
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy conditional - check if user is in Engineering department
+subject.department == "Engineering"
+
+// Policy expression - route to user's manager
+c1.directory.users.v1.FindByEmail(subject.manager)
+```
+
+*In Groups:*
+```cel
+// Group membership - include all Engineering employees
+subject.department == "Engineering" && subject.status == UserStatus.ENABLED
+```
+
+*In Automations:*
+```cel
+// Automation trigger - when user status changes
+subject.status == UserStatus.DISABLED
+```
+
+*In Campaigns:*
+```cel
+// User selection - include contractors only
+!subject.email.endsWith("@company.com")
+```
+
+*In Account provisioning:*
+```cel
+// Data mapping - use user's first name
+subject.attributes.firstName
+```
+
+### User object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Groups <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Automations <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** References other users in the system (not the current subject)  
+**Usage:** Used when you need to reference or compare against other users
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy expression - assign to specific user
+c1.directory.users.v1.GetByID("user123")
+```
+
+*In Groups:*
+```cel
+// Group membership - include users by department
+user.department == "Engineering"
+```
+
+*In Automations:*
+```cel
+// Automation step - modify specific user
+user.status == UserStatus.DISABLED
+```
+
+*In Campaigns:*
+```cel
+// User selection - include users by status
+user.status == UserStatus.ENABLED
+```
+
+### Task object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** References the current access request or task  
+**Usage:** Only available in policy expressions where there's an active task context
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy conditional - check task origin
+task.origin == TaskOrigin.SLACK
+
+// Policy conditional - check for access conflicts
+task.analysis.hasConflictViolations
+
+// Policy conditional - time-based access
+task.isGrantPermanent == false && task.grantDuration > duration("2h")
+```
+
+### Task analysis object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** Provides information about potential access conflicts and other analysis data  
+**Usage:** Only available in policy expressions for conflict detection and analysis
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy conditional - check for any conflicts
+task.analysis.hasConflictViolations
+
+// Policy conditional - check for specific conflict
+"conflict123" in task.analysis.conflictViolations
+```
+
+### Entitlement object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** References the entitlement being requested  
+**Usage:** Only available in policy expressions where there's an active entitlement request
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy conditional - check specific entitlement
+entitlement.id == "entitlement123"
+
+// Policy expression - assign to users with same entitlement
+c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.id)
+```
+
+### IP address object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** Used for network-based access control and filtering  
+**Usage:** Available in policies and automations for network-based logic
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy conditional - check if IP is private
+ip.isPrivate
+
+// Policy conditional - check if IP is IPv4
+ip.is4
+```
+
+*In Automations:*
+```cel
+// Automation trigger - when IP is from private network
+ip.isPrivate
+```
+
+### IP CIDR object
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** Used for network range-based access control and filtering  
+**Usage:** Available in policies and automations for network range checking
+
+**Context-specific examples:**
+
+*In Policies:*
+```cel
+// Policy conditional - check if IP is in range
+cidr('10.1.2.0/24').contains(ip('10.1.2.5'))
+```
+
+*In Automations:*
+```cel
+// Automation trigger - when IP is in specific range
+ip('10.1.2.5').within(cidr('10.1.2.0/24'))
+```
+
+### Context object (ctx)
+**Available in:** <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Automation Triggers <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Workflow Steps <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Description:** Provides access to workflow execution context and trigger data  
+**Usage:** Used in automations to access trigger data and previous step outputs
+
+**Available fields:**
+
+*In Automation Triggers:*
+- `ctx.trigger.oldUser` / `ctx.trigger.old_user` - User state before change
+- `ctx.trigger.newUser` / `ctx.trigger.new_user` - User state after change  
+- `ctx.trigger.oldAccount` / `ctx.trigger.old_account` - Account state before change
+- `ctx.trigger.newAccount` / `ctx.trigger.new_account` - Account state after change
+- `ctx.trigger.entitlement` - Entitlement that triggered the workflow
+
+*In Workflow Steps:*
+- `ctx.trigger` - Trigger output data (structure varies by trigger type)
+- `ctx.[step_name]` - Output from each completed workflow step
+
+**Context-specific examples:**
+
+*In automation triggers:*
+```cel
+// Trigger when user changes departments
+ctx.trigger.newUser.department != ctx.trigger.oldUser.department && 
+ctx.trigger.newUser.department == "Engineering"
+
+// Trigger when account status changes to disabled
+ctx.trigger.newAccount.status.status == APP_USER_STATUS_DISABLED &&
+ctx.trigger.oldAccount.status.status == APP_USER_STATUS_ENABLED
+```
+
+*In automation steps:*
+```cel
+// Access trigger data
+ctx.trigger.user.email
+
+// Template syntax for embedding in strings
+"User {{ ctx.trigger.user.display_name }} changed departments"
+```
+
+<Warning>
+**Important:** 
+
+Automation triggers have limited function access. They do NOT have access to directory functions (`c1.directory.*`) or user entitlement checking functions (`c1.user.v1.HasApp`, etc.). Only basic user/account field access and status enums are available.
+</Warning>
+
+## Important notes
+
+### Use camelCase 
+CEL expressions should be written in camelCase. ConductorOne is moving away from snake_case for consistency and readability. Existing expressions in snake_case will still work, but new ones should follow the camelCase convention. 
+
+### Null safety with has()
+Use the `has()` macro to check for existence of optional fields, especially in profile maps:
+```cel
+has(subject.profile.custom_field) ? subject.profile.custom_field == "value" : false
+```
+
+### Performance considerations
+Directory functions (`c1.directory.*`) perform I/O operations. Place them after simpler conditions when possible:
+```cel
+// Good: Check fast conditions first
+subject.department == "Engineering" && c1.directory.users.v1.FindByEmail(subject.email)
+
+// Less optimal: I/O operation runs for all evaluations
+c1.directory.users.v1.FindByEmail(subject.email) && subject.department == "Engineering"
+```
+
+### Function memoization
+Directory function calls are automatically memoized within a single expression evaluation, so calling the same function multiple times is safe and efficient.
+
+### Template syntax
+Only Workflow Steps support `{{ expression }}` template syntax for embedding CEL expressions in strings.
+

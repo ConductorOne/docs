@@ -1,0 +1,483 @@
+---
+title: "Use Baton-SCIM to build a custom connector"
+description: "Build a custom connector to sync users, groups, and roles from SCIM-enabled applications."
+og:title: "Use Baton-SCIM to build a custom connector"
+og:description: "Build a custom connector to sync users, groups, and roles from SCIM-enabled applications."
+sidebarTitle: "Build a custom connector with Baton-SCIM"
+---
+
+## Overview
+
+The [Baton-SCIM](https://github.com/ConductorOne/baton-scim) connector is a generic connector for applications compatible with SCIM (System for Cross-domain Identity Management). It communicates with the SCIM API to sync data about users, groups, and roles.
+
+Built-in service providers include:
+
+- Miro
+- Postman
+- Slack
+- Zoom
+
+For other SCIM-enabled applications, you can create your own configuration file.
+
+## Configuration options
+
+The connector accepts the following command-line flags and environment variables:
+
+| Flag | Environment variable | Description |
+| :--- | :--- | :--- |
+| `--service-provider` | `BATON_SERVICE_PROVIDER` | Name of the service provider (e.g., slack, zoom) |
+| `--scim-config` | `BATON_SCIM_CONFIG` | Path to custom YAML SCIM configuration file |
+| `--token` | `BATON_TOKEN` | OAuth2 token for authentication |
+| `--api-key` | `BATON_API_KEY` | API key for authentication |
+| `--username` | `BATON_USERNAME` | Username for basic authentication |
+| `--password` | `BATON_PASSWORD` | Password for basic authentication |
+| `--scim-client-id` | `BATON_SCIM_CLIENT_ID` | Client ID used to obtain access token |
+| `--scim-client-secret` | `BATON_SCIM_CLIENT_SECRET` | Client Secret used to obtain access token |
+| `--account-id` | `BATON_ACCOUNT_ID` | Account ID used to obtain access token |
+| `-p, --provisioning` | `BATON_PROVISIONING` | Enable provisioning actions |
+| `-f, --file` | `BATON_FILE` | Path to the output c1z file (default “sync.c1z”) |
+
+## Authentication methods
+
+The SCIM connector supports several authentication methods.
+
+### OAuth2 token authentication
+
+Use this method when the SCIM provider requires OAuth2 token authentication:
+
+```bash
+baton-scim --token=YOUR_OAUTH_TOKEN --service-provider=slack
+```
+
+Or with environment variables:
+
+```bash
+BATON_TOKEN=YOUR_OAUTH_TOKEN BATON_SERVICE_PROVIDER=slack baton-scim
+```
+
+### API key authentication
+
+Use this method when the SCIM provider requires API key authentication:
+
+```bash
+baton-scim --api-key=YOUR_API_KEY --service-provider=zoom
+```
+
+Or with environment variables:
+
+```bash
+BATON_API_KEY=YOUR_API_KEY BATON_SERVICE_PROVIDER=zoom baton-scim
+```
+
+### Basic authentication
+
+Use this method when the SCIM provider requires username/password authentication:
+
+```bash
+baton-scim --username=YOUR_USERNAME --password=YOUR_PASSWORD --scim-config=./custom-provider.yaml
+```
+
+Or with environment variables:
+
+```bash
+BATON_USERNAME=YOUR_USERNAME BATON_PASSWORD=YOUR_PASSWORD BATON_SCIM_CONFIG=./custom-provider.yaml baton-scim
+```
+
+### OAuth2 client credentials authentication flow
+
+Use this method for services requiring OAuth token acquisition via client credentials:
+
+```bash
+baton-scim --scim-client-id=YOUR_CLIENT_ID --scim-client-secret=YOUR_CLIENT_SECRET --account-id=YOUR_ACCOUNT_ID --service-provider=zoom
+```
+
+Or with environment variables:
+
+```bash
+BATON_SCIM_CLIENT_ID=YOUR_CLIENT_ID BATON_SCIM_CLIENT_SECRET=YOUR_CLIENT_SECRET BATON_ACCOUNT_ID=YOUR_ACCOUNT_ID BATON_SERVICE_PROVIDER=zoom baton-scim
+```
+
+## Custom SCIM configuration
+
+For SCIM-enabled applications without built-in support, create a YAML configuration file to map the SCIM resources to the Baton connector.
+
+### Configuration file structure
+
+```yaml expandable
+# The URL of the SCIM API endpoint (required)
+apiEndpoint: "https://api.example.com/scim/v2/" 
+
+# Whether the service requires a specific Accept header for SCIM (required)
+hasScimHeader: true 
+
+# Authentication configuration (required)
+auth:
+  # Authentication type: "oauth2", "apiKey", or "basic" (required)
+  authType: "oauth2"
+  
+  # Prefix for API key in Authorization header (optional)
+  apiKeyPrefix: "Bearer"
+  
+  # Whether to obtain token programmatically (optional)
+  shouldObtainToken: false
+  
+  # Auth URL for obtaining token (required if shouldObtainToken is true)
+  authUrl: "https://example.com/oauth/token"
+  
+  # JSONPath to extract token from response (required if shouldObtainToken is true)
+  tokenPath: "access_token"
+
+# User resource mapping (required)
+user:
+  # JSONPath to user ID (required)
+  id: "id"
+  
+  # JSONPath to username (required)
+  userName: "userName"
+  
+  # JSONPath to first name (required)
+  firstName: "name.givenName"
+  
+  # JSONPath to last name (required)
+  lastName: "name.familyName"
+  
+  # JSONPath to primary email (required)
+  primaryEmail: "emails[?(@.primary==true)].value"
+  
+  # JSONPath to first email (optional)
+  firstEmail: "emails[0].value"
+  
+  # JSONPath to active status (required)
+  active: "active"
+  
+  # Whether groups are defined on the user object (optional)
+  hasGroupsOnUser: false
+  
+  # Group mapping on user object (required if hasGroupsOnUser is true)
+  userGroup:
+    # JSONPath to groups array on user object
+    path: "groups"
+    
+    # JSONPath to group name in user's group object
+    name: "display"
+    
+    # JSONPath to group ID in user's group object (optional)
+    id: "value"
+  
+  # Role mapping on user object (optional)
+  roles:
+    # JSONPath to roles array on user object
+    path: "roles"
+    
+    # JSONPath to role name
+    name: "value"
+    
+    # JSONPath to role display name (optional)
+    display: "display"
+
+# Group resource mapping (required)
+group:
+  # JSONPath to group ID (required)
+  id: "id"
+  
+  # JSONPath to group display name (required)
+  displayName: "displayName"
+  
+  # Member mapping in group object (optional)
+  members:
+    # JSONPath to members array in group object
+    path: "members"
+    
+    # JSONPath to member ID
+    id: "value"
+    
+    # JSONPath to member display name (optional)
+    displayName: "display"
+
+# Pagination mapping (required)
+pagination:
+  # JSONPath to total results count
+  totalResults: "totalResults"
+  
+  # JSONPath to items per page
+  itemsPerPage: "itemsPerPage"
+  
+  # JSONPath to start index
+  startIndex: "startIndex"
+
+# Provisioning configuration (optional, required for provisioning)
+provisioning:
+  # Configuration for adding a user to a group
+  addUserToGroup:
+    # Schema for the operation
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    
+    # Operation type
+    op: "add"
+    
+    # Path to field being modified
+    path: "members"
+    
+    # Path to value field in the operation
+    valuePath: "value"
+  
+  # Configuration for removing a user from a group
+  removeUserFromGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "replace"
+    path: "members"
+    valuePath: "value"
+  
+  # Configuration for adding a role to a user
+  addUserRole:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "add"
+    path: "roles"
+    valuePath: "value"
+  
+  # Configuration for removing a role from a user
+  removeUserRole:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "remove"
+    path: "roles"
+    valuePath: "value"
+```
+
+### JSONPath expressions
+
+The configuration uses JSONPath expressions to extract data from the SCIM API responses. Some common patterns:
+
+- `id` - Direct access to a field named “id”
+- `name.givenName` - Access “givenName” field inside a “name” object
+- `emails[0].value` - Access the “value” of the first item in the “emails” array
+- `emails[?(@.primary==true)].value` - Access “value” of the item in “emails” where “primary” is true
+
+## Running the connector
+
+After configuring your SCIM connector, you can run it with one of these methods:
+
+### Using command line arguments
+
+Providing your ConductorOne tenant client ID and client secret via flags automatically triggers Continuous Service Mode. This mode is recommended for production deployments.
+
+```bash
+# With a built-in service provider
+baton-scim --token=your-oauth-token --service-provider=slack
+
+# With a custom configuration
+baton-scim --api-key=your-api-key --scim-config=./config.yaml
+```
+
+### Using Docker
+
+```bash
+# With a built-in service provider
+docker run --rm -v $(pwd):/out -e BATON_TOKEN=your-oauth-token -e BATON_SERVICE_PROVIDER=slack ghcr.io/conductorone/baton-scim:latest -f "/out/sync.c1z"
+
+# With a custom configuration
+docker run --rm -v $(pwd):/out -v $(pwd)/config.yaml:/config.yaml -e BATON_API_KEY=your-api-key -e BATON_SCIM_CONFIG=/config.yaml ghcr.io/conductorone/baton-scim:latest -f "/out/sync.c1z"
+```
+
+## Provisioning
+
+The SCIM connector supports provisioning actions like adding/removing users from groups and assigning/revoking user roles. To enable provisioning, use the `--provisioning` flag:
+
+```bash
+baton-scim --service-provider=slack --token=your-oauth-token --provisioning
+```
+
+Or with environment variables:
+
+```bash
+BATON_TOKEN=your-oauth-token BATON_SERVICE_PROVIDER=slack BATON_PROVISIONING=true baton-scim
+```
+
+The provisioning section in your config file must be properly configured for this to work.
+
+## Example configurations
+
+Here are examples for configuring with common SCIM-enabled applications:
+
+### Okta
+
+```yaml expandable
+apiEndpoint: "https://your-domain.okta.com/api/v1/scim/v2/"
+hasScimHeader: true
+auth:
+  authType: "apiKey"
+  apiKeyPrefix: "Bearer"
+user:
+  id: "id"
+  userName: "userName"
+  firstName: "name.givenName"
+  lastName: "name.familyName"
+  primaryEmail: "emails[?(@.primary==true)].value"
+  firstEmail: "emails[0].value"
+  active: "active"
+group:
+  id: "id"
+  displayName: "displayName"
+  members:
+    path: "members"
+    id: "value"
+    displayName: "display"
+pagination:
+  totalResults: "totalResults"
+  itemsPerPage: "itemsPerPage"
+  startIndex: "startIndex"
+provisioning:
+  addUserToGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "add"
+    path: "members"
+    valuePath: "value"
+  removeUserFromGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "remove"
+    path: "members"
+    valuePath: "value"
+```
+
+Command:
+
+```bash
+baton-scim --api-key=your-okta-api-token --scim-config=./okta.yaml
+```
+
+### Azure AD
+
+```yaml expandable
+apiEndpoint: "https://graph.microsoft.com/v1.0/scim/"
+hasScimHeader: true
+auth:
+  authType: "oauth2"
+  shouldObtainToken: true
+  authUrl: "https://login.microsoftonline.com/your-tenant-id/oauth2/v2.0/token"
+  tokenPath: "access_token"
+user:
+  id: "id"
+  userName: "userName"
+  firstName: "name.givenName"
+  lastName: "name.familyName"
+  primaryEmail: "emails[0].value"
+  active: "active"
+group:
+  id: "id"
+  displayName: "displayName"
+  members:
+    path: "members"
+    id: "value"
+pagination:
+  totalResults: "totalResults"
+  itemsPerPage: "itemsPerPage"
+  startIndex: "startIndex"
+provisioning:
+  addUserToGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "add"
+    path: "members"
+    valuePath: "value"
+  removeUserFromGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "remove"
+    path: "members"
+    valuePath: "value"
+```
+
+Command:
+
+```bash
+baton-scim --scim-client-id=your-client-id --scim-client-secret=your-client-secret --scim-config=./azure.yaml
+```
+
+### OneLogin
+
+```yaml expandable
+apiEndpoint: "https://api.us.onelogin.com/scim/v2/"
+hasScimHeader: true
+auth:
+  authType: "apiKey"
+  apiKeyPrefix: "Bearer"
+user:
+  id: "id"
+  userName: "userName"
+  firstName: "name.givenName"
+  lastName: "name.familyName"
+  primaryEmail: "emails[?(@.primary==true)].value"
+  firstEmail: "emails[0].value"
+  active: "active"
+group:
+  id: "id"
+  displayName: "displayName"
+  members:
+    path: "members"
+    id: "value"
+pagination:
+  totalResults: "totalResults"
+  itemsPerPage: "itemsPerPage"
+  startIndex: "startIndex"
+provisioning:
+  addUserToGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "add"
+    path: "members"
+    valuePath: "value"
+  removeUserFromGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "remove"
+    path: "members"
+    valuePath: "value"
+```
+
+Command:
+
+```bash
+baton-scim --api-key=your-onelogin-api-token --scim-config=./onelogin.yaml
+```
+
+### Google Workspace
+
+
+
+```yaml expandable
+apiEndpoint: "https://admin.googleapis.com/admin/directory/v1/scim/"
+hasScimHeader: true
+auth:
+  authType: "oauth2"
+user:
+  id: "id"
+  userName: "userName"
+  firstName: "name.givenName"
+  lastName: "name.familyName"
+  primaryEmail: "emails[?(@.primary==true)].value"
+  firstEmail: "emails[0].value"
+  active: "active"
+group:
+  id: "id"
+  displayName: "displayName"
+  members:
+    path: "members"
+    id: "value"
+    displayName: "display"
+pagination:
+  totalResults: "totalResults"
+  itemsPerPage: "itemsPerPage"
+  startIndex: "startIndex"
+provisioning:
+  addUserToGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "add"
+    path: "members"
+    valuePath: "value"
+  removeUserFromGroup:
+    schemas: "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    op: "remove"
+    path: "members"
+    valuePath: "value"
+```
+
+Command:
+
+```bash
+baton-scim --token=your-google-oauth-token --scim-config=./google.yaml
+```

@@ -1,0 +1,106 @@
+---
+title: "Build a custom connector"
+description: "Use the Baton software development kit to build your own connector if a pre-built cloud connector isn't available."
+og:title: "Build a custom connector"
+og:description: "Use the Baton software development kit to build your own connector if a pre-built cloud connector isn't available."
+sidebarTitle: "Build a new connector"
+---
+
+If you need to connect ConductorOne to a homegrown or backoffice piece of infrastructure, you can build your own connector with the Baton software development kit (SDK). Once built, these connectors can be integrated directly with ConductorOne.
+
+Check out our tutorial video to learn how to build your own connector:
+
+<Frame>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/bzC3FH0EpG8?si=1zItEo8C19BkjMsk" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</Frame>
+
+## What exactly is a connector?
+
+At a high level, we use the term ‘connector’ to describe a piece of software that communicates with an external service (such as a SaaS, REST API, or local database). The two primary operations that a connector can perform with an external service are: ingesting (syncing) and provisioning.
+
+### Data normalization
+
+Out in the wild, every service is different. Some have groups, while others have teams. In some places the resources that are tied to human identities are called users, while in other places they are just called accounts.
+
+Because of this, Baton provides its own data model that lets you bring an external service’s representation into alignment with the rest of the services that you’re interacting with.
+
+To do this, Baton defines a series of objects and annotations that map to similar things from upstream services.
+
+### Traits
+
+In Baton, we have the concept of ’traits’ that allow you to define the ‘shape’ of an object. To start with, Baton supports four major traits:
+
+- User
+- Group
+- Role
+- App
+
+These traits all have additional data fields on them including details like which email addresses belong to a user, or arbitrary profile attributes for a group. Baton is able to use these traits to help enforce data validation, determine what resource types are allowed to be granted access, and more.
+
+It isn’t required to use traits at all. If an existing trait aligns with your data type it is a good idea to use it, but if not, don’t fret!
+
+### Resource types
+
+In Baton, a `Resource Type` describes a kind of resource that the connector is able to pull information about. Some examples of resource types include: `User`, `Team`, `Organization`, `Table`, `Account`, etc.
+
+When defining a resource type, you’ll be required to specify an ID, DisplayName, and can optionally provide the traits that you are expecting that resource to have. While syncing data with the service, Baton will automatically ensure that any resources of a given type also have the proper traits on them.
+
+Resource types allow you to map the external services terminology to the internal Baton terminology built around traits. We can see a good example of this if we look towards the GitHub API. By defining a new resource type “Team” while giving it a Group trait, we can continue to to call the type by its upstream name and Baton will recognize it as a group.
+
+### Resources
+
+Resources in Baton are created to describe and model the nouns within the system you’re connecting to. For example, if we’ve defined a `Group` resource type for our connector, a Baton resource maps to a specific instance of each `Group` resource type coming from your external service.
+
+It is expected that you will have zero or more resources for each resource type that your connector supports.
+
+### Entitlements
+
+Baton uses entitlements to describe a specific permission that can be granted to a principal. Entitlements *always* correspond to a specific resource, and not a resource type. Entitlements have a display name, description and ‘slug’, which acts as a short human-readable label for the entitlement. Entitlements also specify which resource types the entitlement can be granted to. If you know your entitlement can only be granted to the HumanUser resource type, and not the RobotUser resource type, you can express that in the entitlement and Baton will enforce it for you during the syncing process.
+
+There are two types of entitlements that it is important to understand the difference between. Entitlements can either be for permissions, or they can be for “assignment”.
+
+Permission entitlements are the predominant type of entitlement that your connector will use. A permission entitlement describes some permission or level of access that is granted on a resource. Imagine the resource that we want to describe in our connector is a generic file that some users may have the ability to `read`, `write`, or `exec`. This means that we would emit three permission entitlements for our resource: `read`, `write`, and `exec`.
+
+Assignment entitlements are critical, but naturally occur less. Use an assignment entitlement to describe situations where the principal being granted the entitlement isn’t gaining permission, but is instead being assigned to the resource.
+
+A good example of how permission and assignment entitlements play together can be seen if we think about what entitlements might exist on a generic `Group` resource. It is pretty standard that groups have members, so to represent that in Baton, we would have the `Group` resource emit an assignment entitlement for membership. Granting this entitlement tells Baton that the principal is “assigned” to the group. In future releases this allows for fun things like automatically passing grants from the group onto any of its members. In addition to being a member of the group, some members are also allowed to add and remove members from the group. To model this, we would emit a second permission entitlement called “administrator”. Being granted this entitlement means that the user has the `administrator` permission on the specific `Group` resource.
+
+### Grants
+
+The final object type that Baton uses is called a Grant. Each grant represents a fact: the principal resource *has* the given entitlement on the specified resource. A more concrete example would be “User X is granted the membership entitlement on Group Y”. Note that “User X” and “Group Y” are both normal resources, but “User X” is the principal receiving the grant to the “Group Y” resource.
+
+When creating a grant, the principal can be *any* resource, including the same resource the entitlement belongs to. This means that we can express more complicated situations, for example: In the service we are building a connector for, users can belong to groups, but groups can also belong to groups, allowing for nested groups. Because principals can be any resource, it means that we can create a grant for each user and group on our original groups assignment entitlement.
+
+## Syncing
+
+At their core, Baton connectors are a [gRPC](https://grpc.io/) service that includes methods to answer the following questions:
+
+- What types of resources are you going to tell me about?
+- What are all of the resources that are type X?
+- What entitlements does this specific resource have?
+- Who is granted entitlements on this specific resource?
+
+The goal of the syncing process is to answer these questions using the upstream service and connector implementation.
+
+As a developer using the Baton SDK, your primary responsibility is writing the logic used to communicate with whichever external service you’d like to integrate with. This could be a very well-known SaaS such as Okta and AWS, or it could be the internal time clock application that has been around in your office for years. While you focus on communicating with the external service, the SDK does some of the heavy lifting behind the curtain. This includes providing support for consistent rate limiting across services, helpers for complex pagination, working with loading and saving from files in a remote object store like S3, and more.
+
+When a connector runs, the first thing that happens is that the SDK attempts to instantiate an instance of your connector. Once that happens successfully, the process forks itself and begins running the ConnectorServer gRPC service in a child process. Communication between the child and parent processes are encrypted using mTLS. Once the child process is up and running, the SDK-internal logic is able to start performing a sync!
+
+The general flow of a sync looks like:
+
+<Steps>
+    <Step>
+    List all resource types
+    </Step>
+    <Step>
+    For each resource type, return each resource of the specified type
+    </Step>
+    <Step>
+    For every resource(across all resource types), list all entitlements for that specific resource
+    </Step>
+    <Step>
+    For every resource(across all resource types), list all grants for that specific resource.
+    </Step>
+</Steps>
+
+Once syncing has completed, the SDK is responsible for persisting a C1Z file that contains all of your sync details. You can use the [Baton](https://github.com/conductorone/baton) tool to inspect your own C1Zs today.

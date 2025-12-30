@@ -1,0 +1,258 @@
+---
+title: Configure webhooks
+og:title: Configure webhooks - ConductorOne
+og:description: Set up webhooks in ConductorOne to extend workflows across multiple tools, such as creating a ticket or making an API call. 
+description: Set up webhooks in ConductorOne to extend workflows across multiple tools, such as creating a ticket or making an API call.
+sidebarTitle: Webhooks
+---
+
+## Add a new webhook
+
+Set up a webhook in ConductorOne to extend your access control workflows across multiple tools. 
+
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** and click the **Webhooks** tab.
+</Step>
+<Step>
+Click **Add webhook**.
+</Step>
+<Step>
+Give the webhook a name and description so that you and your colleagues can easily identify its purpose.
+</Step>
+<Step>
+Enter the URL for the webhook.
+</Step>
+<Step>
+Click **Save**. The new webhook is set up and assigned an ID. Click **View history** to see the webhook's activity in the past eight days.
+</Step>
+</Steps>
+
+### Test a webhook
+
+Here's how to test a webhook once you've set it up in ConductorOne: 
+
+<Steps>
+<Step>
+On the **Webhooks** tab, click the more actions (**...**) menu and select **Test webhook**. The webhook fires with an empty payload.
+</Step>
+<Step>
+Click **View history** to see details of the webhook's payload and status. 
+</Step>
+</Steps>
+
+## Webhook authentication
+
+Webhooks include the `Authorization` header set with a bearer token that can be used to authenticate that the webhook came from ConductorOne. This bearer token is a JWT that can be authenticated using the JWKS available at `https://<YOUR DOMAIN>.conductor.one/auth/v1/jwks`. After the token is authenticated, you can validate the request body using the `htb_s256` claim included in the token.
+
+The payload of the JWT looks like this: 
+
+```bash
+{
+  "aud": "webhook.site",
+  "c1typ": "wh",
+  "exp": 1713312240,
+  "htb_s256": "VZ9Lx6npbJ2wf2oS4gqSlWPBlrOR6egghxnOMk9UKIM=",
+  "htm": "POST",
+  "htu": "https://webhook.site/729638b0-d919-4c7d-b14b-24dd68c84f22",
+  "iat": 1713312120,
+  "iss": "example.conductor.one",
+  "jti": "2fCjnQxpBRyaQQgPO3rW6EWNdld",
+  "nbf": 1713312060
+}
+```
+
+| Claim    | Description                                                          |
+| :--- | :--- |
+| `aud`      | The domain that the webhook was delivered to.                        |
+| `c1typ`    | The type of token from ConductorOne. This will be ‘wh’ for webhooks. |
+| `exp`      | The expiration time.                                                 |
+| `htb_s256` | The sha256 checksum of the request body for the webhook.             |
+| `htm`      | The HTTP method that the webhook was delivered with.                 |
+| `htu`      | The target URL of the webhook.                                       |
+| `iat`      | The time that the token was issued.                                  |
+| `iss`      | The tenant domain that the token was issued for.                     |
+| `jti`      | The ID of the token                                                  |
+| `nbf`      | The earliest time the token should be accepted.                      |
+
+## Webhook payload
+
+The contents of a webhook request vary based on the context of the webhook that is delivered. Each request includes a set of common fields that act as webhook metadata. Additionally, a payload is defined based on the event type of the webhook.
+
+The most basic request is a test webhook, and it looks like this:
+
+```json
+{
+  "version": "v1",
+  "webhookId": "2fCjgK8tYJxV9u8d1wupBMeXZ45",
+  "callbackUrl": "https://test-domain.conductor.one/api/v1/webhooks/callback/ChsyNVR0dHZXSWhpQVYwT0N5ZWwwQTJiTVdGN1ISfXKaBFUxiS0r42OpH-ppdtxyUjkn1ExnOotjVEgk4p2bouIM8oSOvhcVDSEJLtIqhzTetQ-ckH3JbnS6k0nHefQhVTeZmmmW2KpIMUiaJooDgQ4Yyti5dTNduxNmI7kjlNff5XXZU1aw4QSv3vdKe0dD4KKjP5PGwL1x9nN9",
+  "event": "c1.webhooks.v1.PayloadTest",
+  "payload": {
+    "@type": "type.googleapis.com/c1.webhooks.v1.PayloadTest"
+  }
+}
+```
+
+Here's an explanation of the fields in the test webhook:
+
+| Field       | Description                                                                              |
+| :--- | :--- |
+| `version`     | The version of the webhook.                                                              |
+| `webhookId`   | The unique ID of the webhook.                                                            |
+| `callbackUrl` | A URL that a delayed response can be sent to after responding with HTTP status code 202. |
+| `event`       | The type of the event the webhook was dispatched for (see below).                        |
+| `payload`     | The contextual payload of the webhook based on the type.                                 |
+
+### Payload types 
+
+| Event type                          | Description                                                                                                                                   |
+| :--- | :--- |
+| `c1.webhooks.v1.PayloadTest`          | An empty payload.                                                                                                                             |
+| `c1.webhooks.v1.PayloadProvisionStep` | The same payload that is returned from the [GetTask API endpoint](/conductorone-api/task/get). |
+
+## Configuring callback URL responses 
+
+When setting up callback URLs for use with ConductorOne, remember: 
+
+* The POST to the callback URL must respond with HTTP status code 202. 
+
+* You don't need to include session tokens. A blank POST call to the callback URL is enough. 
+
+### Callback URLs for request policies 
+
+When configuring a callback URL to respond to a request policy, here's what to include in the webhook body:  
+
+To approve a request and add a comment:
+`{"version": "v1", "approve": {"comment": "This is approved."}}`
+
+To deny a request and add a comment:
+`{"version": "v1", "deny": {"comment": "This is denied. Please reach out to IT."}}`
+
+To reassign a request and add a comment:
+
+```bash
+{
+  "version": "v1",
+  "reassign": {
+      "comment": "Reassigning to Alice Rodriguez",
+      "newStepUserIds": ["2mqg9IILyNefQ6oMTvolM4FjDTS"]
+  }
+}
+```
+
+## Using a webhook to trigger a ConductorOne automation
+
+C1 webhook triggers allow external systems to initiate automations by sending authenticated HTTP requests. The JWT (JSON Web Token) authentication method provides cryptographic security through public key infrastructure.
+
+### Step 1: Generate a RSA key pair
+
+Generate a 2048-bit RSA private key and extract the public key. Keep the private key secure - it will be used to sign your webhook requests.
+
+**Using OpenSSL:**
+
+```bash
+# Generate private key
+openssl genrsa -out private_key.pem 2048
+
+# Extract public key
+openssl rsa -in private_key.pem -pubout -out public_key.pem
+```
+
+**Using ssh-keygen:**
+
+```bash
+# Generate key pair
+ssh-keygen -t rsa -b 2048 -m PEM -f webhook_key -N ""
+
+# Convert to PEM format if needed
+openssl rsa -in webhook_key -out private_key.pem
+```
+
+### Step 2: Create a JWKS document
+
+Format your public key as a JSON Web Key Set (JWKS):
+
+```json
+{"keys": [{
+    "kty": "RSA",
+    "use": "sig",
+    "kid": "webhook-key-1",
+    "n": "<base64url-encoded-modulus>",
+    "e": "<base64url-encoded-exponent>",
+    "alg": "RS256"}]}
+```
+
+The kid (key ID) is your unique identifier for this key - you'll reference it when signing JWTs.
+
+### Step 3: Host the JWKS endpoint
+
+Your JWKS must be accessible via HTTPS at a stable URL. Options include:
+
+* GitHub Gist (Quick testing): Create a gist with your JWKS JSON and use the raw URL
+* Static hosting: GitHub Pages, S3, or any CDN that serves JSON
+* Dynamic endpoint: Your application's .well-known/jwks.json path
+
+### Step 4: Configure a webhook listener in C1
+
+<Steps>
+<Step>
+Navigate to your automation's webhook trigger settings.
+</Step>
+<Step>
+Select <b>JWT authentication</b>.
+</Step>
+<Step>
+Enter your JWKS URL.
+</Step>
+<Step>
+Save the configuration and copy the listener ID.
+</Step>
+</Steps>
+
+### Step 5: Send an authenticated webhook
+
+Send a POST request to:
+
+`https://{tenant}.conductor.one/api/v1/webhooks/incoming/{listener_id}`
+
+With headers:
+
+* `Authorization: Bearer {jwt_token}`
+* `Content-Type: application/json`
+* `Webhook-Timestamp: {unix_seconds}`
+* `Webhook-Event-Id: {uuid_v4}`
+* `Webhook-Signature: {jwt_token}`
+
+### Important notes
+
+* JWKS must be accessible at the configured URL
+* Private key must match public key in JWKS
+* JWT kid header must match a key in JWKS
+* JWT must be signed with RS256
+* JWT must contain all required claims
+* Body hash (htb_s256) must match SHA256 of request body
+* JWT expiration window is 10 minutes
+* Event ID must be UUID v4
+
+## Using webhooks for provisioning in ConductorOne
+
+You configure an entitlement to use a webhook as its [provisioning strategy](/product/admin/access-requests#set-how-an-entitlement-is-provisioned), meaning that when access to the entitlement is approved, the webhook will automatically fire. The webhook can perform a wide variety of work to automate the provisioning process, such as: 
+
+* Automatically creating a Jira, ServiceNow, or other service desk ticket 
+
+* Making a public API call to a tool your organization uses 
+
+* Calling the internal API of a backoffice, homegrown, or airgapped tool
+
+* Sending a notification to a collaboration platform, such as pinging a Slack channel
+
+* Adding an entry to an audit log
+
+<Tip>
+**Middleware for webhooks.**
+
+Configuring a webhook for use between ConductorOne and another tool often requires the creation of some middleware code. Integration Platform as a Service (iPaaS) tools such as Celigo, MuleSoft, or Zapier can help you to create this code. 
+</Tip>
+
+

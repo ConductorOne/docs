@@ -1,0 +1,500 @@
+---
+title: Set up a Workday connector
+og:title: Set up a Workday connector - ConductorOne docs
+og:description: Integrate your Workday instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance and just-in-time provisioning for Workday. Integrate your Workday instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: "Workday"
+---
+
+## Which Workday connector should I use? 
+
+ConductorOne offers two Workday connectors: Workday and Workday Accounts (WQL). How you want to work with Workday in ConductorOne will determine which one you should set up.
+
+* **[Workday connector](/baton/workday)**: This connector is the best choice if you want to use Workday as a [directory](/product/admin/directory). You’ll also need it if you want to enable access requests for Workday role and group assignments. 
+
+* **[Workday Account (WQL) connector](/baton/workday-wql)**: This connector utilizes the Workday Query Language (WQL), which allows it to pull a different data set than the Workday connector. Workday Accounts (WQL) is the best choice if you want to review who has what kind of access to Workday in your organization, including account type and service center assignments. 
+
+| Resource                                          | Workday connector\* | Workday Accounts (WQL) connector |
+| :--- | :--- | :--- |
+| Accounts                                          | Sync                | Sync                             |
+| Roles                                             | Sync                |                                  |
+| Security groups                                   | Sync                | Sync                             |
+| Account type (Implementers and Integration Users) |                     | Sync                             |
+| Service centers                                   |                     | Sync                             |
+
+*If the Workday connector is configured using a custom report (see below), it can also pull in information on the account owner’s organization, title, and manager.
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           |       
+| Roles        | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           | 
+| Security groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    |       | 
+
+## Gather Workday credentials 
+
+Configuring the connector requires you to pass in credentials generated in Workday. Gather these credentials before you move on. 
+
+<Tip>
+To authenticate with Workday, you can use either an **API client** or a Report-as-a-service (RaaS) **custom report** in CSV or JSON format. 
+
+**Which authentication method should I use?**
+The **API client option** pulls available data about Workday accounts, such as each account's manager and manager email, which can be used as [user attributes](/product/admin/attributes). The custom report method only pulls data that is explicitly named in the report into ConductorOne. 
+
+The **RaaS custom report option** is often preferred by Workday Admins and HR teams, as it’s Workday’s preferred integration method. RaaS allows you fine-grained control over what data is sent to ConductorOne. Additionally, it allows you to transform the format of Workday attributes as needed before sending them to ConductorOne.
+
+Follow the relevant set of instructions below to generate your credentials.
+</Tip>
+
+### Option 1: Authenticate using API client credentials
+
+Here's the reorganized documentation, with the ISU creation step added in the correct sequence, and the security group assignment moved to be with the ISU creation.
+
+### Create Workday API Client Credentials
+
+<Warning>
+A user with the permission to create a new API client in Workday must perform this task.
+</Warning>
+
+The process involves creating an Integration System User (ISU), creating a security group, associating the ISU with the security group, and then registering the API client and generating a refresh token.
+
+#### Create an Integration System User (ISU)
+
+<Steps>
+<Step>
+In Workday, use the search bar to look up "Create Integration System User".
+
+</Step>
+<Step>
+In the **Create Integration System User** modal, enter a **User Name**, such as "ConductorOne integration". 
+</Step>
+<Step>
+
+Enter and confirm a strong **Password** for this user.
+
+   Optionally, you can provide a **New Password Never Expires** if appropriate for your security policies.
+</Step>
+<Step>
+Click **OK**.
+</Step>
+<Step>
+Make note of the **User Name** you created, as you will need it later.
+</Step>
+</Steps>
+#### Create a new Security Group
+
+<Steps>
+<Step>
+In Workday, use the search bar to look up "Maintain Permissions for Security Group".
+</Step>
+<Step>
+In the **Maintain Permissions for Security Group** modal, make sure the **Maintain** button is selected.
+</Step>
+<Step>
+In the **Source Security Group** field, navigate to **By Type** > **Integration System Security Group**.
+</Step>
+<Step>
+Create a new security group. Give it a name, such as "ConductorOne integration security group".
+</Step>
+<Step>
+On the new group's **Domain Security Policy Permissions** tab, leave the **Select All** box checked.
+</Step>
+<Step>
+Click the **+** icon to create six (or seven, see below) new rows, and fill them out as follows:
+
+    Row 1:
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Worker Data: Public Worker Reports**
+
+    Row 2:
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Reports: Organization**
+
+    Row 3:
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Security Administration**
+
+    Row 4:
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Manager: Organization Roles**
+
+    Row 5:
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Person Data: Work Email**
+
+    Row 6:
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Worker Data: Current Staffing Information**
+
+    Row 7 (needed only if title data is split out from the inherent staffing parent domain):
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Worker Data: Staffing Business Title**
+</Step>
+<Step>
+Click **OK**.
+</Step>
+</Steps>
+
+#### Assign the Security Group to the Integration System User (ISU)
+
+<Steps>
+<Step>
+Still in Workday, use the search bar to look up "View Workday Account" and select the **Integration System User (ISU)** you created previously.
+</Step>
+<Step>
+Click the three dots icon next to the account name and navigate to **Security Profile** > **Assign Integration System Security Groups**.
+</Step>
+<Step>
+Select the security group you created and click **OK**.
+</Step>
+</Steps>
+
+#### Activate Security Policy Changes
+
+<Steps>
+<Step>
+Next, activate the security policy changes. Search for "Activate Pending Security Policy Changes".
+</Step>
+<Step>
+Add a comment about the change you're making and click **OK**.
+</Step>
+<Step>
+Review the changes and if everything looks good, click the **Confirm** checkbox, then click **OK**.
+</Step>
+</Steps>
+#### Create a New Workday API Client
+
+<Steps>
+<Step>
+In Workday, use the search bar to look up "Register API Client for Integrations". Make sure to select this name from the results, not the similarly named "Register API Client".
+</Step>
+<Step>
+Give the new API client a name, such as "ConductorOne integration".
+</Step>
+<Step>
+In the **Integration System User** field, select the ISU you created earlier. This is crucial for associating the API client with the correct permissions.
+</Step>
+<Step>
+In the **Scopes** box, select **Custom Objects** and search for "Staffing". Select **Staffing** and **Organizations and Roles** and click **OK**.
+</Step>
+<Step>
+The newly created client's client ID and client secret are shown. Carefully copy and save these credentials.
+
+    **Do not** click **Done** at the bottom of the page yet.
+</Step>
+</Steps>
+
+#### Create a Refresh Token
+
+<Steps>
+<Step>
+Next, click the three dots icon next to the client name and navigate to **API Client** > **Manage Refresh Tokens for Integrations**.
+</Step>
+<Step>
+Select the **Integration System User (ISU)** you want to associate with the token (this should be the same ISU you selected when registering the API client) and click **OK**.
+</Step>
+<Step>
+On the **Delete or Regenerate Refresh Token** page, scroll down and check the **Generate New Refresh Token** box.
+</Step>
+<Step>
+Click **OK**.
+</Step>
+<Step>
+Carefully copy and save the new refresh token.
+</Step>
+</Steps>
+**That's it!** Next, move on to the connector configuration instructions. 
+
+### Option 2: Authenticate using a custom report 
+
+<Warning>
+A user with the permission to create a custom report in Workday must perform this task.
+</Warning>
+
+#### Set up the custom report
+
+<Steps>
+<Step>
+In Workday, navigate to the **Tasks and Reports** menu and select **Create Custom Report**. 
+</Step>
+<Step>
+When setting report details, set the report type to **Advanced** and mark **Enable As Web Service**. 
+</Step>
+<Step>
+When setting data sources, disable the **Optimized for Performance** option and select **All Workers** as the data source. 
+</Step>
+</Steps>
+
+At this point, you can create the custom report in either JSON (recommended) or CSV format by following the relevant directions below. 
+
+### Expected custom report contents when using the JSON format
+
+When using the JSON format for custom reports, the connector expects a specific structure. Below is a table of the supported fields:
+
+**Suggested Data Source:** All Active and Terminated Workers
+
+| Column Heading Override XML Alias/Column Heading Override | Required | Description | Suggested Workday Object Field     |
+| :--- | :--- | :--- | :--- |
+| user_id                 | Yes      | Unique identifier for the user       | Worker: Employee ID                         |
+| email                   | No       | User's email address                 | Worker: Email - Primary Work                |
+| first_name              | Yes      | User's first name                    | Worker: First Name                          |
+| middle_name             | No       | User's middle name                   | Worker: Middle Name                         |
+| last_name               | Yes      | User's last name                     | Worker: Last Name                           |
+| active                  | Yes      | Boolean indicating if user is active | Worker: Active Status                       |
+| org_name                | No       | User's department or organization    | Worker: Supervisory Organization Name       |
+| business_title          | No       | User's job title                     | Worker: Business Title                      |
+| security_groups         | No       | User's security groups               | Worker: User-Based Security Groups for User |
+| roles                   | No       | User's roles                         | Worker: Organization Roles                  |
+| manager_name            | No       | Manager's name                       | Calculated Field - Lookup Related Value: Worker: Manager Level 01: Full Name            |
+| manager_email           | No       | Manager's email                      | Calculated Field - Lookup Related Value: Worker: Manager Level 01: Email - Primary Work |
+
+Notes:
+- The order of the fields does not matter.
+- The `Column Heading Override XML Alias` value MUST match `Column Heading Override`.
+- You may substitute the suggested Workday object fields with alternatives as long as they provide equivalent data.
+
+#### Expected custom report contents when using the CSV format
+
+Add the following fields to the custom report **in this order**: 
+
+   * Active Status
+   * User Name
+   * Employee ID
+   * Worker
+   * Security Group
+   * Role Name
+   * Organization
+   * Organization Type
+
+<Tip>
+   The fields needed in custom reports can vary depending on how your Workday installation is configured. Contact ConductorOne support if you need help figuring out which fields to include.   
+</Tip>
+
+5. Create the custom report. 
+
+#### Look up the custom report URL 
+
+<Steps>
+<Step>
+On the **Report Definition** page, click the **Related Actions** (three dots) button. 
+</Step>
+<Step>
+Navigate to **Actions** > **Web Service** > **View URLs**. 
+</Step>
+<Step>
+Right-click on the **JSON** or **CSV** (as relevant) URL, then carefully copy and save it. 
+</Step>
+</Steps>
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Workday connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Workday credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Workday** and click **Add**. 
+</Step>
+<Step>
+Choose how to set up the new Workday connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+If using an API client to authenticate, select **API client** and fill our the form: 
+   
+   1. Enter the **Client ID**, **Client secret**, and **Refresh token** in the relevant fields.
+
+   2. Enter the full URL of your Workday tenant in the **Workday URL** field.
+
+   3. Enter the Workday tenant name in the **Tenant Name** field. 
+</Step>
+<Step>
+If using a custom report to authenticate, select **Custom report** and fill out the form: 
+
+   1. Enter the **Report URL**, **Report username**, and **Report user password** in the relevant fields.  
+
+   2. **Optional.** To include extra Workday data in the sync, in the **Additional report fields** field, enter any additional field names from the Workday JSON report that you want to include in user profiles. Press **Enter** between each field name. 
+   
+      Fields that return multiple values (such as `roles` or `security_groups`) are not supported. 
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your Workday connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the Workday connector, hosted and run in your own environment. [Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector and get detailed setup instructions.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Workday connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Workday connector: 
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+   * Add the connector to a managed app (select from the list of existing managed apps)
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed. 
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret. 
+
+   Carefully copy and save these credentials. We'll use them in Step 2. 
+</Step>
+</Steps>
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Workday connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-workday-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-workday-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Workday credentials if using an API client to authenticate
+  BATON_WORKDAY_CLIENT_ID: <Workday API client ID> 
+  BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret> 
+  BATON_WORKDAY_REFRESH_TOKEN: <Workday API client refresh token> 
+  BATON_WORKDAY_URL: <Workday API URL>
+  BATON_TENANT_NAME: <Workday tenant name>
+
+  # Workday credentials if using a custom report to authenticate
+  BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: true
+  BATON_WORKDAY_REPORT_URL: <Workday custom report URL>
+  BATON_WORKDAY_REPORT_USERNAME: <Workday username of the user who created the report>
+  BATON_WORKDAY_REPORT_PASSWORD: <Workday password of the user who created the report>
+  BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday JSON report to include in user profiles>
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-workday.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-workday
+  labels:
+    app: baton-workday
+spec:
+  selector:
+    matchLabels:
+      app: baton-workday
+  template:
+    metadata:
+      labels:
+        app: baton-workday
+        baton: true
+        baton-app: workday
+    spec:
+      containers:
+      - name: baton-workday
+        image: ghcr.io/conductorone/baton-workday:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-workday-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files. 
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Workday connector to. Workday data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+**That's it!** Your Workday connector is now pulling access data into ConductorOne.
+
+## Troubleshooting the Workday connector
+
+Make sure that the integration security group you created when configuring the connector has the domain security policy applied to **Report/Task Permissions** only. 
+
+<Steps>
+<Step>
+ In Workday, use the search bar to look up "View Security Group", then navigate to **Security Groups** > **Integration System Security Group (Unconstrained)** and select the security group you just created. 
+</Step>
+<Step>
+On the security group's page, click the three dots icon next to the security group name and navigate to **Security Group** > **Manage Domain Permissions for Security Group**. 
+</Step>
+<Step>
+Make sure that **Worker Data: Public Worker Reports** is shown in the **Domain Security Policies permitting View access** box. 
+</Step>
+</Steps>
+</Tab>
+</Tabs>

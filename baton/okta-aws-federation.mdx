@@ -1,0 +1,245 @@
+---
+title: "Set up an Okta AWS Federation connector"
+og:title: "Set up an Okta AWS Federation connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Okta for AWS federation. Integrate your Okta instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Okta for AWS federation. Integrate your Okta instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Okta AWS Federation"
+---
+
+<Tip>
+**This connector integrates with Okta for AWS federation through Okta groups.** It's useful for organizations that use the SAML to AWS app config in Okta, wherein Okta mints a SAML cert with correct group memberships to drive IAM roles for the federated user.
+</Tip>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Groups assigned to the AWS app | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Application assignments for the AWS app | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+
+## Gather Okta credentials 
+
+Configuring the connector requires you to pass in credentials generated in Okta. Gather these credentials before you move on.
+
+### API token permissions and ConductorOne capabilities
+
+ConductorOne's capabilities depend on the permissions of the API token used to set up the connector:
+
+| ConductorOne capability          | Custom read-only token | Read-only + app admin + group admin token | Super admin token |
+| :--- | :--- | :--- | :--- |
+| Review group membership          | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>              | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>                                  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          |
+| Provision group membership       |                      | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>                                  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          |
+| Review application assignment    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>              | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>                                  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          |
+| Provision application assignment |                      | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>                                  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          |
+| Review admin roles                |                      |                                          | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>          |                                         |
+
+<Tip>
+Instead of generating a new API token, you can use an existing API token generated with **Super Admin** or a combination of **Read Only/App Admin/Group Admin** privileges. To learn more about Okta roles, visit [https://help.okta.com/en/prod/Content/Topics/Security/administrators-admin-comparison.htm](https://help.okta.com/en/prod/Content/Topics/Security/administrators-admin-comparison.htm)
+</Tip>
+
+### (Optional) Create a custom read-only admin role
+
+To give the ConductorOne integration limited read-only admin permissions, you'll need to create a custom Okta admin role and resource set and assign them to the admin you'll use to generate the API key. 
+
+<Steps>
+<Step>
+In Okta, log in to the Admin Dashboards and navigate to **Security** > **Administrators** > **Roles**.
+</Step>
+<Step>
+Click **Create new role**.
+</Step>
+<Step>
+Give the new role a name and description, such as "ConductorOne integration read-only admin".
+</Step>
+<Step>
+Give the role the **View roles, resources, and admin assignments** permission (this is found in the **Identity and access management permissions** section).
+</Step>
+<Step>
+Click **Save role**.
+</Step>
+<Step>
+Next, navigate to **Security** > **Administrators** > **Resources**.
+</Step>
+<Step>
+Click **Create new resource set**.
+</Step>
+<Step>
+Give the new resource set a name and description, such as "Read-only admin for C1 integration".
+</Step>
+<Step>
+Click **Add resources**.
+</Step>
+<Step>
+Find the **Identity and access management** resource type and select **View roles, resources, and admin assignments**.
+</Step>
+<Step>
+Click **Save selection**, then click **Create**. The resource set is now shown on the **Resources** tab.
+</Step>
+<Step>
+Now we'll assign the resource set to an admin. (If you need to do so, make a service account following the instructions below, then return to finish this process.) Click **Edit** on the new resource set and select **View or edit assignments**.
+</Step>
+<Step>
+In the **Complete the assignment** section of the page, select the role and resource set you just created.
+</Step>
+<Step>
+Click **Save changes**.
+</Step>
+</Steps> 
+
+Now you can skip ahead to the instructions to create an API token. 
+
+### (Optional) Create a service account for the API token
+
+If desired, you can create a service account user in Okta that has the permissions for the API token.
+
+<Steps>
+<Step>
+Navigate to **Directory > People** and click **Add person**.
+
+   <Frame>
+   <img src="/images/product/assets/okta-token-1.png" alt=""/>
+   </Frame>
+</Step>
+<Step>
+Enter the necessary user details to create a user. You might want to use identifiers that make it easily recognizable as a service account, such as First Name: ReadOnly, Last Name: ServiceUser.
+</Step>
+<Step>
+Set the **Password** for the account and carefully save it somewhere secure.
+</Step>
+<Step>
+Click **Save**.
+
+   <Tip>
+   At this point, if you've created a custom read-only role, stop here and return to the instructions above. If you're using a standard Okta admin role, continue on.
+   </Tip>
+</Step>
+<Step>
+Navigate to **Security > Administrator** and click **Add administrator**.
+</Step>
+<Step>
+Enter the email address for your newly created Service Account to select the user.
+</Step>
+<Step>
+Select the administrator roles to grant: Super Administrator or a combination of Read Only + Application Admin + Group Admin.
+
+   <Frame>
+   <img src="/images/product/assets/okta-token-4.png" alt=""/>
+   </Frame>
+</Step>
+<Step>
+Click **Add Administrator**.
+</Step>
+</Steps>
+
+### Create an API token
+
+<Tip>
+When **creating** an API token, Okta assigns the permissions of the _currently logged-in user_ to the token. If, for example, you wish to use a Read Only Admin-scoped API token, you must log in to Okta as a user with the Read Only Admin role assigned.
+</Tip>
+
+<Steps>
+<Step>
+Log into Okta with the account you'll use to generate the API token.
+   The account must have **Super Administrator,** the custom read-only role you created above, or a combination of **Read Only/App Admin/Group Admin** privileges. The permissions on the API token affects what features and functionality are available from ConductorOne. Before you begin, review the chart in [API permissions and ConductorOne capabilities](/baton/okta-v2#api-token-permissions-and-conductorone-capabilities) to make sure you're creating a token with the right permissions for your needs.
+</Step>
+<Step>
+In the Okta console, navigate to **Security > API** and click **Tokens**.
+
+   <Frame>
+   <img src="/images/product/assets/okta-token-5.png" alt=""/>
+   </Frame>
+</Step>
+<Step>
+Click **Create Token**.
+</Step>
+<Step>
+Give your token a name, such as **ConductorOne**, and click **Create Token**.
+</Step>
+<Step>
+Copy and save the new API token.
+</Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions. 
+
+## Configure the Okta AWS Federation connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Okta credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Okta AWS Federation** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Okta AWS Federation connector:
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Enter your Okta domain (the URL of your Okta instance is `<YOUR DOMAIN>.okta.com`) into the **Okta domain** field.
+</Step>
+<Step>
+Paste your API token into the **API token** field.
+</Step>
+<Step>
+Enter your AWS Okta app ID in the **AWS Okta app ID** field.
+</Step>
+<Step>
+**Optional.** If desired, click the checkbox to **Allow group to direct assignment conversion for provisioning**.
+
+   When this setting is enabled, when AWS roles are requested directly and the user is assigned to the AWS app in Okta via group membership, ConductorOne will convert the user assignment to a direct assignment.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+Finally, set an Okta connector as the source of identities for this connector. This significantly improves the connector's performance. In the **Shared identity source** area of the page, click **Edit**.
+</Step>
+<Step>
+Select the Okta connector from which you want to pull identities.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your Okta AWS Federation connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use a connector, hosted and run in your own environment.**
+
+*Self-hosted connector not currently available.*
+</Tab>
+</Tabs>

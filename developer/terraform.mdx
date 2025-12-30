@@ -1,0 +1,131 @@
+---
+title: ConductorOne Terraform provider
+og:title: ConductorOne Terraform provider - ConductorOne
+og:description: ConductorOne's Terraform provider lets you define and manage ConductorOne infrastructure in a declarative way.
+description: ConductorOne's Terraform provider lets you define and manage ConductorOne infrastructure in a declarative way.
+sidebarTitle: "ConductorOne Terraform provider"
+---
+
+Terraform is an open-source infrastructure as code (IAC) tool that lets developers define and manage cloud infrastructure using code. Terraform is declarative, which means that you define the desired state of your infrastructure, and Terraform then automatically creates or updates your infrastructure to match the desired state. This can be helpful for creating and managing complex infrastructure deployments.
+
+ConductorOne's Terraform provider can help you automate the provisioning, configuration, and management of ConductorOne resources and integrations. The ConductorOne Terraform provider allows you to configure important management objects, including:
+
+- Policies
+- Integrations
+- Applications
+- Entitlements
+
+<Frame>
+<video
+  controls
+  className="w-full aspect-video rounded-xl"
+  autoPlay
+  muted
+  loop
+  src="/images/developer/assets/video-sample.mp4"
+></video>
+</Frame>
+## Getting started with ConductorOne's Terraform provider
+
+Find [ConductorOne's Terraform provider](https://registry.terraform.io/providers/ConductorOne/conductorone/latest) on the Terraform registry.
+
+<Frame>
+<img src="/images/developer/assets/terraform.png" alt="ConductorOne Terraform provider on the Terraform registry" />
+</Frame>
+
+Click **Documentation** on the registry homepage to see the full list of resources and data sources available in the provider.
+
+To get started, click **Use Provider** and follow the instructions provided to add ConductorOne's Terraform provider to your Terraform configuration file.
+
+## Specialized Terraform capabilities 
+
+ConductorOne has built some specialized capabilities in Terraform to address use cases unique to this manner of setting up and using our product. These capabilities do not have equivalents in the web UI. 
+
+### Merge an IdP group with a C1 group 
+
+Traditionally, creating a group in an IdP and then configuring its properties in C1 required a multi-step, manual process. You'd have to run Terraform against the IdP, wait for C1 to sync the new group, and then run a separate Terraform script against C1 after manually matching the group names. This was inefficient and prone to errors.
+
+Now, with the Group ID as a join key, you can perform a single Terraform run that creates a group in C1 and simultaneously merges that group with the corresponding IdP group. This eliminates the need to wait for multiple C1 syncs and dramatically simplifies your group management process.
+
+Here are sample Terraform files demonstrating how to use the `match_baton_id` key to sync a C1 group with Okta:
+
+**okta.tf file:**
+
+```terraform expandable
+terraform h
+  required_providers {
+    okta = {
+      source  = "okta/okta"
+      version = "4.16.0"
+    }
+    conductorone = {
+      source  = "ConductorOne/conductorone"
+      version = "1.0.2"
+    }
+  }
+}
+
+provider "okta" {
+  org_name  = "<org_name>"
+  base_url  = "<base_url>"
+  api_token = "<api_token>"
+}
+
+// Create a net new group in Okta, or reference an existing group here
+resource "okta_group" "example" {
+  name        = "Example"
+  description = "My Example Group"
+}
+```
+
+**c1.tf file:**
+
+```terraform expandable
+provider "conductorone" {
+  server_url    = "<server_url>"
+  client_id     = "<client_id>"
+  client_secret = "<client_secret>"
+}
+
+// Get the existing Okta app in ConductorOne by display name
+data "conductorone_app" "okta_app" {
+  display_name = "Okta v2"
+}
+
+// Get the existing group resource type in the Okta app by display name and app ID
+data "conductorone_app_resource_type" "group_resource_type" {
+  app_ids      = [data.conductorone_app.okta_app.id]
+  display_name = "group"
+}
+
+// Create a new app resource in ConductorOne by display name, description, app resource type ID, and provide a match_baton_id
+// The match_baton_id is the ID of the group in Okta that will be used to match the resource in ConductorOne
+resource "conductorone_app_resource" "okta_group_resource" {
+  app_id               = data.conductorone_app.okta_app.id
+  display_name         = "Example"
+  description          = "this is a test description"
+  app_resource_type_id = data.conductorone_app_resource_type.group_resource_type.id
+  match_baton_id       = okta_group.example.id
+}
+
+// Create a new app entitlement in ConductorOne with your desired configuration. Provide the match_baton_id of the group in Okta that will be used to match the resource in ConductorOne
+resource "conductorone_custom_app_entitlement" "test" {
+  app_id               = data.conductorone_app.okta_app.id
+  app_resource_id      = conductorone_app_resource.okta_group_resource.id
+  app_resource_type_id = data.conductorone_app_resource_type.group_resource_type.id
+  display_name         = "Admin"
+  alias                = "tf_test_admin_role"
+  slug                 = "member"
+  description          = "Terraform generated admin role"
+  purpose              = "APP_ENTITLEMENT_PURPOSE_VALUE_ASSIGNMENT"
+  duration_grant       = "3601s"
+  match_baton_id       = okta_group.example.id
+}
+
+// After running this script, you will see an entitlement show up in the Okta app with your set display name. This entitlement will not have grants from Okta until the Okta app is finished syncing.
+// Once the Okta app is finished syncing, you will see the entitlement be populated with the corresponding grants from Okta.
+```
+
+
+
+

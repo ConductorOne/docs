@@ -1,0 +1,440 @@
+---
+title: "Use Baton-SQL to build a custom connector"
+description: "Build a custom connector to sync users, groups, and roles from SQL-enabled applications."
+og:title: "Use Baton-SQL to build a custom connector"
+og:description: "Build a custom connector to sync users, groups, and roles from SQL-enabled applications."
+sidebarTitle: "Build a connector with Baton-SQL"
+---
+
+The [Baton-SQL](https://github.com/ConductorOne/baton-sql) connector is a generic connector for applications that use a SQL database. If you have back-office, home-grown, or on-prem applications that do not have an API but are structured around an SQL database, use the Baton-SQL connector to bring those apps’ access data into ConductorOne.
+
+This document provides detailed instructions for configuring a custom connector using Baton-SQL. The Baton-SQL connector allows you to sync identities, resources, and permissions from various SQL databases into ConductorOne.
+
+## Supported database engines
+
+The Baton-SQL connector currently supports the following database engines:
+
+- PostgreSQL
+- MySQL
+- Microsoft SQL Server
+- Oracle
+- SAP HANA
+
+## Configuration overview
+
+The Baton-SQL connector is configured using a YAML file that defines:
+
+- Application metadata
+- Database connection details
+- Resource types to sync (users, groups, roles, etc.)
+- Entitlements that can be granted to resources
+- Grants that define which principals have which entitlements
+- Provisioning rules for granting/revoking entitlements
+
+This document walks you through the process of composing the YAML file. You can see examples of complete YAML files for various apps and services at the end of this doc, and in the `Examples` folder in the [baton-sql connector repo](https://github.com/ConductorOne/baton-sql).
+
+## Configuring the YAML file
+
+The basic structure of a Baton-SQL connector configuration file includes:
+
+```yaml
+# Application metadata
+app_name: Your Application Name
+app_description: Optional description of your application
+
+# Database connection
+connect:
+  dsn: "connection_string"
+  # Optional: separate credentials if needed
+  user: "username"
+  password: "password"
+
+# Resource definitions
+resource_types:
+  # Resource type configurations...
+```
+
+### Database connection configuration
+
+The `connect` section defines how to connect to your database:
+
+```yaml
+connect:
+  # Connection string (Data Source Name)
+  dsn: "mysql://user:password@hostname:port/database?parseTime=true"
+  
+  # Optional: Separate credentials (useful if username/password require URL encoding)
+  user: "${DB_USER}"  # Environment variable support
+  password: "${DB_PASSWORD}"
+```
+
+Connection string examples for supported databases:
+
+**MySQL:**
+
+```yaml
+connect:
+  dsn: "mysql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local"
+```
+
+**Oracle:**
+
+```yaml
+connect:
+  dsn: "oracle://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_SERVICE}"
+```
+
+**SQL Server:**
+
+```yaml
+connect:
+  dsn: "sqlserver://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}?database=${DB_NAME}"
+```
+
+### Resource type configuration
+
+Resource types define the entities you want to sync to ConductorOne. Common resource types include users, groups, and roles.
+
+Basic structure:
+
+```yaml expandable
+resource_types:
+  user:  # Resource type key
+    name: "User"  # Display name
+    description: "User accounts in the system"
+    
+    # Resource configuration sections:
+    list: # How to list resources
+      # ...
+    
+    static_entitlements: # Predefined entitlements
+      # ...
+    
+    grants: # How to discover existing grants
+      # ...
+    
+    account_provisioning: # Settings for creating new accounts
+      # ...
+```
+
+### Listing resources
+
+The `list` section defines how to query resources from your database:
+
+```yaml expandable
+list:
+  # Variables available in the query
+  vars:
+    status: "'active'"
+  
+  # SQL query to fetch resources
+  query: |
+    SELECT
+      id,
+      username,
+      email,
+      status
+    FROM users
+    WHERE status = ?<status>
+    ORDER BY id ASC
+    LIMIT ?<Limit> OFFSET ?<Offset>
+  
+  # Mapping configuration
+  map:
+    # ...
+  
+  # Pagination configuration
+  pagination:
+    # ...
+```
+
+### Mapping resources
+
+The `map` section defines how to transform database query results into ConductorOne resources:
+
+```yaml expandable
+map:
+  # Required fields
+  id: ".id"  # Maps the 'id' column to the resource ID
+  display_name: ".username"  # Human-readable name
+  description: "string(.department) + ' department user'"  # Can use CEL expressions
+  
+  # Optional traits specific to this resource type
+  traits:
+    user:  # For user resources
+      emails:
+        - ".email"  # Direct field mapping
+      status: ".status"  # Maps to active, inactive, etc.
+      login: ".username"
+      profile:
+        department: ".department"
+        joined_date: ".created_at"
+    
+    # Or for role resources
+    role:
+      profile:
+        role_name: ".role_name"
+```
+
+Field mappings use CEL (Common Expression Language) to transform data. The dot syntax (e.g., `.column_name`) references a column from the query result.
+
+### Pagination
+
+The `pagination` section defines how to handle large result sets:
+
+```yaml
+pagination:
+  strategy: "offset"  # Options: "offset" or "cursor"
+  primary_key: "id"  # Column used for pagination tracking
+```
+
+Pagination strategies:
+
+- **offset**: Uses LIMIT and OFFSET in SQL queries
+- **cursor**: Uses a value-based approach where records after a certain key value are fetched
+
+### Entitlements
+
+Entitlements define permissions that can be granted to resources.
+
+#### Static entitlements
+
+Static entitlements are predefined and don’t require a database query:
+
+```yaml
+static_entitlements:
+  - id: "access"  # Unique identifier
+    display_name: "Basic Access"
+    description: "Provides basic access to the application"
+    purpose: "access"  # Purpose: "access", "assignment", "permission"
+    grantable_to:
+      - "user"  # Resource types that can receive this entitlement
+    
+    # Optional: Provisioning configuration
+    provisioning:
+      # ...
+```
+
+#### Dynamic entitlements
+
+Dynamic entitlements are fetched from the database:
+
+```yaml expandable
+entitlements:
+  query: |
+    SELECT
+      id,
+      name,
+      description
+    FROM permissions
+    ORDER BY id ASC
+    LIMIT ?<Limit> OFFSET ?<Offset>
+  
+  map:
+    - id: ".id"
+      display_name: ".name"
+      description: ".description"
+      purpose: "permission"
+      grantable_to:
+        - "user"
+        - "group"
+  
+  pagination:
+    strategy: "offset"
+    primary_key: "id"
+```
+
+### Grants
+
+Grants define which principals (users/groups) have which entitlements:
+
+```yaml
+grants:
+  - query: |
+      SELECT
+        user_id,
+        role_name
+      FROM user_roles
+      LIMIT ?<Limit> OFFSET ?<Offset>
+    
+    map:
+      - skip_if: "phpDeserializeStringArray(string(.role_name))[0] != resource.ID"
+        principal_id: ".user_id"
+        principal_type: "user"
+        entitlement_id: "member"
+    
+    pagination:
+      strategy: "offset"
+      primary_key: "user_id"
+```
+
+The `skip_if` field uses a CEL expression to determine whether to skip a grant mapping.
+
+### Provisioning
+
+Provisioning defines how to implement entitlement changes:
+
+```yaml expandable
+provisioning:
+  vars:
+    # Variables available in provisioning queries
+    principal_id: "principal.ID"
+    role_id: "resource.ID"
+  
+  grant:
+    # SQL statements to execute when granting
+    no_transaction: false  # Whether to disable transaction wrapping
+    queries:
+      - |
+        INSERT INTO user_roles (user_id, role_id)
+        VALUES (?<principal_id>, ?<role_id>)
+  
+  revoke:
+    # SQL statements to execute when revoking
+    queries:
+      - |
+        DELETE FROM user_roles
+        WHERE user_id = ?<principal_id>
+        AND role_id = ?<role_id>
+```
+
+### Account provisioningAccount provisioning allows creating new accounts directly through ConductorOne:
+
+```yaml expandable
+account_provisioning:
+  schema:
+    - name: "username"
+      description: "The username for the user"
+      type: "string"
+      placeholder: "newuser"
+      required: true
+    - name: "email"
+      description: "The email of the user"
+      type: "string"
+      placeholder: "user@example.com"
+      required: true
+  
+  credentials:
+    no_password:
+      preferred: true
+    # Or with random password
+    random_password:
+      max_length: 128
+      min_length: 12
+      disallowed_characters: "!@#$%^&*()_+"
+      preferred: false
+  
+  validate:
+    vars:
+      username: "username"
+    query: |
+      SELECT id FROM users WHERE username = ?<username>
+  
+  create:
+    vars:
+      username: "input.username"
+      email: "input.email"
+    queries:
+      - |
+        INSERT INTO users (username, email)
+        VALUES (?<username>, ?<email>)
+```
+
+## Running the connector
+
+To run the connector, use the following command:
+
+```bash
+baton-sql --config-path /path/to/config.yaml
+```
+
+Common flags:
+
+- `--client-id` and `--client-secret`: Authentication with ConductorOne
+- `--config-path`: Path to your configuration file
+- `-f/--file`: Path to save the sync data
+- `-p/--provisioning`: Enable provisioning actions
+- `--log-level`: Set logging verbosity (debug, info, warn, error)
+
+Learn more about [deploying self-hosted connector](/baton/deploy) in our docs.
+
+## Example configurations
+
+The following are example configurations for commonly used SQL tools.
+
+```yaml expandable
+app_name: Example Application
+
+connect:
+  dsn: "mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:3306/${DB_NAME}?parseTime=true"
+
+resource_types:
+  user:
+    name: "User"
+    description: "Represents a user account in the system"
+    list:
+      query: |
+        SELECT 
+          id,
+          username,
+          email,
+          created_at,
+          status,
+          department
+        FROM users
+        WHERE status = 'active'
+        ORDER BY id ASC
+        LIMIT ?<Limit> OFFSET ?<Offset>
+      map:
+        id: ".id"
+        display_name: ".username"
+        description: "string(.department) + ' department user'"
+        traits:
+          user:
+            emails:
+              - ".email"
+            status: ".status"
+            profile:
+              department: ".department"
+              joined_date: ".created_at"
+      pagination:
+        strategy: "offset"
+        primary_key: "id"
+    static_entitlements:
+      - id: "access"
+        display_name: "Basic Access"
+        description: "Provides basic access to the application"
+        purpose: "access"
+        grantable_to:
+          - "user"
+        provisioning:
+          vars:
+            user_id: "principal.ID"
+            access_level: "'basic'"
+          grant:
+            queries:
+              - |
+                INSERT INTO user_access (user_id, level)
+                VALUES (?<user_id>, ?<access_level>)
+          revoke:
+            queries:
+              - |
+                DELETE FROM user_access
+                WHERE user_id = ?<user_id>
+    grants:
+      - query: |
+          SELECT 
+            user_id,
+            access_level,
+            granted_at
+          FROM user_access
+          LIMIT ?<Limit> OFFSET ?<Offset>
+        map:
+          - skip_if: ".access_level != 'basic'"
+            principal_id: ".user_id"
+            principal_type: "user"
+            entitlement_id: "access"
+        pagination:
+          strategy: "offset"
+          primary_key: "user_id"
+```

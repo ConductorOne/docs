@@ -1,0 +1,218 @@
+---
+title: Set up PingOne connector
+og:title: Set up PingOne connector - ConductorOne docs
+og:description: Integrate your PingOne instance with ConductorOne to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
+description: ConductorOne provides identity governance and just-in-time provisioning for PingOne. Integrate your PingOne instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests.
+sidebarTitle: PingOne
+---
+
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+
+## Capabilities
+
+| Resource     | Sync | Provision |
+| :----------- | :--- | :-------- |
+| Account | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Group | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Population | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Role | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+**Additional functionality:**
+
+<Icon icon="square-check" iconType="solid"  color="#65DE23"/> Supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning)
+
+## Gather PingOne configuration information
+
+Configuring the connector requires you to pass in information from PingOne. Gather these configuration details before you move on.
+
+Here's the information you'll need:
+
+* PingOne Client ID
+* PingOne Client Secret
+* PingOne Environment ID
+
+See the PingOne docs for information on how to acquire credentials: [View the documentation](https://apidocs.pingidentity.com/pingone/auth/v1/api#top)
+
+This connector requires the following scopes:
+
+  * p1:read:user
+  * p1:read:userGroup
+  * p1:read:role
+  * p1:read:population
+  * p1:create:user
+  * p1:update:user
+  * p1:delete:user
+  * p1:update:userGroup
+  * p1:update:role
+
+## Configure the PingOne connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of PingOne configuration information gathered by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **PingOne** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new PingOne connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Enter the configuration information from the previous section.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+**That's it!** Your PingOne connector is now pulling access data into ConductorOne.
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the PingOne connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new PingOne connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new PingOne connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your PingOne connector deployment:
+
+#### Secrets configuration
+
+```yaml
+# baton-ping-one-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-ping-one-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+  # PingOne config
+  BATON_PINGONE_CLIENT_ID: <PingOne Client ID for OAuth2 authentication>
+  BATON_PINGONE_CLIENT_SECRET: <PingOne Client Secret for OAuth2 authentication>
+  BATON_PINGONE_ENVIRONMENT_ID: <PingOne Environment ID to list resources from>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-ping-one.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-ping-one
+  labels:
+    app: baton-ping-one
+spec:
+  selector:
+    matchLabels:
+      app: baton-ping-one
+  template:
+    metadata:
+      labels:
+        app: baton-ping-one
+        baton: true
+        baton-app: ping-one
+    spec:
+      containers:
+      - name: baton-ping-one
+        image: ghcr.io/conductorone/baton-ping-one:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-ping-one-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the ping-one connector to. ping-one data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+**That's it!** Your PingOne connector is now pulling access data into ConductorOne.
+
+</Tab>
+</Tabs>

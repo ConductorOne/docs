@@ -1,0 +1,256 @@
+---
+title: "Set up a Docusign connector"
+og:title: "Set up a Docusign connector"
+description: "ConductorOne provides identity governance for Docusign. Integrate your Docusign instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "ConductorOne provides identity governance for Docusign. Integrate your Docusign instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Docusign"
+---
+
+<Tip>
+**This is an updated and improved version of the Docusign connector!** If you're setting up Docusign with ConductorOne for the first time, you're in the right place.
+</Tip>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>* | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Signing groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Permission profiles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+The Docusign connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
+
+Every Docusign account must be assigned at least one permission profile. If all other permission profiles are revoked, the account will be automatically assigned the **DocuSign Viewer** profile, which cannot be revoked.
+
+*By default, signing groups are not synced. You can configure the connector to sync signing groups, if desired.
+
+## Gather Docusign credentials
+
+Configuring the connector requires you to pass in credentials generated in Docusign. Gather these credentials before you move on.
+
+The Docusign credentials requirements depend on your chosen hosting method:
+
+- **Cloud-hosted**: You'll use an OAuth app verification flow we've set up for you. No additional credentials are needed. You can **skip this section** and go straight to the cloud-hosted setup instructions below.
+
+- **Self-hosted**: You'll need to create a Docusign app that will be used when setting up the connector. Go on to the next section.
+
+### Self-hosted only: Create a Docusign app
+
+<Warning>
+A user with access to the **Docusign Admin console** must perform this task.
+</Warning>
+
+<Steps>
+  <Step>
+  In the Docusign Admin Console, click **Add App and Integration Key**.
+  </Step>
+  <Step>
+  Choose a name for your app, such as "ConductorOne" and click **Create App**.
+  </Step>
+  <Step>
+  On the app configuration screen, carefully copy and save the **Client ID** (also called an integration key).
+  </Step>
+  <Step>
+  Click **Add Secret Key**, then carefully copy and save the client secret.
+  </Step>
+  <Step>
+  In the **Redirect URI** field, enter any URI of your choice (such as http://example.com/callback) and click **Add**.
+  </Step>
+  <Step>
+  Under **Authentication**, enable **Authorization Code Grant**.
+  </Step>
+  <Step>
+  Click **Save** at the bottom of the page.
+  </Step>
+</Steps>
+
+#### Generate an OAuth refresh token
+
+<Steps>
+  <Step>
+  Follow the [Docusign instructions to generate a refresh token](https://developers.docusign.com/platform/auth/confidential-authcode-get-token#use-refresh-tokens).
+  </Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Docusign connector
+
+<Warning>
+To complete this task, you'll need the **Connector Administrator** or **Super Administrator** role in ConductorOne and the relevant set of permissions on your Docusign account:
+
+- To sync access data (READ): Read users, groups, and permissions.
+
+- To sync access data and provision accounts (READ/WRITE): Create users plus read users, groups, and permissions.
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+  </Step>
+  <Step>
+  Search for **Docusign v2** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Docusign connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+  If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  Find the **Settings** area of the page and click **Edit**.
+  </Step>
+  <Step>
+  **Optional.** Click to **Sync signing groups**, if desired.
+  </Step>
+  <Step>
+  Click **Login with OAuth**.
+  </Step>
+  <Step>
+  Log in and authorize ConductorOne with your Docusign instance.
+  </Step>
+  <Step>
+  After authorizing, you'll be redirected back to the ConductorOne integrations page, where an "Authorized as" message is now printed.
+  </Step>
+  <Step>
+  Click **Save**.
+  </Step>
+  <Step>
+  The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+  </Step>
+</Steps>
+
+**That's it!** Your Docusign connector is now pulling access data into ConductorOne.
+
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the [Docusign](https://github.com/ConductorOne/baton-docusign) connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Docusign connector
+
+<Steps>
+  <Step>
+  In ConductorOne, navigate to **Connectors** > **Add connector**.
+  </Step>
+  <Step>
+  Search for **Baton** and click **Add**.
+  </Step>
+  <Step>
+  Choose how to set up the new Docusign connector:
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+  <Step>
+  Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+  If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+  <Step>
+  Click **Next**.
+  </Step>
+  <Step>
+  In the **Settings** area of the page, click **Edit**.
+  </Step>
+  <Step>
+  Click **Rotate** to generate a new Client ID and Secret.
+
+  Carefully copy and save these credentials. We'll use them in Step 2.
+  </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Docusign connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-docusign-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-docusign-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Docusign credentials
+  BATON_CLIENTID: <Docusign app client ID>
+  BATON_CLIENTSECRET: <Docusign app client secret>
+  BATON_REDIRECT_URI: <The redirect URI you entered when setting up the Docusign app>
+  BATON_REFRESH_TOKEN: <OAuth 2.0 refresh token>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include if you want ConductorOne to sync signing groups
+  BATON_INCLUDE_SIGNING_GROUPS: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-docusign.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-docusign
+  labels:
+    app: baton-docusign
+spec:
+  selector:
+    matchLabels:
+      app: baton-docusign
+  template:
+    metadata:
+      labels:
+        app: baton-docusign
+        baton: true
+        baton-app: docusign
+    spec:
+      containers:
+      - name: baton-docusign
+        image: ghcr.io/conductorone/baton-docusign:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-docusign-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+  <Step>
+  Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+  </Step>
+  <Step>
+  Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Docusign connector to. Docusign data should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
+
+**That's it!** Your Docusign connector is now pulling access data into ConductorOne.
+
+</Tab>
+</Tabs>

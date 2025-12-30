@@ -1,0 +1,142 @@
+---
+title: How to authenticate requests
+description: "To use the ConductorOne API, you must authenticate your requests. This document guides you through the process of obtaining and utilizing an API key, as well as establishing an access token."
+---
+
+## Step 1: Obtain an API key
+
+The first step in the process is to obtain your API key from ConductorOne:
+
+<Steps>
+<Step>
+In the ConductorOne app, navigate to the User's API Settings page by clicking your username at the bottom of the screen and selecting **API Keys**.
+</Step>
+<Step>
+Click **Create credential**.
+</Step>
+<Step>
+Enter a descriptive name for your API key.
+</Step>
+</Steps>
+
+Your new key is created, and its Client ID and Client Secret are generated and displayed. Take note that the Client Secret is shown to you once, so make sure to securely store this information.
+
+### Details about the Client ID and Client Secret
+
+
+The Client ID is a stable format that includes a random ID, the base hostname, and the use-case. It is represented in the format: `<random-id>@<hostname>/<use-case>`. For example: `strange-hydra-68836@acme.conductor.one/pcc`.
+
+The Client Secret follows the format: `secret-token:conductorone.com:${base64url encoded JWK}`. It contains an `ed25519` private key that you may parse to get the private key. For example:
+
+```bash
+secret-token:conductorone.com:v1:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6IkMySEx5Y0d6eUhfZDQwcjJvejZoNkpqdndvRVFBZ0FTRVc2eDB6emh6Y2MiLCJkIjoiLTgzVkxXUVUtZVhQY0ZCWVhDb2NpU29XVmhrYnRXUm9zdkZUZ3JqcXNVbyJ9
+```
+
+Remember to securely handle and store your Client ID and Client Secret. They play a critical role in the security and integrity of your interaction with our API.
+
+## Step 2: Determine your API root and token endpoint
+
+A crucial part of interacting with the ConductorOne API involves determining the appropriate endpoints for your requests. Two key components in this process are your API root and the token endpoint. These can be inferred from your Client ID.
+
+### Extracting the hostname from the Client ID
+
+
+Your Client ID is in the format `<random-id>@<hostname>/<use-case>`. The hostname for your API client can be identified as the portion of your Client ID immediately following the `@` and preceding the `/`.
+
+For instance, for the Client ID `strange-hydra-68836@acme.conductor.one/pcc`, the hostname is `acme.conductor.one`.
+
+### Identifying the token endpoint
+
+With the hostname in hand, the token endpoint can be determined. It resides under the hostname at the path `/auth/v1/token`. So for the example Client ID above, the token endpoint is `https://acme.conductor.one/auth/v1/token`.
+
+### Identifying the API root
+
+Similar to the token endpoint, the API root is also located under the hostname. It resides at the path `/api/v1`. In our example Client ID, the API root is `https://acme.conductor.one/api/v1`.
+
+## Step 3: Get an access token
+
+There are two methods available for obtaining an access token. Choose the one that best fits your needs.
+
+### Get a basic access token
+
+A basic access token can be obtained by utilizing your Client ID and Client Secret with the OAuth2 Token Endpoint.
+
+To achieve this:
+
+POST a request to Token Endpoint using the `application/x-www-form-urlencoded` content type.
+
+Include the following data in your request:
+
+- `grant_type=client_credentials`
+- `client_id=${CLIENT_ID}`
+- `client_secret=${CLIENT_SECRET}`
+
+You will receive a JSON response which includes an an `access_token`, `token_type`, and an `expires_in` value that indicates the number of seconds until the access token expires.
+
+Example JSON response:
+
+```json
+{
+    "access_token": "secret_access_token_value",
+    "token_type": "Bearer",
+    "expires_in": 600
+}
+```
+
+### Get an access token using a Signed Client Assertion
+
+For a more secure authentication process, a JWT can be created and signed using the JWK private key derived from the parsed Client Secret.
+
+Here are the key requirements for the signed JWT:
+
+- The issuer (iss) should be set to the `${CLIENT_ID}` value.
+- The subject (sub) should be set to the `${CLIENT_ID}` value.
+- The audience (aud) should be set to the Tenant's Domain.
+- The expiration time (exp) of the JWT must be within five minutes of the current time. Infinitely valid JWTs are not allowed.
+
+To authenticate using a signed client assertion, you should POST a request to `${TOKEN_ENDPOINT}` using the `application/x-www-form-urlencoded` content type with the following data:
+
+- `grant_type=client_credentials`
+- `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
+- `client_id=${CLIENT_ID}`
+- `client_assertion=${CLIENT_ASSERTION}`
+
+You will receive a JSON response which includes an `access_token`, `token_type`, and an `expires_in` value that indicates the number of seconds until the access token expires.
+
+Example JSON response:
+
+```json
+{
+    "access_token": "secret_access_token_value",
+    "token_type": "Bearer",
+    "expires_in": 600
+}
+```
+
+<Info>
+Here's an example of creating a OAuth Token Source for this signing mechanism using Cone: [https://github.com/ConductorOne/cone/blob/main/pkg/client/token\_source.go](https://github.com/ConductorOne/cone/blob/main/pkg/client/token_source.go)
+</Info>
+
+## Making requests to the API using an access token
+
+Once you have successfully obtained an access token, you are ready to make authenticated requests to the ConductorOne API.
+
+Here's how to include the access token in your request:
+
+Set the `Authorization` HTTP header to `Bearer ${ACCESS_TOKEN}`.
+
+Example:
+
+```bash
+GET /api/v1/endpoint HTTP/1.1
+Host: acme.conductor.one
+Authorization: Bearer ${ACCESS_TOKEN}
+```
+Remember to replace `${ACCESS_TOKEN}` with your actual access token.
+
+Keep in mind that your access token will expire after a period of time (as indicated by the `expires_in` field in the JSON response when you obtained your access token). When this happens, any request you make with the expired access token will be denied.
+
+To avoid service interruption:
+
+- Track the `expires_in` time for your access token.
+- Generate and implement a new access token before the `expires_in` time has passed. This will ensure continuous access to the ConductorOne API.

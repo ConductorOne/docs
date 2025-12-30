@@ -1,0 +1,386 @@
+---
+title: "Set up a Microsoft Dynamics 365 connector"
+og:title: "Set up a Microsoft Dynamics 365 connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Dynamics 365. Integrate your Microsoft Dynamics 365 instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Dynamics 365. Integrate your Microsoft Dynamics 365 instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Microsoft Dynamics 365"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Teams | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+By default, system accounts are not synced. You can configure the connector to sync system accounts if desired. 
+
+## Gather Microsoft Dynamics 365 credentials 
+
+Configuring the connector requires you to pass in credentials generated in Microsoft Dynamics 365. Gather these credentials before you move on. 
+
+<Warning>
+A user who is an **Application Administrator** (or similar admin role) in Microsoft Entra ID and a **System Administrator** in Microsoft Dynamics 365 must perform this task.
+</Warning>
+
+### Look up your Microsoft Dynamics 365 environment URL
+
+<Steps>
+<Step>
+Log into the [Power Platform Admin Center](https://admin.powerplatform.microsoft.com).
+</Step>
+<Step>
+On the left side of the screen, click **Manage** > **Environments**.
+</Step>
+<Step>
+Click the name of the environment you want to integrate with ConductorOne.
+</Step>
+<Step>
+On the environment's details page, carefully copy and save the URL of the environment.
+</Step>
+</Steps> 
+
+### Create a new Entra application 
+
+<Steps>
+<Step>
+In the Entra ID admin center, navigate to **App registrations**.
+</Step>
+<Step>
+Click **+ New registration**.
+</Step>
+<Step>
+Give the application a name, such as "ConductorOne", and select the supported account type relevant to your Entra installation (typically **Accounts in this organizational directory only (Default Directory only - Single tenant)**). You do not need to set a redirect URL.
+</Step>
+<Step>
+Click **Register**.
+</Step>
+<Step>
+The new app is created. Carefully copy and save the **Application (client) ID** and the **Directory (tenant) ID** shown on the application summary page.
+</Step>
+</Steps>
+
+### Give the new Entra app API permissions
+
+<Steps>
+<Step>
+Click **API permissions**.
+</Step>
+<Step>
+Click **+ Add permissions** and click the **APIs my organization uses** tab.
+</Step>
+<Step>
+Search for "Dataverse".
+</Step>
+<Step>
+Click **Application permissions**.
+</Step>
+<Step>
+Select **user_impersonation**. This permission allows your application to access Dataverse as itself (or, conceptually, to "impersonate" a user defined within Dataverse).
+</Step>
+<Step>
+Click **Add permissions**.
+</Step>
+<Step>
+Navigate to **Identity** > **Applications** > **Enterprise applications** > **All applications**.
+</Step>
+<Step>
+Click **Grant admin consent for ...** at the top of the permissions list, and confirm your action.
+</Step>
+</Steps> 
+
+### Create a client secret 
+
+<Steps>
+<Step>
+Next, we'll generate a client secret for your app. Navigate to the app and click **Certificates & secrets**.
+</Step>
+<Step>
+Click **+ New client secret**.
+</Step>
+<Step>
+Give the client secret a description and set its expiration.
+</Step>
+<Step>
+Click **Add**.
+</Step>
+<Step>
+The client secret is shown in the **VALUE** field. Carefully copy and save the **Secret Value**.
+</Step>
+</Steps>  
+
+### Create an application user 
+
+This step links your Microsoft Entra ID app to your Dataverse environment and assigns it security roles, defining its actual permissions within Dynamics 365.
+
+<Steps>
+<Step>
+Sign in to your Dynamics 365 environment.
+</Step>
+<Step>
+Click the gear icon in the top right corner and select **Advanced Settings**.
+</Step>
+<Step>
+Navigate to **Settings** > **Security** > **Users**.
+</Step>
+<Step>
+In the **Users** view, change the view from "Enabled Users" to "Application Users" using the view selector in the command bar.
+</Step>
+<Step>
+Click **New** in the command bar.
+</Step>
+<Step>
+In the new user form, ensure the form type dropdown at the top is set to **Application User**.
+</Step>
+<Step>
+Fill in the Application User's details as follows:
+
+   * Application ID: Paste the Application (client) ID you copied from Microsoft Entra ID earlier.
+
+   * Full Name: Give it a descriptive name, such as "Dataverse Integration App User".
+
+   * Primary Email: You can use a dummy email like `appuser@yourdomain.com` if desired.
+
+   * Business Unit: Select your Primary/Root Business Unit. This is crucial. If you're unsure, it's typically the top-level business unit named after your organization (you can find it by navigating to **Power Platform Admin Center** > **Environments** > **[Your Env]** > **Settings** > **Business Units**).
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+Next, assign Security Roles. Click **Manage Roles** in the command bar at the top.
+</Step>
+<Step>
+Assign the relevant security roles. You'll need roles that grant the indicated privileges on the following entities:
+</Step>
+<Step>
+   To sync (read-only): 
+
+    | Entity | Permissions | 
+    |---|---|
+    | **User** | Read |
+    | **Team** | Read |
+    | **Security Role** | Read |
+
+   To sync and provision (read-write):
+
+    | Entity | Permissions | 
+    |---|---|
+    | **User** | Read, Append To, Append |
+    | **Team** | Write, Read, Append, Append To |
+    | **Security Role** | Read, Assign |
+    | **Account** | Read, Append To |
+    | **Action Approval Model** | Read |
+    | **Activity** | Create, Read, Write, Append, Append To |
+    | **Approval** | Read |
+    | **Approval Process** | Create, Read, Write, Delete, Append, Append To, Assign, Share |
+    | **Approval Request** | Read |
+    | **Approval Response** | Read |
+    | **Approval Stage Approval** | Read |
+    | **Approval Stage Condition** | Read |
+    | **Approval Stage Order** | Read |
+    | **Approval Step** | Read |
+    | **Await All Action Approval Model** | Read |
+    | **Await All Approval Model** | Read |
+    | **Basic Approval Model Data** | Read |
+    | **Connection** | Read |
+    | **Contact** | Read, Append To |
+    | **Email Signature** | Read |
+    | **Flow Approval** | Read |
+    | **Lead** | Read, Write, Append To, Assign | 
+    | **Mailbox** | Read |
+    | **Note** | Create, Read, Write, Delete, Append, Append To, Assign, Share |
+    | **Sales Agent Configuration** | Read |
+    | **Sales Agent Run** | Create, Read, Write, Delete, Append, Append To, Assign, Share |
+    | **SalesAgentConfigurationV2** | Read |
+    | **Sales Agent Profile** | Read, Append To |
+    | **Sequence** | Read | 
+    | **Sequence Target** | Create, Read, Write, Delete, Append, Append To, Assign, Share |
+    | **Sequence Target Step** | Create, Read, Write, Delete, Append, Append To, Assign, Share |
+    | **System Job** | Read | 
+    | **Queue** | Read |
+
+   We recommend creating a custom security role with only the specific permissions needed for these entities at the "Organization" level.
+</Step>
+<Step>
+Click **OK**.
+</Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions. 
+
+## Configure the Microsoft Dynamics 365 connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Microsoft Dynamics 365 credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Microsoft Dynamics 365** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Microsoft Dynamics 365 connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Enter the Microsoft Dynamics 365 credentials into the relevant fields.
+</Step>
+<Step>
+**Optional.** Click the box to **Include system accounts** in the information the connector syncs.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your Microsoft Dynamics 365 connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use the Microsoft Dynamics 365 connector, hosted and run in your own environment. [Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Microsoft Dynamics 365 connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Microsoft Dynamics 365 connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+   Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps> 
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Microsoft Dynamics 365 connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-microsoft-dynamics-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-microsoft-dynamics-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # Microsoft Dynamics 365-specific credentials
+  BATON_ENVIRONMENT_URL: <Environment URL of your Microsoft Dynamics 365 instance>
+  BATON_DYNAMICS_CLIENT_ID: <Client ID of the Entra app created to authenticate with the Dataverse API>
+  BATON_DYNAMICS_CLIENT_SECRET: <Client secret of the Entra app created to authenticate with the Dataverse API>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include if you want ConductorOne to sync system accounts 
+  BATON_INCLUDE_SYSTEM_ACCOUNTS: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-microsoft-dynamics.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-microsoft-dynamics
+  labels:
+    app: baton-microsoft-dynamics
+spec:
+  selector:
+    matchLabels:
+      app: baton-microsoft-dynamics
+  template:
+    metadata:
+      labels:
+        app: baton-microsoft-dynamics
+        baton: true
+        baton-app: microsoft-dynamics
+    spec:
+      containers:
+      - name: baton-microsoft-dynamics
+        image: ghcr.io/conductorone/baton-microsoft-dynamics:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-microsoft-dynamics-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Microsoft Dynamics 365 connector to. Microsoft Dynamics 365 data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your Microsoft Dynamics 365 connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>
+
