@@ -1,0 +1,221 @@
+---
+title: "Set up a Valimail connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Valimail. Integrate your Valimail instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:title: "Set up a Valimail connector"
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Valimail. Integrate your Valimail instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Valimail"
+---
+
+## Availability 
+
+This connector is compatible with Valimail plans that includes access to the API. API access is standard on the Enforce Enterprise package, and can be included as an add-on for other packages. 
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+| Member types | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+The Valimail connector supports [automatic account provisioning](/docs/product/admin/account-provisioning). 
+
+This connector does not support account deprovisioning. You must deprovision accounts directly in Valimail.
+
+## Gather Valimail configuration information
+
+Each setup method requires you to pass in credentials generated in Valimail. Gather these credentials before you move on. 
+
+<Warning>
+A user who is an **Owner** in Valimail must perform this task. 
+
+Additionally, Single Sign-On (SSO) or Multi-Factor Authentication (MFA) must be enabled on the Valimail user's account in order to create an API key. 
+</Warning>
+
+### Generate an API key
+
+<Steps>
+<Step>
+In Valimail, navigate to **Account Settings** > **API Keys**. 
+</Step>
+<Step>
+Create new credentials with the type "Configuration Only".
+
+This type provides the necessary SCIM API access with the following permissions, which are needed for sync and provisioning operations:
+
+* Read: Access to the SCIM Users endpoint (`GET /accounts/{slug}/scim/v2/Users`)
+* Write: Ability to create users (`POST /accounts/{slug}/scim/v2/Users`)
+* Update: Ability to modify user attributes including status and member type (`PATCH /accounts/{slug}/scim/v2/Users/{id}`)
+</Step>
+<Step>
+Once the new API ket is created, carefully copy and save the **Client ID** and **App ID**. 
+</Step>
+</Steps>
+
+### Look up your account slug
+
+The Account Slug can be found in your ValiMail application URL between `/app/` and the next `/`. 
+
+For example, if your ValiMail URL is `https://app.valimail.com/app/conductorone-test/sample/overview`, your account slug is `conductorone-test`.
+
+**That's it!** Next, move on to the connector configuration instructions.  
+
+## Configure the Valimail connector
+
+<Warning>
+**To complete this task, you'll need:**
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of Valimail configuration information gathered by following the instructions above
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **Valimail** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new Valimail connector:
+
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    Find the **Settings** area of the page and click **Edit**.
+    </Step>
+    <Step>
+    Enter the configuration information from the previous section.
+    </Step>
+    <Step>
+    Click **Save**.
+    </Step>
+    <Step>
+    The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+    </Step>
+</Steps>
+
+**That's it!** Your Valimail connector is now pulling access data into ConductorOne.
+</Tab>
+<Tab title="Self-hosted">
+**Follow these instructions to use the Valimail connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Step 1: Set up a new Valimail connector
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Connectors** > **Add connector**.
+    </Step>
+    <Step>
+    Search for **Baton** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new Valimail connector:
+
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    In the **Settings** area of the page, click **Edit**.
+    </Step>
+    <Step>
+    Click **Rotate** to generate a new Client ID and Secret.
+	Carefully copy and save these credentials. We'll use them in Step 2.
+    </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Valimail connector deployment:
+
+#### Secrets configuration
+
+```yaml 
+# baton-valimail-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-valimail-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+  # Valimail credentials
+  BATON_VALIMAIL_APP_ID: <Valimail app ID>
+  BATON_VALIMAIL_CLIENT_ID: <Valimail client ID>
+  BATON_VALIMAIL_SLUG: <Valimail account slug>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-valimail.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-valimail
+  labels:
+    app: baton-valimail
+spec:
+  selector:
+    matchLabels:
+      app: baton-valimail
+  template:
+    metadata:
+      labels:
+        app: baton-valimail
+        baton: true
+        baton-app: valimail
+    spec:
+      containers:
+      - name: baton-valimail
+        image: ghcr.io/conductorone/baton-valimail:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-valimail-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+    <Step>
+    Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+    </Step>
+    <Step>
+    Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Valimail connector to. Valimail data should be found on the **Entitlements** and **Accounts** tabs.
+    </Step>
+</Steps>
+
+**That's it!** Your Valimail connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>
