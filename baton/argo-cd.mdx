@@ -23,6 +23,67 @@ This connector does not support account deprovisioning. You must deprovision acc
 
 Configuring the connector requires you to pass in credentials generated in ArgoCD. Gather these credentials before you move on.
 
+### Create a Role with required permissions**
+
+The connector needs permissions to read and modify ArgoCD ConfigMaps. Create a Role that grants access to the following ConfigMaps:
+
+- `argocd-rbac-cm`: Contains RBAC policies and role grants (needs read and write access)
+- `argocd-cm`: Contains ArgoCD configuration including user accounts (needs write access for provisioning)
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: baton-argo-cd
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "patch", "update"]
+```
+
+**Required Permissions Explained:**
+
+- `get`: Read individual ConfigMaps (required to read `argocd-rbac-cm` and `argocd-cm`)
+- `list`: List ConfigMaps in the namespace (required to discover and access the ConfigMaps)
+- `patch`: Partially update ConfigMaps (used to modify RBAC policies and user accounts)
+- `update`: Fully update ConfigMaps (used as an alternative to patch for modifying ConfigMaps)
+
+Apply with:
+
+```bash
+kubectl apply -f role.yaml
+```
+
+### Create a RoleBinding
+
+Bind the Role to the ServiceAccount so the connector can use the permissions:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: baton-argo-cd
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: baton-argo-cd
+subjects:
+  - kind: ServiceAccount
+    name: baton-argo-cd
+    namespace: argocd
+```
+
+Apply with:
+```bash
+kubectl apply -f rolebinding.yaml
+```
+
+### Gather additional credentials 
+
+To set up the connector, you'll need: 
+
 <Steps>
     <Step>
     The username and password for your ArgoCD admin account, or for a dedicated service account you've set up.
@@ -34,11 +95,11 @@ Configuring the connector requires you to pass in credentials generated in ArgoC
     Your ArgoCD API URL, which is the URL you use to access the ArgoCD UI.
     </Step>
     <Step>
-    The `kubeconfig` path or file to connect to the cluster where ArgoCD is running. There are some options here:
-	1. **Provided `kubeconfig` file**: If a `kubeconfig` file is provided through the connector configuration, it will be used to connect to the cluster.
-	2. **In-cluster configuration**: If the connector is deployed in the same Kubernetes cluster as ArgoCD (such as in the `argocd` namespace), it will automatically use the in-cluster configuration from the pod's service account. No `kubeconfig` file is needed in this case. If one is provided, it will take precedence over in-cluster.
-		Find [more information on setting up an in-cluster configuration](https://github.com/ConductorOne/baton-argo-cd/blob/main/docs/docs-info.md#kubernetes-deployment-in-cluster-configuration) in the connector repo.
-	3. **Default kubeconfig location**: If no `kubeconfig` is provided and in-cluster config is not available, the connector will attempt to use the default `kubeconfig` file at `~/.kube/config`.
+    The `kubeconfig` path or file to connect to the cluster where ArgoCD is running. 
+    
+    **The connector should be deployed in the same Kubernetes cluster as ArgoCD** (such as in the `argocd` namespace). This allows the connector to automatically use the in-cluster configuration from the pod's service account. No `kubeconfig` file is needed in this case. If one is provided, it will take precedence over in-cluster. 
+
+    Find [more information on setting up an in-cluster configuration](https://github.com/ConductorOne/baton-argo-cd/blob/main/docs/docs-info.md#kubernetes-deployment-in-cluster-configuration) in the connector repo.
     </Step>
 </Steps>
 
