@@ -1,0 +1,836 @@
+---
+title: "Build a custom connector with Baton-HTTP"
+description: "Build a custom connector to sync users, groups, roles, and other resources from any HTTP/REST API-enabled application."
+og:title: "Build a custom connector with Baton-HTTP"
+og:description: "Build a custom connector to sync users, groups, roles, and other resources from any HTTP/REST API-enabled application."
+sidebarTitle: "Build a connector with Baton-HTTP"
+---
+
+## Overview
+
+[Baton-HTTP](https://github.com/ConductorOne/baton-http) is a flexible, configuration-driven connector for [Baton](https://github.com/conductorone/baton) that enables integration with any HTTP-based API. If you have back-office, home-grown, or on-prem applications that expose an HTTP API but don't have a dedicated Baton connector, use Baton-HTTP to bring those apps' access data into ConductorOne.
+
+This connector allows you to:
+
+- Sync users, groups, roles, and custom resource types from any HTTP API
+- Define custom mappings using YAML configuration with CEL expressions
+- Configure authentication methods including OAuth2, API keys, bearer tokens, and basic auth
+- Enable provisioning actions for granting and revoking access
+
+## Configuration overview
+
+Baton-HTTP is driven by a YAML configuration file that defines:
+
+- Application metadata
+- HTTP API connection details and authentication
+- Resource types to sync (users, groups, roles, etc.)
+- Entitlements that can be granted to resources
+- Grants that define which principals have which entitlements
+- Provisioning rules for granting/revoking access
+
+## Command-line options
+
+The connector accepts the following command-line flags:
+
+| Flag | Description |
+| :--- | :--- |
+| `--config-path` | **(Required)** Path to the YAML configuration file |
+| `--validate-config-only` | Validate the configuration file and exit without running the connector |
+| `--enable-command-actions` | Enable command actions (shell script execution) |
+| `--client-id` | ConductorOne client ID for service mode |
+| `--client-secret` | ConductorOne client secret for service mode |
+
+<Note>
+Authentication credentials for the target API are configured in the YAML file using environment variable interpolation (e.g., `${API_TOKEN}`), not via command-line flags.
+</Note>
+
+## YAML configuration structure
+
+Every Baton-HTTP configuration file must include these core elements:
+
+```yaml
+version: "1"                    # Required, must be "1"
+app_name: "Your Application"    # Required
+app_description: "Optional description"
+
+connect:
+  base_url: "https://api.example.com/v1"
+  auth:
+    type: "bearer"
+    token: "${API_TOKEN}"
+
+resource_types:
+  user:
+    # Resource configuration...
+```
+
+### Top-level fields
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `version` | Yes | Schema version, must be `"1"` |
+| `app_name` | Yes | Application name for this connector |
+| `app_description` | No | Description of the application |
+| `vars` | No | Global variables available throughout configuration |
+| `connect` | Yes | API connection and authentication settings |
+| `http` | No | HTTP client settings (timeouts, retries) |
+| `resource_types` | Yes | Resource type definitions (minimum 1 required) |
+| `error_handling` | No | Global error handling configuration |
+| `actions` | No | Custom action definitions |
+
+## Connection configuration
+
+The `connect` section defines how to connect to your HTTP API:
+
+```yaml
+connect:
+  base_url: "https://api.example.com/v1"
+
+  auth:
+    type: "bearer"
+    token: "${API_TOKEN}"
+
+  request_defaults:
+    content_type: "application/json"
+    headers:
+      Accept: "application/json"
+    query_params:
+      limit: "100"
+
+  pagination:
+    strategy: "offset"
+    limit_param: "limit"
+    offset_param: "offset"
+    page_size: 25
+```
+
+## Authentication methods
+
+Baton-HTTP supports multiple authentication methods. Configure authentication under `connect.auth`.
+
+### No authentication
+
+```yaml
+auth:
+  type: none
+```
+
+### Bearer token
+
+Use when the API requires a static bearer token:
+
+```yaml
+auth:
+  type: bearer
+  token: "${API_TOKEN}"
+```
+
+### Basic authentication
+
+Use for username/password authentication:
+
+```yaml
+auth:
+  type: basic
+  username: "${API_USERNAME}"
+  password: "${API_PASSWORD}"
+```
+
+### API key
+
+Use when the API requires an API key in a header:
+
+```yaml
+auth:
+  type: api_key
+  api_key:
+    header: "X-API-Key"       # Header name
+    prefix: "ApiKey"          # Optional prefix
+    key: "${API_KEY}"         # The key value
+```
+
+### OAuth2 client credentials
+
+Use for APIs requiring OAuth2 client credentials flow:
+
+```yaml
+auth:
+  type: oauth2_client_credentials
+  oauth2_client_credentials:
+    token_url: "https://api.example.com/oauth/token"
+    # Or use OIDC discovery:
+    # issuer: "https://login.example.com"
+    client_id: "${CLIENT_ID}"
+    client_secret: "${CLIENT_SECRET}"
+    scope: "read:users read:groups"
+    token_expiry_padding: 60  # Refresh 60 seconds before expiry
+```
+
+### OAuth2 password (ROPC)
+
+Use for OAuth2 Resource Owner Password Credentials flow:
+
+```yaml
+auth:
+  type: oauth2_password
+  oauth2_password:
+    token_url: "https://api.example.com/oauth/token"
+    client_id: "${CLIENT_ID}"
+    client_secret: "${CLIENT_SECRET}"
+    username: "${USERNAME}"
+    password: "${PASSWORD}"
+    scope: "api"
+```
+
+### Bearer dynamic
+
+Use for APIs that issue tokens via a login endpoint:
+
+```yaml
+auth:
+  type: bearer_dynamic
+  bearer_dynamic:
+    token_url: "https://api.example.com/login"
+    username: "${USERNAME}"
+    password: "${PASSWORD}"
+    token_field: "access_token"      # JSON field containing token
+    expiry_field: "expires_at"       # Optional, auto-parses JWT if omitted
+    token_expiry_padding: 60
+```
+
+## Resource type configuration
+
+Resource types define the entities you want to sync. Each resource type specifies how to list resources and map API responses to ConductorOne resources.
+
+### Basic structure
+
+```yaml
+resource_types:
+  user:
+    name: "User"
+    description: "User accounts"
+    traits:
+      - user
+
+    list:
+      request:
+        method: GET
+        url: /users
+      response:
+        items_path: items
+        mapping_type: resource
+        resource_mapping:
+          id: cel:item.id
+          display_name: cel:item.name
+          user_traits:
+            email: cel:item.email
+            login: cel:item.username
+            status: 'cel:item.active ? "enabled" : "disabled"'
+
+    skip_entitlements_and_grants: true
+```
+
+### Resource type fields
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `name` | Yes | Human-readable name |
+| `description` | No | Description of this resource type |
+| `traits` | No | Traits for this type (`user`, `group`, `role`, `app`) |
+| `depends_on` | No | Resource types that must be processed first |
+| `parent_type` | No | Parent resource type for hierarchical resources |
+| `child_types` | No | Child resource types |
+| `list` | Yes* | How to list resources (*unless using `static_resources`) |
+| `static_resources` | No | Statically defined resources |
+| `static_entitlements` | No | Predefined entitlements |
+| `entitlements` | No | Dynamic entitlement configuration |
+| `grants` | No | Grant discovery configuration |
+| `skip_entitlements_and_grants` | No | Skip entitlement/grant processing |
+
+## Data mapping with CEL expressions
+
+Baton-HTTP uses [Common Expression Language (CEL)](https://github.com/google/cel-spec) for data mapping. CEL expressions are prefixed with `cel:`.
+
+### Response mapping
+
+```yaml
+response:
+  items_path: data.users           # Path to array in response
+  mapping_type: resource           # resource, grant, or entitlement
+  resource_mapping:
+    id: cel:item.id
+    display_name: cel:item.firstName + " " + item.lastName
+    description: cel:item.email
+    user_traits:
+      email: cel:item.email
+      login: cel:item.username
+      status: 'cel:item.status == "active" ? "enabled" : "disabled"'
+      profile:
+        first_name: cel:item.firstName
+        last_name: cel:item.lastName
+        department: cel:item.department
+```
+
+### Common CEL patterns
+
+```yaml
+# Conditional expressions
+status: 'cel:item.active ? "enabled" : "disabled"'
+
+# String concatenation
+display_name: cel:item.firstName + " " + item.lastName
+
+# Null-safe access with has()
+parent_id: "cel:has(item.parent.id) ? item.parent.id : null"
+
+# Array access
+primary_email: cel:item.emails[0].address
+```
+
+## Templating with Go templates
+
+For URLs and request bodies, use Go templates prefixed with `tmpl:`:
+
+```yaml
+# URL templating
+url: tmpl:/groups/{{.resource.id}}/members
+
+# With parent resource
+url: tmpl:/orgs/{{.parent_resource.id}}/teams/{{.resource.id}}
+
+# Request body templating
+body: |
+  tmpl:{
+    "user_id": "{{.principal.id}}",
+    "role": "member"
+  }
+```
+
+### Available template variables
+
+| Variable | Description |
+| :--- | :--- |
+| `.resource.id` | Current resource ID |
+| `.resource.display_name` | Current resource display name |
+| `.parent_resource.id` | Parent resource ID |
+| `.principal.id` | Principal ID (for provisioning) |
+| `.principal.traits.user.email` | Principal's email |
+| `.pre_requests.<name>.body` | Response from a pre-request |
+
+## Pagination
+
+Configure pagination under `connect.pagination` (global) or per-resource under `list.pagination`.
+
+### Offset-based pagination
+
+```yaml
+pagination:
+  strategy: offset
+  limit_param: limit
+  offset_param: offset
+  page_size: 100
+  total_path: totalResults     # Optional: path to total count
+```
+
+### Cursor-based pagination
+
+```yaml
+pagination:
+  strategy: cursor
+  limit_param: limit
+  cursor_param: cursor
+  cursor_path: meta.nextCursor  # Path to next cursor in response
+  page_size: 100
+```
+
+### Page-based pagination
+
+```yaml
+pagination:
+  strategy: page
+  limit_param: per_page
+  page_param: page
+  page_start: 1               # Starting page number
+  page_size: 100
+```
+
+### Link-based pagination
+
+```yaml
+pagination:
+  strategy: link
+  next_link_path: links.next   # Path to next URL in response
+```
+
+### No pagination
+
+```yaml
+pagination:
+  strategy: none
+```
+
+## Entitlements
+
+Entitlements define permissions that can be granted to resources.
+
+### Static entitlements
+
+Use for predefined entitlements like group membership:
+
+```yaml
+static_entitlements:
+  - id: member
+    display_name: cel:resource.display_name + " Member"
+    description: cel:"Member of " + resource.display_name
+    slug: member
+    purpose: assignment      # assignment, permission, or role
+    grantable_to:
+      - user
+```
+
+### Dynamic entitlements
+
+Fetch entitlements from an API:
+
+```yaml
+entitlements:
+  - request:
+      url: tmpl:/spaces/{{.resource.id}}/permissions
+    response:
+      items_path: items
+      mapping_type: entitlement
+      entitlement_mapping:
+        id: cel:resource.id + "-" + item.operation
+        display_name: cel:"Can " + item.operation + " on " + resource.display_name
+        slug: cel:item.operation
+        purpose: permission
+        grantable_to:
+          - user
+          - group
+```
+
+## Grants
+
+Grants define which principals have which entitlements:
+
+```yaml
+grants:
+  - request:
+      url: tmpl:/groups/{{.resource.id}}/members
+    response:
+      items_path: members
+      mapping_type: grant
+      grant_mapping:
+        principal_id: cel:item.userId
+        principal_type: user
+        entitlement_name: member
+```
+
+### Conditional grants
+
+Use `skip_if` to filter grants:
+
+```yaml
+grants:
+  - request:
+      url: tmpl:/resources/{{.resource.id}}/permissions
+    response:
+      items_path: items
+      skip_if: cel:item.subject.type == "anonymous"
+      mapping_type: grant
+      grant_mapping:
+        principal_id: cel:item.subject.id
+        principal_type: cel:item.subject.type
+        entitlement_name: cel:item.permission
+```
+
+## Provisioning
+
+Enable provisioning to grant and revoke access through ConductorOne.
+
+### Grant and revoke configuration
+
+```yaml
+static_entitlements:
+  - id: member
+    display_name: "Group Member"
+    purpose: assignment
+    grantable_to:
+      - user
+    provisioning:
+      grant:
+        request:
+          method: POST
+          url: tmpl:/groups/{{.resource.id}}/members
+          body: |
+            tmpl:{
+              "user_id": "{{.principal.id}}"
+            }
+        success_condition: cel:response.status_code == 201
+      revoke:
+        request:
+          method: DELETE
+          url: tmpl:/groups/{{.resource.id}}/members/{{.principal.id}}
+        success_condition: cel:response.status_code == 204
+```
+
+### Pre-requests
+
+Use pre-requests when you need data from another API call:
+
+```yaml
+provisioning:
+  grant:
+    request:
+      pre_requests:
+        user_details:
+          url: tmpl:/users/{{.principal.id}}
+          method: GET
+      method: PUT
+      url: tmpl:/groups/{{.resource.id}}/members/{{.pre_requests.user_details.body.username}}
+```
+
+## HTTP client settings
+
+Configure timeouts and retries under the `http` section:
+
+```yaml
+http:
+  timeout: 30s
+  headers:
+    Accept: "application/json"
+  retry:
+    max_attempts: 3
+    initial_backoff: 1s
+    max_backoff: 10s
+```
+
+## Error handling
+
+Configure error handling globally or per-request:
+
+```yaml
+error_handling:
+  error_status_codes:
+    "429":
+      action: retry
+      retry_after: 30s
+      max_retries: 3
+    "404":
+      action: warn
+      message: "Resource not found"
+    "500":
+      action: retry
+      retry_after: 5s
+```
+
+Error actions: `fail` (default), `retry`, `warn`, `ignore`
+
+## Running the connector
+
+### Local execution
+
+```bash
+# Run a sync
+baton-http --config-path ./config.yaml
+
+# Validate configuration only
+baton-http --config-path ./config.yaml --validate-config-only
+
+# Connect to ConductorOne (service mode)
+baton-http --config-path ./config.yaml \
+  --client-id "$C1_CLIENT_ID" \
+  --client-secret "$C1_CLIENT_SECRET"
+```
+
+### Using environment variables
+
+Set credentials via environment variables referenced in your config:
+
+```bash
+export API_TOKEN="your-api-token"
+export API_BASE_URL="https://api.example.com"
+baton-http --config-path ./config.yaml
+```
+
+## Deploying to ConductorOne
+
+### Step 1: Set up a new connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new connector:
+   - Add the connector to a currently unmanaged app
+   - Add the connector to a managed app
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret. Save these credentials.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration
+
+#### Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-http-secrets
+type: Opaque
+stringData:
+  C1_CLIENT_ID: <ConductorOne client ID>
+  C1_CLIENT_SECRET: <ConductorOne client secret>
+  API_TOKEN: <Your API token>
+```
+
+#### ConfigMap
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: baton-http-config
+data:
+  config.yaml: |
+    version: "1"
+    app_name: My Application
+
+    connect:
+      base_url: "https://api.example.com/v1"
+      auth:
+        type: bearer
+        token: "${API_TOKEN}"
+
+    resource_types:
+      user:
+        name: User
+        traits:
+          - user
+        list:
+          request:
+            url: /users
+          response:
+            items_path: data
+            mapping_type: resource
+            resource_mapping:
+              id: cel:item.id
+              display_name: cel:item.name
+              user_traits:
+                email: cel:item.email
+                status: 'cel:item.active ? "enabled" : "disabled"'
+        skip_entitlements_and_grants: true
+```
+
+#### Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-http
+spec:
+  selector:
+    matchLabels:
+      app: baton-http
+  template:
+    metadata:
+      labels:
+        app: baton-http
+    spec:
+      containers:
+      - name: baton-http
+        image: ghcr.io/conductorone/baton-http:latest
+        args:
+          - "--config-path=/config/config.yaml"
+        envFrom:
+        - secretRef:
+            name: baton-http-secrets
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: baton-http-config
+```
+
+### Step 3: Deploy
+
+Apply the configuration files to your Kubernetes cluster and verify the connector appears in ConductorOne under **Applications** > **Managed apps**.
+
+## Example: GitHub integration
+
+```yaml
+version: "1"
+app_name: Github
+app_description: Github Organization
+
+connect:
+  base_url: https://api.github.com
+  auth:
+    type: bearer
+    token: "${GITHUB_TOKEN}"
+  request_defaults:
+    headers:
+      Accept: application/json
+    query_params:
+      per_page: 100
+
+resource_types:
+  org:
+    name: Organization
+    traits:
+      - app
+    child_types:
+      - user
+      - team
+    list:
+      request:
+        url: /user/orgs
+      response:
+        items_path: items
+        mapping_type: resource
+        resource_mapping:
+          id: cel:item.id
+          display_name: cel:item.login
+
+  user:
+    name: User
+    depends_on:
+      - org
+    parent_type: org
+    traits:
+      - user
+    list:
+      request:
+        url: tmpl:/orgs/{{.parent_resource.id}}/members
+      response:
+        items_path: items
+        mapping_type: resource
+        resource_mapping:
+          id: cel:item.login
+          display_name: cel:item.login
+          user_traits:
+            login: cel:item.login
+    skip_entitlements_and_grants: true
+
+  team:
+    name: Team
+    depends_on:
+      - org
+    parent_type: org
+    traits:
+      - group
+    list:
+      request:
+        url: tmpl:/orgs/{{.parent_resource.id}}/teams
+      response:
+        items_path: items
+        mapping_type: resource
+        resource_mapping:
+          id: cel:item.id
+          display_name: cel:item.name
+          group_traits:
+            profile:
+              description: cel:item.description
+    static_entitlements:
+      - id: member
+        display_name: "Team Member"
+        purpose: assignment
+        grantable_to:
+          - user
+    grants:
+      - request:
+          url: tmpl:/orgs/{{.parent_resource.id}}/team/{{.resource.id}}/members
+        response:
+          items_path: items
+          mapping_type: grant
+          grant_mapping:
+            principal_id: cel:item.login
+            principal_type: user
+            entitlement_name: member
+```
+
+## Example: OAuth2 with provisioning
+
+```yaml
+version: "1"
+app_name: ConductorOne
+app_description: ConductorOne API Integration
+
+connect:
+  base_url: https://${C1_ENDPOINT}/api/v1
+  auth:
+    type: oauth2_client_credentials
+    oauth2_client_credentials:
+      token_url: https://${C1_ENDPOINT}/auth/v1/token
+      client_id: "${C1_CLIENT_ID}"
+      client_secret: "${C1_CLIENT_SECRET}"
+  request_defaults:
+    headers:
+      Accept: application/json
+
+resource_types:
+  user:
+    name: User
+    traits:
+      - user
+    list:
+      request:
+        url: /users
+      response:
+        items_path: list
+        mapping_type: resource
+        resource_mapping:
+          id: cel:item.user.id
+          display_name: cel:item.user.displayName
+          user_traits:
+            login: cel:item.user.username
+            email: cel:item.user.email
+    skip_entitlements_and_grants: true
+```
+
+## Troubleshooting
+
+### Authentication errors
+
+- Verify credentials are correct and environment variables are set
+- Check token hasn't expired
+- For OAuth2, verify token URL and scopes
+
+### Resources not syncing
+
+- Use `--validate-config-only` to check configuration
+- Verify `items_path` matches your API response structure
+- Check CEL expressions with sample data
+
+### Pagination issues
+
+- Confirm pagination `strategy` matches your API
+- Verify parameter names (`limit_param`, `offset_param`, etc.)
+- Check `cursor_path` or `next_link_path` for cursor/link pagination
+
+### Mapping errors
+
+- Test CEL expressions against sample API responses
+- Use `has()` for optional fields to avoid null errors
+- Check for typos in field names
+
+For more information, see the [baton-http repository](https://github.com/ConductorOne/baton-http) and the [docs directory](https://github.com/ConductorOne/baton-http/tree/main/docs) for detailed specifications.
