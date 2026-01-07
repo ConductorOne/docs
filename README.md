@@ -1,20 +1,31 @@
-# ConductorOne Documentation
+# ConductorOne documentation
 
-This repository contains the source files for the [ConductorOne documentation](https://www.conductorone.com/docs).
+Welcome to the official repository for [ConductorOne Documentation](https://www.conductorone.com/docs)! 
 
-## Contributing
+We believe that great documentation is a community effort. This repository contains the source files for our docs site, and we’re excited to open it up for public contributions. Whether you've found a typo, a broken link, or have a suggestion for a new guide, we welcome your input.
 
-We welcome contributions! To suggest changes:
+## 🚀 How to contribute
 
-1. Fork this repository
-2. Make your changes
-3. Submit a pull request
+There are two ways to suggest changes:
 
-## Local Development
+### 1. For a quick fix: Suggest edits
+On any page of our [documentation site](https://www.conductorone.com/docs), scroll to the bottom and click **Suggest edits**. This will take you directly to the GitHub editor for that specific file, where you can make changes and submit a Pull Request (PR) in just a few clicks.
 
-```bash
-npm i -g mint
-mint dev
-```
+### 2. For power users: Fork & PR
+If you have larger changes or want to work locally:
+1. **Fork** this repository to your own account.
+2. Create a new branch for your changes.
+3. Commit your edits and push them to your fork.
+4. Open a **Pull Request** against our `main` branch.
 
-Then visit `http://localhost:3000` to preview your changes.
+## 📝 Review process
+
+Every contribution, no matter how small, helps improve the experience for all ConductorOne users. So thank you! 
+
+Once you submit a Pull Request, the **ConductorOne Documentation Team** will review your suggestions. We may ask for clarification or make minor adjustments to ensure consistency with our style guide. Once approved, we’ll merge your changes and they’ll be live on the site shortly after!
+
+## ⚖️ License
+
+By contributing to this repository, you agree that your contributions will be licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](./LICENSE).
+
+
