@@ -1,0 +1,887 @@
+---
+title: "Use Baton-HTTP to build a custom connector"
+description: "Build a custom connector to sync users, groups, roles, and other resources from HTTP/REST API-enabled applications."
+og:title: "Use Baton-HTTP to build a custom connector"
+og:description: "Build a custom connector to sync users, groups, roles, and other resources from HTTP/REST API-enabled applications."
+sidebarTitle: "Build a connector with Baton-HTTP"
+---
+
+## Overview
+
+The [Baton-HTTP](https://github.com/ConductorOne/baton-http) connector is a generic connector for applications that expose HTTP/REST APIs. If you have back-office, home-grown, or on-prem applications that have an HTTP API but don't have a dedicated Baton connector, use the Baton-HTTP connector to bring those apps' access data into ConductorOne.
+
+This connector allows you to:
+
+- Sync users, groups, roles, and custom resource types from any HTTP API
+- Define custom mappings using YAML configuration
+- Configure authentication methods including OAuth2, API keys, and basic auth
+- Enable provisioning actions for granting and revoking access
+
+## Configuration overview
+
+The Baton-HTTP connector is configured using a YAML file that defines:
+
+- Application metadata
+- HTTP API connection details and authentication
+- Resource types to sync (users, groups, roles, etc.)
+- Entitlements that can be granted to resources
+- Grants that define which principals have which entitlements
+- Provisioning rules for granting/revoking access
+
+This document walks you through the process of composing the YAML configuration file.
+
+## Configuration options
+
+The connector accepts the following command-line flags and environment variables:
+
+| Flag | Environment variable | Description |
+| :--- | :--- | :--- |
+| `--config-path` | `BATON_CONFIG_PATH` | Path to the YAML configuration file |
+| `--token` | `BATON_TOKEN` | OAuth2 token for authentication |
+| `--api-key` | `BATON_API_KEY` | API key for authentication |
+| `--username` | `BATON_USERNAME` | Username for basic authentication |
+| `--password` | `BATON_PASSWORD` | Password for basic authentication |
+| `--client-id` | `BATON_CLIENT_ID` | OAuth2 client ID for client credentials flow |
+| `--client-secret` | `BATON_CLIENT_SECRET` | OAuth2 client secret for client credentials flow |
+| `-p, --provisioning` | `BATON_PROVISIONING` | Enable provisioning actions |
+| `-f, --file` | `BATON_FILE` | Path to the output c1z file (default "sync.c1z") |
+
+## Configuring the YAML file
+
+The basic structure of a Baton-HTTP connector configuration file includes:
+
+```yaml
+# Application metadata
+app_name: Your Application Name
+app_description: Optional description of your application
+
+# API connection
+connect:
+  base_url: "https://api.example.com"
+  auth:
+    type: "bearer"  # Options: bearer, api_key, basic, oauth2
+    # Auth-specific configuration...
+
+# Resource definitions
+resource_types:
+  # Resource type configurations...
+```
+
+### API connection configuration
+
+The `connect` section defines how to connect to your HTTP API:
+
+```yaml expandable
+connect:
+  # Base URL for all API requests
+  base_url: "https://api.example.com/v1"
+  
+  # Default headers to include in all requests
+  headers:
+    Accept: "application/json"
+    Content-Type: "application/json"
+  
+  # Authentication configuration
+  auth:
+    type: "bearer"  # Options: bearer, api_key, basic, oauth2
+    
+    # For bearer token auth
+    token: "${API_TOKEN}"
+    
+    # For API key auth
+    # api_key: "${API_KEY}"
+    # api_key_header: "X-API-Key"  # Header name for the API key
+    
+    # For basic auth
+    # username: "${API_USERNAME}"
+    # password: "${API_PASSWORD}"
+    
+    # For OAuth2 client credentials
+    # client_id: "${CLIENT_ID}"
+    # client_secret: "${CLIENT_SECRET}"
+    # token_url: "https://api.example.com/oauth/token"
+    # scopes:
+    #   - "read"
+    #   - "write"
+
+  # Optional: Rate limiting configuration
+  rate_limit:
+    requests_per_second: 10
+    burst: 20
+
+  # Optional: Retry configuration
+  retry:
+    max_retries: 3
+    retry_wait: "1s"
+```
+
+### Authentication methods
+
+The HTTP connector supports several authentication methods.
+
+#### Bearer token authentication
+
+Use this method when the API requires a bearer token:
+
+```yaml
+connect:
+  base_url: "https://api.example.com"
+  auth:
+    type: "bearer"
+    token: "${API_TOKEN}"
+```
+
+#### API key authentication
+
+Use this method when the API requires an API key in a header:
+
+```yaml
+connect:
+  base_url: "https://api.example.com"
+  auth:
+    type: "api_key"
+    api_key: "${API_KEY}"
+    api_key_header: "X-API-Key"  # Default: "Authorization"
+```
+
+#### Basic authentication
+
+Use this method when the API requires username/password authentication:
+
+```yaml
+connect:
+  base_url: "https://api.example.com"
+  auth:
+    type: "basic"
+    username: "${API_USERNAME}"
+    password: "${API_PASSWORD}"
+```
+
+#### OAuth2 client credentials
+
+Use this method for APIs requiring OAuth2 client credentials flow:
+
+```yaml
+connect:
+  base_url: "https://api.example.com"
+  auth:
+    type: "oauth2"
+    client_id: "${CLIENT_ID}"
+    client_secret: "${CLIENT_SECRET}"
+    token_url: "https://api.example.com/oauth/token"
+    scopes:
+      - "read:users"
+      - "read:groups"
+```
+
+### Resource type configuration
+
+Resource types define the entities you want to sync to ConductorOne. Common resource types include users, groups, and roles.
+
+Basic structure:
+
+```yaml expandable
+resource_types:
+  user:  # Resource type key
+    name: "User"  # Display name
+    description: "User accounts in the system"
+    
+    # Resource configuration sections:
+    list:  # How to list resources
+      # ...
+    
+    get:  # How to get a single resource (optional)
+      # ...
+    
+    static_entitlements:  # Predefined entitlements
+      # ...
+    
+    entitlements:  # Dynamic entitlements
+      # ...
+    
+    grants:  # How to discover existing grants
+      # ...
+    
+    provisioning:  # How to provision/deprovision access
+      # ...
+```
+
+### Listing resources
+
+The `list` section defines how to query resources from your API:
+
+```yaml expandable
+list:
+  # HTTP request configuration
+  request:
+    method: GET
+    path: "/users"
+    query_params:
+      status: "active"
+      limit: "{{.Limit}}"
+      offset: "{{.Offset}}"
+  
+  # Response parsing configuration
+  response:
+    # JSONPath to the array of resources in the response
+    items_path: "$.data.users"
+    
+    # Pagination configuration
+    pagination:
+      type: "offset"  # Options: offset, cursor, page, link
+      limit_param: "limit"
+      offset_param: "offset"
+      # For cursor pagination:
+      # cursor_path: "$.meta.next_cursor"
+      # cursor_param: "cursor"
+      # For page pagination:
+      # page_param: "page"
+      # total_pages_path: "$.meta.total_pages"
+      # For link pagination:
+      # next_link_path: "$.links.next"
+  
+  # Mapping configuration
+  map:
+    id: "$.id"
+    display_name: "$.name"
+    description: "$.department + ' user'"
+    traits:
+      user:
+        emails:
+          - "$.email"
+        status: "$.status"
+        login: "$.username"
+        profile:
+          department: "$.department"
+          title: "$.job_title"
+```
+
+### Mapping resources
+
+The `map` section defines how to transform API response data into ConductorOne resources:
+
+```yaml expandable
+map:
+  # Required fields
+  id: "$.id"  # JSONPath to the resource ID
+  display_name: "$.name"  # Human-readable name
+  description: "$.description"  # Optional description
+  
+  # Optional traits specific to this resource type
+  traits:
+    user:  # For user resources
+      emails:
+        - "$.email"
+        - "$.secondary_email"
+      status: "$.active ? 'enabled' : 'disabled'"
+      login: "$.username"
+      profile:
+        first_name: "$.first_name"
+        last_name: "$.last_name"
+        department: "$.department"
+    
+    group:  # For group resources
+      profile:
+        group_name: "$.name"
+        member_count: "$.member_count"
+    
+    role:  # For role resources
+      profile:
+        role_name: "$.name"
+        permissions: "$.permissions"
+```
+
+Field mappings use JSONPath expressions to extract data from the API response.
+
+### Pagination
+
+The `pagination` section defines how to handle large result sets:
+
+```yaml expandable
+pagination:
+  # Offset-based pagination
+  type: "offset"
+  limit_param: "limit"
+  offset_param: "offset"
+  default_limit: 100
+
+# Or cursor-based pagination
+pagination:
+  type: "cursor"
+  cursor_param: "cursor"
+  cursor_path: "$.meta.next_cursor"
+  limit_param: "limit"
+
+# Or page-based pagination
+pagination:
+  type: "page"
+  page_param: "page"
+  per_page_param: "per_page"
+  total_pages_path: "$.meta.total_pages"
+
+# Or link-based pagination (following next links)
+pagination:
+  type: "link"
+  next_link_path: "$.links.next"
+```
+
+### Entitlements
+
+Entitlements define permissions that can be granted to resources.
+
+#### Static entitlements
+
+Static entitlements are predefined and don't require an API call:
+
+```yaml
+static_entitlements:
+  - id: "member"
+    display_name: "Member"
+    description: "Membership in the group"
+    purpose: "assignment"  # Options: access, assignment, permission
+    grantable_to:
+      - "user"
+
+  - id: "admin"
+    display_name: "Administrator"
+    description: "Administrative access"
+    purpose: "permission"
+    grantable_to:
+      - "user"
+```
+
+#### Dynamic entitlements
+
+Dynamic entitlements are fetched from the API:
+
+```yaml expandable
+entitlements:
+  request:
+    method: GET
+    path: "/permissions"
+  
+  response:
+    items_path: "$.data"
+    pagination:
+      type: "offset"
+  
+  map:
+    - id: "$.id"
+      display_name: "$.name"
+      description: "$.description"
+      purpose: "permission"
+      grantable_to:
+        - "user"
+        - "group"
+```
+
+### Grants
+
+Grants define which principals (users/groups) have which entitlements:
+
+```yaml expandable
+grants:
+  - request:
+      method: GET
+      path: "/groups/{{.ResourceID}}/members"
+    
+    response:
+      items_path: "$.members"
+      pagination:
+        type: "offset"
+    
+    map:
+      - principal_id: "$.user_id"
+        principal_type: "user"
+        entitlement_id: "member"
+        skip_if: "$.status != 'active'"
+
+  - request:
+      method: GET
+      path: "/roles/{{.ResourceID}}/assignments"
+    
+    response:
+      items_path: "$.assignments"
+    
+    map:
+      - principal_id: "$.user_id"
+        principal_type: "user"
+        entitlement_id: "{{.ResourceID}}"
+```
+
+The `skip_if` field uses an expression to determine whether to skip a grant mapping.
+
+### Provisioning
+
+Provisioning defines how to implement entitlement changes:
+
+```yaml expandable
+provisioning:
+  grant:
+    request:
+      method: POST
+      path: "/groups/{{.ResourceID}}/members"
+      body:
+        user_id: "{{.PrincipalID}}"
+  
+  revoke:
+    request:
+      method: DELETE
+      path: "/groups/{{.ResourceID}}/members/{{.PrincipalID}}"
+```
+
+For more complex provisioning scenarios:
+
+```yaml expandable
+provisioning:
+  grant:
+    # Conditional logic based on entitlement
+    - when: "{{.EntitlementID}} == 'member'"
+      request:
+        method: POST
+        path: "/groups/{{.ResourceID}}/members"
+        body:
+          user_id: "{{.PrincipalID}}"
+    
+    - when: "{{.EntitlementID}} == 'admin'"
+      request:
+        method: PUT
+        path: "/groups/{{.ResourceID}}/admins/{{.PrincipalID}}"
+  
+  revoke:
+    - when: "{{.EntitlementID}} == 'member'"
+      request:
+        method: DELETE
+        path: "/groups/{{.ResourceID}}/members/{{.PrincipalID}}"
+    
+    - when: "{{.EntitlementID}} == 'admin'"
+      request:
+        method: DELETE
+        path: "/groups/{{.ResourceID}}/admins/{{.PrincipalID}}"
+```
+
+## Running the connector
+
+To run the connector locally:
+
+```bash
+baton-http --config-path /path/to/config.yaml
+```
+
+### Using command line arguments
+
+Provide credentials via flags for one-time syncs:
+
+```bash
+baton-http \
+  --config-path ./config.yaml \
+  --token your-api-token \
+  -f sync.c1z
+```
+
+### Using environment variables
+
+```bash
+BATON_TOKEN=your-api-token \
+BATON_CONFIG_PATH=./config.yaml \
+baton-http
+```
+
+### Using Docker
+
+```bash
+docker run --rm \
+  -v $(pwd):/config \
+  -v $(pwd):/out \
+  -e BATON_TOKEN=your-api-token \
+  -e BATON_CONFIG_PATH=/config/config.yaml \
+  ghcr.io/conductorone/baton-http:latest \
+  -f "/out/sync.c1z"
+```
+
+## Deploying to ConductorOne
+
+To integrate the connector with ConductorOne, follow the self-hosted connector deployment pattern:
+
+### Step 1: Set up a new HTTP connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new connector:
+
+   * Add the connector to a currently unmanaged app
+   * Add the connector to a managed app
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+   Carefully copy and save these credentials.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-http-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-http-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  
+  # API credentials (choose based on your auth method)
+  BATON_TOKEN: <API bearer token>
+  # Or for API key auth:
+  # BATON_API_KEY: <API key>
+  # Or for basic auth:
+  # BATON_USERNAME: <username>
+  # BATON_PASSWORD: <password>
+
+  # Optional: Enable provisioning
+  BATON_PROVISIONING: "true"
+```
+
+#### ConfigMap for the YAML configuration
+
+```yaml expandable
+# baton-http-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: baton-http-config
+data:
+  config.yaml: |
+    app_name: My Application
+    
+    connect:
+      base_url: "https://api.example.com/v1"
+      auth:
+        type: "bearer"
+        token: "${BATON_TOKEN}"
+    
+    resource_types:
+      user:
+        name: "User"
+        list:
+          request:
+            method: GET
+            path: "/users"
+          response:
+            items_path: "$.data"
+          map:
+            id: "$.id"
+            display_name: "$.name"
+            traits:
+              user:
+                emails:
+                  - "$.email"
+                status: "$.active ? 'enabled' : 'disabled'"
+```
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-http.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-http
+  labels:
+    app: baton-http
+spec:
+  selector:
+    matchLabels:
+      app: baton-http
+  template:
+    metadata:
+      labels:
+        app: baton-http
+        baton: true
+        baton-app: http
+    spec:
+      containers:
+      - name: baton-http
+        image: ghcr.io/conductorone/baton-http:latest
+        imagePullPolicy: IfNotPresent
+        args:
+          - "--config-path=/config/config.yaml"
+        env:
+        - name: BATON_HOST_ID
+          value: baton-http
+        envFrom:
+        - secretRef:
+            name: baton-http-secrets
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: baton-http-config
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Apply the configuration files to your Kubernetes cluster.
+</Step>
+<Step>
+Check that the connector data uploaded correctly in ConductorOne under **Applications** > **Managed apps**.
+</Step>
+</Steps>
+
+## Example configurations
+
+### Example: Custom internal application
+
+```yaml expandable
+app_name: Internal HR System
+
+connect:
+  base_url: "https://hr.internal.example.com/api"
+  auth:
+    type: "bearer"
+    token: "${HR_API_TOKEN}"
+  headers:
+    X-API-Version: "2"
+
+resource_types:
+  employee:
+    name: "Employee"
+    description: "Employee accounts in the HR system"
+    
+    list:
+      request:
+        method: GET
+        path: "/employees"
+        query_params:
+          status: "active"
+          limit: "{{.Limit}}"
+          offset: "{{.Offset}}"
+      
+      response:
+        items_path: "$.employees"
+        pagination:
+          type: "offset"
+          limit_param: "limit"
+          offset_param: "offset"
+      
+      map:
+        id: "$.employee_id"
+        display_name: "$.first_name + ' ' + $.last_name"
+        traits:
+          user:
+            emails:
+              - "$.email"
+            status: "$.employment_status == 'active' ? 'enabled' : 'disabled'"
+            login: "$.username"
+            profile:
+              first_name: "$.first_name"
+              last_name: "$.last_name"
+              department: "$.department"
+              manager: "$.manager_id"
+
+  department:
+    name: "Department"
+    description: "Organizational departments"
+    
+    list:
+      request:
+        method: GET
+        path: "/departments"
+      
+      response:
+        items_path: "$.departments"
+      
+      map:
+        id: "$.id"
+        display_name: "$.name"
+        traits:
+          group:
+            profile:
+              department_code: "$.code"
+    
+    static_entitlements:
+      - id: "member"
+        display_name: "Member"
+        description: "Member of the department"
+        purpose: "assignment"
+        grantable_to:
+          - "employee"
+    
+    grants:
+      - request:
+          method: GET
+          path: "/departments/{{.ResourceID}}/members"
+        
+        response:
+          items_path: "$.members"
+        
+        map:
+          - principal_id: "$.employee_id"
+            principal_type: "employee"
+            entitlement_id: "member"
+```
+
+### Example: SaaS application with OAuth2
+
+```yaml expandable
+app_name: Custom SaaS App
+
+connect:
+  base_url: "https://api.saasapp.com/v2"
+  auth:
+    type: "oauth2"
+    client_id: "${SAAS_CLIENT_ID}"
+    client_secret: "${SAAS_CLIENT_SECRET}"
+    token_url: "https://api.saasapp.com/oauth/token"
+    scopes:
+      - "users:read"
+      - "groups:read"
+      - "groups:write"
+
+resource_types:
+  user:
+    name: "User"
+    
+    list:
+      request:
+        method: GET
+        path: "/users"
+      
+      response:
+        items_path: "$.results"
+        pagination:
+          type: "cursor"
+          cursor_path: "$.paging.next_cursor"
+          cursor_param: "cursor"
+      
+      map:
+        id: "$.id"
+        display_name: "$.full_name"
+        traits:
+          user:
+            emails:
+              - "$.email"
+            status: "$.is_active ? 'enabled' : 'disabled'"
+
+  team:
+    name: "Team"
+    
+    list:
+      request:
+        method: GET
+        path: "/teams"
+      
+      response:
+        items_path: "$.teams"
+      
+      map:
+        id: "$.id"
+        display_name: "$.name"
+        traits:
+          group:
+            profile:
+              team_type: "$.type"
+    
+    static_entitlements:
+      - id: "member"
+        display_name: "Team Member"
+        purpose: "assignment"
+        grantable_to:
+          - "user"
+      
+      - id: "admin"
+        display_name: "Team Admin"
+        purpose: "permission"
+        grantable_to:
+          - "user"
+    
+    grants:
+      - request:
+          method: GET
+          path: "/teams/{{.ResourceID}}/memberships"
+        
+        response:
+          items_path: "$.memberships"
+        
+        map:
+          - principal_id: "$.user_id"
+            principal_type: "user"
+            entitlement_id: "$.role == 'admin' ? 'admin' : 'member'"
+    
+    provisioning:
+      grant:
+        - when: "{{.EntitlementID}} == 'member'"
+          request:
+            method: POST
+            path: "/teams/{{.ResourceID}}/memberships"
+            body:
+              user_id: "{{.PrincipalID}}"
+              role: "member"
+        
+        - when: "{{.EntitlementID}} == 'admin'"
+          request:
+            method: POST
+            path: "/teams/{{.ResourceID}}/memberships"
+            body:
+              user_id: "{{.PrincipalID}}"
+              role: "admin"
+      
+      revoke:
+        request:
+          method: DELETE
+          path: "/teams/{{.ResourceID}}/memberships/{{.PrincipalID}}"
+```
+
+## Troubleshooting
+
+### Authentication errors
+
+If you receive 401 or 403 errors:
+
+- Verify your API credentials are correct
+- Check that your token hasn't expired
+- Ensure the API user has sufficient permissions
+- For OAuth2, verify the token URL and scopes are correct
+
+### Pagination issues
+
+If the connector isn't syncing all resources:
+
+- Check the pagination configuration matches your API's behavior
+- Verify the `items_path` correctly points to the array of items
+- For cursor pagination, ensure the cursor path is correct
+
+### Mapping errors
+
+If resources aren't mapping correctly:
+
+- Validate your JSONPath expressions against sample API responses
+- Check for null values that might cause mapping failures
+- Use the `--log-level debug` flag to see detailed mapping information
+
+Learn more about [deploying self-hosted connectors](/baton/deploy) in our docs.
