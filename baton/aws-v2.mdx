@@ -30,10 +30,6 @@ The AWS connector supports [automatic account provisioning and deprovisioning](/
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
 
-### Known limitations
-
-- Cross-account Assume Role is not currently supported
-
 ## Gather AWS credentials
 
 Configuring the connector requires you to pass in credentials generated in AWS. Gather these credentials before you move on.
@@ -71,27 +67,50 @@ This custom role acts as a bridge, allowing ConductorOne to securely access your
     Navigate to the [IAM Dashboard](https://us-east-1.console.aws.amazon.com/iamv2/home?) and select **Roles** > **Create Role**.
     </Step>
     <Step>
-    Select **Custom Trust Policy** and paste the following into the Trust Policy JSON editor, replacing `{ROOT_ID}` with the root ID from the main account, `ConductorOneService` with the role name from the root account, and `EXTERNAL_ID_FROM_C1_INTEGRATIONS_PAGE` with the External ID from ConductorOne.
+    Select **Custom Trust Policy** and paste the following into the Trust Policy JSON editor:
 
     ```json
     {
-    "Version": "2012-10-17",
-    "Statement": [
+      "Version": "2012-10-17",
+      "Statement": [
         {
-        "Sid": "Statement1",
-        "Effect": "Allow",
-        "Principal": {
-            "AWS": "arn:aws:iam::{ROOT_ID}:role/ConductorOneService"
+          // The minimum permissions required for the connector to sync. This will sync IAM Users, Groups, and Roles
+          "Sid": "MinimumRequiredPermissionsSyncIAMUsersGroupsRoles",
+          "Effect": "Allow",
+          "Action": [
+            "iam:ListUsers",
+            "iam:ListGroups",
+            "iam:ListRoles",
+            "iam:GetGroup",
+            "iam:GetRole",
+            // The following two permissions are only needed if you want ConductorOne to sync access key secret data
+            "iam:ListAccessKeys",
+            "iam:GetAccessKeyLastUsed"
+          ],
+          "Resource": "*"
         },
-        "Action": "sts:AssumeRole"
+        {
+          // Optional: Include this statement if you enable "Enable support for AWS Organizations" checkbox in the ConductorOn e UI
+          "Sid": "OrganizationsSupport",
+          "Effect": "Allow",
+          "Action": [
+            "organizations:ListAccounts",
+            "organizations:DescribeOrganization"
+          ],
+          "Resource": "*"
+        },
+        {
+          // Optional: Include this statement if you want to use account aliases instead of numeric IDs
+          "Sid": "UseMoreDescriptiveAccountAliases",
+          "Effect": "Allow",
+          "Action": [
+            "iam:ListAccountAliases"
+          ],
+          "Resource": "*"
         }
-    ]
+      ]
     }
     ```
-
-	**Notes on the Trust Policy:**
-	**"Action": "sts:AssumeRole"**: This is the core permission. It's the only action allowed by this policy, and it specifically allows the ConductorOne role in your root account to temporarily assume this role in the child account. Think of it like a temporary key that only the main account can use.
-	**"Principal": "arn:aws:iam::`{ROOT\_ID}`:role/ConductorOneService"**: This is the trusted entity. It specifies that only the ConductorOne role in your main root account is allowed to assume this role. This ensures that no other account can use this trust policy.
     </Step>
     <Step>
     Click **Next**.
