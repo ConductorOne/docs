@@ -1,0 +1,301 @@
+---
+title: Configure automation actions
+og:title: Configure automation actions - ConductorOne docs
+og:description: Automation actions let you safely expose powerful automations to business users and agents without giving them standing admin access.
+description: Automation actions let you safely expose powerful automations to business users and agents without giving them standing admin access.
+sidebarTitle: Automation actions
+---
+{/* Editor Refresh: 2026-01-19 */}
+
+<Tip>
+**Early access:** 
+
+This new feature is in early access while we gather feedback and fine-tune its details. Let us know if you're eager to give it a try!
+</Tip>
+
+Automation actions are requestable automations that run on demand, under policy control, with full auditability. They let you safely expose powerful automations to business users without giving them standing admin access.
+
+## What are automation actions?
+
+An automation action is a ConductorOne automation that you make requestable:
+
+- It is triggered by a user instead of a cron or detection event.
+- It is governed by an approval policy.
+- It can collect structured inputs from the requester via a form.
+- It runs using pre-defined steps and connectors, with full logging.
+
+Automation actions are designed for operations that go beyond normal access requests, such as:
+
+- Creating or modifying resources (for example, AD groups, GitHub repos).
+- Executing operational workflows (for example, device requests, timecard punch-ins).
+- Running just-in-time privileged tasks without handing out credentials.
+
+## Key capabilities
+
+### Make automations requestable
+
+You can flag an existing automation as requestable to convert it from cron/detection/manual-admin-only to an on-demand action that any allowed user can trigger. This removes IT as a manual bottleneck for repetitive workflows while keeping approval and audit in place.
+
+### Audience-scoped visibility and access
+
+Automation actions are visible and requestable only to the audience you define. You choose which users or groups can see and request each action. Others do not see it in the Actions catalog. This reduces blast radius and enforces least privilege at the workflow level.
+
+### Custom request forms
+
+Every automation action can have an attached form that collects structured inputs from requesters. At launch, supported field types include:
+
+- Single-line text
+- Multi-line text
+- Dropdown
+- Checkbox
+
+This ensures you have the context and parameters needed to run the workflow without follow-up tickets, and improves evidence quality for audits and downstream reviews.
+
+### Policy-driven approvals
+
+Execution of an automation action is governed by policy. The automation only executes after the policy is satisfied. This keeps humans in the loop for high-risk workflows while allowing low-risk flows to proceed automatically, and provides a consistent control layer across different systems and use cases.
+
+### End-to-end audit logging
+
+Every request and execution is tracked. ConductorOne records the requester, inputs, approvals, and downstream automation steps as a task, giving you a single place to answer "who did what, when, and why" across complex workflows.
+
+## How it works
+
+### Roles and personas
+
+- **End users / business users**: Discover and request actions from the Actions catalog or from the request entry points in the UI.
+- **Admins / IT / security teams**: Design automations, configure requestability, define forms, and attach policies.
+- **Approvers**: Approve or deny requests as tasks assigned to them (for example, app owners, managers, security reviewers).
+
+### End-to-end flow
+
+1. **Admin designs an automation**  
+   Uses automation steps (for example, "Create AD group," "Send Slack message," "Create ticket") to define the workflow and associates the automation with one or more connectors.
+
+2. **Admin enables requestability**  
+   Chooses to make the automation requestable (cannot also have a cron or detection trigger attached) and assigns a display name that appears to end users in the Actions catalog.
+
+3. **Admin attaches a form and policy**  
+   Creates or selects a form that collects required inputs, configures a policy that determines who must approve the request, and defines the audience.
+
+4. **User requests an action**  
+   Navigates to **Access** > **Browse** > **Actions** or uses the request entry point in the navigation, sees only the actions that their audience membership allows, selects an action, completes the form, and submits.
+
+5. **Task and approvals**  
+   ConductorOne creates a task representing the request. If auto-approved, the task moves directly into execution. If approval is required, approvers receive tasks and must approve or deny.
+
+6. **Automation execution**  
+   Once approved, the automation runs using the form inputs and requester context as variables in steps. Connected systems are updated accordingly and the task records each step's outcome.
+
+7. **Completion and visibility**  
+   The requester sees that the action was completed or failed. Admins and auditors can review the full history, including inputs, approvals, and execution logs.
+
+## Configure an automation action
+
+<Warning>
+A user with the **Super Admin** role in ConductorOne must complete this task. 
+</Warning>
+
+### Plan the use case
+
+Before you configure anything, clarify:
+
+- **Outcome**: What real-world operation are you trying to enable? (Example: "Allow shift workers to log timecard punch-ins" or "Allow employees to request a new laptop.")
+- **Risk level**: Is this high-risk (for example, production access), medium, or low (for example, basic device request)?
+- **Audience**: Who should be able to request this? Everyone? A specific team? Only app owners?
+- **Approvers**: Who should be in the approval path, if any?
+
+This drives form design, policy configuration, and audience scoping.
+
+### Build or select the base automation
+
+<Steps>
+<Step>
+Go to **Admin** > **Automations**.
+</Step>
+<Step>
+Create a new automation or select an existing one.
+</Step>
+<Step>
+Add steps that implement the operation:
+
+- Resource operations (for example, create group, modify group).
+- Notifications (for example, Slack messages).
+- Ticket creation or updates.
+</Step>
+<Step>
+Make sure the required connectors are configured and authorized:
+
+- Directory services (for example, AD) for group operations.
+- Collaboration tools (for example, Slack) for notifications.
+- ITSM tools for ticketing if used.
+</Step>
+</Steps>
+
+<Warning>
+An automation cannot be both cron/detection-triggered and requestable. If you need both, create a second automation that calls the core logic (for example, via a "run automation" step) and make only one of them requestable.
+</Warning>
+
+### Configure self-service
+
+<Steps>
+<Step>
+Open the automation.
+</Step>
+<Step>
+Ensure it does not have a trigger attached.
+</Step>
+<Step>
+Mark it as **requestable**.
+</Step>
+<Step>
+Set a clear **Request display name**. This is what end users see in the Actions catalog.
+
+Prefer action-oriented names such as:
+- "Request new laptop"
+- "Create product team AD group"
+- "Punch in for shift"
+</Step>
+</Steps>
+
+### Design the form
+
+<Steps>
+<Step>
+Create a new form or attach an existing one.
+</Step>
+<Step>
+Use available field types:
+
+- Text / multi-line text for justifications and notes.
+- Dropdown for constrained choices (for example, device types, locations).
+- Checkbox for affirmations (for example, "I confirm this is for a production incident").
+</Step>
+<Step>
+Map form fields to automation variables:
+
+- Reference form inputs (for example, `${form.device_type}`) in steps and messages.
+- Use them to drive branching or to populate ticket fields and messages.
+</Step>
+</Steps>
+
+<Tip>
+Avoid collecting data ConductorOne already has. Requester identity (ID, email, name) is always available and does not need to be requested again.
+</Tip>
+
+### Configure approval policy
+
+<Steps>
+<Step>
+Attach or create a policy that governs the action:
+
+- Auto-approve low-risk, reversible operations.
+- Require manager or app owner approval for operations that create or change access.
+- Consider multi-stage policies for high-risk actions (for example, manager plus security).
+</Step>
+<Step>
+Decide whether the requester can see policy details or just the fact that approval is required.
+</Step>
+<Step>
+Verify how the policy behaves for:
+
+- Offboarding or transfers (for example, when a manager changes).
+- Cross-team scenarios (for example, one team requesting changes in another team's app).
+</Step>
+</Steps>
+
+### Scope the audience
+
+<Steps>
+<Step>
+Define who can **see** and **request** the action:
+
+- Entire organization for low-risk, common tasks.
+- Scoped groups or teams for sensitive operations.
+</Step>
+<Step>
+Use existing entitlements or groups where possible to align with your current RBAC model.
+</Step>
+</Steps>
+
+<Warning>
+Users who are not in the action's audience will not see it in the Actions catalog at all. This is expected and part of the security model.
+</Warning>
+
+### Test end-to-end
+
+Before announcing an automation action:
+
+<Steps>
+<Step>
+Run test requests as:
+
+- An end user in the intended audience.
+- An approver.
+</Step>
+<Step>
+Validate:
+
+- Form behavior and field labels.
+- Policy routing and notifications.
+- Automation step execution and downstream effects.
+- Task visibility and logs.
+</Step>
+<Step>
+Confirm that error states are understandable (for example, connector misconfiguration, missing downstream resource, or webhook failures).
+</Step>
+</Steps>
+
+## Best practices
+
+### When to use automation actions
+
+Use automation actions when:
+
+- The operation is performed repeatedly and currently drives tickets (for example, provisioning resources, device requests).
+- You want to remove shared admin credentials or ad-hoc scripts and replace them with policy-controlled workflows.
+- You need reliable evidence for auditors about specific operations, not just entitlements.
+- You want to empower non-IT users to perform controlled changes.
+
+### Common patterns that work well
+
+- **Just-in-time operations on shared infrastructure**  
+  Example: On-demand creation of project-scoped groups or repos with approval from an app owner.
+
+- **Operational workflows that are not pure "access"**  
+  Example: Timecard punch-ins, device requests, environment freezes, or operational toggles.
+
+- **Scoped admin-like actions for app owners**  
+  Example: Allowing app owners to manage groups or entitlements in their own application without directory-wide admin rights.
+
+## Example: Device request workflow
+
+**Goal:** Let any employee request a new laptop through ConductorOne, with IT approval and Slack notification.
+
+### Automation
+
+Steps:
+- Create or update a ticket in your ITSM system.
+- Send a Slack message to an "IT-devices" channel with requester and device details.
+
+### Form
+
+Fields:
+- Dropdown: "Device type" (for example, Laptop, Monitor, Dock).
+- Multi-line text: "Reason for request."
+- Checkbox: "I confirm this device is for business use."
+
+### Policy
+
+- Approver: IT lead (for example, head of IT).
+- Behavior: All employees can request, but nothing runs until IT approves.
+
+### User experience
+
+- User goes to **Access** > **Browse** > **Actions** and selects **"Request new device."**
+- Fills out the form and submits.
+- A task is created, routed to IT for approval, and then the automation executes to create a ticket and notify Slack.
+
+### Governance outcome
+
+Device provisioning is consistent, auditable, and policy-controlled. No need for separate ticket forms or ad-hoc emails.
