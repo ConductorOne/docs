@@ -1,0 +1,308 @@
+---
+title: "Caching recipes"
+sidebarTitle: "Caching recipes"
+description: "Battle-tested patterns for caching data across resource types, with critical anti-patterns to avoid."
+---
+
+Each recipe includes the problem, solution code, and rationale.
+
+## When to cache
+
+**Problem:** You need data from one resource type when processing another (e.g., resolving user IDs to emails when emitting grants).
+
+**When caching helps:**
+
+| Scenario | Cache? | Why |
+|----------|--------|-----|
+| Grants() needs user details from List() | Yes | Avoids N+1 API calls |
+| Entitlements() needs role definitions | Yes | Role metadata is stable |
+| List() needs parent context | Maybe | Often passed via parentID |
+| Any data across sync runs | No | Stale data causes drift |
+
+**When NOT to cache:**
+- Across sync runs (connector restarts clear caches anyway)
+- Large datasets that don't fit in memory
+- Data that changes frequently during sync
+
+## Thread-safe caching with sync.Map
+
+**Problem:** Cache data that's populated in one method and read in another, possibly concurrently.
+
+**Solution:**
+
+```go
+// pkg/connector/connector.go
+type Connector struct {
+    client *client.Client
+
+    // Thread-safe caches
+    userCache  sync.Map // map[userID]User
+    groupCache sync.Map // map[groupID]Group
+}
+
+// Populate cache during List()
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, next, err := u.client.ListUsers(ctx, pToken.Token)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    var resources []*v2.Resource
+    for _, user := range users {
+        // Cache for later lookup
+        u.connector.userCache.Store(user.ID, user)
+
+        r, _ := resource.NewUserResource(user.Name, userResourceType, user.ID,
+            resource.WithEmail(user.Email, true))
+        resources = append(resources, r)
+    }
+
+    return resources, next, nil, nil
+}
+
+// Use cache during Grants()
+func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource,
+    pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+
+    memberIDs, next, err := g.client.GetGroupMemberIDs(ctx, resource.Id.Resource)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    var grants []*v2.Grant
+    for _, memberID := range memberIDs {
+        // Look up cached user
+        if cached, ok := g.connector.userCache.Load(memberID); ok {
+            user := cached.(User)
+            gr := grant.NewGrant(resource, "member",
+                &v2.ResourceId{ResourceType: "user", Resource: memberID})
+            grants = append(grants, gr)
+        }
+    }
+
+    return grants, next, nil, nil
+}
+```
+
+**Why:** `sync.Map` is safe for concurrent reads and writes. The SDK may call different builders concurrently.
+
+## Cross-resource lookups
+
+**Problem:** When emitting grants, you have member IDs but need to determine if they're users or groups.
+
+**Solution:**
+
+```go
+type Connector struct {
+    client *client.Client
+
+    // Track which IDs are which type
+    knownUsers  sync.Map // map[id]bool
+    knownGroups sync.Map // map[id]bool
+}
+
+// In user List(), mark IDs as users
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, next, err := u.client.ListUsers(ctx, pToken.Token)
+    for _, user := range users {
+        u.connector.knownUsers.Store(user.ID, true)
+        // ...
+    }
+    return resources, next, nil, nil
+}
+
+// In Grants(), determine principal type
+func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource,
+    pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+
+    members, next, err := g.client.GetGroupMembers(ctx, resource.Id.Resource)
+
+    var grants []*v2.Grant
+    for _, member := range members {
+        principalType := g.resolvePrincipalType(member.ID)
+        gr := grant.NewGrant(resource, "member",
+            &v2.ResourceId{ResourceType: principalType, Resource: member.ID})
+        grants = append(grants, gr)
+    }
+
+    return grants, next, nil, nil
+}
+
+func (c *Connector) resolvePrincipalType(id string) string {
+    if _, ok := c.knownUsers.Load(id); ok {
+        return "user"
+    }
+    if _, ok := c.knownGroups.Load(id); ok {
+        return "group"
+    }
+    return "user" // Default
+}
+```
+
+**Why:** Many APIs return member IDs without type information. Caching during List() avoids expensive lookups during Grants().
+
+## Cache warming order
+
+**Problem:** Grants() runs before the cache is populated.
+
+**Solution:** The SDK processes resource types in the order they're registered. Register types that populate caches first:
+
+```go
+func (c *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
+    return []connectorbuilder.ResourceSyncer{
+        // Users first - populates userCache
+        newUserBuilder(c),
+        // Groups second - populates groupCache
+        newGroupBuilder(c),
+        // Roles last - can use both caches in Grants()
+        newRoleBuilder(c),
+    }
+}
+```
+
+**Why:** SDK processes syncers in order. If roles need user lookups, users must be synced first.
+
+## Anti-pattern: package-level caches
+
+<Warning>
+**This is a critical anti-pattern.** Package-level `sync.Map` variables persist state across sync runs in daemon mode, causing data corruption and phantom grants.
+</Warning>
+
+**Real example found in production connectors:**
+
+```go
+// pkg/connector/helper.go - ANTI-PATTERN (do not copy)
+var userCache sync.Map  // Package-level - persists across syncs!
+
+func lookupUser(id string) (*User, bool) {
+    if cached, ok := userCache.Load(id); ok {
+        return cached.(*User), true
+    }
+    return nil, false
+}
+```
+
+**What goes wrong:**
+
+1. Sync 1 runs, populates cache with users A, B, C
+2. User B is deleted from the target system
+3. Sync 2 runs in daemon mode (same process)
+4. Cache still contains user B
+5. Grants referencing user B appear valid but point to deleted user
+6. Access reviews show phantom access that doesn't exist
+
+**Correct pattern - struct-scoped cache:**
+
+```go
+// pkg/connector/connector.go - CORRECT
+type Connector struct {
+    client    *client.Client
+    userCache sync.Map  // Struct field - fresh per connector instance
+}
+
+// Each sync creates new Connector instance with empty cache
+func New(ctx context.Context, client *client.Client) *Connector {
+    return &Connector{
+        client:    client,
+        userCache: sync.Map{},  // Fresh cache
+    }
+}
+```
+
+**How to verify your connector:**
+
+```bash
+# Search for package-level sync.Map declarations
+grep -r "^var.*sync\.Map" pkg/
+```
+
+If you find any, refactor them to struct fields.
+
+## Cache lifetime in daemon mode
+
+**Problem:** In daemon mode, the connector runs continuously processing multiple syncs. Caches need explicit lifetime management.
+
+**Runtime modes:**
+
+| Mode | Cache lifetime | Risk |
+|------|----------------|------|
+| **One-shot (CLI)** | Process lifetime | Low - process exits after sync |
+| **Daemon mode** | Must be managed | High - stale data persists across syncs |
+
+**Solution:** Clear or recreate caches at sync boundaries:
+
+```go
+type Connector struct {
+    client    *client.Client
+    userCache sync.Map
+
+    // Track when cache was populated
+    cachePopulatedAt time.Time
+}
+
+// Called at start of each sync cycle
+func (c *Connector) PrepareForSync(ctx context.Context) error {
+    // Clear caches from previous sync
+    c.userCache = sync.Map{}
+    c.cachePopulatedAt = time.Time{}
+    return nil
+}
+```
+
+**Cache lifetime expectations:**
+
+| Scenario | Expected behavior |
+|----------|-------------------|
+| CLI one-shot | Cache lives for single sync, then process exits |
+| Daemon between syncs | Cache should be cleared before each new sync |
+| Daemon during sync | Cache valid for duration of single sync cycle |
+| Long-running sync (>5 min) | Consider time-based invalidation |
+
+## Memory-bounded caching
+
+**Problem:** Caching all users exhausts memory in large organizations.
+
+**Solution:** For very large datasets, use LRU cache or skip caching entirely:
+
+```go
+import "github.com/hashicorp/golang-lru/v2"
+
+type Connector struct {
+    // LRU cache with max size
+    userCache *lru.Cache[string, User]
+}
+
+func New(ctx context.Context) (*Connector, error) {
+    cache, err := lru.New[string, User](10000) // Max 10k entries
+    if err != nil {
+        return nil, err
+    }
+    return &Connector{userCache: cache}, nil
+}
+```
+
+**Alternative:** For truly large datasets, accept the N+1 lookup cost or batch lookups:
+
+```go
+// Batch lookup instead of caching everything
+func (c *Connector) lookupUsers(ctx context.Context, ids []string) (map[string]User, error) {
+    return c.client.GetUsersByIDs(ctx, ids)  // Single API call for batch
+}
+```
+
+**Why:** Memory is finite. A connector that OOMs is worse than one that makes extra API calls.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Auth recipes" icon="key" href="/developer/recipes-auth">
+    Authentication patterns
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/baton/deploy">
+    Run your connector in production
+  </Card>
+</CardGroup>

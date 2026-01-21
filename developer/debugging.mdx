@@ -1,0 +1,363 @@
+---
+title: "Troubleshooting"
+sidebarTitle: "Debugging"
+description: "Debug common connector issues: auth failures, pagination loops, empty syncs, performance problems."
+---
+
+Something broke? Start here. Most connector issues fall into recognizable patterns.
+
+## Debugging workflow
+
+When a connector fails, follow this diagnostic sequence:
+
+1. **Check logs** - What error message?
+2. **Inspect output** - Did sync produce a .c1z file?
+3. **Verify config** - Are credentials valid?
+4. **Test API access** - Can you hit the target API directly?
+5. **Isolate the issue** - Which resource type fails?
+
+### Enable debug logging
+
+```bash
+./baton-yourservice --log-level debug --log-format json
+```
+
+Log levels: `debug`, `info`, `warn`, `error`
+
+### Inspect sync output
+
+Use the `baton` CLI to inspect what was synced:
+
+```bash
+baton resources -f sync.c1z    # List all resources
+baton grants -f sync.c1z       # List grants
+baton entitlements -f sync.c1z # List entitlements
+baton stats -f sync.c1z        # Get stats
+```
+
+## Common errors
+
+### Pagination loop detected
+
+**Error:** `next page token is the same as the current page token`
+
+**Cause:** Your `List()`, `Entitlements()`, or `Grants()` method returned the same pagination token it received.
+
+```go
+// BAD - Returns same token, causes infinite loop
+func (u *userBuilder) List(ctx context.Context, parentID *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, err := u.client.GetUsers(ctx)
+    return resources, pToken.Token, nil, nil  // WRONG - returning input token
+}
+
+// GOOD - Returns next page token from API, or empty when done
+func (u *userBuilder) List(ctx context.Context, parentID *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, nextPage, err := u.client.GetUsers(ctx, pToken.Token)
+    return resources, nextPage, nil, nil  // CORRECT
+}
+```
+
+The SDK detects this and returns an error to prevent infinite loops.
+
+### Authentication failed
+
+**Error:** `401 Unauthorized` or `403 Forbidden`
+
+**Causes:**
+- Invalid or expired credentials
+- Missing required scopes/permissions
+- Wrong API endpoint
+
+**Diagnostic steps:**
+
+```bash
+# Test credentials directly
+curl -H "Authorization: Bearer $TOKEN" https://api.example.com/v1/users
+
+# Check token expiration (for JWT tokens, decode and check 'exp' claim)
+
+# Verify required scopes in target API documentation
+```
+
+| Issue | Fix |
+|-------|-----|
+| Expired token | Refresh or regenerate credentials |
+| Missing scope | Request additional API permissions |
+| Wrong endpoint | Check `--base-url` or environment config |
+
+### Rate limited
+
+**Error:** `429 Too Many Requests` or slow sync performance
+
+**Solutions:**
+
+1. **Reduce page size** (more pages, smaller requests):
+   ```go
+   users, next, err := client.ListUsers(ctx, pageSize: 100)
+   ```
+
+2. **The SDK handles backoff automatically** via `uhttp`:
+   ```go
+   httpClient, _ := uhttp.NewBaseHttpClient(ctx)
+   // Automatic exponential backoff on 429
+   ```
+
+3. **Add explicit delays** if needed:
+   ```go
+   time.Sleep(time.Second) // Between API calls
+   ```
+
+### Resource type mismatch
+
+**Error:** Grants reference principals that don't exist
+
+**Cause:** The `ResourceId` in a grant doesn't match any synced resource.
+
+```go
+// BAD - Type ID doesn't match
+g := grant.NewGrant(resource, "member",
+    &v2.ResourceId{ResourceType: "User", Resource: member.ID})  // "User" vs "user"
+
+// GOOD - Type ID matches exactly
+g := grant.NewGrant(resource, "member",
+    &v2.ResourceId{ResourceType: "user", Resource: member.ID})  // Matches userBuilder
+```
+
+**Debug:**
+```bash
+baton resources -f sync.c1z | grep -i "resource_type"
+baton grants -f sync.c1z | grep "principal"
+```
+
+### Empty sync results
+
+**Error:** Sync completes but produces no resources
+
+**Causes:**
+- API returns empty results (permissions issue)
+- Pagination starts past end of data
+- Filter too restrictive
+
+```bash
+baton stats -f sync.c1z
+./baton-yourservice --log-level debug 2>&1 | grep -i "response\|count"
+```
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| 0 users | Missing read permission | Check API credentials scope |
+| 0 grants | No memberships exist | Verify data exists in target system |
+| Partial data | Pagination bug | Check token handling |
+
+### Connection refused
+
+**Error:** `connection refused` or `no such host`
+
+```bash
+curl -v https://api.example.com/health  # Test connectivity
+nslookup api.example.com                # Check DNS
+./baton-yourservice --base-url https://internal.example.com
+```
+
+### TLS certificate errors
+
+**Error:** `x509: certificate signed by unknown authority`
+
+**For testing only** - skip TLS verification:
+```bash
+./baton-yourservice --insecure-skip-verify
+```
+
+<Warning>
+Never use `--insecure-skip-verify` in production.
+</Warning>
+
+**For production** - add the CA certificate:
+```bash
+export SSL_CERT_FILE=/path/to/ca-bundle.crt
+```
+
+## Performance issues
+
+### Slow sync
+
+| Cause | Diagnosis | Fix |
+|-------|-----------|-----|
+| Too many API calls | Debug logs show thousands of requests | Batch where possible |
+| No pagination | Single huge request | Implement proper paging |
+| N+1 queries | Fetching details one-by-one | Use bulk endpoints |
+| Rate limiting | 429 errors in logs | Reduce page size |
+
+```go
+// BAD - N+1 pattern (one API call per user)
+for _, user := range users {
+    details, _ := client.GetUserDetails(ctx, user.ID)
+}
+
+// GOOD - Bulk fetch
+details, _ := client.GetUsersWithDetails(ctx, userIDs)
+```
+
+### Memory issues
+
+| Cause | Fix |
+|-------|-----|
+| Loading all data in memory | Use pagination, stream processing |
+| Large responses not garbage collected | Process in batches |
+| Caching too much | Limit cache size, use LRU |
+
+## Daemon mode issues
+
+### Task polling failures
+
+**Error:** `failed to poll for tasks` or `authentication error`
+
+```bash
+./baton-yourservice \
+    --client-id $CLIENT_ID \
+    --client-secret $CLIENT_SECRET \
+    --log-level debug
+```
+
+### Connector not receiving tasks
+
+**Symptoms:** Daemon runs but never processes anything
+
+Check:
+- Connector registered in ConductorOne admin UI
+- Sync scheduled
+- Correct connector ID
+
+## Provisioning issues
+
+### Grant/revoke failures
+
+**Error:** `error: provisioner not found for resource type`
+
+**Cause:** Declared provisioning capability but didn't implement the interface.
+
+```go
+// Implement ResourceProvisionerV2 interface
+func (g *groupBuilder) Grant(ctx context.Context,
+    principal *v2.Resource, entitlement *v2.Entitlement) (
+    []*v2.Grant, annotations.Annotations, error) {
+    // Implementation
+}
+
+func (g *groupBuilder) Revoke(ctx context.Context,
+    grant *v2.Grant) (annotations.Annotations, error) {
+    // Implementation
+}
+```
+
+Verify capabilities:
+```bash
+./baton-yourservice capabilities | jq '.resourceTypeCapabilities[] | select(.capabilities | contains(["CAPABILITY_PROVISION"]))'
+```
+
+## Duplicate objects after sync
+
+### Symptom
+
+After running a sync, you see duplicate resources in ConductorOne: one created via Terraform/API and a separate one discovered by the connector.
+
+### Causes
+
+1. **RawId not set** - Connector doesn't include the `RawId` annotation
+2. **ID format mismatch** - Connector uses a different ID format than expected
+3. **match_baton_id value incorrect** - Terraform resource has wrong ID value
+4. **Case sensitivity** - IDs may be case-sensitive
+
+### Resolution
+
+**Step 1:** Verify the connector outputs RawId annotation:
+
+```bash
+./baton-yourservice --log-level debug 2>&1 | grep -i rawid
+```
+
+**Step 2:** Check what ID the connector uses:
+
+| Connector | ID Field | Example |
+|-----------|----------|---------|
+| Okta | `app.Id` | `0oa1xyz789abcdef0h7` |
+| Azure AD | Object ID | `12345678-1234-...` |
+| GCP | Resource path | `projects/my-project` |
+| AWS | Full ARN | `arn:aws:iam::123...` |
+
+**Step 3:** Update Terraform to use the exact match:
+
+```hcl
+resource "conductorone_app" "example" {
+  display_name   = "My App"
+  match_baton_id = "0oa1xyz789abcdef0h7"  # Exact value from connector
+}
+```
+
+**Step 4:** Delete duplicate and re-sync.
+
+## Diagnostic commands
+
+```bash
+# Quick health check
+make build && ./dist/*/baton-yourservice \
+    --log-level debug \
+    --log-format json \
+    2>&1 | head -100
+
+# Inspect .c1z file
+baton stats -f sync.c1z
+baton resources -f sync.c1z --resource-type user
+baton resources -f sync.c1z --output-format json > resources.json
+
+# Compare syncs
+./baton-yourservice && mv sync.c1z sync1.c1z
+./baton-yourservice && mv sync.c1z sync2.c1z
+baton stats -f sync1.c1z
+baton stats -f sync2.c1z
+```
+
+## Getting help
+
+If you've tried these steps and still have issues:
+
+1. **Search existing issues** on the connector's GitHub repo
+2. **Check SDK issues** at [baton-sdk issues](https://github.com/ConductorOne/baton-sdk/issues)
+3. **Open a new issue** with:
+   - Connector name and version
+   - Error message (full text)
+   - Debug logs (sanitized of credentials)
+   - Steps to reproduce
+
+## Quick reference
+
+### Debug flags
+
+| Flag | Purpose |
+|------|---------|
+| `--log-level debug` | Verbose logging |
+| `--log-format json` | Structured logs for parsing |
+| `--insecure-skip-verify` | Skip TLS verification (testing only) |
+| `--base-url` | Override API endpoint |
+
+### Diagnostic tools
+
+| Tool | Command | Purpose |
+|------|---------|---------|
+| baton | `baton resources -f sync.c1z` | Inspect sync output |
+| baton | `baton stats -f sync.c1z` | Summary statistics |
+| curl | `curl -v $API_URL` | Test API connectivity |
+| jq | `cat sync.json \| jq '.'` | Parse JSON output |
+
+<CardGroup cols={2}>
+  <Card title="Error codes" icon="circle-exclamation" href="/developer/error-codes">
+    Error code reference
+  </Card>
+  <Card title="SDK reference" icon="book" href="/developer/sdk">
+    Full SDK API reference
+  </Card>
+</CardGroup>

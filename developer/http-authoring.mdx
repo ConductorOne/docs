@@ -1,0 +1,247 @@
+---
+title: "baton-http: REST API integration"
+sidebarTitle: "HTTP authoring"
+description: "Integrate any REST API without writing Go code. Configuration only."
+---
+
+Meta-connectors let you write YAML instead of Go code. Instead of implementing the `ResourceSyncer` interface, you describe how to map an API to ConductorOne's resource model. Your ops team can own integrations directly - no engineering queue.
+
+## When to use baton-http
+
+**Use baton-http when:**
+- The target system has a REST API
+- You need a quick integration without writing Go
+- The access model maps to user/group/resource patterns
+- You want non-developers to maintain the integration
+
+**Use a custom connector when:**
+- The API requires complex authentication (OAuth2 flows, Kerberos)
+- You need heavy data transformation or business logic
+- You need maximum performance optimization
+
+## Connection configuration
+
+```yaml
+version: "1"
+app_name: "My Integration"
+app_description: "Syncs users and groups from SaaS API"
+
+connect:
+  base_url: "https://api.example.com/v1"
+  auth:
+    type: "bearer"
+    token: "${API_KEY}"          # Environment variable
+  request_defaults:
+    headers:
+      Accept: "application/json"
+    query_params:
+      limit: "100"
+```
+
+**Supported authentication types:**
+- `bearer` - Bearer token in Authorization header
+- `api_key` - API key in custom header
+- `basic` - Basic authentication
+- `oauth2_client_credentials` - OAuth2 client credentials flow
+
+## Listing resources
+
+```yaml
+resource_types:
+  user:
+    name: "User"
+    list:
+      request:
+        url: "/users"
+        method: "GET"
+      response:
+        items_path: "data.users"      # JSONPath to array in response
+      pagination:
+        strategy: "offset"
+        limit_param: "limit"
+        offset_param: "offset"
+        page_size: 100
+      map:
+        id: ".id"
+        display_name: ".name"
+        traits:
+          user:
+            emails:
+              - ".email"
+            status: ".status"
+```
+
+## URL templates
+
+Use Go template syntax for dynamic URLs:
+
+```yaml
+grants:
+  - request:
+      url: "tmpl:/groups/{{.resource.id}}/members"
+```
+
+Available template variables:
+- `.resource` - Current resource being processed
+- `.principal` - User/entity for provisioning
+- `.item` - Current item in iteration
+
+## Pagination
+
+### Offset-based
+
+```yaml
+pagination:
+  strategy: "offset"
+  limit_param: "limit"
+  offset_param: "offset"
+  page_size: 100
+  total_path: "meta.total"    # Optional: path to total count
+```
+
+### Cursor-based
+
+```yaml
+pagination:
+  strategy: "cursor"
+  primary_key: "id"
+```
+
+## Entitlements and grants
+
+### Static entitlements
+
+Define fixed entitlements that don't require discovery:
+
+```yaml
+resource_types:
+  group:
+    static_entitlements:
+      - id: "member"
+        display_name: "'Member'"
+        purpose: "assignment"
+        grantable_to:
+          - "user"
+```
+
+### Grants discovery
+
+```yaml
+grants:
+  - request:
+      url: "tmpl:/roles/{{.resource.id}}/members"
+      method: "GET"
+    response:
+      items_path: "members"
+    map:
+      - principal_id: ".user_id"
+        principal_type: "user"
+        entitlement_id: "assigned"
+```
+
+## Complete example
+
+```yaml
+version: "1"
+app_name: "SaaS Application"
+app_description: "Syncs users from SaaS API"
+
+connect:
+  base_url: "https://api.example.com/v2"
+  auth:
+    type: "bearer"
+    token: "${API_KEY}"
+  request_defaults:
+    headers:
+      Accept: "application/json"
+
+resource_types:
+  user:
+    name: "User"
+
+    list:
+      request:
+        url: "/users"
+        method: "GET"
+      response:
+        items_path: "data"
+      pagination:
+        strategy: "offset"
+        limit_param: "per_page"
+        offset_param: "page"
+        page_size: 100
+      map:
+        id: ".id"
+        display_name: ".attributes.name"
+        traits:
+          user:
+            emails:
+              - ".attributes.email"
+            status: ".attributes.active ? 'enabled' : 'disabled'"
+
+  role:
+    name: "Role"
+
+    list:
+      request:
+        url: "/roles"
+        method: "GET"
+      response:
+        items_path: "roles"
+      map:
+        id: ".id"
+        display_name: ".name"
+
+    static_entitlements:
+      - id: "assigned"
+        display_name: "'Assigned'"
+        purpose: "assignment"
+        grantable_to:
+          - "user"
+
+    grants:
+      - request:
+          url: "tmpl:/roles/{{.resource.id}}/members"
+          method: "GET"
+        response:
+          items_path: "members"
+        map:
+          - principal_id: ".user_id"
+            principal_type: "user"
+            entitlement_id: "assigned"
+```
+
+## Running baton-http
+
+### Validate configuration
+
+```bash
+baton-http --config-path ./config.yaml --validate-config-only
+```
+
+### One-shot mode (local testing)
+
+```bash
+baton-http --config-path ./config.yaml -f sync.c1z
+baton resources -f sync.c1z
+baton grants -f sync.c1z
+```
+
+### Service mode (production)
+
+```bash
+baton-http --config-path ./config.yaml \
+  --client-id "$C1_CLIENT_ID" \
+  --client-secret "$C1_CLIENT_SECRET"
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="SQL authoring" icon="database" href="/developer/sql-authoring">
+    baton-sql for database integration
+  </Card>
+  <Card title="CEL expressions" icon="code" href="/developer/cel-expressions">
+    Data transformation with CEL
+  </Card>
+</CardGroup>

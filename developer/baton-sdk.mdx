@@ -1,0 +1,513 @@
+---
+title: "Baton SDK API reference"
+sidebarTitle: "Baton SDK"
+description: "Baton SDK interfaces, methods, and helper functions for connector development."
+---
+
+This reference documents the public APIs in `baton-sdk` that connector developers use. The SDK follows an inversion-of-control pattern: you implement interfaces, the SDK calls your methods.
+
+## Connector builder interfaces
+
+### Connectorbuilder (entry point)
+
+The main interface your connector must implement:
+
+```go
+type ConnectorBuilder interface {
+    MetadataProvider
+    ValidateProvider
+    ResourceSyncers(ctx context.Context) []ResourceSyncer
+}
+
+// V2 preferred - uses enhanced sync options
+type ConnectorBuilderV2 interface {
+    MetadataProvider
+    ValidateProvider
+    ResourceSyncers(ctx context.Context) []ResourceSyncerV2
+}
+```
+
+**Required sub-interfaces:**
+
+```go
+type MetadataProvider interface {
+    Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
+}
+
+type ValidateProvider interface {
+    Validate(ctx context.Context) (annotations.Annotations, error)
+}
+```
+
+**Usage:**
+
+```go
+func NewConnector(ctx context.Context, in interface{}, opts ...Opt) (types.ConnectorServer, error)
+
+// Options
+func WithTicketingEnabled() Opt
+func WithMetricsHandler(h metrics.Handler) Opt
+func WithSessionStore(ss sessions.SessionStore) Opt
+```
+
+### ResourceSyncer (core sync)
+
+The primary interface for syncing data:
+
+```go
+// V1 Interface (legacy)
+type ResourceSyncer interface {
+    ResourceType(ctx context.Context) *v2.ResourceType
+    List(ctx context.Context, parentResourceID *v2.ResourceId,
+         pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error)
+    Entitlements(ctx context.Context, resource *v2.Resource,
+                 pToken *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error)
+    Grants(ctx context.Context, resource *v2.Resource,
+           pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error)
+}
+
+// V2 Interface (preferred)
+type ResourceSyncerV2 interface {
+    ResourceType(ctx context.Context) *v2.ResourceType
+    List(ctx context.Context, parentResourceID *v2.ResourceId,
+         opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error)
+    Entitlements(ctx context.Context, resource *v2.Resource,
+                 opts resource.SyncOpAttrs) ([]*v2.Entitlement, *resource.SyncOpResults, error)
+    Grants(ctx context.Context, resource *v2.Resource,
+           opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error)
+}
+```
+
+**V2 Sync Types:**
+
+```go
+type SyncOpAttrs struct {
+    SyncID    string
+    PageToken string
+    Session   sessions.SessionStore
+}
+
+type SyncOpResults struct {
+    NextPageToken string
+    Annotations   annotations.Annotations
+}
+```
+
+**Key differences V1 vs V2:**
+- V2 receives `SyncOpAttrs` with session store for caching
+- V2 returns structured `SyncOpResults` instead of raw values
+- V2 is preferred for new connectors
+
+### ResourceTargetedSyncer (single resource fetch)
+
+Extension for fetching a single resource by ID:
+
+```go
+type ResourceTargetedSyncer interface {
+    ResourceSyncer
+    Get(ctx context.Context, resourceId *v2.ResourceId,
+        parentResourceId *v2.ResourceId) (*v2.Resource, annotations.Annotations, error)
+}
+```
+
+Enables `CAPABILITY_TARGETED_SYNC` for faster incremental updates.
+
+### ResourceProvisioner (grant/revoke)
+
+For connectors that can modify access:
+
+```go
+// V1 (legacy)
+type ResourceProvisioner interface {
+    ResourceSyncer
+    Grant(ctx context.Context, resource *v2.Resource,
+          entitlement *v2.Entitlement) (annotations.Annotations, error)
+    Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error)
+}
+
+// V2 (preferred) - Grant returns created grants
+type ResourceProvisionerV2 interface {
+    ResourceSyncer
+    Grant(ctx context.Context, resource *v2.Resource,
+          entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error)
+    Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error)
+}
+```
+
+**V2 advantage:** `Grant()` returns list of created grants, useful when one grant creates multiple assignments.
+
+Enables `CAPABILITY_PROVISION`.
+
+### AccountManager (user provisioning)
+
+For creating user accounts (JIT provisioning):
+
+```go
+type AccountManager interface {
+    ResourceSyncer
+    CreateAccount(ctx context.Context,
+        accountInfo *v2.AccountInfo,
+        credentialOptions *v2.LocalCredentialOptions,
+    ) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
+
+    CreateAccountCapabilityDetails(ctx context.Context,
+    ) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error)
+}
+
+type CreateAccountResponse interface {
+    proto.Message
+    GetIsCreateAccountResult() bool
+}
+```
+
+**Response types:**
+- `*v2.CreateAccountResponse_SuccessResult` - Account created successfully
+- `*v2.CreateAccountResponse_ActionRequiredResult` - User action needed
+
+Enables `CAPABILITY_ACCOUNT_PROVISIONING`.
+
+### ResourceManager (create/delete resources)
+
+For creating and deleting resources:
+
+```go
+// V1 (legacy)
+type ResourceManager interface {
+    ResourceSyncer
+    Create(ctx context.Context, resource *v2.Resource) (*v2.Resource, annotations.Annotations, error)
+    Delete(ctx context.Context, resourceId *v2.ResourceId) (annotations.Annotations, error)
+}
+
+// V2 (preferred) - Delete receives parent ID
+type ResourceManagerV2 interface {
+    ResourceSyncer
+    Create(ctx context.Context, resource *v2.Resource) (*v2.Resource, annotations.Annotations, error)
+    Delete(ctx context.Context, resourceId *v2.ResourceId,
+           parentResourceID *v2.ResourceId) (annotations.Annotations, error)
+}
+
+// Separate interfaces if you only need one operation
+type ResourceDeleter interface {
+    ResourceSyncer
+    Delete(ctx context.Context, resourceId *v2.ResourceId) (annotations.Annotations, error)
+}
+
+type ResourceDeleterV2 interface {
+    ResourceSyncer
+    Delete(ctx context.Context, resourceId *v2.ResourceId,
+           parentResourceID *v2.ResourceId) (annotations.Annotations, error)
+}
+```
+
+Enables `CAPABILITY_RESOURCE_CREATE` and `CAPABILITY_RESOURCE_DELETE`.
+
+### CredentialManager (credential rotation)
+
+For rotating credentials:
+
+```go
+type CredentialManager interface {
+    ResourceSyncer
+    Rotate(ctx context.Context,
+        resourceId *v2.ResourceId,
+        credentialOptions *v2.LocalCredentialOptions,
+    ) ([]*v2.PlaintextData, annotations.Annotations, error)
+
+    RotateCapabilityDetails(ctx context.Context,
+    ) (*v2.CredentialDetailsCredentialRotation, annotations.Annotations, error)
+}
+```
+
+Returns plaintext credentials; the SDK encrypts them before sending to ConductorOne.
+
+Enables `CAPABILITY_CREDENTIAL_ROTATION`.
+
+### CustomActionManager (custom actions)
+
+For connectors with custom operations:
+
+```go
+type CustomActionManager interface {
+    ListActionSchemas(ctx context.Context) ([]*v2.BatonActionSchema, annotations.Annotations, error)
+    GetActionSchema(ctx context.Context, name string) (*v2.BatonActionSchema, annotations.Annotations, error)
+    InvokeAction(ctx context.Context, name string, args *structpb.Struct,
+    ) (string, v2.BatonActionStatus, *structpb.Struct, annotations.Annotations, error)
+    GetActionStatus(ctx context.Context, id string,
+    ) (v2.BatonActionStatus, string, *structpb.Struct, annotations.Annotations, error)
+}
+```
+
+Enables `CAPABILITY_ACTIONS`.
+
+### EventFeed (real-time events)
+
+For streaming events from the target system:
+
+```go
+// V2 (preferred) - Multiple feeds
+type EventProviderV2 interface {
+    ConnectorBuilder
+    EventFeeds(ctx context.Context) []EventFeed
+}
+
+type EventFeed interface {
+    ListEvents(ctx context.Context, earliestEvent *timestamppb.Timestamp,
+               pToken *pagination.StreamToken,
+    ) ([]*v2.Event, *pagination.StreamState, annotations.Annotations, error)
+    EventFeedMetadata(ctx context.Context) *v2.EventFeedMetadata
+}
+```
+
+Enables `CAPABILITY_EVENT_FEED_V2`.
+
+## Type builders
+
+### Resource builder
+
+```go
+// Create resource type definition
+func NewResourceType(name string, requiredTraits []v2.ResourceType_Trait,
+                     msgs ...proto.Message) *v2.ResourceType
+
+// Create resource ID
+func NewResourceID(resourceType *v2.ResourceType, objectID interface{}) (*v2.ResourceId, error)
+
+// Create resource instance
+func NewResource(name string, resourceType *v2.ResourceType,
+                 objectID interface{}, resourceOptions ...ResourceOption) (*v2.Resource, error)
+```
+
+**Resource Options:**
+
+```go
+func WithAnnotation(msgs ...proto.Message) ResourceOption
+func WithExternalID(externalID *v2.ExternalId) ResourceOption
+func WithParentResourceID(parentResourceID *v2.ResourceId) ResourceOption
+func WithDescription(description string) ResourceOption
+func WithUserTrait(opts ...UserTraitOption) ResourceOption
+func WithGroupTrait(opts ...GroupTraitOption) ResourceOption
+func WithRoleTrait(opts ...RoleTraitOption) ResourceOption
+func WithAppTrait(opts ...AppTraitOption) ResourceOption
+func WithSecretTrait(opts ...SecretTraitOption) ResourceOption
+```
+
+### User trait options
+
+```go
+func WithStatus(status v2.UserTrait_Status_Status) UserTraitOption
+func WithDetailedStatus(status v2.UserTrait_Status_Status, details string) UserTraitOption
+func WithEmail(email string, primary bool) UserTraitOption
+func WithUserLogin(login string, aliases ...string) UserTraitOption
+func WithEmployeeID(employeeIDs ...string) UserTraitOption
+func WithUserIcon(assetRef *v2.AssetRef) UserTraitOption
+func WithUserProfile(profile map[string]interface{}) UserTraitOption
+func WithAccountType(accountType v2.UserTrait_AccountType) UserTraitOption
+func WithCreatedAt(createdAt time.Time) UserTraitOption
+```
+
+**Status values:**
+
+| Status | Meaning |
+|--------|---------|
+| `STATUS_ENABLED` | Active user |
+| `STATUS_DISABLED` | Suspended user |
+| `STATUS_DELETED` | Soft-deleted user |
+| `STATUS_UNSPECIFIED` | Unknown status |
+
+**Account types:**
+
+| Type | Meaning |
+|------|---------|
+| `ACCOUNT_TYPE_HUMAN` | Human user |
+| `ACCOUNT_TYPE_SERVICE` | Service account |
+| `ACCOUNT_TYPE_SYSTEM` | System account |
+
+### Entitlement builder
+
+```go
+// Permission entitlement (e.g., "admin", "editor")
+func NewPermissionEntitlement(resource *v2.Resource, name string,
+                              entitlementOptions ...EntitlementOption) *v2.Entitlement
+
+// Assignment entitlement (e.g., group membership)
+func NewAssignmentEntitlement(resource *v2.Resource, name string,
+                              entitlementOptions ...EntitlementOption) *v2.Entitlement
+
+// Generic entitlement
+func NewEntitlement(resource *v2.Resource, name, purposeStr string,
+                    entitlementOptions ...EntitlementOption) *v2.Entitlement
+
+// Generate entitlement ID
+func NewEntitlementID(resource *v2.Resource, permission string) string
+```
+
+**Entitlement Options:**
+
+```go
+func WithAnnotation(msgs ...proto.Message) EntitlementOption
+func WithGrantableTo(grantableTo ...*v2.ResourceType) EntitlementOption
+func WithDisplayName(displayName string) EntitlementOption
+func WithDescription(description string) EntitlementOption
+```
+
+### Grant builder
+
+```go
+// Create grant linking principal to entitlement
+func NewGrant(resource *v2.Resource, entitlementName string,
+              principal GrantPrincipal, grantOptions ...GrantOption) *v2.Grant
+
+// Generate grant ID
+func NewGrantID(principal GrantPrincipal, entitlement *v2.Entitlement) string
+```
+
+**Grant Options:**
+
+```go
+func WithGrantMetadata(metadata map[string]interface{}) GrantOption
+func WithExternalPrincipalID(externalID *v2.ExternalId) GrantOption
+func WithAnnotation(msgs ...proto.Message) GrantOption
+```
+
+## Pagination
+
+### Token types
+
+```go
+type Token struct {
+    Size  int    // Page size
+    Token string // Opaque token from API
+}
+
+type StreamToken struct {
+    Size   int    // Page size
+    Cursor string // Stream cursor
+}
+
+type StreamState struct {
+    Cursor  string // Next cursor
+    HasMore bool   // More events available
+}
+```
+
+### Pagination bag
+
+For nested or multi-resource pagination:
+
+```go
+type Bag struct {
+    // Internal state stack
+}
+
+func (pb *Bag) Push(state PageState)
+func (pb *Bag) Pop() *PageState
+func (pb *Bag) Next(pageToken string) error
+func (pb *Bag) NextToken(pageToken string) (string, error)
+func (pb *Bag) Current() *PageState
+func (pb *Bag) Marshal() (string, error)
+func (pb *Bag) Unmarshal(data string) error
+```
+
+## HTTP client utilities
+
+### Creating clients
+
+```go
+func NewClient(ctx context.Context, options ...Option) (*http.Client, error)
+
+// Options
+func WithTLSClientConfig(tlsConfig *tls.Config) Option
+func WithLogger(log bool, logger *zap.Logger) Option
+func WithUserAgent(userAgent string) Option
+```
+
+### Caching
+
+```go
+func CreateCacheKey(req *http.Request) (string, error)
+func ClearCaches(ctx context.Context) error
+```
+
+Features: built-in response caching, rate limit extraction, automatic retry with exponential backoff on 429.
+
+## Session store
+
+For caching data across pagination calls:
+
+```go
+type SessionStore interface {
+    Get(ctx context.Context, key string) (interface{}, error)
+    Set(ctx context.Context, key string, value interface{}) error
+    Clear(ctx context.Context, filters ...SessionFilter) error
+    Stats(ctx context.Context) StoreStats
+}
+```
+
+**Accessing in sync methods (V2):**
+
+```go
+func (u *userBuilder) List(ctx context.Context, parentID *v2.ResourceId,
+    opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+
+    // Use session store for caching
+    if cached, err := opts.Session.Get(ctx, "user_cache"); err == nil {
+        // Use cached data
+    }
+
+    // Store for next call
+    opts.Session.Set(ctx, "user_cache", userData)
+}
+```
+
+## Capabilities matrix
+
+Capabilities are automatically detected based on which interfaces you implement:
+
+| Capability | Interface required |
+|------------|-------------------|
+| `CAPABILITY_SYNC` | ResourceSyncer |
+| `CAPABILITY_TARGETED_SYNC` | ResourceTargetedSyncer |
+| `CAPABILITY_PROVISION` | ResourceProvisioner or ResourceProvisionerV2 |
+| `CAPABILITY_ACCOUNT_PROVISIONING` | AccountManager |
+| `CAPABILITY_RESOURCE_CREATE` | ResourceManager |
+| `CAPABILITY_RESOURCE_DELETE` | ResourceManager, ResourceDeleter, or ResourceDeleterV2 |
+| `CAPABILITY_CREDENTIAL_ROTATION` | CredentialManager |
+| `CAPABILITY_EVENT_FEED_V2` | EventFeed |
+| `CAPABILITY_TICKETING` | TicketManager (with WithTicketingEnabled option) |
+| `CAPABILITY_ACTIONS` | CustomActionManager |
+
+## Quick reference
+
+### Import paths
+
+```go
+import (
+    "github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+    "github.com/conductorone/baton-sdk/pkg/pagination"
+    "github.com/conductorone/baton-sdk/pkg/types/entitlement"
+    "github.com/conductorone/baton-sdk/pkg/types/grant"
+    "github.com/conductorone/baton-sdk/pkg/types/resource"
+    "github.com/conductorone/baton-sdk/pkg/uhttp"
+    "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
+)
+```
+
+### Common patterns
+
+| Task | Functions |
+|------|-----------|
+| Create resource type | `resource.NewResourceType(name, traits)` |
+| Create resource | `resource.NewResource(name, type, id, opts...)` |
+| Add user trait | `resource.WithUserTrait(resource.WithEmail(...))` |
+| Create entitlement | `entitlement.NewAssignmentEntitlement(resource, name)` |
+| Create grant | `grant.NewGrant(resource, entitlement, principal)` |
+| Handle pagination | `pagination.Bag{}` with Marshal/Unmarshal |
+
+<CardGroup cols={2}>
+  <Card title="Building connectors" icon="wrench" href="/developer/syncing">
+    How to use these interfaces in practice
+  </Card>
+  <Card title="Configuration schema" icon="gear" href="/developer/config-schema">
+    CLI flags and environment variables
+  </Card>
+</CardGroup>

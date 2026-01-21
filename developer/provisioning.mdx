@@ -1,0 +1,414 @@
+---
+title: "Implementing provisioning"
+sidebarTitle: "Provisioning"
+description: "Grant and revoke access programmatically. Create accounts. Delete resources. This is where your connector becomes actionable."
+---
+
+Sync tells ConductorOne what access exists. Provisioning lets ConductorOne *change* access.
+
+| Operation | What it does |
+|-----------|--------------|
+| **Grant** | Add an entitlement to a principal (e.g., add user to group) |
+| **Revoke** | Remove an entitlement from a principal |
+| **CreateAccount** | Create a new user account in the target system |
+| **DeleteResource** | Remove a resource (user, group, etc.) from the target system |
+
+Provisioning is optional - many connectors sync only. But this is where your connector goes from "showing access" to "managing access." It's the difference between a dashboard and a control plane.
+
+## The provisioning interfaces
+
+The SDK provides several interfaces you can implement:
+
+### Grant and revoke
+
+```go
+// V2 interface (recommended for new connectors)
+type GrantProvisionerV2 interface {
+    Grant(ctx context.Context, resource *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error)
+}
+
+type RevokeProvisioner interface {
+    Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error)
+}
+```
+
+<Note>
+**V2 vs V1:** The V2 interface returns a list of grants from Grant(). This handles cases where one logical grant creates multiple underlying grants. New connectors should use V2.
+</Note>
+
+### CreateAccount
+
+```go
+type AccountManagerLimited interface {
+    CreateAccount(ctx context.Context,
+        accountInfo *v2.AccountInfo,
+        credentialOptions *v2.LocalCredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
+    CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error)
+}
+```
+
+### DeleteResource
+
+```go
+// V2 interface (recommended)
+type ResourceDeleterV2Limited interface {
+    Delete(ctx context.Context, resourceId *v2.ResourceId, parentResourceID *v2.ResourceId) (annotations.Annotations, error)
+}
+```
+
+## Implementing grant and revoke
+
+### When to implement
+
+If your target system supports adding/removing users from groups, roles, or permissions programmatically, implement Grant and Revoke. This covers most access control systems.
+
+### Grant implementation
+
+```go
+func (g *groupBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
+    // 1. Validate principal type
+    if principal.Id.ResourceType != userResourceType.Id {
+        return nil, nil, fmt.Errorf("only users can have group membership granted")
+    }
+
+    // 2. Extract IDs
+    groupID := entitlement.Resource.Id.Resource
+    userID := principal.Id.Resource
+
+    // 3. Call your API
+    err := g.client.AddUserToGroup(ctx, groupID, userID)
+    if err != nil {
+        // 4. Handle "already exists" gracefully
+        if isAlreadyExistsError(err) {
+            return nil, nil, nil  // Success - idempotent
+        }
+        return nil, nil, fmt.Errorf("failed to add user to group: %w", err)
+    }
+
+    // 5. Return the created grant (V2)
+    grant := sdkGrant.NewGrant(entitlement.Resource, entitlement.Slug, principal.Id)
+    return []*v2.Grant{grant}, nil, nil
+}
+```
+
+### Revoke implementation
+
+```go
+func (g *groupBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+    // 1. Validate principal type
+    if grant.Principal.Id.ResourceType != userResourceType.Id {
+        return nil, fmt.Errorf("only users can have group membership revoked")
+    }
+
+    // 2. Extract IDs from grant
+    groupID := grant.Entitlement.Resource.Id.Resource
+    userID := grant.Principal.Id.Resource
+
+    // 3. Call your API
+    err := g.client.RemoveUserFromGroup(ctx, groupID, userID)
+    if err != nil {
+        // 4. Handle "not found" gracefully
+        if isNotFoundError(err) {
+            return nil, nil  // Success - already revoked
+        }
+        return nil, fmt.Errorf("failed to remove user from group: %w", err)
+    }
+
+    return nil, nil
+}
+```
+
+## Idempotency
+
+Provisioning operations should be idempotent - calling Grant twice for the same user+entitlement should succeed both times. This makes retries safe and simplifies the whole system.
+
+**Grant idempotency:**
+- If user already has the entitlement, return success (not an error)
+- HTTP 409 Conflict typically means "already exists"
+
+**Revoke idempotency:**
+- If user doesn't have the entitlement, return success
+- HTTP 404 Not Found typically means "already revoked"
+
+### Using annotations
+
+The SDK provides annotations to signal idempotent states:
+
+```go
+// For already-exists during Grant
+annos := annotations.Annotations{}
+annos.Update(&v2.GrantAlreadyExists{})
+return nil, annos, nil
+
+// For already-revoked during Revoke
+annos := annotations.Annotations{}
+annos.Update(&v2.GrantAlreadyRevoked{})
+return annos, nil
+```
+
+## Real examples
+
+### Active Directory group membership (LDAP)
+
+```go
+func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+    if principal.Id.ResourceType != resourceTypeUser.Id {
+        return nil, fmt.Errorf("only users can have group membership granted")
+    }
+
+    // Get LDAP entries
+    group, err := getEntryByObjectGUID(ctx, g.client, entitlement.Resource.Id.Resource)
+    if err != nil {
+        return nil, fmt.Errorf("failed to find group: %w", err)
+    }
+    user, err := getEntryByObjectGUID(ctx, g.client, principal.Id.Resource)
+    if err != nil {
+        return nil, fmt.Errorf("failed to find user: %w", err)
+    }
+
+    // LDAP modify to add member
+    modifyRequest := ldap.NewModifyRequest(group.DN, nil)
+    modifyRequest.Add(attrGroupMember, []string{user.DN})
+
+    err = g.client.LdapModify(ctx, modifyRequest)
+    if err != nil {
+        if strings.Contains(err.Error(), "Already Exists") {
+            annos := annotations.Annotations{}
+            annos.Update(&v2.GrantAlreadyExists{})
+            return annos, nil
+        }
+        return nil, fmt.Errorf("failed to grant group membership: %w", err)
+    }
+
+    return nil, nil
+}
+```
+
+### Google Workspace role revocation (REST API)
+
+```go
+func (o *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+    if grant.Principal.Id.ResourceType != resourceTypeUser.Id {
+        return nil, errors.New("user principal is required")
+    }
+    l := ctxzap.Extract(ctx)
+
+    // Use grant.Id to delete the specific assignment
+    r := o.roleProvisioningService.RoleAssignments.Delete(o.customerId, grant.Id)
+    err := r.Context(ctx).Do()
+    if err != nil {
+        gerr := &googleapi.Error{}
+        if errors.As(err, &gerr) {
+            if gerr.Code == http.StatusNotFound {
+                // Already deleted - log and return success
+                l.Info("role assignment not found (already revoked)")
+                return nil, nil
+            }
+        }
+        return nil, fmt.Errorf("failed to remove role: %w", err)
+    }
+
+    return nil, nil
+}
+```
+
+## Edge cases
+
+### Validate principal type
+
+Always check that the principal is the expected type:
+
+```go
+if principal.Id.ResourceType != userResourceType.Id {
+    return nil, nil, fmt.Errorf("only users can receive this entitlement")
+}
+```
+
+### Store grant IDs
+
+If the target system returns an assignment ID, store it in the grant:
+
+```go
+grant := sdkGrant.NewGrant(entitlement.Resource, slug, principal.Id)
+grant.Id = assignmentIDFromAPI  // This enables targeted revoke
+return []*v2.Grant{grant}, nil, nil
+```
+
+This allows Revoke to use `grant.Id` directly instead of searching.
+
+### Multiple entitlement types
+
+If a resource offers multiple entitlement types, dispatch appropriately:
+
+```go
+switch entitlement.Slug {
+case "member":
+    err = g.client.AddMember(ctx, groupID, userID)
+case "admin":
+    err = g.client.AddAdmin(ctx, groupID, userID)
+default:
+    return nil, nil, fmt.Errorf("unknown entitlement: %s", entitlement.Slug)
+}
+```
+
+## CreateAccount (JIT provisioning)
+
+CreateAccount enables just-in-time (JIT) user provisioning - accounts are created in target systems only when access is needed.
+
+### When to implement
+
+- User accounts can be created via API
+- You want to enable JIT provisioning workflows
+- The target system supports account creation without interactive signup
+
+### Basic pattern
+
+```go
+func (u *userBuilder) CreateAccount(ctx context.Context,
+    accountInfo *v2.AccountInfo,
+    credentialOptions *v2.LocalCredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error) {
+
+    // 1. Create user in target system
+    user, err := u.client.CreateUser(ctx, &CreateUserRequest{
+        Email:     accountInfo.GetEmails()[0].GetAddress(),
+        FirstName: accountInfo.GetProfile().GetFirstName(),
+        LastName:  accountInfo.GetProfile().GetLastName(),
+    })
+    if err != nil {
+        return nil, nil, nil, fmt.Errorf("failed to create user: %w", err)
+    }
+
+    // 2. Build success response
+    result := &v2.CreateAccountResponse_SuccessResult{
+        Resource: user.ToResource(),
+    }
+
+    return result, nil, nil, nil
+}
+
+func (u *userBuilder) CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
+    return &v2.CredentialDetailsAccountProvisioning{
+        SupportedCredentialTypes: []v2.CredentialType{
+            v2.CredentialType_CREDENTIAL_TYPE_PASSWORD,
+        },
+    }, nil, nil
+}
+```
+
+## DeleteResource
+
+DeleteResource removes resources (users, groups, etc.) from the target system.
+
+### When to implement
+
+- You want to deprovision users when they leave
+- Resources can be deleted via API
+- You want cleanup automation
+
+### Basic pattern
+
+```go
+func (u *userBuilder) Delete(ctx context.Context, resourceId *v2.ResourceId, parentResourceID *v2.ResourceId) (annotations.Annotations, error) {
+    if resourceId.ResourceType != userResourceType.Id {
+        return nil, fmt.Errorf("can only delete users")
+    }
+
+    err := u.client.DeleteUser(ctx, resourceId.Resource)
+    if err != nil {
+        if isNotFoundError(err) {
+            return nil, nil  // Already deleted
+        }
+        return nil, fmt.Errorf("failed to delete user: %w", err)
+    }
+
+    return nil, nil
+}
+```
+
+## Declaring capabilities
+
+Capabilities are **auto-generated**, not manually written. When you implement provisioning interfaces, the connector binary automatically advertises those capabilities.
+
+```bash
+# Generate the capability manifest
+./baton-yourservice capabilities > baton_capabilities.json
+```
+
+This produces:
+
+```json
+{
+  "@type": "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
+  "resourceTypeCapabilities": [
+    {
+      "resourceType": { "id": "group" },
+      "capabilities": [
+        { "@type": "...GrantCapability" },
+        { "@type": "...RevokeCapability" }
+      ]
+    }
+  ],
+  "connectorCapabilities": [
+    "CAPABILITY_SYNC",
+    "CAPABILITY_PROVISION"
+  ]
+}
+```
+
+### Interface-to-capability mapping
+
+| Interface implemented | Capability declared |
+|----------------------|---------------------|
+| `ResourceSyncer` | `CAPABILITY_SYNC` |
+| `ResourceProvisionerV2` | `CAPABILITY_PROVISION` + Grant/Revoke per resource type |
+| `AccountManager` | `CAPABILITY_ACCOUNT_PROVISIONING` |
+| `ResourceDeleterV2` | Resource deletion capabilities |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/baton/deploy">
+    Run your provisioning-enabled connector in production
+  </Card>
+  <Card title="Cookbook" icon="book" href="/developer/recipes-auth">
+    More patterns and techniques
+  </Card>
+  <Card title="Meta-connectors" icon="gears" href="/developer/http-authoring">
+    Configuration-driven provisioning without Go code
+  </Card>
+</CardGroup>
+
+## Quick reference
+
+### Interfaces
+
+| Interface | Methods | Use for |
+|-----------|---------|---------|
+| `ResourceProvisionerV2` | `Grant()`, `Revoke()` | Adding/removing entitlements |
+| `AccountManager` | `CreateAccount()` | JIT user provisioning |
+| `ResourceDeleterV2` | `Delete()` | Removing users/resources |
+
+### Method signatures
+
+```go
+// Grant (V2 - recommended)
+Grant(ctx, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error)
+
+// Revoke
+Revoke(ctx, grant *v2.Grant) (annotations.Annotations, error)
+
+// CreateAccount
+CreateAccount(ctx, accountInfo *v2.AccountInfo, credentialOptions *v2.LocalCredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
+
+// Delete (V2)
+Delete(ctx, resourceId *v2.ResourceId, parentResourceID *v2.ResourceId) (annotations.Annotations, error)
+```
+
+### Idempotency checklist
+
+| Scenario | Expected behavior |
+|----------|-------------------|
+| Grant already exists | Return success (not error) |
+| Revoke already revoked | Return success (not error) |
+| Delete already deleted | Return success (not error) |
+| Invalid principal type | Return error immediately |
