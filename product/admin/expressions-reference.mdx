@@ -20,6 +20,10 @@ These library functions let you interact with the ConductorOne system to look up
 | `c1.user.v1.AutomaticallyGrantedFromEnrollment` | user, app ID, entitlement ID | Boolean | Policy conditions only |
 | `c1.user.v1.ListAppUsersForUser` | user, app ID | List of AppUser | Automations, Account provisioning |
 
+**What can go wrong:**
+- Invalid app ID or entitlement ID returns `false` for boolean functions (no error thrown)
+- `ListAppUsersForUser` returns empty list `[]` if user has no accounts in the app
+
 ### Directory library functions
 
 | Function | Accepts | Returns | Availability |
@@ -31,8 +35,29 @@ These library functions let you interact with the ConductorOne system to look up
 | `c1.directory.groups.v1.FindByName` | group name | group | Policies, Groups, Automations, Account provisioning |
 | `c1.directory.apps.v1.GetEntitlementMembers` | app ID, entitlement ID | list of users | Policies, Groups, Automations, Account provisioning |
 
+**What can go wrong:**
+- `FindByEmail` fails if email doesn't exist in directory - verify emails before deploying
+- `GetByID` fails if user ID doesn't exist
+- `GetManagers` returns empty list `[]` if user has no manager - **this silently skips approval steps**
+- `DirectReports` returns empty list `[]` if user has no reports
+- `GetEntitlementMembers` returns empty list `[]` if entitlement has no members
+
+<Warning>
+**Critical:** When `GetManagers` returns an empty list in a policy approver expression, the approval step is silently skipped rather than failing. Always add a fallback approver:
+
+```go
+// DANGER without fallback: step skipped if no manager
+c1.directory.users.v1.GetManagers(subject)
+
+// SAFE with fallback: uses app owners if no manager
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? c1.directory.users.v1.GetManagers(subject)
+  : appOwners
+```
+</Warning>
+
 <Tip>
-Go to an application or entitlement's details page to look up its ID, or use [Cone](/product/cli/install/). 
+Go to an application or entitlement's details page to look up its ID, or use [Cone](/product/cli/install/).
 </Tip>
 
 <Info>
@@ -163,6 +188,11 @@ These fields are used in the majority of condition expressions:
 | `subject.email.startsWith` | string | Email prefix check | `subject.email.startsWith("admin")` | Admin user identification |
 | `subject.email.endsWith` | string | Email domain check | `subject.email.endsWith("@company.com")` | Employee vs contractor |
 | `subject.manager` | string | User's manager email | `subject.manager == "boss@company.com"` | Manager-based routing |
+| `subject.manager_id` | string | User's manager ID | `subject.manager_id != ""` | Check if user has manager |
+
+<Info>
+Both `subject.manager` (email) and `subject.manager_id` (ID) are available. Use `manager` for email-based comparisons and `manager_id` to check existence or for ID-based lookups with `GetByID`.
+</Info>
 
 #### Organizational fields
 

@@ -51,14 +51,21 @@ subject.type == UserType.SERVICE || subject.type == UserType.SYSTEM
 
 ```go
 // Route to manager
+// DANGER: Fails if subject.manager is empty - see safe patterns below
 c1.directory.users.v1.FindByEmail(subject.manager)
 
 // Route to manager's manager (skip-level)
+// DANGER: Returns [] if user has no manager - step silently skipped
 c1.directory.users.v1.GetManagers(c1.directory.users.v1.FindByEmail(subject.manager))
 
 // Route to user's manager AND skip-level manager
+// DANGER: Fails if managerId is empty
 [c1.directory.users.v1.GetByID(c1.directory.users.v1.GetByID(subject.managerId).managerId), c1.directory.users.v1.GetByID(subject.managerId)]
 ```
+
+<Warning>
+**Manager lookups can return empty results.** When `GetManagers` returns `[]` in an approver expression, the approval step is silently skipped. Always add fallback approvers - see [Approver selection patterns](#approver-selection-patterns) below.
+</Warning>
 
 ### Access conflict detection
 
@@ -100,12 +107,14 @@ task.origin == TaskOrigin.API
 
 ```go
 // Check custom attribute
+// SILENT FALSE: Returns false if attribute doesn't exist - use has() to check first
 subject.attributes.contractor == "true"
 
 // Check if custom attribute exists
 has(subject.attributes.securityClearance)
 
 // Conditional logic based on custom attribute
+// SAFE: Uses has() to check existence before accessing
 has(subject.attributes.director) ? subject.attributes.director == "boss@company.com" : subject.manager == "manager@company.com"
 ```
 
@@ -177,23 +186,29 @@ c1.user.v1.AutomaticallyGrantedFromEnrollment(subject, entitlement.appId, entitl
 
 **Simple user returns:**
 ```go
-subject  // Self-approval
-c1.directory.users.v1.FindByEmail(subject.manager)  // Route to manager
+subject  // Self-approval - always valid
+c1.directory.users.v1.FindByEmail(subject.manager)  // DANGER: Fails if manager field is empty
 ```
 
 **Conditional user routing:**
 ```go
+// DANGER: FindByEmail branch fails if subject.manager is empty
 subject.department == "IT" ? subject : c1.directory.users.v1.FindByEmail(subject.manager)
 ```
 
 **Complex nested routing:**
 ```go
-has(subject.profile.propThatOnlyExistsSometimes) ? 
-  subject.profile.propThatOnlyExistsSometimes == "Value That Happens" ? 
-    c1.directory.users.v1.FindByEmail("some.email@company.com") : 
-    c1.directory.users.v1.GetByID("user123") : 
+// SAFE: Uses has() for optional field, hardcoded IDs as fallbacks
+has(subject.profile.propThatOnlyExistsSometimes) ?
+  subject.profile.propThatOnlyExistsSometimes == "Value That Happens" ?
+    c1.directory.users.v1.FindByEmail("some.email@company.com") :
+    c1.directory.users.v1.GetByID("user123") :
   c1.directory.users.v1.GetByID("fallback123")
 ```
+
+<Tip>
+For production approver expressions, prefer the patterns in [Approver selection patterns](#approver-selection-patterns) which include proper fallbacks.
+</Tip>
 
 ## Real-world policy examples
 
@@ -491,9 +506,86 @@ has(subject.profile.hire_date) &&
 time.try_parse(subject.profile.hire_date, TimeFormat.DATE, now()) <= now()
 ```
 
+## Approver selection patterns
+
+These patterns are for **policy step approvers** - expressions that return one or more users. The critical rule: always include fallback approvers to prevent steps from being silently skipped.
+
+### Why fallbacks matter
+
+When an approver expression returns an empty list `[]`, the approval step is **silently skipped** rather than failing. This can inadvertently auto-approve requests that should have been reviewed.
+
+```go
+// DANGER: Returns [] if user has no manager - step skipped entirely
+c1.directory.users.v1.GetManagers(subject)
+
+// SAFE: Falls back to app owners if no manager
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? c1.directory.users.v1.GetManagers(subject)
+  : appOwners
+```
+
+### Manager with fallback
+
+```go
+// Route to manager, fall back to app owners
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? c1.directory.users.v1.GetManagers(subject)
+  : appOwners
+
+// Route to first manager only (not all managers)
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? [c1.directory.users.v1.GetManagers(subject)[0]]
+  : appOwners
+```
+
+### Skip-level manager with fallback
+
+```go
+// Get manager's manager, fall back to direct manager, then app owners
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? (size(c1.directory.users.v1.GetManagers(c1.directory.users.v1.GetManagers(subject)[0])) > 0
+      ? c1.directory.users.v1.GetManagers(c1.directory.users.v1.GetManagers(subject)[0])
+      : c1.directory.users.v1.GetManagers(subject))
+  : appOwners
+```
+
+### Entitlement members with fallback
+
+```go
+// Route to users who have this entitlement, fall back to app owners
+size(c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.id)) > 0
+  ? c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.id)
+  : appOwners
+```
+
+### Conditional approver by department
+
+```go
+// Engineering: route to tech lead group
+// Others: route to manager with fallback
+subject.department == "Engineering"
+  ? c1.directory.apps.v1.GetEntitlementMembers("groups-app", "tech-leads")
+  : (size(c1.directory.users.v1.GetManagers(subject)) > 0
+      ? c1.directory.users.v1.GetManagers(subject)
+      : appOwners)
+```
+
+### Multiple approver groups
+
+```go
+// Combine app owners and security team (for high-risk access)
+appOwners + c1.directory.apps.v1.GetEntitlementMembers("groups-app", "security-team")
+```
+
+<Info>
+The `appOwners` variable is always available in policy step expressions and never returns an empty list - making it the safest fallback option.
+</Info>
+
 ## Related documentation
 
 - **[Write condition expressions](/product/admin/expressions)** - Introduction to CEL expressions and where they're used
 - **[CEL expressions reference](/product/admin/expressions-reference)** - Complete reference for all available objects, functions, and time functions
+- **[Workflow expressions](/product/admin/expressions-workflows)** - Pass data between automation steps using the ctx object
+- **[Troubleshooting expressions](/product/admin/expressions-troubleshooting)** - Debug common errors and understand failure modes
 
 
