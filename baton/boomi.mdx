@@ -1,0 +1,257 @@
+---
+title: "Set up a Boomi connector"
+og:title: "Set up a Boomi connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Boomi. Integrate your Boomi instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Boomi. Integrate your Boomi instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Boomi"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Account groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+**Additional functionality:**
+The Boomi connector supports [automatic account provisioning](/docs/product/admin/account-provisioning).
+
+**Notes:**
+- The Boomi connector supports account provisioning and role assignment/revocation.
+- Account deprovisioning (deleting users) is not supported. When revoking a user's last role, the connector automatically assigns the "Standard User" role first to prevent accidental user deletion from the account.
+- Users are created in Boomi by assigning them a role. New users receive an email invitation to complete their account setup.
+- Account Groups are only available for Primary accounts that manage multiple sub-accounts. If your account is not a Primary account, the Account Groups sync will return empty results.
+- Some global Boomi roles with non-standard UUID formats cannot be assigned via the API and are automatically excluded from assignable entitlements.
+
+## Understanding roles in Boomi
+
+Boomi uses two types of role assignments:
+
+**Global Roles**: Assigned to users at the account level, granting permissions across the entire Boomi account. These are managed through the **Roles** resource in ConductorOne.
+
+**Group Roles**: When a user is added to an Account Group, they are assigned one or more specific roles within that group context. These are not roles that belong to the group itself, but rather roles that a specific user has within the context of that group. A single user can have multiple different roles within the same group. Each user-group-role combination is represented as a separate grant in ConductorOne under the **Account Groups** resource type.
+
+## Gather Boomi credentials
+
+<Warning>
+To configure the Boomi connector, you need at least **Account Administrator** role or equivalent permissions in Boomi to manage users, roles, and groups across the account. Additionally, your user must have the **API Access** privilege and the **API Token** feature enabled.
+</Warning>
+
+<Steps>
+  <Step>
+    Log in to [Boomi AtomSphere](https://platform.boomi.com/) and navigate to **Settings** > **My User Settings** > **User Information**.
+    
+    Copy your email address from this page. You'll need it in the next section.
+    
+    <Tip>
+    The connector will automatically format your email as `BOOMI_TOKEN.{email}` for API authentication, so you only need to provide your email address.
+    </Tip>
+  </Step>
+
+  <Step>
+    Navigate to **Settings** > **My User Settings** > **Platform API Tokens**.
+    
+    Click **Add New Token**.
+  </Step>
+
+  <Step>
+    1. Enter a unique name for the token, such as `ConductorOne`
+    2. Click **Generate Token**
+    3. Copy the token and save it securely. You won't be able to view it again after closing the dialog.
+    
+    <Tip>
+    You can generate up to five tokens per user account. Tokens inherit the permissions of the user who created them, so ensure your account has the necessary administrative privileges.
+    </Tip>
+  </Step>
+
+  <Step>
+    Navigate to **Settings** > **Account Information and Setup**.
+    
+    Copy your Boomi Account ID from this page. You'll need it in the next section.
+  </Step>
+</Steps>
+
+For more information about Boomi API tokens, see the [Platform API Tokens documentation](https://help.boomi.com/docs/Atomsphere/Platform/int-AtomSphere_API_Tokens_page_6a75a1f6-709c-4b08-b3bd-85fe2ac02e18).
+
+## Configure the Boomi connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Boomi** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Boomi connector:
+        
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+        
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Paste the email address, API token, and Account ID into the relevant fields:
+        
+        - **Boomi Email**: Enter the email address you copied from your Boomi user settings
+        - **Boomi API Token**: Paste the API token you generated earlier
+        - **Boomi Account ID**: Enter your Boomi Account ID
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Boomi connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Boomi](https://github.com/ConductorOne/baton-boomi) connector, hosted and run in your own environment.
+    
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+    ### Step 1: Set up a new Boomi connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Boomi connector:
+        
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+        
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+        
+        Carefully copy and save these credentials. We'll use them in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Boomi connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-boomi-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-boomi-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+      
+      # Boomi credentials
+      BATON_BOOMI_EMAIL: <Your Boomi email address>
+      BATON_BOOMI_API_TOKEN: <Your Boomi API token>
+      BATON_BOOMI_ACCOUNT_ID: <Your Boomi Account ID>
+
+      # Optional: include if you want ConductorOne to provision access using this connector
+      BATON_PROVISIONING: true
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-boomi.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-boomi
+      labels:
+        app: baton-boomi
+    spec:
+      selector:
+        matchLabels:
+          app: baton-boomi
+      template:
+        metadata:
+          labels:
+            app: baton-boomi
+            baton: true
+            baton-app: boomi
+        spec:
+          containers:
+          - name: baton-boomi
+            image: ghcr.io/conductorone/baton-boomi:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-boomi
+            envFrom:
+            - secretRef:
+                name: baton-boomi-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Boomi connector to. Boomi data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Boomi connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+
