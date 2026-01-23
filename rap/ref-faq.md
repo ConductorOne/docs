@@ -51,10 +51,11 @@ Overloaded term:
 
 **Q: How to determine mode?**
 
-```
---client-id provided?
-  No  --> One-shot
-  Yes --> Daemon
+```mermaid
+flowchart TD
+    Q{"--client-id provided?"}
+    Q -->|No| OS[One-shot]
+    Q -->|Yes| D[Daemon]
 ```
 
 ---

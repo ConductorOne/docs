@@ -8,22 +8,28 @@ The four sync stages, pagination, and how the SDK orchestrates calls.
 
 The SDK orchestrates sync in four stages:
 
+```mermaid
+flowchart LR
+    subgraph Stage1["Stage 1: ResourceType()"]
+        RT[SDK learns what<br>resource types exist]
+    end
+    subgraph Stage2["Stage 2: List()"]
+        L[SDK fetches all<br>instances of each type]
+    end
+    subgraph Stage3["Stage 3: Entitlements()"]
+        E[SDK asks each resource<br>what entitlements it offers]
+    end
+    subgraph Stage4["Stage 4: Grants()"]
+        G[SDK discovers who<br>has each entitlement]
+    end
+    Stage1 --> Stage2 --> Stage3 --> Stage4
 ```
-Stage 1: ResourceType()
-  SDK learns what resource types exist (user, group, role)
 
-Stage 2: List()
-  SDK fetches all instances of each type
-  Returns: 127 users, 23 groups, 15 roles
-
-Stage 3: Entitlements()
-  SDK asks each resource what entitlements it offers
-  Returns: group-A offers "member", role-X offers "assigned"
-
-Stage 4: Grants()
-  SDK discovers who has each entitlement
-  Returns: alice has "member" on group-A
-```
+**Example outputs:**
+- Stage 1: user, group, role
+- Stage 2: 127 users, 23 groups, 15 roles
+- Stage 3: group-A offers "member", role-X offers "assigned"
+- Stage 4: alice has "member" on group-A
 
 ## Inversion of Control
 
@@ -59,11 +65,13 @@ The SDK handles pagination orchestration. You return items and the next token.
 
 ## The Sync Pipeline
 
-```
-External    Connector    .c1z     Sync      Domain
-System  ->  (yours)  ->  File ->  Service -> Objects
-                                     |
-                                "Uplift"
+```mermaid
+flowchart LR
+    ES[External<br>System] --> C[Connector<br>yours]
+    C --> F[.c1z<br>File]
+    F --> SS[Sync<br>Service]
+    SS --> DO[Domain<br>Objects]
+    SS -.-> U["Uplift"]
 ```
 
 1. **Fetch** - Your connector calls external API
