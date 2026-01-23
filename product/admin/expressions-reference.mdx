@@ -6,6 +6,227 @@ description: Complete reference for CEL expression objects, functions, and usage
 ---
 {/* Editor Refresh: 2026-01-16 */}
 
+## Type definitions
+
+CEL expressions use typed values. Understanding these types helps you write correct expressions and avoid runtime errors.
+
+### Primitive types
+
+| Type | Description | Example values |
+|:-----|:------------|:---------------|
+| `string` | Text value | `"Engineering"`, `"user@company.com"` |
+| `bool` | Boolean true/false | `true`, `false` |
+| `int` | Integer number | `0`, `42`, `-1` |
+| `double` | Floating-point number | `3.14`, `0.5` |
+| `bytes` | Binary data | Rarely used directly |
+
+### Time types
+
+| Type | Description | How to create |
+|:-----|:------------|:--------------|
+| `timestamp` | A point in time (UTC) | `now()`, `timestamp("2025-01-01T00:00:00Z")`, `time.parse(...)` |
+| `duration` | A length of time | `duration("24h")`, `duration("30m")`, `duration("720h")` |
+
+**Duration format:** Use `h` for hours, `m` for minutes, `s` for seconds. Examples: `"2h"` (2 hours), `"30m"` (30 minutes), `"720h"` (30 days).
+
+**Timestamp arithmetic:**
+```go
+now() + duration("24h")              // 24 hours from now
+now() - duration("720h")             // 30 days ago
+timestamp1 - timestamp2              // Returns a duration
+```
+
+### Collection types
+
+| Type | Description | Example |
+|:-----|:------------|:--------|
+| `list<T>` | Ordered list of items | `[user1, user2]`, `["a", "b", "c"]` |
+| `map<K,V>` | Key-value mapping | `subject.profile` (map of string to any) |
+
+**List operations:**
+```go
+size(myList)                         // Number of items
+myList[0]                            // First item (0-indexed)
+"value" in myList                    // Check membership
+myList + otherList                   // Concatenate lists
+myList.filter(x, x.status == UserStatus.ENABLED)  // Filter
+myList.map(x, x.email)               // Transform
+myList.exists(x, x.department == "IT")  // Any match?
+myList.all(x, x.status == UserStatus.ENABLED)     // All match?
+```
+
+### Enum types
+
+Enums are predefined constants. Always use the full enum name (e.g., `UserStatus.ENABLED`, not just `ENABLED`).
+
+#### UserStatus
+
+| Value | Meaning |
+|:------|:--------|
+| `UserStatus.ENABLED` | User is active |
+| `UserStatus.DISABLED` | User is disabled |
+| `UserStatus.DELETED` | User is deleted |
+
+#### UserType
+
+| Value | Meaning |
+|:------|:--------|
+| `UserType.HUMAN` | Regular human user |
+| `UserType.AGENT` | Automated agent |
+| `UserType.SERVICE` | Service account |
+| `UserType.SYSTEM` | System account |
+
+#### TaskOrigin
+
+| Value | Meaning |
+|:------|:--------|
+| `TaskOrigin.WEBAPP` | Created in ConductorOne web interface |
+| `TaskOrigin.SLACK` | Created via Slack integration |
+| `TaskOrigin.API` | Created via API |
+| `TaskOrigin.JIRA` | Created via Jira integration |
+| `TaskOrigin.COPILOT` | Created via Copilot |
+| `TaskOrigin.PROFILE_MEMBERSHIP_AUTOMATION` | Created by automation |
+| `TaskOrigin.TIME_REVOKE` | Created by time-based revocation |
+
+#### AppUserStatus (for triggers)
+
+Used in `ctx.trigger.oldAccount.status.status` and `ctx.trigger.newAccount.status.status`:
+
+| Value | Meaning |
+|:------|:--------|
+| `APP_USER_STATUS_ENABLED` | Account is active |
+| `APP_USER_STATUS_DISABLED` | Account is disabled |
+| `APP_USER_STATUS_DELETED` | Account is deleted |
+
+#### TimeFormat
+
+| Constant | Format | Example output |
+|:---------|:-------|:---------------|
+| `TimeFormat.RFC3339` | ISO 8601 / RFC 3339 | `2025-10-22T14:30:00Z` |
+| `TimeFormat.DATE` | Date only | `2025-10-22` |
+| `TimeFormat.DATETIME` | Date and time | `2025-10-22 14:30:00` |
+| `TimeFormat.TIME` | Time only | `14:30:00` |
+
+### Object types
+
+These are complex types returned by functions or available as variables.
+
+<Info>
+**User vs AppUser:** These are different types. A `User` is a person in the ConductorOne directory (your identity provider sync). An `AppUser` is that person's account within a specific application (their GitHub account, Okta account, etc.). One User can have many AppUsers across different apps.
+</Info>
+
+#### User
+
+Represents a person in the ConductorOne directory. This is your organization's user record, typically synced from an identity provider.
+
+**Returned by:** `FindByEmail`, `GetByID`, `GetManagers`, `DirectReports`, `GetEntitlementMembers`
+
+**Available as:** `subject`, elements of `appOwners`, `ctx.trigger.oldUser`, `ctx.trigger.newUser`
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `id` | string | Unique user identifier |
+| `email` | string | Primary email address |
+| `emails` | list&lt;string&gt; | All email addresses |
+| `displayName` | string | Display name |
+| `username` | string | Username |
+| `usernames` | list&lt;string&gt; | All usernames |
+| `department` | string | Department |
+| `jobTitle` | string | Job title |
+| `employmentType` | string | Employment type (e.g., "Full Time") |
+| `employmentStatus` | string | Employment status (e.g., "Active") |
+| `status` | UserStatus | User status enum |
+| `directoryStatus` | UserStatus | Directory sync status |
+| `type` | UserType | User type enum |
+| `manager` | string | Manager's email |
+| `manager_id` | string | Manager's user ID |
+| `profile` | map | Custom profile attributes |
+| `attributes` | map | Custom user attributes |
+
+#### Group
+
+Represents a ConductorOne group. Returned by `FindByName`.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `id` | string | Group identifier |
+| `app_id` | string | App ID the group belongs to |
+| `display_name` | string | Group display name |
+
+#### AppUser
+
+Represents a user's account within a specific connected application (e.g., their GitHub account, Salesforce account, AWS IAM user). Different from `User` which is the directory-level identity.
+
+**Returned by:** `ListAppUsersForUser`
+
+**Available as:** `ctx.trigger.oldAccount`, `ctx.trigger.newAccount` (in account-change triggers)
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `id` | string | App user identifier |
+| `displayName` | string | Display name |
+| `username` | string | Username in the app |
+| `usernames` | list&lt;string&gt; | All usernames |
+| `email` | string | Email in the app |
+| `emails` | list&lt;string&gt; | All emails |
+| `employeeIds` | list&lt;string&gt; | Employee IDs |
+| `status` | AppUserStatus | Nested status object |
+| `status.status` | enum | APP_USER_STATUS_ENABLED/DISABLED/DELETED |
+| `status.details` | string | Status details |
+| `profile` | map | Custom profile attributes |
+| `attributes` | map | Attribute mappings |
+
+#### Task
+
+Represents an access request or task in ConductorOne. See [Task object](#task-object) for all fields.
+
+**Available as:** `task` (in policy expressions)
+
+#### TaskAnalysis
+
+Analysis data attached to a task, including access conflict information. See [Task analysis object](#task-analysis-object) for all fields.
+
+**Available as:** `task.analysis` (in policy expressions)
+
+#### Entitlement
+
+The entitlement (permission/role) being requested. See [Entitlement object](#entitlement-object) for all fields.
+
+**Available as:** `entitlement` (in policy expressions)
+
+#### IP
+
+Represents an IP address with properties for classification. See [IP address object](#ip-address-object) for all fields.
+
+**Created by:** `ip("1.2.3.4")`
+
+#### CIDR
+
+Represents a network range for IP matching. See [IP CIDR object](#ip-cidr-object) for all methods.
+
+**Created by:** `cidr("10.0.0.0/8")`
+
+#### Context (ctx)
+
+Workflow execution context containing trigger data and step outputs. See [Context object](#context-object-ctx) for all fields.
+
+**Available as:** `ctx` (in automation triggers and workflow steps)
+
+### Built-in variables
+
+These variables are automatically available in specific contexts.
+
+| Variable | Type | Available in | Description |
+|:---------|:-----|:-------------|:------------|
+| `subject` | User | Policies, Groups, Automations, Campaigns, Account provisioning | The current user being evaluated |
+| `task` | Task | Policies only | The current access request |
+| `entitlement` | Entitlement | Policies only | The entitlement being requested |
+| `appOwners` | list&lt;User&gt; | Policy step approvers only | Owners of the application |
+| `ctx` | Context | Automations only | Workflow context and trigger data |
+| `ip` | IP | Policies, Automations | Requestor's IP address (when available) |
+
+---
+
 ## Functions
 
 These library functions let you interact with the ConductorOne system to look up whether a user has access to a certain application or entitlement, or to find the user or list of users who should review a task.
@@ -94,14 +315,7 @@ ConductorOne provides comprehensive time functions for working with dates and ti
 
 #### TimeFormat constants
 
-| Constant | Format | Example Output |
-| :--- | :--- | :--- |
-| `TimeFormat.RFC3339` | ISO 8601 / RFC 3339 | `2025-10-22T14:30:00Z` |
-| `TimeFormat.DATE` | Date only | `2025-10-22` |
-| `TimeFormat.DATETIME` | Date and time | `2025-10-22 14:30:00` |
-| `TimeFormat.TIME` | Time only | `14:30:00` |
-
-You can also use custom Go time layouts like `"2006-01-02"` or `"Monday, January 2, 2006"`.
+See [TimeFormat enum](#timeformat) for all constants. You can also use custom Go time layouts like `"2006-01-02"` or `"Monday, January 2, 2006"`.
 
 #### Common time patterns
 
@@ -210,19 +424,6 @@ Both `subject.manager` (email) and `subject.manager_id` (ID) are available. Use 
 | `subject.profile` | map[string]interface{} | Profile attributes | `subject.profile.department == "IT"` | Custom profile data access |
 | `subject.attributes.<CUSTOM_USER_ATTRIBUTE>` | varies | Custom user attributes | `subject.attributes.contractor == "true"` | Custom business logic |
 
-#### Enum values reference
-
-**UserStatus values:**
-- `UserStatus.ENABLED` - User is active
-- `UserStatus.DISABLED` - User is disabled  
-- `UserStatus.DELETED` - User is deleted
-
-**UserType values:**
-- `UserType.HUMAN` - Regular human user
-- `UserType.AGENT` - Automated agent
-- `UserType.SERVICE` - Service account
-- `UserType.SYSTEM` - System account
-
 <Tip>
 **Use custom user attributes.** 
 
@@ -263,14 +464,7 @@ The task object is used in policy expressions to reference the current access re
 | `task.requestorUserId` | string | ID of the user who created the task | `task.requestorUserId == "user123"` | Requestor-based routing |
 | `task.analysis` | analysis | Task analysis data | `task.analysis.hasConflictViolations` | Access conflict detection |
 
-#### TaskOrigin values:
-- `TaskOrigin.WEBAPP` - Created in ConductorOne web interface
-- `TaskOrigin.SLACK` - Created via Slack integration
-- `TaskOrigin.API` - Created via API
-- `TaskOrigin.JIRA` - Created via Jira integration
-- `TaskOrigin.COPILOT` - Created via Copilot
-- `TaskOrigin.PROFILE_MEMBERSHIP_AUTOMATION` - Created by automation
-- `TaskOrigin.TIME_REVOKE` - Created by time-based revocation
+See [TaskOrigin enum](#taskorigin) for all possible values.
 
 ### Task analysis object
 

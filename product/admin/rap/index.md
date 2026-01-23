@@ -41,6 +41,12 @@ These files document specific function categories available in CEL expressions.
 | `functions-ip.md` | IP addresses, CIDR ranges, network-based access control |
 | `functions-strings.md` | String operations, ifEmpty, contains, endsWith, lowerAscii |
 
+### Types and References
+
+| File | Use When User Asks About |
+|------|--------------------------|
+| `types.md` | Type definitions, enums, User vs AppUser, primitives, collections, built-in variables |
+
 ### Patterns and Debugging
 
 | File | Use When User Asks About |
@@ -64,11 +70,20 @@ These files document specific function categories available in CEL expressions.
 - "Trigger when user disabled" -> `env-triggers.md`
 - "Check if user has access" -> `functions-user.md`
 
+**User asks about types:**
+- "What's the difference between User and AppUser?" -> `types.md`
+- "What fields does subject have?" -> `types.md`
+- "What are the UserStatus values?" -> `types.md`
+- "How do I use duration?" -> `types.md`, `functions-time.md`
+- "What enums are available?" -> `types.md`
+- "What's in appOwners?" -> `types.md`
+
 **User has an error:**
 - Any CEL error -> `debug-errors.md` first, then relevant env file
+- Type mismatch error -> `types.md`, `debug-errors.md`
 
 **User asks what's available:**
-- "What variables can I use?" -> Check which environment, retrieve that `env-*.md`
+- "What variables can I use?" -> `types.md` (built-in variables), then relevant `env-*.md`
 - "What functions exist?" -> `functions-directory.md`, `functions-user.md`, `functions-time.md`
 
 ## File Characteristics
