@@ -30,10 +30,6 @@ The AWS connector supports [automatic account provisioning and deprovisioning](/
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
 
-### Known limitations
-
-- Cross-account Assume Role is not currently supported
-
 ## Gather AWS credentials
 
 Configuring the connector requires you to pass in credentials generated in AWS. Gather these credentials before you move on.
@@ -129,28 +125,67 @@ Next, you will create an inline policy to define the specific data this role can
 
     ```json
     {
-    "Action": [
-        "iam:ListUsers",
-        "iam:ListGroups",
-        "iam:ListRoles",
-        "iam:GetGroup",
-        //The following two permissions are only needed if you want ConductorOne to sync access key secret data
-        "iam:ListAccessKeys",
-        "iam:GetAccessKeyLastUsed", 
-    ],
-    "Effect": "Allow",
-    "Resource": "*",
-    // The minimum permissions required for the connector to sync. This will sync IAM Users, Groups, and Roles
-    "Sid": "MinimumRequiredPermissionsSyncIAMUsersGroupsRoles"
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "MinimumRequiredPermissionsSyncIAMUsersGroupsRoles",
+          "Effect": "Allow",
+          "Action": [
+            "iam:ListUsers",
+            "iam:ListGroups",
+            "iam:ListRoles",
+            "iam:GetGroup",
+            "iam:GetRole",
+            "iam:ListAccessKeys",
+            "iam:GetAccessKeyLastUsed"
+          ],
+          "Resource": "*"
+        },
+        {
+          "Sid": "OrganizationsSupport",
+          "Effect": "Allow",
+          "Action": [
+            "organizations:ListAccounts",
+            "organizations:DescribeOrganization"
+          ],
+          "Resource": "*"
+        },
+        {
+          "Sid": "UseMoreDescriptiveAccountAliases",
+          "Effect": "Allow",
+          "Action": [
+            "iam:ListAccountAliases"
+          ],
+          "Resource": "*"
+        }
+      ]
     }
     ```
 
-	**Notes about permissions:**
-	**iam:ListUsers:** Allows ConductorOne to retrieve a list of all IAM user accounts in this AWS account.
-	**iam:ListGroups:** Allows ConductorOne to retrieve a list of all IAM groups.
-	**iam:ListRoles:** Allows ConductorOne to retrieve a list of all IAM roles.
-	**iam:GetGroup:** Required to see which users belong to which groups. The ListGroups action only provides the group name, while GetGroup provides the group's members.
-	**iam:ListAccessKeys and iam:GetAccessKeyLastUsed:** These are optional permissions. They allow ConductorOne to gather data on the status of your IAM access keys, such as when they were last used. This is useful for auditing and security purposes (such as identifying unused or old keys). ConductorOne does not store or access the secret access key itself.
+    **Explanation of permissions**
+
+    **Core IAM Permissions** These permissions allow ConductorOne to sync your basic identity structure.
+
+    * iam:ListUsers: Allows ConductorOne to retrieve a list of all IAM user accounts.
+    * iam:ListGroups: Allows ConductorOne to retrieve a list of all IAM groups.
+    * iam:ListRoles: Allows ConductorOne to retrieve a list of all IAM roles.
+    * iam:GetGroup: Required to see which users belong to which groups. ListGroups only provides the group names, while GetGroup identifies the specific members.
+    * iam:GetRole: Allows ConductorOne to retrieve detailed information about specific roles, including their trust relationships.
+
+    **Optional: Security & Audit Insights** Include these permissions if you want ConductorOne to sync access key metadata.
+
+    * iam:ListAccessKeys and iam:GetAccessKeyLastUsed: These allow ConductorOne to gather data on the status of your IAM access keys, such as when they were last used. This is useful for identifying unused or stale credentials.
+
+       Note that ConductorOne only retrieves metadata for auditing; it does not store or access the secret access keys themselves.
+
+    **Optional: AWS Organizations Support** Include these permissions if you enable the "Enable support for AWS Organizations" checkbox in the ConductorOne UI.
+
+    * organizations:ListAccounts: Allows the connector to discover all accounts within your AWS Organization.
+    * organizations:DescribeOrganization: Provides high-level details about your organization to ensure proper mapping.
+
+    **Optional: Descriptive Account Aliases**
+
+    * iam:ListAccountAliases: Include this if you prefer to use human-readable account aliases (for example, "Production-Environment") in the ConductorOne UI instead of 12-digit numeric AWS account IDs.
     </Step>
     <Step>
         Click **Review Policy**.
