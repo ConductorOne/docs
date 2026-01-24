@@ -1,0 +1,233 @@
+---
+title: Configure requestable automations
+og:title: Configure requestable automations - ConductorOne docs
+og:description: Requestable automations let you safely expose powerful automations to business users and agents without giving them standing admin access.
+description: Requestable automations let you safely expose powerful automations to business users and agents without giving them standing admin access.
+sidebarTitle: Requestable automations
+---
+{/* Editor Refresh: 2026-01-23 */}
+
+## What are requestable automations?
+
+A requestable automation is a [ConductorOne automation](/product/admin/automations) that you make requestable to end users. Unlike standard automations that are triggered by schedules or events, requestable automations are user-driven workflows, such as creating a new GitHub repo or requesting replacement hardware. Requestable automations maintain strict governance while removing IT as a manual bottleneck for repetitive workflows.
+
+### How do requestable automations work?
+
+The lifecycle of a requestable automation connects automated workflows with human governance:
+
+1. **Automation design:** Start by building an automation. By marking it as requestable, you convert a back-end process into an on-demand service.
+
+2. **Configuration and scoping:** You define audience-scoped access to control who can see the action, and attach custom request forms to collect required information (like a "project ID") up front to eliminate manual follow-up.
+
+3. **Governance gate:** Every request is governed by a policy-driven approval. The automation pauses for human review or auto-approves based on your risk logic, providing a consistent control layer across systems.
+
+4. **Execution and logging:** Once approved, ConductorOne runs the steps using the requester's form inputs. Every action, from the request to the final step, is captured in an end-to-end audit log. 
+
+## Create a requestable automation
+
+<Warning>
+A user with the **Super Admin** role in ConductorOne must complete this task. 
+</Warning>
+
+### Plan the use case
+
+Before you configure anything, clarify:
+
+- **Outcome**: What real-world operation are you trying to enable? (Examples: "Allow shift workers to log timecard punch-ins" or "Allow employees to request a new laptop".)
+- **Risk level**: Is this high-risk (for example, production access), medium, or low (for example, a basic device request)?
+- **Audience**: Who should be able to request this? Everyone? A specific team? Only app owners?
+- **Approvers**: Who should be in the approval path, if an approval path is needed?
+
+### Build or select the automation
+
+<Steps>
+<Step>
+Go to **Admin** > **Automations**.
+</Step>
+<Step>
+Follow the docs to [set up a new automation](/product/admin/automations#create-a-new-automation) or select an existing one. 
+</Step>
+<Step>
+Ensure the automation performs the desired steps to achieve the intended outcome.
+</Step>
+<Step>
+Click **Publish**.
+</Step>
+</Steps>
+
+<Tip>
+**Requestable or scheduled/triggered?** A single automation cannot be both cron/event-triggered and requestable. If you need both options, duplicate the automation, set one to have an automated trigger, and make the other requestable.
+</Tip>
+
+### Configure requestability
+
+<Steps>
+<Step>
+From the **Automations** page, select the automation.
+</Step>
+<Step>
+Ensure that the trigger is set to **On demand** (if a different trigger is set, you must delete it).
+</Step>
+<Step>
+Click the **...** (more actions) menu at the top right of the page and select **Configure requestable**. 
+</Step>
+<Step>
+Set a clear **Request display name**. 
+
+This is what end users will see in their **Actions** catalog, so choose a clear, action-oriented name (for example, "Request new device" rather than "Device provisioning automation").
+</Step>
+</Steps>
+
+### Design the form
+
+If the action should gather information from a requesting user, select an existing form or follow the steps below to create a new one.
+
+<Steps>
+<Step>
+In the **Request form** section, use the dropdown to select **Create new form**. 
+</Step>
+<Step>
+Give the new form a name and description. 
+
+   Remember that this form will be available as an option across your ConductorOne installation, so choose a name that will help your colleagues understand the form's purpose. 
+</Step>
+<Step>
+Select the data type for your first field. The current options are: 
+* Text (a single-line text field)
+* Checkbox 
+* Text area (a multi-line text field)
+* Dropdown 
+</Step>
+<Step>
+Fill in the field label and provide dropdown options, helper text, a default value, and a placeholder, as needed. The required and available elements vary by field type. Here's an overview of where these elements are shown in the form:
+
+   <Frame>
+   <img src="/images/product/assets/custom-forms-2.png" alt="A screenshot showing a request modal on the Requests page with a request form showing the three field types. Each field element is labeled with its type: the text field's field label reads Text field label, the placeholder value is Placeholder, and so on."/>
+   </Frame>
+</Step>
+<Step>
+For text and text area fields, choose whether the field is required. A user cannot submit a request if a required field has not been filled out. 
+</Step>
+<Step>
+As needed, click **Add field** and repeat the steps above to add additional fields. 
+   <Tip>
+   Avoid collecting data ConductorOne already has. Requester identity (ID, email, name) is always available and does not need to be requested again.
+   </Tip>
+</Step>
+<Step>
+When you're satisfied, click **Save**. Click **Preview** to see how the form will appear to requesters.
+</Step>
+</Steps>
+
+#### Mapping form inputs to automation steps
+
+To make your automation dynamic, you can pass the information collected in your form directly into your automation steps. Each field in your form has a Field ID that acts as a variable.
+
+How to use variables:
+
+* Syntax: Click the **Available data** tab of any step in your automation to see and copy the list of available form variables. These are nested under the `trigger` object. 
+
+* Usage: You can insert these variables into any supported automation step field, such as the body of a Slack message, a ticket description in Jira, or a resource name in a cloud provider.
+
+* Dynamic logic: Use these inputs to drive conditional branching. For instance, if `Urgency` is "High," you might route the workflow to a different approval policy or a higher-priority queue.
+
+### Configure the request policy
+
+<Steps>
+<Step>
+Follow the docs to [set up a new request policy](/product/admin/policies) or select an existing one. 
+
+Remember to consider the level of review and approval needed for the action:
+
+- Auto-approve low-risk, reversible operations.
+- Require manager or app owner approval for operations that create or change access.
+- Consider multi-stage policies for high-risk actions (for example, manager plus security).
+</Step>
+</Steps>
+
+### Scope the audience and provide instructions
+
+<Steps>
+<Step>
+Define who can **view** and **request** the action. Only the users you set here will be able to see and request the action. Choose from:
+
+- Entire organization (**Everyone**).
+- Only users who are currently assigned the specific entitlement or entitlements you specify. Use existing entitlements or groups where possible to align with your current RBAC model.
+</Step>
+<Step>
+**Optional.** Provide clear instructions for requesters in the **Request instructions** field. This text appears at the top of the request form to guide users on when and how to use the action.
+</Step>
+<Step>
+Click **Save** to finalize the request configuration.
+</Step>
+</Steps>
+
+### Enable the requestable automation
+
+Finally, when you're ready to make the action available to your defined audience, enable the **Allow users to request** toggle.
+
+**That's it!** Your requestable automation is now available to your defined audience in their **Actions** catalog.
+
+### Test end-to-end
+
+Once you have configured your requestable automation, perform a dry run to ensure the governance and automation align with your expectations.
+
+**Test as different roles:** Log in as a user within your defined audience to confirm the action is visible in the catalog, then log in as an approver to verify the task routing and notifications.
+
+**Validate the form and policy:** Ensure the field labels are clear for requesters and that the approval policy correctly gates or auto-approves the request based on your logic.
+
+**Audit the execution:** After approval, verify that the automation steps completed successfully in the downstream system and that the ConductorOne task log accurately captures the inputs and outcomes.
+
+**Check error handling:** Intentionally trigger an error (such as a missing required field or a connector timeout) to ensure the resulting task status and notifications provide enough context for troubleshooting.
+
+## App-specific requestable automations
+
+<Warning>
+A user who is an application owner with the **App Admin** role can create and manage app-specific requestable automations for the apps they own. 
+</Warning>
+
+You can create and manage requestable automations that are scoped to a specific app on that application's **Automations** tab. 
+
+To create an app-specific requestable automation: 
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Applications** and click the name of an application you own. 
+</Step>
+<Step>
+Click **Automations**. Any existing app-specific automations are listed here. 
+</Step>
+<Step>
+Follow the instructions to create a new [app-specific automation](/product/admin/automations#create-an-app-specific-automation) or select an existing one from the list.
+</Step>
+<Step>
+Follow the instructions above, beginning at [Configure requestability](/product/admin/automation-actions#configure-requestability), to configure the automation as requestable, including designing the form, setting the request policy, and scoping the audience.
+</Step>
+</Steps>
+<Tip>
+All app-specific automations are also listed on the **Automations** page. Only users with the **Super Admin** role can see and manage these automations from this page.
+</Tip>
+
+## Best practices and examples
+
+Requestable automations are most effective for operations that are currently managed via manual tickets, shared credentials, or ad-hoc scripts. By moving these into ConductorOne, you gain reliable audit evidence and empower non-IT staff to perform controlled changes.
+
+### Common patterns
+
+**Just-in-time infrastructure:** On-demand creation of project-scoped groups or repos with approval from an app owner.
+
+**Scoped admin tasks:** Allowing app owners to manage their own application's groups without granting them directory-wide admin rights.
+
+**Non-access workflows:** Handling operational tasks like environment freezes, timecard punch-ins, or hardware requests.
+
+### Example: Hardware request workflow
+
+This example demonstrates how to replace a manual ticketing process with a requestable automation.
+
+**The automation:** A workflow that creates a ticket in your ITSM system (such as Jira or ServiceNow) and notifies an `#it-ops` Slack channel.
+
+**The form:** Collects structured data via a "device type" dropdown and a "reason for request" text field.
+
+**The policy:** Configured to require approval from the user's manager and the IT Lead before the automation executes.
+
+**The outcome:** The user requests a new MacBook Pro via the **Actions** catalog. Once the IT Lead approves the task, the ITSM system ticket is automatically generated and logged, ensuring a consistent audit trail without manual data entry.
