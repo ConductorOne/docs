@@ -1,0 +1,221 @@
+---
+title: Common connector development gotchas
+og:title: Common connector development gotchas - ConductorOne
+og:description: Code-level issues that trip up connector developers and how to fix them.
+description: Code-level issues that trip up connector developers and how to fix them.
+sidebarTitle: "Common gotchas"
+---
+
+This page covers code-level issues that commonly trip up connector developers. For conceptual challenges (understanding access models, mapping to baton), see [The hardest parts](/developer/hardest-parts).
+
+## Config struct requires mapstructure tags
+
+When using `configSdk.DefineConfiguration()` with a custom Config struct, every field must have a `mapstructure` tag matching the field name.
+
+**The error:**
+
+```
+VerifyStructFields failed: field my-field in confschema does not have
+a corresponding struct tag in the configuration struct
+```
+
+**Wrong:**
+
+```go
+const fieldAPIKey = "api-key"
+
+var configFields = []field.SchemaField{
+    field.StringField(fieldAPIKey, field.WithRequired(true)),
+}
+
+type Config struct {
+    APIKey string  // Missing tag
+}
+```
+
+**Correct:**
+
+```go
+type Config struct {
+    APIKey string `mapstructure:"api-key"`  // Tag matches field name
+}
+```
+
+**Why:** The SDK uses Viper for configuration, which uses mapstructure for unmarshaling. The SDK validates that all schema fields have matching struct tags to catch misconfigurations at startup.
+
+## Import paths are under pkg/types
+
+The SDK's resource, entitlement, and grant helpers are under `pkg/types/`, not directly under `pkg/`.
+
+**The error:**
+
+```
+module github.com/conductorone/baton-sdk@latest found (v0.7.1),
+but does not contain package github.com/conductorone/baton-sdk/pkg/entitlement
+```
+
+**Wrong:**
+
+```go
+import (
+    "github.com/conductorone/baton-sdk/pkg/entitlement"
+    "github.com/conductorone/baton-sdk/pkg/grant"
+    "github.com/conductorone/baton-sdk/pkg/resource"
+)
+```
+
+**Correct:**
+
+```go
+import (
+    "github.com/conductorone/baton-sdk/pkg/types/entitlement"
+    "github.com/conductorone/baton-sdk/pkg/types/grant"
+    "github.com/conductorone/baton-sdk/pkg/types/resource"
+)
+```
+
+## Config struct must implement Configurable
+
+Your Config struct needs getter methods for the SDK to read values.
+
+**The error:**
+
+```
+cannot use cfg (variable of type *Config) as field.Configurable value
+```
+
+**Required methods:**
+
+```go
+type Config struct {
+    APIKey  string `mapstructure:"api-key"`
+    BaseURL string `mapstructure:"base-url"`
+}
+
+func (c *Config) GetString(key string) string {
+    switch key {
+    case "api-key":
+        return c.APIKey
+    case "base-url":
+        return c.BaseURL
+    }
+    return ""
+}
+
+func (c *Config) GetBool(key string) bool             { return false }
+func (c *Config) GetInt(key string) int               { return 0 }
+func (c *Config) GetStringSlice(key string) []string  { return nil }
+func (c *Config) GetStringMap(key string) map[string]any { return nil }
+```
+
+## Connector must be wrapped with NewConnector
+
+The connector you implement must be wrapped before returning from `getConnector`.
+
+**Wrong:**
+
+```go
+func getConnector(ctx context.Context, cfg *Config) (types.ConnectorServer, error) {
+    return connector.New(ctx, cfg)  // Returns your connector directly
+}
+```
+
+**Correct:**
+
+```go
+func getConnector(ctx context.Context, cfg *Config) (types.ConnectorServer, error) {
+    cb, err := connector.New(ctx, cfg)
+    if err != nil {
+        return nil, err
+    }
+    return connectorbuilder.NewConnector(ctx, cb)  // Wrap with NewConnector
+}
+```
+
+**Why:** `connectorbuilder.NewConnector` adds the gRPC server implementation around your connector's sync logic.
+
+## WithGrantableTo expects ResourceType pointers
+
+When creating entitlements, `WithGrantableTo` takes `*v2.ResourceType`, not strings.
+
+**Wrong:**
+
+```go
+entitlement.NewAssignmentEntitlement(resource, "member",
+    entitlement.WithGrantableTo("user"),  // String doesn't work
+)
+```
+
+**Correct:**
+
+```go
+var userResourceType = &v2.ResourceType{
+    Id:          "user",
+    DisplayName: "User",
+    Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_USER},
+}
+
+entitlement.NewAssignmentEntitlement(resource, "member",
+    entitlement.WithGrantableTo(userResourceType),  // Pass the pointer
+)
+```
+
+## Error messages should include connector name
+
+Prefix errors with your connector name for easier debugging in logs.
+
+**Okay:**
+
+```go
+return nil, fmt.Errorf("failed to list users: %w", err)
+```
+
+**Better:**
+
+```go
+return nil, fmt.Errorf("baton-myservice: failed to list users: %w", err)
+```
+
+## ExternalId is required for provisioning
+
+If your connector supports provisioning (Grant/Revoke), resources must have ExternalId set.
+
+**Without ExternalId, provisioning can't look up the native identifier:**
+
+```go
+resource, err := rs.NewResource(
+    displayName,
+    resourceType,
+    id,
+    // Missing ExternalId - provisioning will fail
+)
+```
+
+**With ExternalId:**
+
+```go
+resource, err := rs.NewResource(
+    displayName,
+    resourceType,
+    id,
+    rs.WithExternalID(&v2.ExternalId{Id: nativeID}),
+)
+```
+
+## go.mod needs go mod tidy
+
+Writing `go.mod` manually doesn't create `go.sum`. You must run `go mod tidy`.
+
+**The error:**
+
+```
+missing go.sum entry for module providing package ...
+```
+
+**Solution:**
+
+```bash
+go mod tidy
+```
+
+This downloads dependencies and generates the required `go.sum` file.

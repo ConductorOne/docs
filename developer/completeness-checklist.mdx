@@ -1,0 +1,87 @@
+---
+title: Connector completeness checklist
+og:title: Connector completeness checklist - ConductorOne
+og:description: Use this checklist before shipping a connector to ensure it meets all requirements for resources, entitlements, grants, and provisioning.
+description: Checklist for verifying connector completeness before shipping.
+sidebarTitle: "Completeness checklist"
+---
+
+Use this checklist before shipping a connector. Each item maps to a specific validation that tooling may eventually automate.
+
+## Resource types
+
+Every connector must define which resources it syncs from the target system.
+
+- **At least one user resource with TRAIT_USER** - Users are the principals that receive access. Without users, there's nothing to grant entitlements to.
+
+- **Each resource type has a unique ID** - Resource type IDs must be unique within the connector. Use lowercase (e.g., `user`, `group`, `project`).
+
+- **Resources with TRAIT_GROUP have a "member" entitlement** - Groups exist to contain members. If something has TRAIT_GROUP, it should have an entitlement that represents membership.
+
+- **Resources with TRAIT_ROLE have an "assigned" entitlement** - Roles exist to be assigned. If something has TRAIT_ROLE, it should have an entitlement that represents assignment.
+
+## Entitlements
+
+Entitlements represent what access exists on a resource.
+
+- **Every entitlement specifies grantableTo** - This declares which principal types can receive the entitlement. Usually `user`, but could also include service accounts or other principals.
+
+- **grantableTo references existing resource types** - The resource types listed in grantableTo must actually exist in your connector.
+
+- **Entitlements have display names** - Human-readable names help operators understand what access is being granted.
+
+- **User resources generally don't have entitlements** - Users receive access, they don't grant it. If you're adding entitlements to users, consider whether you've modeled the relationship correctly.
+
+## Grants
+
+Grants connect principals to entitlements - they represent "who has what."
+
+- **Resources with entitlements have a Grants() implementation** - If a resource has entitlements, you need to sync who currently has those entitlements.
+
+- **Grants() returns grants for each entitlement type** - If a group has both "member" and "admin" entitlements, your Grants() should return grants for both.
+
+- **Grant principals match grantableTo types** - If an entitlement says `grantableTo: [user]`, grants should only reference user resources.
+
+## Provisioning (if supported)
+
+Provisioning enables ConductorOne to actually grant and revoke access.
+
+- **Resources set ExternalId** - The ExternalId is the native system's identifier for the resource. This is required for provisioning because it's how the connector knows which resource to modify.
+
+- **ExternalId uses the native system's identifier** - Use the ID that the target API expects, not a synthetic ID.
+
+- **Grant()/Revoke() contain actual logic** - Stub implementations that return nil aren't provisioning. Verify your methods actually call the target API.
+
+## Structural requirements
+
+These ensure the connector can run at all.
+
+- **Connector implements Metadata()** - Returns connector name and description.
+
+- **Connector implements Validate()** - Tests that credentials are valid and the connection works.
+
+- **Validate() actually tests the connection** - Don't just return nil. Make an API call to verify credentials work.
+
+- **ResourceSyncers() returns at least one syncer** - A connector that syncs nothing isn't useful.
+
+## Quick reference
+
+| Check | Why it matters |
+|-------|----------------|
+| User with TRAIT_USER | Users receive access - required for any connector |
+| TRAIT_GROUP has member entitlement | Groups contain members - that's what makes them groups |
+| TRAIT_ROLE has assigned entitlement | Roles are assigned - that's what makes them roles |
+| Entitlements have grantableTo | Defines who can receive access |
+| Grants() matches entitlements | Syncs current access state |
+| ExternalId set | Required for provisioning to work |
+| Validate() tests connection | Catches credential problems early |
+
+## Common mistakes
+
+**Modeling access backwards** - Users receive entitlements on groups/roles, not the other way around. If you find yourself adding entitlements to user resources, reconsider your model.
+
+**Missing grants** - Defining entitlements but not implementing Grants() means ConductorOne sees what access exists but not who has it.
+
+**No ExternalId** - Without ExternalId, provisioning can't work because the connector doesn't know which resource to modify.
+
+**Validate() is a stub** - A Validate() that always returns nil doesn't catch credential problems until sync fails.
