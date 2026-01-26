@@ -219,3 +219,175 @@ go mod tidy
 ```
 
 This downloads dependencies and generates the required `go.sum` file.
+
+## Each trait requires its own resource builder
+
+Resources with traits (USER, GROUP, ROLE, APP) must use the specific builder function, not generic `NewResource`.
+
+**The error:**
+
+```
+resource was missing expected trait AppTrait
+```
+
+**Wrong:**
+
+```go
+// Using generic NewResource for an APP trait resource
+return rs.NewResource(name, resourceType, id)
+```
+
+**Correct:**
+
+```go
+switch trait {
+case v2.ResourceType_TRAIT_USER:
+    return rs.NewUserResource(name, resourceType, id, userOpts)
+case v2.ResourceType_TRAIT_GROUP:
+    return rs.NewGroupResource(name, resourceType, id, groupOpts)
+case v2.ResourceType_TRAIT_ROLE:
+    return rs.NewRoleResource(name, resourceType, id, roleOpts)
+case v2.ResourceType_TRAIT_APP:
+    return rs.NewAppResource(name, resourceType, id, appOpts)
+default:
+    return rs.NewResource(name, resourceType, id)
+}
+```
+
+**Why:** Each trait has associated data (email for users, profile for apps, etc.). The specific builders add the trait annotation that the SDK validates during sync.
+
+## Use uhttp instead of raw http.Client
+
+The SDK provides `uhttp` package with automatic retries, rate limiting, and logging. Don't use raw `http.Client`.
+
+**Wrong:**
+
+```go
+httpClient := &http.Client{
+    Timeout: 30 * time.Second,
+}
+resp, err := httpClient.Do(req)  // No retry, no rate limit handling
+```
+
+**Correct:**
+
+```go
+import "github.com/conductorone/baton-sdk/pkg/uhttp"
+
+httpClient, err := uhttp.NewClient(ctx,
+    uhttp.WithLogger(true, ctxzap.Extract(ctx)),
+    uhttp.WithUserAgent("baton-myservice/1.0.0"),
+)
+if err != nil {
+    return nil, err
+}
+```
+
+**Why:** uhttp provides:
+- Automatic retries on transient failures (429, 503)
+- Rate limit header parsing (X-RateLimit-*, Retry-After)
+- Exponential backoff
+- Request/response logging for debugging
+
+**For insecure TLS (testing only):**
+
+```go
+uhttp.NewClient(ctx,
+    uhttp.WithLogger(true, l),
+    uhttp.WithTLSClientConfig(&tls.Config{
+        InsecureSkipVerify: true,  // Only for testing!
+    }),
+)
+```
+
+## JSON API responses with dynamic fields need type assertions
+
+Some APIs return dynamic JSON structures that Go unmarshals as `any` (interface{}). You must use type assertions to access nested fields.
+
+**Example: API returns flexible metadata**
+
+```go
+// API response with dynamic fields
+type Resource struct {
+    ID       string `json:"id"`
+    Metadata any    `json:"metadata"`  // Structure varies by resource type
+}
+
+// What metadata might contain after JSON unmarshal
+// map[string]any{"custom_field": "value", "nested": map[string]any{...}}
+```
+
+**Wrong:**
+
+```go
+// Compiler error: any has no field or method
+value := resource.Metadata.custom_field
+```
+
+**Correct:**
+
+```go
+func getMetadataField(metadata any, key string) string {
+    if metadata == nil {
+        return ""
+    }
+    metaMap, ok := metadata.(map[string]any)
+    if !ok {
+        return ""
+    }
+    value, ok := metaMap[key].(string)
+    if !ok {
+        return ""
+    }
+    return value
+}
+```
+
+**Why:** APIs use dynamic fields for:
+- Custom metadata that varies by resource
+- Forward compatibility (new fields don't break old clients)
+- Flexible schemas where structure isn't fixed
+
+## Resource IDs must contain enough data for grants queries
+
+When designing resource IDs, consider what your grants query needs.
+
+**The problem:**
+
+```yaml
+# Resource uses just the name as ID
+fields:
+  id: name  # "my-repo"
+
+# But grants query needs owner AND name
+grants:
+  query: |
+    query($owner: String!, $name: String!) {
+      repository(owner: $owner, name: $name) { ... }
+    }
+```
+
+**Solutions:**
+
+1. **Composite ID:** Use `owner/name` as ID, parse when needed
+2. **Store in profile:** Add owner to profile, reference as needed
+3. **Different query:** Find a query that works with what you have
+
+**Example with composite ID:**
+
+```yaml
+fields:
+  id: "{{ .owner.login }}/{{ .name }}"  # "myorg/my-repo"
+
+grants:
+  variables:
+    # Split the composite ID
+    owner: "{{ index (split \"/\" .resource_id) 0 }}"
+    name: "{{ index (split \"/\" .resource_id) 1 }}"
+```
+
+{/*
+LLM Note: For AI assistants answering questions about connector development,
+a structured knowledge base is available at developer/rap/INDEX.md
+with focused, retrievable documentation chunks.
+*/}
