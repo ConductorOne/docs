@@ -234,5 +234,154 @@ Complete Steps 1-3 in [Set up an external data source](/product/admin/external-d
 
 You can run the script on demand, or set up a scheduler to run it periodically. The S3 bucket syncs with ConductorOne once an hour.
 
+## Deployment examples
 
+### Docker
+
+Build a container for your self-hosted connector:
+
+```dockerfile
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN make build
+
+FROM alpine:latest
+COPY --from=builder /app/dist/baton-yourservice /usr/local/bin/
+ENTRYPOINT ["baton-yourservice"]
+```
+
+Run in service mode:
+
+```bash
+docker run -d \
+  -e BATON_CLIENT_ID=$CLIENT_ID \
+  -e BATON_CLIENT_SECRET=$CLIENT_SECRET \
+  -e BATON_API_KEY=$API_KEY \
+  baton-yourservice
+```
+
+### Kubernetes
+
+Create secrets for connector credentials:
+
+```yaml
+# baton-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-yourservice-secrets
+type: Opaque
+stringData:
+  BATON_CLIENT_ID: "<ConductorOne client ID>"
+  BATON_CLIENT_SECRET: "<ConductorOne client secret>"
+  BATON_API_KEY: "<Target system API key>"
+```
+
+Deploy the connector:
+
+```yaml
+# baton-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-yourservice
+  labels:
+    app: baton-yourservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: baton-yourservice
+  template:
+    metadata:
+      labels:
+        app: baton-yourservice
+    spec:
+      containers:
+      - name: baton-yourservice
+        image: ghcr.io/conductorone/baton-yourservice:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: baton-yourservice-secrets
+```
+
+For high availability, increase replicas. Multiple instances can share the same client ID and secret; ConductorOne distributes tasks round-robin.
+
+### Systemd (Linux)
+
+Create a service unit:
+
+```ini
+# /etc/systemd/system/baton-yourservice.service
+[Unit]
+Description=Baton Connector for YourService
+After=network.target
+
+[Service]
+Type=simple
+User=baton
+ExecStart=/usr/local/bin/baton-yourservice
+Restart=always
+RestartSec=10
+EnvironmentFile=/etc/baton/yourservice.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Environment file:
+
+```bash
+# /etc/baton/yourservice.env
+BATON_CLIENT_ID=your-client-id
+BATON_CLIENT_SECRET=your-client-secret
+BATON_API_KEY=your-api-key
+```
+
+Enable and start:
+
+```bash
+sudo systemctl enable baton-yourservice
+sudo systemctl start baton-yourservice
+sudo systemctl status baton-yourservice
+```
+
+## Production considerations
+
+### Credential management
+
+Never commit credentials to source control. Options:
+
+| Method | Use case |
+|--------|----------|
+| Environment variables | Works everywhere |
+| Secrets manager | AWS Secrets Manager, HashiCorp Vault |
+| Kubernetes secrets | For K8s deployments |
+
+### Network requirements
+
+Service mode requires outbound HTTPS only:
+- Connector initiates connections to ConductorOne
+- No inbound ports required
+- Works behind NAT and most firewalls
+
+If you have egress filtering, allow HTTPS to `*.conductorone.com`.
+
+### Resource requirements
+
+Connectors are lightweight:
+
+| Resource | Recommendation |
+|----------|----------------|
+| CPU | 1 CPU (or fractional) is sufficient |
+| Memory | Typically under 100MB; allocate 250-500MB for large syncs |
+
+### Monitoring
+
+ConductorOne sends email alerts after three consecutive sync failures. Monitor:
+- Sync status in the ConductorOne UI
+- Connector logs for errors
+- Memory usage (should stay stable)
 

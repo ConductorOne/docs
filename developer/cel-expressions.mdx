@@ -1,0 +1,125 @@
+---
+title: "CEL expressions"
+sidebarTitle: "CEL reference"
+description: "Common Expression Language reference for baton-http and baton-sql data transformation."
+---
+
+Both meta-connectors use the Common Expression Language (CEL) for data transformation. CEL is a simple, fast, and secure expression language - a safer alternative to embedding arbitrary code in your config.
+
+## Basic field mapping
+
+```yaml
+map:
+  id: ".id"                                           # Direct field access
+  display_name: ".first_name + ' ' + .last_name"      # String concatenation
+  status: ".is_active ? 'enabled' : 'disabled'"       # Ternary
+```
+
+## Available functions
+
+| Function | Purpose | Example |
+|----------|---------|---------|
+| `lowercase()` | Convert to lowercase | `lowercase(.email)` |
+| `uppercase()` | Convert to uppercase | `uppercase(.code)` |
+| `titlecase()` | Title case | `titlecase(.name)` |
+| `trim()` | Remove whitespace | `trim(.value)` |
+| `match()` | Regex matching | `match(.email, ".*@corp\\.com")` |
+| `extract()` | Extract regex group | `extract(.urn, "user-([0-9]+)")` |
+| `replace()` | String replacement | `replace(.name, {"old": "_", "new": "-"})` |
+| `get()` | Get with default | `get(.optional, "default")` |
+| `has()` | Check field exists | `has(input.employee_id)` |
+| `parse_json()` | Parse JSON string | `parse_json(.metadata).type` |
+| `json_path()` | Extract from JSON | `json_path(.data, "user.name")` |
+
+## Context variables
+
+Available variables depend on context:
+
+| Variable | Available in | Purpose |
+|----------|--------------|---------|
+| `item` or `.column` | List/Grants | Current row/item |
+| `resource` | Grants, Provisioning | Current resource |
+| `principal` | Provisioning | User being granted/revoked |
+| `entitlement` | Provisioning | Entitlement being modified |
+| `input` | Account creation | User-provided form values |
+| `password` | Account creation | Generated password |
+
+## Common patterns
+
+### Conditional field mapping
+
+```yaml
+account_type: ".type == 'employee' ? 'human' : 'service'"
+```
+
+### Null handling
+
+```yaml
+last_login: ".last_login != null ? string(.last_login) : ''"
+```
+
+### String operations
+
+```yaml
+# Lowercase email
+email: "lowercase(.email)"
+
+# Build full name
+display_name: ".first_name + ' ' + .last_name"
+
+# Extract username from email
+username: "extract(.email, '([^@]+)@.*')"
+```
+
+### Type conversion
+
+```yaml
+# Convert numeric ID to string
+id: "string(.numeric_id)"
+```
+
+### Field existence check
+
+```yaml
+# Use optional field with fallback
+department: "has(input.department) ? input.department : 'Unknown'"
+```
+
+### Skip conditions in grants
+
+```yaml
+grants:
+  - query: "SELECT * FROM role_members WHERE role_id = ?<role_id>"
+    map:
+      - skip_if: ".user_type == 'system'"    # Skip system accounts
+        principal_id: ".user_id"
+        principal_type: "user"
+        entitlement_id: "member"
+```
+
+## Quick reference
+
+```yaml
+# Direct field access
+".field_name"
+
+# String concatenation
+".first + ' ' + .last"
+
+# Ternary
+".active ? 'enabled' : 'disabled'"
+
+# Null check
+".value != null ? .value : 'default'"
+
+# Type conversion
+"string(.numeric_id)"
+
+# Field existence check
+"has(input.optional_field)"
+
+# Lowercase/uppercase
+"lowercase(.email)"
+"uppercase(.code)"
+```
+

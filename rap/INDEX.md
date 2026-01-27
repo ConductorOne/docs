@@ -64,6 +64,7 @@ Documentation for building ConductorOne Baton connectors. Request relevant secti
 |---------|------|--------|
 | Debugging workflow | `debug-workflow.md` | Step-by-step process |
 | Common errors | `debug-errors.md` | Pagination loops, auth, rate limits |
+| Key patterns | `patterns.md` | Entity sources, HTTP handling, pagination, idempotency |
 
 ### Reference
 
@@ -114,9 +115,11 @@ Documentation for building ConductorOne Baton connectors. Request relevant secti
 **Code with errors**
 - Error message -> `debug-errors.md`
 - Interface issue -> `build-syncer.md`, `ref-sdk.md`
-- Pagination issue -> `build-pagination.md`
+- Pagination issue -> `build-pagination.md`, `patterns.md`
 - Auth failure -> `recipes-auth.md`, `debug-errors.md`
 - Cache problems -> `recipes-caching.md`
+- Grant/Revoke -> `patterns.md`
+- HTTP responses -> `patterns.md`
 
 **Configuration**
 - CLI flags -> `ref-config.md`

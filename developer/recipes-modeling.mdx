@@ -1,0 +1,283 @@
+---
+title: "Resource modeling recipes"
+sidebarTitle: "Modeling recipes"
+description: "Battle-tested patterns for structuring resources, hierarchies, and display names."
+---
+
+Each recipe includes the problem, solution code, and rationale.
+
+## Parent-child hierarchies
+
+**Problem:** Model resources that exist within other resources (projects in organizations, repos in orgs).
+
+**Solution:**
+
+```go
+// Define parent type with child annotation
+var orgResourceType = &v2.ResourceType{
+    Id:          "organization",
+    DisplayName: "Organization",
+    Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+}
+
+var projectResourceType = &v2.ResourceType{
+    Id:          "project",
+    DisplayName: "Project",
+    Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+}
+
+// In org List(), declare children
+func (o *orgBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    orgs, err := o.client.ListOrgs(ctx)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    var resources []*v2.Resource
+    for _, org := range orgs {
+        r, _ := resource.NewResource(org.Name, orgResourceType, org.ID,
+            // Declare that this org has project children
+            resource.WithAnnotation(&v2.ChildResourceType{
+                ResourceTypeId: projectResourceType.Id,
+            }),
+        )
+        resources = append(resources, r)
+    }
+
+    return resources, "", nil, nil
+}
+
+// In project List(), reference parent
+func (p *projectBuilder) List(ctx context.Context, parentID *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    // parentID is the org ID when SDK calls this for each org
+    if parentID == nil {
+        return nil, "", nil, nil // Projects only exist within orgs
+    }
+
+    projects, err := p.client.ListProjects(ctx, parentID.Resource)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    var resources []*v2.Resource
+    for _, proj := range projects {
+        r, _ := resource.NewResource(proj.Name, projectResourceType, proj.ID,
+            resource.WithParentResourceID(parentID),
+        )
+        resources = append(resources, r)
+    }
+
+    return resources, "", nil, nil
+}
+```
+
+**Why:** Parent-child relationships let the SDK scope `List()` calls. The UI can show hierarchical navigation. Entitlements inherit context from their parent.
+
+## Display name fallbacks
+
+**Problem:** Ensure resources always have a human-readable name.
+
+**Solution:**
+
+```go
+func displayNameFor(user User) string {
+    if user.DisplayName != "" {
+        return user.DisplayName
+    }
+    if user.Name != "" {
+        return user.Name
+    }
+    if user.Email != "" {
+        return user.Email
+    }
+    // Last resort - never return empty
+    return user.ID
+}
+
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, _ := u.client.ListUsers(ctx)
+
+    var resources []*v2.Resource
+    for _, user := range users {
+        r, _ := resource.NewUserResource(
+            displayNameFor(user),  // Never empty
+            userResourceType,
+            user.ID,
+        )
+        resources = append(resources, r)
+    }
+
+    return resources, "", nil, nil
+}
+```
+
+**Why:** Empty display names break UIs and access reviews. Reviewers can't approve access to "(blank)".
+
+## Error handling
+
+### Wrap errors with context
+
+**Problem:** Make errors traceable to their source.
+
+**Solution:**
+
+```go
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, err := u.client.ListUsers(ctx)
+    if err != nil {
+        // Include connector name and operation
+        return nil, "", nil, fmt.Errorf("baton-example: failed to list users: %w", err)
+    }
+
+    // ...
+}
+```
+
+**Why:** The connector name prefix makes it clear which connector produced the error. The `%w` verb preserves the error chain for `errors.Is()` and `errors.As()`.
+
+### Distinguish retryable vs fatal errors
+
+**Problem:** Let the SDK know which errors are worth retrying.
+
+**Solution:**
+
+```go
+import "github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, err := u.client.ListUsers(ctx)
+    if err != nil {
+        // Check for retryable errors
+        if isRateLimitError(err) || isNetworkError(err) {
+            // SDK will retry automatically
+            return nil, "", nil, err
+        }
+
+        // Fatal errors (bad credentials, permission denied)
+        if isAuthError(err) {
+            return nil, "", nil, fmt.Errorf("baton-example: authentication failed (check credentials): %w", err)
+        }
+
+        return nil, "", nil, err
+    }
+    // ...
+}
+
+func isRateLimitError(err error) bool {
+    var httpErr *HTTPError
+    if errors.As(err, &httpErr) {
+        return httpErr.StatusCode == 429
+    }
+    return false
+}
+```
+
+**Why:** The SDK handles retries for transient errors. Clear error messages for fatal errors help users fix configuration issues.
+
+### Check context cancellation in loops
+
+**Problem:** Respect timeouts and cancellation in long-running operations.
+
+**Solution:**
+
+```go
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    users, err := u.client.ListUsers(ctx)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    var resources []*v2.Resource
+    for _, user := range users {
+        // Check for cancellation
+        select {
+        case <-ctx.Done():
+            return nil, "", nil, ctx.Err()
+        default:
+        }
+
+        r, err := resource.NewUserResource(user.Name, userResourceType, user.ID)
+        if err != nil {
+            return nil, "", nil, err
+        }
+        resources = append(resources, r)
+    }
+
+    return resources, "", nil, nil
+}
+```
+
+**Why:** A cancelled context means "stop now." Ignoring it wastes resources and can cause timeouts in subsequent operations.
+
+## Anti-patterns
+
+### Don't buffer entire datasets
+
+```go
+// WRONG: Loading everything into memory
+allUsers, _ := client.GetAllUsers(ctx)  // Could be millions
+
+// CORRECT: Paginate
+users, nextCursor, _ := client.ListUsers(ctx, cursor, 100)
+```
+
+### Don't swallow errors
+
+```go
+// WRONG: Ignoring errors
+users, _ := client.ListUsers(ctx)
+
+// CORRECT: Return errors
+users, err := client.ListUsers(ctx)
+if err != nil {
+    return nil, "", nil, fmt.Errorf("baton-example: failed to list users: %w", err)
+}
+```
+
+### Don't log sensitive data
+
+```go
+// WRONG: Logging tokens
+l.Info("authenticating", zap.String("token", token))
+
+// CORRECT: Never log credentials
+l.Info("authenticating", zap.String("user", username))
+```
+
+### Don't mix resource types in grants
+
+```go
+// WRONG: Grant with mismatched types
+grant.NewGrant(
+    groupResource,
+    "member",
+    &v2.ResourceId{
+        ResourceType: "app",  // Wrong!
+        Resource:     userID,
+    },
+)
+
+// CORRECT: Consistent resource types
+grant.NewGrant(
+    groupResource,
+    "member",
+    &v2.ResourceId{
+        ResourceType: userResourceType.Id,
+        Resource:     userID,
+    },
+)
+```
+
+

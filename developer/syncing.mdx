@@ -1,0 +1,438 @@
+---
+title: "Building connectors"
+sidebarTitle: "Syncing resources"
+description: "Build a connector that produces clean resources, entitlements, and grants - and can be tested without touching production."
+---
+
+You are building a Go module that implements the `ResourceSyncer` contract. The interface is focused: four methods per resource type, and the SDK handles everything else.
+
+Your connector answers three questions:
+
+1. **What exists?** Users, groups, roles, applications
+2. **What permissions are available?** Entitlements that can be granted
+3. **Who has what?** Grants connecting users to permissions
+
+The Baton SDK handles orchestration, output format, pagination coordination, and communication with ConductorOne. You focus on translating your system's API into the Resource/Entitlement/Grant model.
+
+## Project structure
+
+### Directory layout
+
+A common structure for Baton connectors:
+
+```
+baton-{service}/
+  cmd/baton-{service}/
+    main.go                 # Entry point, config setup
+  pkg/
+    config/
+      config.go             # Configuration fields (API keys, URLs, etc.)
+    connector/
+      connector.go          # Register resource types with the SDK
+      users.go              # User resource builder
+      groups.go             # Group resource builder
+      roles.go              # Role resource builder (if applicable)
+      resource_types.go     # Shared resource type definitions
+    client/                 # Optional: API wrapper
+      client.go             # HTTP client for target system API
+  .github/workflows/        # CI/release automation
+    ci.yaml                 # Build, lint, test on PRs
+    release.yaml            # Build and publish releases
+  .golangci.yml             # Lint configuration
+  baton_capabilities.json   # Capability manifest (what operations are supported)
+  go.mod                    # Dependencies (includes baton-sdk)
+  go.sum                    # Dependency checksums
+  Makefile                  # Build targets
+  README.md                 # Usage documentation
+  LICENSE                   # Apache 2.0 (standard for Baton)
+```
+
+<Note>
+Not all connectors follow this exact structure. Some organize code differently based on their needs. The structure above is a common starting point, not a requirement.
+</Note>
+
+The naming convention is `baton-{service}` - for example, `baton-github`, `baton-okta`, `baton-salesforce`.
+
+### Key files
+
+| File | Purpose |
+|------|---------|
+| `cmd/.../main.go` | Entry point. Parses config, creates connector, runs CLI |
+| `pkg/connector/connector.go` | Registers all resource builders with the SDK |
+| `pkg/connector/*.go` | One file per resource type implementing ResourceSyncer |
+| `pkg/client/client.go` | Wraps target system API with Go methods |
+| `baton_capabilities.json` | Declares what operations (sync, grant, revoke) are supported |
+
+### Makefile targets
+
+Standard connectors include these make targets:
+
+```makefile
+# Build the connector binary
+make build
+# Output: dist/{os}_{arch}/baton-{service}
+
+# Run golangci-lint
+make lint
+
+# Update dependencies
+make update-deps
+```
+
+### Setting up a new connector
+
+<Steps>
+  <Step title="Create repository">
+    ```bash
+    mkdir baton-yourservice
+    cd baton-yourservice
+    go mod init github.com/your-org/baton-yourservice
+    ```
+  </Step>
+  <Step title="Add baton-sdk dependency">
+    ```bash
+    go get github.com/conductorone/baton-sdk
+    ```
+  </Step>
+  <Step title="Create directory structure">
+    ```bash
+    mkdir -p cmd/baton-yourservice pkg/connector pkg/client
+    ```
+  </Step>
+  <Step title="Copy standard files">
+    From an existing connector:
+    - `.golangci.yml` (lint configuration)
+    - `Makefile` (build targets)
+    - `.github/workflows/ci.yaml` (CI workflow)
+    - `.github/workflows/release.yaml` (release workflow)
+  </Step>
+  <Step title="Implement the connector">
+    Following the patterns in this guide
+  </Step>
+</Steps>
+
+### Capability manifest
+
+The capability manifest declares what operations your connector supports. This file is **auto-generated** by running:
+
+```bash
+./dist/*/baton-yourservice capabilities > baton_capabilities.json
+```
+
+Example manifest:
+
+```json
+{
+  "@type": "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
+  "resourceTypeCapabilities": [
+    {
+      "resourceType": {
+        "id": "user",
+        "displayName": "User",
+        "traits": ["TRAIT_USER"]
+      },
+      "capabilities": ["CAPABILITY_SYNC"]
+    },
+    {
+      "resourceType": {
+        "id": "group",
+        "displayName": "Group",
+        "traits": ["TRAIT_GROUP"]
+      },
+      "capabilities": ["CAPABILITY_SYNC", "CAPABILITY_PROVISION"]
+    }
+  ]
+}
+```
+
+| Capability | Meaning |
+|------------|---------|
+| `CAPABILITY_SYNC` | Resource type participates in sync |
+| `CAPABILITY_TARGETED_SYNC` | Supports fetching specific resources by ID |
+| `CAPABILITY_PROVISION` | Supports Grant/Revoke operations |
+
+<Warning>
+Do not write this file manually. Always generate it from the connector binary to ensure accuracy.
+</Warning>
+
+## Implementing ResourceSyncer
+
+The `ResourceSyncer` interface is the heart of your connector. Per resource type, implement four methods:
+- `ResourceType(ctx) *v2.ResourceType`
+- `List(ctx, parentResourceID, token) ([]*v2.Resource, nextToken, annotations, error)`
+- `Entitlements(ctx, resource, token) ([]*v2.Entitlement, nextToken, annotations, error)`
+- `Grants(ctx, resource, token) ([]*v2.Grant, nextToken, annotations, error)`
+
+### ResourceType()
+
+Defines what this resource is:
+
+```go
+func (u *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
+    return &v2.ResourceType{
+        Id:          "user",
+        DisplayName: "User",
+        Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_USER},
+    }
+}
+```
+
+Traits tell ConductorOne how to interpret the resource. Use `TRAIT_USER` for people, `TRAIT_GROUP` for collections, `TRAIT_ROLE` for permission bundles.
+
+### List()
+
+Fetches all instances of this resource type:
+
+```go
+func (u *userBuilder) List(ctx context.Context, parentID *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    // Call your API
+    users, nextPage, err := u.client.GetUsers(ctx, pToken.Token)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    // Convert to Baton resources
+    var resources []*v2.Resource
+    for _, user := range users {
+        r, err := resource.NewUserResource(user.Name, userResourceType, user.ID,
+            resource.WithEmail(user.Email, true))
+        if err != nil {
+            return nil, "", nil, err
+        }
+        resources = append(resources, r)
+    }
+
+    return resources, nextPage, nil, nil
+}
+```
+
+Return a page of resources plus a token for the next page. Empty token means you're done. The SDK calls you repeatedly until you return an empty token.
+
+### The RawId annotation
+
+Always include a `RawId` annotation with the external system's stable identifier:
+
+```go
+r, err := resource.NewUserResource(user.Name, userResourceType, user.ID,
+    resource.WithEmail(user.Email, true))
+if err != nil {
+    return nil, "", nil, err
+}
+// Add the external system's ID for correlation
+r.WithAnnotation(&v2.RawId{Id: user.ID})
+```
+
+**Why this matters:** ConductorOne uses the `RawId` to:
+- **Correlate resources across syncs** - Same ID = same resource, not a duplicate
+- **Track provenance** - Know which connector discovered which resource
+- **Enable pre-sync patterns** - Support reservation mechanisms that create placeholders before sync
+
+| System | RawId value | Example |
+|--------|-------------|---------|
+| Okta | `app.Id` | `0oa1xyz789abcdef0` |
+| AWS | ARN | `arn:aws:iam::123456789:user/alice` |
+| GCP | Resource name | `projects/my-project-123` |
+| Azure AD | Object ID | `550e8400-e29b-41d4-a716-446655440000` |
+| GitHub | Node ID or numeric ID | `MDQ6VXNlcjE=` or `12345` |
+
+### Entitlements()
+
+Defines what permissions this resource offers:
+
+```go
+func (g *groupBuilder) Entitlements(ctx context.Context, resource *v2.Resource,
+    pToken *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+
+    // Groups typically offer membership
+    membership := entitlement.NewAssignmentEntitlement(resource, "member",
+        entitlement.WithDisplayName("Member"),
+        entitlement.WithDescription("Member of this group"))
+
+    return []*v2.Entitlement{membership}, "", nil, nil
+}
+```
+
+Users typically return empty here - they receive grants, they don't offer entitlements.
+
+### Grants()
+
+Reports who has each entitlement:
+
+```go
+func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource,
+    pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+
+    // Get group members from API
+    members, nextPage, err := g.client.GetGroupMembers(ctx, resource.Id.Resource, pToken.Token)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    var grants []*v2.Grant
+    for _, member := range members {
+        g := grant.NewGrant(resource, "member",
+            &v2.ResourceId{ResourceType: "user", Resource: member.ID})
+        grants = append(grants, g)
+    }
+
+    return grants, nextPage, nil, nil
+}
+```
+
+<Note>
+**Pagination must progress**: the SDK detects and errors if your "next page token" repeats the input token.
+</Note>
+
+## Modeling decisions
+
+How you structure resources and entitlements determines what ConductorOne can manage.
+
+### What to sync as a resource?
+
+| Good candidates | Why |
+|-----------------|-----|
+| Users | People who have access |
+| Groups | Collections that grant access |
+| Roles | Permission bundles |
+| Teams | Organizational units with permissions |
+| Projects/Workspaces | Scoped containers |
+
+| Skip these | Why |
+|------------|-----|
+| Business data | Customers, orders, tickets - not access control |
+| Logs/events | Operational data, not identity |
+| Configurations | Unless they control who can do what |
+
+### Entitlement granularity
+
+**Fine-grained:** Separate entitlements for read, write, admin
+- Pro: More control in access reviews
+- Con: More complexity, more grants to manage
+
+**Coarse-grained:** Single "access" entitlement
+- Pro: Simpler model
+- Con: Can't revoke admin without revoking everything
+
+Choose based on how access decisions are made. If "can this person admin the database?" is a real question, admin should be a separate entitlement.
+
+### Parent-child relationships
+
+Some systems have hierarchies: organization -> project -> resource.
+
+```go
+// Parent declares it has children
+orgResource, _ := resource.NewResource("Acme Corp", orgType, "org-123",
+    resource.WithAnnotation(&v2.ChildResourceType{ResourceTypeId: "project"}))
+
+// Child references parent
+projectResource, _ := resource.NewResource("Platform", projectType, "proj-456",
+    resource.WithParentResourceID(orgResource.Id))
+```
+
+Use hierarchies when:
+- Child resources only make sense within a parent context
+- You need to scope List() calls to a parent
+- The target API is organized hierarchically
+
+See [Pagination patterns](/developer/pagination) for handling hierarchical data with nested pagination.
+
+## Definition of done
+
+Your connector is ready when:
+
+- **Sync works deterministically** (same inputs produce stable IDs and consistent results across runs)
+- **Pagination works** (no token loops; handles large datasets)
+- **You can run without production ConductorOne credentials** (local testing story exists)
+
+### Build and test
+
+```bash
+make build
+./dist/baton-yourservice --api-key $KEY --log-level debug
+
+# Inspect results
+baton resources -f sync.c1z
+baton grants -f sync.c1z
+```
+
+## Common mistakes
+
+### Resource type mismatches
+
+A grant references a principal by `ResourceId` (type + id). If your principal type id doesn't match what you used in `ResourceType()`, you will create dangling edges.
+
+### Implicit capability claims
+
+A connector may have a `--provisioning` flag but still not implement specific provisioners. Treat "flag exists" as necessary, not sufficient.
+
+### API clients
+
+If the service has an official Go SDK, use it. Otherwise, the SDK's `uhttp` package handles rate limiting and retries:
+
+```go
+import "github.com/conductorone/baton-sdk/pkg/uhttp"
+
+httpClient, _ := uhttp.NewBaseHttpClient(ctx)
+```
+
+### Error handling
+
+Return errors, don't panic. Wrap errors with context:
+
+```go
+if err != nil {
+    return nil, "", nil, fmt.Errorf("baton-yourservice: failed to list users: %w", err)
+}
+```
+
+### Credentials
+
+Never log credentials. Use the SDK's `SecretString` type for sensitive config fields:
+
+```go
+type Config struct {
+    APIKey types.SecretString `mapstructure:"api-key"`
+}
+```
+
+## Quick reference
+
+### Resource traits
+
+| Trait | Use for |
+|-------|---------|
+| `TRAIT_USER` | Individual accounts |
+| `TRAIT_GROUP` | Collections of users |
+| `TRAIT_ROLE` | Permission bundles |
+| `TRAIT_APP` | Applications |
+
+### Method return signatures
+
+```go
+// List returns: resources, nextPageToken, annotations, error
+([]*v2.Resource, string, annotations.Annotations, error)
+
+// Entitlements returns: entitlements, nextPageToken, annotations, error
+([]*v2.Entitlement, string, annotations.Annotations, error)
+
+// Grants returns: grants, nextPageToken, annotations, error
+([]*v2.Grant, string, annotations.Annotations, error)
+```
+
+### SDK helpers
+
+```go
+// Create user resource
+resource.NewUserResource(name, resourceType, id, ...options)
+
+// Create group resource
+resource.NewGroupResource(name, resourceType, id, ...options)
+
+// Create entitlement
+entitlement.NewAssignmentEntitlement(resource, slug, ...options)
+
+// Create grant
+grant.NewGrant(resource, entitlementSlug, principalID)
+```
