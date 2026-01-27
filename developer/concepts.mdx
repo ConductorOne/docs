@@ -14,18 +14,21 @@ The minimal "connector surface area" is expressed through the SDK's `ResourceSyn
 
 Your connector produces an access graph that powers access reviews, certification campaigns, provisioning workflows, and compliance reporting. This single data structure drives everything ConductorOne does. The graph has three main node/edge types:
 
-```
-+------------------+     +------------------+     +------------------+
-|    RESOURCES     |     |   ENTITLEMENTS   |     |      GRANTS      |
-|------------------|     |------------------|     |------------------|
-| Things that exist|     | Permissions that |     | Who has what     |
-|                  |     | can be assigned  |     |                  |
-| - Users          | --> | - Admin access   | --> | Alice has Admin  |
-| - Groups         |     | - Read access    |     | on Database X    |
-| - Roles          |     | - Member of team |     |                  |
-| - Applications   |     |                  |     | Bob is Member    |
-+------------------+     +------------------+     | of Team Y        |
-                                                  +------------------+
+```mermaid
+flowchart LR
+    subgraph Resources["RESOURCES"]
+        R1[Things that exist]
+        R2["- Users<br>- Groups<br>- Roles<br>- Applications"]
+    end
+    subgraph Entitlements["ENTITLEMENTS"]
+        E1[Permissions that<br>can be assigned]
+        E2["- Admin access<br>- Read access<br>- Member of team"]
+    end
+    subgraph Grants["GRANTS"]
+        G1[Who has what]
+        G2["Alice has Admin<br>on Database X<br><br>Bob is Member<br>of Team Y"]
+    end
+    Resources --> Entitlements --> Grants
 ```
 
 - **Resources**: things that exist (users, groups, apps, roles, projects, etc.)
@@ -64,6 +67,7 @@ The trait enum includes:
 - `TRAIT_ROLE`
 - `TRAIT_APP`
 - `TRAIT_SECRET`
+- `TRAIT_ROLE_SCOPE`
 
 Traits are optional for custom resource types, but they unlock powerful features. When you mark a resource with `TRAIT_USER`, ConductorOne knows it can correlate that resource with users from other systems, display it in user-centric views, and apply user-specific policies.
 
@@ -74,6 +78,7 @@ Traits are optional for custom resource types, but they unlock powerful features
 | `TRAIT_ROLE` | Permission sets |
 | `TRAIT_APP` | Applications or services |
 | `TRAIT_SECRET` | Credentials or tokens |
+| `TRAIT_ROLE_SCOPE` | Permission boundaries (e.g., AWS accounts, GCP projects) |
 
 ### Entitlements
 
@@ -89,6 +94,16 @@ entitlement := &v2.Entitlement{
 ```
 
 One resource can offer multiple entitlements. A GitHub repository might offer: read, write, maintain, admin.
+
+#### Entitlement purpose
+
+Entitlements have a `purpose` field that tells ConductorOne how to interpret them:
+
+| Purpose | Use For | Example |
+|---------|---------|---------|
+| `assignment` | Membership or role assignment | "Member of Engineering Team" |
+| `permission` | Specific permission on a resource | "Read access to Repository X" |
+| `ownership` | Ownership or administrative control | "Owner of Project Y" |
 
 ### Grants
 
@@ -141,13 +156,13 @@ Stage 4: Grants()
 
 When a connector runs, data flows through several stages. The clean separation between what you control and what ConductorOne controls makes the system reliable and testable:
 
-```
-+-----------+    +-----------+    +-------+    +-------+    +--------+
-|  External |    | Connector |    |  .c1z |    | Sync  |    | Domain |
-|   System  | -> |  (yours)  | -> | File  | -> |Service| -> | Objects|
-+-----------+    +-----------+    +-------+    +-------+    +--------+
-                                                   |
-                                              "Uplift"
+```mermaid
+flowchart LR
+    A[External System] --> B[Connector<br>yours]
+    B --> C[.c1z File]
+    C --> D[Sync Service]
+    D --> E[Domain Objects]
+    D -.-> F["Uplift"]
 ```
 
 1. **Fetch** - Your connector calls the external API
