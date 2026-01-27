@@ -1,14 +1,16 @@
 ---
 title: Write condition expressions
 og:title: Write condition expressions - ConductorOne docs
-og:description: Write Common Expression Language (CEL) expressions to create powerful rules for ConductorOne policies and groups. 
-description: Write Common Expression Language (CEL) expressions to create powerful rules for ConductorOne policies and groups. 
+og:description: Write Common Expression Language (CEL) expressions to define rules for ConductorOne policies and groups.
+description: Write Common Expression Language (CEL) expressions to define rules for ConductorOne policies and groups.
 ---
-{/* Editor Refresh: 2026-01-07 */}
+{/* Editor Refresh: 2026-01-21 */}
 
 ## What are CEL expressions and why use them?
 
 CEL (Common Expression Language) expressions are powerful, flexible rules that let you automate decision-making across ConductorOne. Instead of manually configuring each policy, group, or automation, you can write expressions that automatically adapt to your organization's unique needs.
+
+CEL is an open-source expression language created by Google. It's the same technology behind Firebase Rules, Google Cloud IAM conditions, and Kubernetes admission webhooks. ConductorOne extends standard CEL with custom functions for directory lookups, user queries, and access management.
 
 ### Why use CEL expressions?
 
@@ -22,7 +24,59 @@ CEL (Common Expression Language) expressions are powerful, flexible rules that l
 
 **Integrate with your data:** Leverage user attributes, directory information, and access patterns to make intelligent decisions.
 
-## Where CEL expressions are used in ConductorOne
+---
+
+## Where CEL expressions are used
+
+ConductorOne uses CEL expressions in many contexts. Each context provides different variables and expects a specific return type.
+
+### Primary contexts
+
+| Context | Returns | What it enables |
+|:--------|:--------|:----------------|
+| **Policy conditions** | true/false | Route requests to different approval workflows based on user, entitlement, or request properties |
+| **Dynamic groups** | true/false | Automatically maintain group membership as users change departments, titles, or attributes |
+| **Policy step approvers** | One or more users | Dynamically select approvers based on manager chains, app owners, or entitlement membership |
+
+### All expression contexts
+
+| Context | Returns | What it enables |
+|:--------|:--------|:----------------|
+| **Access review filters** | true/false | Scope certification campaigns to specific users or accounts |
+| **Automation triggers** | true/false | Fire automations when user or account attributes change |
+| **Automation steps** | varies | Template interpolation and step-to-step data flow |
+| **Push config filters** | true/false | Target users for push rule provisioning |
+| **Account provisioning** | text | Compute dynamic account attributes during grants |
+| **User attribute mapping** | text or list of text | Derive user attributes from existing data |
+
+<Info>
+Each context provides different variables. For example, `subject` is available in most contexts, but `ctx.trigger` is only available in automations. See the [expressions reference](/product/admin/expressions-reference) for details.
+</Info>
+
+---
+
+## How expressions work
+
+When you save an expression, ConductorOne validates it immediately. This catches most errors before they can cause problems:
+
+**Caught when you save:**
+- Syntax errors (missing quotes, parentheses)
+- Undefined variables (typos, wrong context)
+- Type mismatches (comparing string to number)
+- Wrong return type (returning a user when true/false is expected)
+
+**Only visible at runtime:**
+- Empty results (looking up a user who doesn't exist)
+- Empty lists (user has no manager)
+- Missing profile fields
+
+<Warning>
+Runtime issues are subtle. For example, if an approver expression returns an empty list because the user has no manager, the approval step is **silently skipped** rather than failing. See [troubleshooting](/product/admin/expressions-troubleshooting) for common issues and solutions.
+</Warning>
+
+---
+
+## Context details
 
 ### Policies - Automate access decisions
 
@@ -32,11 +86,11 @@ CEL expressions power two critical parts of [policies](/product/admin/policies):
 <img src="/images/product/assets/conditional-policies.png" alt="A policy's details view, showing the policy conditionals and expressions."/>
 </Frame>
 
-**Policy conditionals** determine what action a policy will take (approve, deny, or route for review). These expressions must return a Boolean value.
+**Policy conditions** determine what action a policy will take (approve, deny, or route for review). These expressions must return true or false.
 
 *Example: Automatically approve access for employees in the Engineering department, but require manager approval for contractors.*
 
-**Policy expressions** determine who will be assigned to review a task. These expressions must return a list of users.
+**Policy step approvers** determine who will be assigned to review a task. These expressions must return one or more users.
 
 *Example: Route access requests from contractors to their manager, while employees can self-approve certain low-risk access.*
 
@@ -48,7 +102,7 @@ Use CEL expressions to define membership for [ConductorOne groups](/product/admi
 <img src="/images/product/assets/conditional-policies-c1-groups.png" alt="A group's details view, showing the group expressions."/>
 </Frame>
 
-**Group expressions** automatically determine group membership based on user attributes and conditions. These expressions must return a list of users.
+**Group expressions** automatically determine group membership based on user attributes and conditions. These expressions must return true or false - true means the user is included in the group.
 
 *Example: Create a group that automatically includes all Engineering employees who are full-time and active.*
 
@@ -58,17 +112,17 @@ Fine-tune [automations](/product/admin/automations) with CEL expressions to cont
 
 **Automation triggers** determine when an automation should start based on user changes, access events, or other conditions.
 
-**Automation steps** can include conditional logic to skip steps or modify behavior based on user data.
+**Automation steps** can include conditional logic to skip steps or modify behavior based on user data. See [workflow expressions](/product/admin/expressions-workflows) for details on passing data between steps.
 
 *Example: Automatically revoke access for users who haven't logged in for 45 days, but only for non-critical applications.*
 
-### Campaigns - Precisely target access reviews 
+### Campaigns - Precisely target access reviews
 
 Use CEL expressions in [access review campaigns](/product/admin/campaigns) to precisely define which users, accounts, or access grants should be reviewed:
 
-**User selection** expressions define which users should be included in the campaign.
+**User scope** expressions filter which users should be included in the campaign.
 
-**Account parameters** expressions filter which app accounts should be reviewed.
+**Account scope** expressions filter which app accounts should be reviewed.
 
 *Example: Review access for all contractors in the Engineering department who have been granted access to production systems.*
 
@@ -76,11 +130,22 @@ Use CEL expressions in [access review campaigns](/product/admin/campaigns) to pr
 
 When [configuring account provisioning](/product/admin/account-provisioning), CEL expressions transform your user data to match the requirements of target applications:
 
-*Example: Map a user's full name from your directory to the first name and last name fields required by a target application.*
+*Example: Derive a username from the user's email address by extracting the part before the @ symbol.*
 
-## Ready to start writing CEL expressions? 
+---
 
-- **[Object and function reference](/product/admin/expressions-reference)** - Complete reference for all available objects, functions, and their usage (including time functions)
+## Next steps
+
+- **[Expressions reference](/product/admin/expressions-reference)** - Complete reference for all available objects, functions, and their usage
 
 - **[Examples and patterns](/product/admin/expressions-examples)** - Practical examples, common patterns, and real-world use cases
 
+- **[Workflow expressions](/product/admin/expressions-workflows)** - Pass data between automation steps using the ctx object
+
+- **[Troubleshooting](/product/admin/expressions-troubleshooting)** - Debug common errors and understand failure modes
+
+{/*
+LLM Note: For AI assistants answering questions about CEL expressions in ConductorOne,
+a structured knowledge base is available at /product/admin/rap/index.md with focused,
+retrievable documentation chunks. The index describes available files and when to use each.
+*/}

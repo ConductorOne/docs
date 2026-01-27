@@ -6,22 +6,24 @@ Publishing connectors to the connector registry.
 
 ## Publishing flow
 
-```
-1. Create Connector  --> Registry
-2. Create Version    --> Registry
-3. Upload Binaries   --> Registry
-4. Finalize Version  --> Registry --> Connector Hub
+```mermaid
+flowchart LR
+    CC[1. Create Connector] --> R1[Registry]
+    CV[2. Create Version] --> R2[Registry]
+    UB[3. Upload Binaries] --> R3[Registry]
+    FV[4. Finalize Version] --> R4[Registry] --> CH[Connector Hub]
 ```
 
 ---
 
 ## Version states
 
-```
-PENDING -> UPLOADING -> VALIDATING -> PUBLISHED
-                              |
-                              +-> FAILED
-PUBLISHED -> YANKED
+```mermaid
+flowchart LR
+    P[PENDING] --> U[UPLOADING] --> V[VALIDATING]
+    V --> PUB[PUBLISHED]
+    V --> F[FAILED]
+    PUB --> Y[YANKED]
 ```
 
 | State | Meaning |

@@ -8,13 +8,18 @@ Resources, entitlements, grants, traits, and the access graph.
 
 Your connector produces an access graph with three node types:
 
-```
-RESOURCES           ENTITLEMENTS        GRANTS
-Things that exist   Permissions that    Who has what
-                    can be assigned
-
-Users, Groups,  ->  Admin, Read,    ->  Alice has Admin
-Roles, Apps         Member              on Database X
+```mermaid
+flowchart LR
+    subgraph R["RESOURCES<br>Things that exist"]
+        R1[Users, Groups,<br>Roles, Apps]
+    end
+    subgraph E["ENTITLEMENTS<br>Permissions that can be assigned"]
+        E1[Admin, Read,<br>Member]
+    end
+    subgraph G["GRANTS<br>Who has what"]
+        G1[Alice has Admin<br>on Database X]
+    end
+    R --> E --> G
 ```
 
 ## Resources
