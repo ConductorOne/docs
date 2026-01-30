@@ -1,0 +1,336 @@
+---
+title: Step up authentication (Beta)
+og:title: Step up authentication - ConductorOne docs
+og:description: Require additional authentication for sensitive approvals using Step Up Authentication.
+description: Require additional authentication for sensitive approvals using Step Up Authentication.
+sidebarTitle: Step up authentication
+---
+{/* Editor Refresh: 2026-01-30 */}
+
+<Warning>
+Step Up Authentication is currently in beta. Some features may have limitations or require additional validation.
+</Warning>
+
+## What is Step Up Authentication?
+
+Step Up Authentication enhances your approval workflows' security by requiring additional authentication for sensitive approvals. Rather than relying solely on a user's initial session, this feature forces a stronger authentication challenge at the time of approval, creating a clear security boundary and audit trail for critical actions.
+
+### Recommended use cases
+
+Consider implementing Step Up Authentication for these approval scenarios:
+
+* Administrative access approvals (system admin, database admin)
+* Production environment access
+* Customer data access
+* Financial systems access
+* Critical infrastructure changes
+* Privileged role assignments
+
+## Known limitations of the beta
+
+* **Slack**: Approval via Step Up is not supported at this time
+* **cone CLI**: Approval via Step Up is not supported at this time
+* **Access Reviews**: Approval via Step Up can work, but the UX is not yet optimized for this case
+* **Microsoft Entra Conditional Access** support is pending additional validation
+
+## Prerequisites
+
+Before implementing Step Up Authentication, ensure you have:
+
+* The Super Administrator user role in ConductorOne
+* Administrator access to your identity provider (Okta or Microsoft Entra)
+* Ability to create OAuth applications in your identity provider
+* Knowledge of your organization's MFA requirements and policies
+* Understanding of which approval workflows require enhanced security
+
+## How Step Up Authentication works
+
+### Core concept
+
+Step Up Authentication creates a security boundary at the approval decision point:
+
+1. Users authenticate normally to access ConductorOne
+2. When attempting to approve sensitive requests, users must "step up" to a stronger authentication method
+3. The identity provider verifies the user with the required authentication factors
+4. Upon verification, the approval is processed with an audit trail of the enhanced authentication
+
+### Architecture
+
+ConductorOne implements the [RFC 9470 OAuth 2.0 Step Up Authentication Challenge Protocol](https://www.rfc-editor.org/rfc/rfc9470.html):
+
+1. ConductorOne redirects to the identity provider with authentication context requirements
+2. Identity provider evaluates the user's current authentication level
+3. If needed, identity provider challenges the user for additional factors
+4. Upon successful authentication, the user is redirected back to ConductorOne with verification
+
+### Authentication flow details
+
+* Each approval requiring Step Up generates a new authentication challenge
+* Authentication state is not cached between approvals
+* The identity provider determines which factors to request based on configured ACR values
+* The flow is implemented as a standard OAuth 2.0 authorization code flow with specific parameters
+
+## Implementation checklist
+
+Use this checklist to guide your implementation:
+
+- [ ] Review your organization's authentication requirements
+- [ ] Identify approval workflows requiring elevated security
+- [ ] Configure your identity provider's security settings, MFA settings, and an OIDC Client Application
+- [ ] Set up the Step Up provider in ConductorOne
+- [ ] Test the configuration
+- [ ] Apply to a test policy
+- [ ] Validate end-to-end functionality
+- [ ] Document configuration details for your organization
+- [ ] Roll out to production policies
+- [ ] Monitor for issues
+
+## Provider configuration
+
+### Supported provider types
+
+ConductorOne currently supports two provider types:
+
+1. **OAuth2 Providers** (RFC 9470 compliant)
+   * Okta
+   * Any provider supporting the OAuth 2.0 Step Up Authentication Challenge Protocol
+2. **Microsoft Entra** (Azure AD)
+   * Uses Microsoft's Conditional Access authentication context
+
+### Add a Step Up provider
+
+<Steps>
+<Step>
+Navigate to **Settings** > **Step Up Authentication**.
+</Step>
+<Step>
+Click **Add Step Up provider**.
+</Step>
+<Step>
+Select provider type (OAuth2 or Microsoft Entra).
+</Step>
+<Step>
+Fill in the required configuration fields.
+</Step>
+</Steps>
+
+#### OAuth2 provider configuration
+
+Required fields:
+
+* **Provider name**: A unique identifier for this provider
+* **Issuer URL**: The base URL of your OAuth2 provider (e.g., `https://your-company.okta.com`)
+* **Client ID**: The OAuth2 client ID
+* **Client secret**: The OAuth2 client secret
+* **ACR values**: Authentication Context Class Reference values that define the authentication level required
+
+See the **Okta integration guide** below for instructions on how to generate these credentials.
+
+#### Microsoft Entra configuration
+
+Required fields:
+
+* **Provider name**: A unique identifier for this provider
+* **Issuer URL**: Your Microsoft Entra tenant URL
+* **Client ID**: The application client ID
+* **Client secret**: The application client secret
+* **Conditional access IDs**: The authentication context IDs (format: C1-C99)
+
+### Test your configuration
+
+After configuring a provider, test it before using it in production:
+
+<Steps>
+<Step>
+Click the **Test Step Up** button on the provider detail page.
+</Step>
+<Step>
+Complete the authentication flow with your identity provider.
+</Step>
+<Step>
+Verify successful redirection back to ConductorOne.
+</Step>
+<Step>
+Check for a success confirmation message.
+</Step>
+</Steps>
+
+Successful tests will update the "Last Tested" timestamp on the provider.
+
+## Policy configuration
+
+Once your provider is configured and tested, enable Step Up Authentication in your approval policies:
+
+<Steps>
+<Step>
+Navigate to **Governance** > **Policies**.
+</Step>
+<Step>
+Edit an existing policy or create a new one.
+</Step>
+<Step>
+For any approval step (User, Group, Resource, or Role), enable **Requires Step Up Authentication**.
+</Step>
+<Step>
+Select your configured provider from the dropdown.
+</Step>
+<Step>
+Save the policy.
+</Step>
+</Steps>
+
+<Note>
+When Step Up Authentication is enabled for an approval step, auto-approval will be automatically disabled.
+</Note>
+
+## Okta integration guide
+
+### Create an Okta application
+
+<Steps>
+<Step>
+Log in to your Okta Admin Dashboard.
+</Step>
+<Step>
+Navigate to **Applications** > **Applications**.
+</Step>
+<Step>
+Click **Create App Integration**.
+</Step>
+<Step>
+Select **OIDC - OpenID Connect** and **Web Application**.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Configure the application:
+
+* **Name**: ConductorOne Step Up Authentication
+* **Grant type**: Authorization Code
+* **Sign-in redirect URIs**: `https://accounts.conductor.one/auth/callback`
+* **Controlled access**: Select appropriate options based on your security requirements
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+Note the **Client ID** and **Client Secret** for use in ConductorOne.
+</Step>
+</Steps>
+
+### Configure Okta authentication policies
+
+For granular control:
+
+<Steps>
+<Step>
+Navigate to **Security** > **Authentication Policies**.
+</Step>
+<Step>
+Create a policy specifically for ConductorOne Step Up Authentication.
+</Step>
+<Step>
+Define rules that require stronger authentication methods (e.g., MFA).
+</Step>
+<Step>
+Assign the policy to your ConductorOne Step Up application.
+</Step>
+</Steps>
+
+### Add Okta as a Step Up provider
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Settings** > **Step Up Authentication**.
+</Step>
+<Step>
+Click **Add Step Up Provider**.
+</Step>
+<Step>
+Select **OAuth2 (RFC 9470 compliant)**.
+</Step>
+<Step>
+Enter the following details:
+
+* **Provider Name**: Okta Step Up
+* **Issuer URL**: Your Okta domain (e.g., `https://your-company.okta.com`)
+* **Client ID**: The Client ID from your Okta application
+* **Client Secret**: The Client Secret from your Okta application
+* **ACR Values**: Select appropriate values based on your security requirements
+</Step>
+</Steps>
+
+### Okta ACR values reference
+
+| ACR Value | Description | Security Level | Typical Use Case |
+| :---- | :---- | :---- | :---- |
+| `urn:okta:loa:1fa:any` | Any single-factor authentication | Low | Non-sensitive approvals |
+| `urn:okta:loa:1fa:pwd` | Password authentication | Low | Password reverification |
+| `urn:okta:loa:2fa:any` | Any multi-factor authentication | Medium | Sensitive resource approvals |
+| `urn:okta:loa:2fa:any:ifpossible` | MFA if possible | Medium | Balanced security/usability |
+| `phr` | Phishing-resistant authentication | High | High-value resource approvals |
+| `phrh` | Phishing-resistant hardware | Very High | Critical system access |
+
+### ACR value selection guidance
+
+* For general approvals with moderate sensitivity: `urn:okta:loa:2fa:any`
+* For highly sensitive approvals (admin rights): `phr` or `phrh`
+* For testing or gradual rollout: `urn:okta:loa:2fa:any:ifpossible`
+
+## End-user experience
+
+When a task requires Step Up Authentication for approval:
+
+1. The task will be marked with a distinct "Requires Step Up Authentication" indicator
+2. Instead of a standard "Approve" button, users will see "Approve with Step Up"
+3. Clicking this button redirects the user to the configured identity provider
+4. The user completes the required authentication steps
+5. Upon successful authentication, the user is returned to ConductorOne
+6. The approval is processed and an audit trail is created
+
+Example approval flow with Okta:
+
+```
+User clicks "Approve with Step Up" 
+  ↓
+Redirect to Okta
+  ↓
+Okta checks authentication context
+  ↓
+Okta prompts for additional factors based on ACR value
+  ↓
+User completes authentication challenge
+  ↓
+Redirect back to ConductorOne
+  ↓
+Approval processed with verification details
+  ↓
+Success message displayed to user
+```
+
+## Frequently asked questions
+
+**Q: How does Step Up Authentication affect automated approvals?**
+
+A: When Step Up Authentication is enabled for an approval step, automated approvals are automatically disabled since there's no user to perform the additional authentication.
+
+**Q: What happens if a user doesn't have MFA enabled in the identity provider?**
+
+A: The behavior depends on the ACR values and provider policies. For example in Okta, if the ACR value is `urn:okta:loa:2fa:any:ifpossible`, the system will use MFA if available, but proceed without it if not. With strict MFA requirements, users without MFA would be unable to complete the approval.
+
+**Q: Can different policies use different Step Up providers?**
+
+A: Yes, each approval step can be configured with a different Step Up provider, allowing you to require different authentication strengths for different types of approvals.
+
+**Q: How does this work with SSO?**
+
+A: Step Up Authentication works outside of the SSO flow. Users will still initially authenticate via SSO, but will be prompted for additional verification when performing sensitive approvals based on the configured policy.
+
+**Q: What happens during identity provider outages?**
+
+A: If the identity provider is unavailable, users won't be able to complete the Step Up Authentication flow.
+
+**Q: Does this feature support mobile applications or just web browsers?**
+
+A: The feature is designed to work on both web browsers and mobile devices, using standard OAuth 2.0 redirect flows.
