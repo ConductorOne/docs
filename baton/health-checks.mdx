@@ -1,0 +1,97 @@
+---
+title: "Connector health checks"
+description: "Monitor Baton connectors running in service mode with HTTP health check endpoints."
+og:title: "Connector health checks"
+og:description: "Monitor Baton connectors running in service mode with HTTP health check endpoints."
+sidebarTitle: "Health checks"
+---
+
+Baton connectors running in service mode can expose HTTP health check endpoints for container orchestrators (ECS Fargate, Kubernetes, etc.) to monitor connector health.
+
+## Enabling health checks
+
+Health checks are disabled by default. Enable them using environment variables or CLI flags:
+
+| Environment variable | CLI flag | Default | Description |
+|---------------------|----------|---------|-------------|
+| `BATON_HEALTH_CHECK` | `--health-check` | `false` | Enable the health check server |
+| `BATON_HEALTH_CHECK_PORT` | `--health-check-port` | `8081` | Port for the health check server |
+| `BATON_HEALTH_CHECK_BIND_ADDRESS` | `--health-check-bind-address` | `127.0.0.1` | Bind address for the health check server |
+
+## Health check endpoints
+
+| Endpoint | Description | Success (HTTP 200) | Failure (HTTP 503) |
+|----------|-------------|-------------------|-------------------|
+| `/health` | Full health check - calls the connector's `Validate()` method | Connector is healthy | Connector validation failed |
+| `/ready` | Readiness check - verifies connector client is available | Connector is ready to serve requests | Connector client not available |
+| `/live` | Liveness check - verifies process is running | Always returns success | N/A |
+
+## The health-check command
+
+Each connector includes a `health-check` subcommand for querying the health check server. This is designed for container exec probes, eliminating the need to bundle curl or other HTTP clients in container images.
+
+### Usage
+
+```bash
+# Check health (default endpoint)
+baton-myconnector health-check
+
+# Check readiness
+baton-myconnector health-check --endpoint=ready
+
+# Check liveness
+baton-myconnector health-check --endpoint=live
+
+# Check with custom port
+baton-myconnector health-check --health-check-port=9090
+```
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--endpoint` | `health` | Endpoint to check: `health`, `ready`, or `live` |
+| `--timeout` | `5` | Request timeout in seconds |
+| `--health-check-port` | `8081` | Port to connect to |
+| `--health-check-bind-address` | `127.0.0.1` | Address to connect to |
+
+### Exit codes
+
+| Scenario | Exit code |
+|----------|-----------|
+| HTTP 200 response | 0 (success) |
+| HTTP non-200 response | 1 (failure) |
+| Connection failed | 1 (failure) |
+| Timeout | 1 (failure) |
+
+## Container orchestrator examples
+
+### AWS ECS Fargate
+
+```json
+{
+  "healthCheck": {
+    "command": ["CMD", "/baton-myconnector", "health-check"],
+    "interval": 30,
+    "timeout": 10,
+    "retries": 3,
+    "startPeriod": 60
+  }
+}
+```
+
+### Kubernetes
+
+```yaml
+livenessProbe:
+  exec:
+    command: ["/baton-myconnector", "health-check", "--endpoint=live"]
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+readinessProbe:
+  exec:
+    command: ["/baton-myconnector", "health-check", "--endpoint=ready"]
+  initialDelaySeconds: 5
+  periodSeconds: 3
+```
