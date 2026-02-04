@@ -1,56 +1,63 @@
-# ConductorOne Connector Documentation Instructions
+---
+name: c1-connector-docs
+description: Write connector documentation for ConductorOne following the established template structure. Use when creating new connector docs in /baton/, updating existing connector pages, or reviewing connector documentation. Ensures consistency with the standardized connector doc format including capabilities tables, credential gathering, and cloud/self-hosted configuration tabs.
+---
 
-## Purpose
-This guide provides instructions for creating connector documentation in the `/baton/` directory that follows ConductorOne's current standards.
+# ConductorOne Connector Documentation
 
-## Required Information Checklist
+Write connector documentation for the `/baton/` directory following ConductorOne's standardized template.
 
-To create a connector doc, gather the following information:
+## When to Use This Skill
+
+Use this skill when:
+- Creating new connector documentation
+- Updating existing connector docs in `/baton/`
+- Reviewing connector documentation for consistency
+- Converting connector information into proper doc format
+
+## File Format
+
+**Location:** Save all connector docs as `.mdx` files in the `/baton/` directory.
+
+**Naming:** Use lowercase, hyphenated names matching the GitHub repo name.
+- Example: `baton-boomi` repo → `/baton/boomi.mdx`
+
+## Information Checklist
+
+Gather this information before writing:
 
 ### Basic Details
-- [ ] App/service name (e.g., "Salesforce", "Boomi", "GitHub")
-- [ ] Parent company name if applicable (e.g., "Atlassian Jira" vs just "Jira")
-- [ ] GitHub baton repo name (e.g., `baton-salesforce`)
-- [ ] Is this a v2/updated version?
-- [ ] Any version-specific notes or improvements?
+- App/service name (e.g., "Salesforce", "Boomi", "GitHub")
+- Parent company name if applicable (e.g., "Atlassian Jira" vs just "Jira")
+- GitHub baton repo name (e.g., `baton-salesforce`)
+- Is this a v2/updated version?
 
 ### Capabilities
-- [ ] What resources does it sync? (Accounts, Groups, Roles, Projects, etc.)
-- [ ] Which resources support provisioning?
-- [ ] Does it support account provisioning?
-- [ ] Does it support account deprovisioning?
-- [ ] Does it support secrets syncing?
-- [ ] Any special features? (ticketing, last login, etc.)
-- [ ] Any limitations or special permission behaviors?
-- [ ] Any platform-specific availability notes? (e.g., "Requires enterprise license")
+- What resources does it sync? (Accounts, Groups, Roles, Projects, etc.)
+- Which resources support provisioning?
+- Does it support account provisioning/deprovisioning?
+- Any special features? (ticketing, last login, secrets syncing)
+- Any limitations or platform-specific notes?
 
 ### Authentication
-- [ ] What credentials are needed? (API token, OAuth app, service account, etc.)
-- [ ] Are there multiple authentication options?
-- [ ] What permission level is required?
-- [ ] What specific scopes/permissions are needed?
-- [ ] Which scopes enable provisioning vs read-only?
-- [ ] Where in the app do users create credentials?
-- [ ] Are there security warnings about scope implications?
+- What credentials are needed? (API token, OAuth app, service account)
+- What permission level is required?
+- What specific scopes/permissions are needed?
+- Which scopes enable provisioning vs read-only?
+- Where in the app do users create credentials?
 
 ### Configuration
-- [ ] Is cloud-hosted available?
-- [ ] Is self-hosted available?
-- [ ] What fields need to be configured? (domain, API URL, org ID, etc.)
-- [ ] What environment variables are needed for self-hosted?
-- [ ] Any special CLI arguments for the baton connector?
-
-### Special Context
-- [ ] Any unique concepts users need to understand? (e.g., Boomi's global vs group roles)
-- [ ] Any "What's next" steps? (like SCIM setup)
-- [ ] Common troubleshooting notes?
-- [ ] Links to vendor API documentation?
+- Is cloud-hosted available?
+- Is self-hosted available?
+- What fields need to be configured?
+- What environment variables are needed for self-hosted?
 
 ---
 
 ## Document Structure
 
 ### Required Frontmatter
+
 ```yaml
 ---
 title: "Set up a [Connector Name] connector"
@@ -61,24 +68,48 @@ sidebarTitle: "[Connector Name]"
 ---
 ```
 
-### Standard Sections (in order)
+### Section Order
 
-#### 1. Version Callout (if applicable)
-```markdown
+1. Version callout (if applicable)
+2. Availability notes (if applicable)
+3. Capabilities table
+4. Special concepts section (if needed)
+5. Gather credentials
+6. Configure the connector (with Cloud/Self-hosted tabs)
+
+---
+
+## Section Templates
+
+### Version Callout (if applicable)
+
+```mdx
 <Tip>
 **This is version 2 of the [App Name] connector.** This version includes [improvements]. See [Migration guide] for details.
 </Tip>
 ```
 
-#### 2. Availability Notes (if applicable)
-```markdown
+### Availability Notes (if applicable)
+
+```mdx
 <Warning>
 This connector requires [specific requirements]. [Standard versions] are not supported.
 </Warning>
 ```
 
-#### 3. Capabilities
-```markdown
+### Beta Connectors
+
+```mdx
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+```
+
+### Capabilities Table
+
+```mdx
 ## Capabilities
 
 | Resource | Sync | Provision |
@@ -93,24 +124,23 @@ The [App Name] connector supports [automatic account provisioning](/docs/product
 **Notes:**
 - [Important capability details]
 - [Limitations or special behaviors]
-- [Platform-specific notes]
 ```
 
 **Icon reference:**
 - Checkmark: `<Icon icon="square-check" iconType="solid" color="#65DE23"/>`
 - Empty cell: Leave blank (no icon)
 
-#### 4. Special Concepts Section (if needed)
-If the app has unique concepts users need to understand (like Boomi's role types), add a section explaining them before the credentials section:
+### Special Concepts Section (if needed)
 
-```markdown
+```mdx
 ## Understanding [Concept] in [App Name]
 
 [Clear explanation of important concepts users need to understand before setup]
 ```
 
-#### 5. Gather Credentials
-```markdown
+### Gather Credentials
+
+```mdx
 ## Gather [App Name] credentials
 
 <Warning>
@@ -120,31 +150,26 @@ To configure the [App Name] connector, you need [specific permission level] perm
 <Steps>
   <Step>
     [First action to take]
-    
-    [Optional tip or context]
+
     <Tip>
     [Helpful information]
     </Tip>
   </Step>
 
   <Step>
-    [Next action]
-  </Step>
-
-  <Step>
     [Create credentials with numbered sub-steps if needed]
-    
+
     1. Navigate to [location]
     2. Click **[Button]**
     3. Enter a name: `ConductorOne`
     4. Select the following scopes:
        - `scope:name` - [What this enables]
        - `scope:name` - [What this enables]
-    
+
     <Warning>
     The **scope:name** scope is used by ConductorOne when automatically provisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
     </Warning>
-    
+
     5. Click **[Generate/Create]**
     6. Copy and save the [token/credentials] securely
   </Step>
@@ -155,9 +180,9 @@ For more information, see [link to vendor docs].
 
 **Multiple authentication options:** Use subheadings like `### Option 1: [Method]` and `### Option 2: [Method]`
 
-#### 6. Configure the Connector
+### Configure the Connector
 
-```markdown
+```mdx
 ## Configure the [App Name] connector
 
 <Tabs>
@@ -175,7 +200,7 @@ For more information, see [link to vendor docs].
 
       <Step>
         Choose how to set up the new [App Name] connector:
-        
+
         - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
         - Add the connector to a managed app (select from the list of existing managed apps)
         - Create a new managed app
@@ -183,7 +208,7 @@ For more information, see [link to vendor docs].
 
       <Step>
         Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
-        
+
         If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
       </Step>
 
@@ -197,7 +222,7 @@ For more information, see [link to vendor docs].
 
       <Step>
         Paste the [credentials] into the relevant fields:
-        
+
         - **[Field Name]**: [What to enter]
         - **[Field Name]**: [What to enter]
       </Step>
@@ -216,7 +241,7 @@ For more information, see [link to vendor docs].
 
   <Tab title="Self-hosted">
     Follow these instructions to use the [App Name](https://github.com/ConductorOne/baton-[connector-name]) connector, hosted and run in your own environment.
-    
+
     When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
 
     ### Step 1: Set up a new [App Name] connector
@@ -232,7 +257,7 @@ For more information, see [link to vendor docs].
 
       <Step>
         Choose how to set up the new [App Name] connector:
-        
+
         - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
         - Add the connector to a managed app (select from the list of existing managed apps)
         - Create a new managed app
@@ -240,7 +265,7 @@ For more information, see [link to vendor docs].
 
       <Step>
         Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
-        
+
         If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
       </Step>
 
@@ -254,7 +279,7 @@ For more information, see [link to vendor docs].
 
       <Step>
         Click **Rotate** to generate a new Client ID and Secret.
-        
+
         Carefully copy and save these credentials. We'll use them in Step 2.
       </Step>
     </Steps>
@@ -276,7 +301,7 @@ For more information, see [link to vendor docs].
       # ConductorOne credentials
       BATON_CLIENT_ID: <ConductorOne client ID>
       BATON_CLIENT_SECRET: <ConductorOne client secret>
-      
+
       # [App Name] credentials
       BATON_[APP]_[CREDENTIAL_1]: <Your [credential 1]>
       BATON_[APP]_[CREDENTIAL_2]: <Your [credential 2]>
@@ -341,11 +366,21 @@ For more information, see [link to vendor docs].
 
 ## Writing Standards
 
+### Template Variables
+
+Replace these consistently throughout:
+
+| Variable | Example |
+| :--- | :--- |
+| `[Connector Name]` | Full official name: "Atlassian Jira Cloud" |
+| `[App Name]` | Shortened name: "Jira Cloud" |
+| `[connector-name]` | Lowercase with hyphens: "jira-cloud" |
+| `[APP]` | Uppercase for env vars: "JIRA" |
+
 ### Naming Conventions
 - Use official product names with proper capitalization
 - Include version numbers when multiple versions exist (e.g., "v2")
 - Include parent company when relevant (e.g., "Atlassian Jira")
-- File names: lowercase with hyphens (e.g., `boomi.mdx`, `okta-v2.mdx`)
 
 ### Step Granularity
 - Each UI action gets its own `<Step>`
@@ -357,76 +392,46 @@ For more information, see [link to vendor docs].
 - Be direct and concise
 - Use "you" to address the reader
 - Use present tense: "The connector syncs..." not "The connector will sync..."
+- Don't use contractions in instructions
 
 ### UI Elements
 - Bold all UI elements: **Connectors**, **Add connector**, **Settings**
 - Use exact text from the UI
-- Navigation: Use ">" for menu paths: **Integrations** > **Connectors**
+- Navigation paths: Use ">" for menu paths: **Integrations** > **Connectors**
 
 ### Code and Credentials
 - Use backticks for code elements: `ConductorOne`, `BATON_CLIENT_ID`
 - Use angle brackets for placeholders: `<Your API token>`
 - File names in comments: `# baton-connector-name-secrets.yaml`
 
-### Warnings and Tips
-```markdown
-<Warning>
-Use for permission requirements, security implications, or destructive actions.
-</Warning>
-
-<Tip>
-Use for helpful context, best practices, or efficiency improvements.
-</Tip>
-```
-
 ### Links
-- Link to product docs: `/docs/product/admin/provisioning`
-- Link to GitHub repos: `https://github.com/ConductorOne/baton-[connector-name]`
-- Link to vendor docs when referencing external setup steps
+- Product docs: `/docs/product/admin/provisioning`
+- GitHub repos: `https://github.com/ConductorOne/baton-[connector-name]`
 - Always use full URLs for external links
-
----
-
-## Special Connector Types
-
-### SQL/Custom Connectors
-- Include extensive YAML configuration documentation
-- Provide complete example configurations
-- Explain each section thoroughly
-
-### Specialty Connectors
-- Clearly explain the specific use case
-- Note any limitations or special requirements
-
-### Beta Connectors
-Add at the top:
-```markdown
-<Warning>
-**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
-
-We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
-</Warning>
-```
 
 ---
 
 ## Common Patterns
 
 ### Permission Warnings
-```markdown
+
+```mdx
 <Warning>
 The **write::org** scope is used by ConductorOne when automatically provisioning and deprovisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
 </Warning>
 ```
 
 ### Completion Messages
+
 Always end both tabs with:
-```markdown
+
+```mdx
 **That's it!** Your [App Name] connector is now pulling access data into ConductorOne.
 ```
 
 ### Multiple Authentication Options
-```markdown
+
+```mdx
 ### Option 1: Use a personal access token
 
 <Steps>
@@ -444,35 +449,35 @@ Always end both tabs with:
 
 ## Things to Avoid
 
-### Don't Include:
-- ❌ Namespace specifications in YAML (`namespace: baton`)
-- ❌ Resource limits/requests in deployment YAML
-- ❌ `kubectl` commands for verification
-- ❌ Manual sync verification steps (describe UI behavior instead)
-- ❌ Overly detailed explanations of app setup choices
-- ❌ "Optional: Enable Sync secrets" step (not in current standard)
-- ❌ Individual `env` variables with `valueFrom` in YAML (use `envFrom` instead)
+### Don't Include
+- Namespace specifications in YAML (`namespace: baton`)
+- Resource limits/requests in deployment YAML
+- `kubectl` commands for verification
+- Manual sync verification steps (describe UI behavior instead)
+- Overly detailed explanations of app setup choices
+- "Optional: Enable Sync secrets" step
+- Individual `env` variables with `valueFrom` in YAML (use `envFrom` instead)
 
-### Don't Use:
-- ❌ "Setup" as a verb (use "set up")
-- ❌ Passive voice
-- ❌ Future tense
-- ❌ First person ("we", "our")
-- ❌ Contractions in instructions
+### Don't Use
+- "Setup" as a verb (use "set up")
+- Passive voice
+- Future tense
+- First person ("we", "our")
+- Contractions in instructions
 
 ---
 
 ## Quality Checklist
 
-Before finalizing a connector doc, verify:
+Before finalizing, verify:
 
 - [ ] Frontmatter is complete and properly formatted
 - [ ] All sections are in the correct order
 - [ ] Each `<Step>` contains only one primary action
 - [ ] All UI elements are bolded
 - [ ] Credentials section has clear warnings about required permissions
-- [ ] Cloud-hosted tab uses "Admin > Connectors" navigation
-- [ ] Self-hosted tab searches for "Baton"
+- [ ] Cloud-hosted tab uses **Integrations** > **Connectors** navigation
+- [ ] Self-hosted tab searches for **Baton**
 - [ ] Self-hosted tab has "Step 1, Step 2, Step 3" structure
 - [ ] YAML files use `-secrets` suffix and `envFrom` pattern
 - [ ] YAML has proper labels: `baton: true` and `baton-app: [name]`
@@ -482,22 +487,3 @@ Before finalizing a connector doc, verify:
 - [ ] Placeholder format is consistent: `<Description>`
 - [ ] No kubectl verification commands
 - [ ] Verification describes UI behavior, not manual checks
-
----
-
-## Example Template Variables
-
-When creating a doc, replace these consistently throughout:
-
-- `[Connector Name]` → Full official name (e.g., "Atlassian Jira Cloud")
-- `[App Name]` → Shortened name for readability (e.g., "Jira Cloud")
-- `[connector-name]` → Lowercase with hyphens (e.g., "jira-cloud")
-- `[APP]` → Uppercase for env vars (e.g., "JIRA")
-
----
-
-## File Location
-
-Save all connector docs as `.mdx` files in the `/baton/` directory with lowercase, hyphenated names matching the GitHub repo name.
-
-Example: `baton-boomi` repo → `/baton/boomi.mdx`
