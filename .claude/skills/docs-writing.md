@@ -66,6 +66,8 @@ Follow this process when creating ConductorOne documentation:
 - **Tone**: Technical, precise, no marketing speak or promotional language
 - **Headings**: Sentence case only ("Getting started" not "Getting Started")
 - **Procedures**: Numbered steps starting with action verbs
+- **Optional steps**: Start with **Optional.** (e.g., "**Optional.** Configure advanced settings...")
+- **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
 - **UI elements**: Bold formatting (**New profile**)
 - **Navigation paths**: **Admin** > **Access profiles** > **New profile**
 - **Terminology**: Use product-specific terms consistently (access profile, entitlement, campaign)
