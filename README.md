@@ -24,6 +24,15 @@ Every contribution, no matter how small, helps improve the experience for all Co
 
 Once you submit a Pull Request, the **ConductorOne Documentation Team** will review your suggestions. We may ask for clarification or make minor adjustments to ensure consistency with our style guide. Once approved, we’ll merge your changes and they’ll be live on the site shortly after!
 
+## 🤖 Writing with Claude
+
+This repo includes [Claude Code](https://claude.ai/code) skills to help you write documentation:
+
+- `/docs-writing` — General documentation style and formatting
+- `/connector-docs` — Connector documentation template
+
+Clone the repo, open it in Claude Code, and invoke the skill to get started.
+
 ## ⚖️ License
 
 By contributing to this repository, you agree that your contributions will be licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](./LICENSE).
