@@ -77,6 +77,7 @@ Follow this process when creating ConductorOne documentation:
 ## Technical Standards
 
 - Add language tags to all code blocks
+- For CEL expressions, use `go` as the language tag (CEL isn't recognized for syntax highlighting)
 - Use relative paths for internal links
 - Include alt text on all images
 - List prerequisites at the start of procedural content
