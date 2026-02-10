@@ -64,7 +64,7 @@ Follow this process when creating ConductorOne documentation:
 
 - **Voice**: Second person ("you"), active voice, direct language
 - **Tone**: Technical, precise, no marketing speak or promotional language
-- **Headings**: Sentence case only ("Getting started" not "Getting Started")
+- **Headings**: Sentence case only ("Getting started" not "Getting Started"); always include explanatory text after a heading before any subheadings
 - **Procedures**: Numbered steps starting with action verbs
 - **Optional steps**: Start with **Optional.** (e.g., "**Optional.** Configure advanced settings...")
 - **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
