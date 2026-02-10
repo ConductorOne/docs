@@ -143,9 +143,7 @@ Some connectors support custom actions that can be used in ConductorOne automati
 ```mdx
 ### Connector actions
 
-Connector actions are custom capabilities that extend ConductorOne automations with app-specific operations. You can use connector actions in the [Perform connector action](/docs/product/admin/automations-steps-reference#perform-connector-action) automation step.
-
-**Available actions:**
+Connector actions are custom capabilities that extend ConductorOne automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
