@@ -52,6 +52,11 @@ Gather this information before writing:
 - What fields need to be configured?
 - What environment variables are needed for self-hosted?
 
+### Connector Actions
+- Does the connector support actions? (Check `baton_capabilities.json` for `CAPABILITY_ACTIONS`)
+- What actions are available? (Check `pkg/connector/actions.go` and related files)
+- What arguments does each action require?
+
 ---
 
 ## Document Structure
@@ -73,9 +78,10 @@ sidebarTitle: "[Connector Name]"
 1. Version callout (if applicable)
 2. Availability notes (if applicable)
 3. Capabilities table
-4. Special concepts section (if needed)
-5. Gather credentials
-6. Configure the connector (with Cloud/Self-hosted tabs)
+4. Connector actions (if applicable)
+5. Special concepts section (if needed)
+6. Gather credentials
+7. Configure the connector (with Cloud/Self-hosted tabs)
 
 ---
 
@@ -129,6 +135,45 @@ The [App Name] connector supports [automatic account provisioning](/docs/product
 **Icon reference:**
 - Checkmark: `<Icon icon="square-check" iconType="solid" color="#65DE23"/>`
 - Empty cell: Leave blank (no icon)
+
+### Connector Actions Section (if applicable)
+
+Some connectors support custom actions that can be used in ConductorOne automations. Add this section after the Capabilities table if the connector supports actions.
+
+```mdx
+### Connector actions
+
+Connector actions are custom capabilities that extend ConductorOne automations with app-specific operations. You can use connector actions in the [Perform connector action](/docs/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+**Available actions:**
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| enable_user | `user_id` (string, required) | Unsuspends a suspended user account |
+| disable_user | `user_id` (string, required) | Suspends an active user account |
+```
+
+**Finding action information in baton repos:**
+
+1. Check `baton_capabilities.json` in the repo root for `CAPABILITY_ACTIONS` in the `connectorCapabilities` array
+2. Look for action definitions in:
+   - `pkg/connector/actions.go` - main connector-level actions
+   - `pkg/connector/user_actions.go` - user resource actions
+   - `pkg/connector/group_actions.go` - group resource actions
+   - `pkg/connector/connector.go` - sometimes contains `BatonActionSchema` definitions
+3. Each action schema includes:
+   - `Name` - the action identifier (e.g., `enable_user`)
+   - `Arguments` - required and optional fields
+   - `ReturnTypes` - what the action returns
+   - `Description` - what the action does
+
+**Common action types:**
+- `enable_user` / `disable_user` - Account enable/disable (most common)
+- `sign_out_user` - Force sign out from all sessions
+- `transfer_user_drive_files` / `transfer_user_calendar` - Data transfer operations
+- `change_user_org_unit` - Move user to different organizational unit
+- `create_group` - Create new groups
+- `offboarding_profile_update` - Comprehensive offboarding operations
 
 ### Special Concepts Section (if needed)
 
@@ -473,6 +518,7 @@ Before finalizing, verify:
 
 - [ ] Frontmatter is complete and properly formatted
 - [ ] All sections are in the correct order
+- [ ] Connector actions section included if `CAPABILITY_ACTIONS` is present in baton repo
 - [ ] Each `<Step>` contains only one primary action
 - [ ] All UI elements are bolded
 - [ ] Credentials section has clear warnings about required permissions
