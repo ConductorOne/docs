@@ -149,6 +149,7 @@ Follow this process when creating ConductorOne documentation:
 - Don't editorialize ("it's important to note")
 - Don't create duplicate content (update existing docs instead)
 - Don't use title case for headings
+- Don't use Latin abbreviations (i.e., e.g., etc.)—they're often misunderstood and don't localize well. Use plain English instead: "for example", "such as", "like", "that is", "in other words", "and so on"
 
 ## Reference Material
 
