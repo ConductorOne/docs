@@ -1,0 +1,348 @@
+---
+title: "Create and test functions"
+og:title: "Create and test functions"
+description: "Learn how to create, write, test, and publish ConductorOne functions using the built-in code editor."
+og:description: "Learn how to create, write, test, and publish ConductorOne functions using the built-in code editor."
+sidebarTitle: "Create and test functions"
+---
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Please contact our Support team if you'd like to try it out or have any feedback.
+</Warning>
+
+This guide walks you through creating your first function, from a simple "hello world" to accessing ConductorOne data and calling external APIs.
+
+## Step 1: Set up a new function
+
+<Steps>
+<Step>
+Navigate to **Workflows** > **Functions**.
+</Step>
+<Step>
+Click **New function**.
+</Step>
+<Step>
+Enter a name and optional description, then click **Create**.
+</Step>
+<Step>
+You're taken to the detail page with a built-in code editor (Monaco, TypeScript mode).
+</Step>
+</Steps>
+
+## Step 2: Write function code
+
+Every function must export a `main` function that accepts `input` and returns a result. Both input and output are JSON objects.
+
+<Tip>
+Visit the [functions reference](/product/admin/functions-reference) for detailed documentation on SDK namespaces, configuration options, and troubleshooting advice.
+</Tip>
+
+### Basic structure
+
+```typescript
+import { JSONObject } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+    return {
+        message: "Hello from my first function!",
+        timestamp: new Date().toISOString()
+    };
+}
+```
+
+### Use input parameters
+
+Accept input to make your function interactive:
+
+```typescript
+import { JSONObject } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+    const name = input.name as string || "World";
+
+    return {
+        greeting: `Hello, ${name}!`,
+        timestamp: new Date().toISOString()
+    };
+}
+```
+
+Test with input:
+
+```json
+{"name": "Alice"}
+```
+
+Output:
+
+```json
+{
+  "greeting": "Hello, Alice!",
+  "timestamp": "2026-02-09T12:07:45.272Z"
+}
+```
+
+### Access ConductorOne data
+
+Use the pre-authenticated `sdk` object to query data from your ConductorOne tenant.
+
+<Note>
+Before using the SDK, configure your function's scopes to allow access to ConductorOne APIs. See [Scopes](/product/admin/functions-reference#scopes) in the reference documentation.
+</Note>
+
+### List users
+
+```typescript
+import { JSONObject, sdk } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+    const users = await sdk.user.list();
+
+    return {
+        userCount: users.userServiceListResponse?.list?.length ?? 0,
+    };
+}
+```
+
+#### Get a specific user
+
+```typescript
+import { JSONObject, sdk } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  const userId = input.userId as string;
+
+  const userResponse = await sdk.user.get({ id: userId });
+
+  return {
+    success: true,
+    user: userResponse.user,
+  };
+}
+```
+
+#### Search users
+
+```typescript
+import { JSONObject, sdk } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  const searchResponse = await sdk.userSearch.search({
+    query: "Engineering",
+  });
+
+  return {
+    success: true,
+    results: searchResponse.list,
+  };
+}
+```
+
+For a complete list of SDK operations, see [SDK namespaces](/product/admin/functions-reference#sdk-namespaces).
+
+### Use secrets and configuration
+
+Store API keys and configuration values securely in your function's config.
+
+#### Set secrets in the UI
+
+<Steps>
+<Step>
+Navigate to your function and click **Edit config** (in the more menu).
+</Step>
+<Step>
+In the **Secrets** section, add key/value pairs.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+#### Access secrets in code
+
+```typescript
+import { JSONObject, functions } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+    const config = await functions.getConfig();
+    console.log('got config', config);
+
+    return {
+      secretNumber: config.secrets.SECRET_NUMBER
+    };
+}
+```
+
+### Call external APIs
+
+<Warning>
+External domains must be added to **Outbound Network Access** in your function's config before you can call them. See [Outbound network access](/product/admin/functions-reference#outbound-network-access).
+</Warning>
+
+```typescript
+import { JSONObject, functions } from "@c1/functions-sdk";
+import { Octokit } from "npm:@octokit/rest@1.2.3";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+    // 1. Get secrets from config
+    const config = await functions.getConfig();
+    const token = config.secrets["GITHUB_TOKEN"];
+
+    if (!token) {
+        throw new Error("GitHub Token not found in config");
+    }
+
+    // 2. Initialize external API client
+    const octokit = new Octokit({ auth: token });
+
+    try {
+        // 3. Make API calls
+        const { data: user } = await octokit.rest.users.getAuthenticated();
+
+        console.log(`Authenticated as: ${user.login}`);
+        return {
+            username: user.login,
+            fullName: user.name || "No name set",
+            publicRepos: user.public_repos,
+        };
+    } catch (error) {
+        console.error("Failed to fetch user profile:", error);
+        throw error;
+    }
+}
+```
+
+## Step 3: Handle errors
+
+Functions should handle errors gracefully and return useful information for debugging.
+
+### Try-catch pattern
+
+```typescript
+import { JSONObject, sdk } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  try {
+    const userResponse = await sdk.user.get({ id: input.userId as string });
+    return { success: true, user: userResponse.user };
+  } catch (error) {
+    console.error("Failed to get user:", error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+```
+
+### Input validation
+
+```typescript
+import { JSONObject } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  // Validate required fields
+  if (!input.userId) {
+    return { error: "userId is required" };
+  }
+
+  const userId = input.userId as string;
+
+  // Your logic here
+  return { success: true };
+}
+```
+
+## Step 4: Test your function
+
+<Steps>
+<Step>
+Click **Run draft** to invoke your function with test JSON input.
+</Step>
+<Step>
+Provide test input in the JSON editor, for example: `{}`
+</Step>
+<Step>
+View the output and logs in the invocation details drawer.
+</Step>
+</Steps>
+
+## Step 5: Publish your function
+
+<Steps>
+<Step>
+Click **Save draft** to commit your changes.
+</Step>
+<Step>
+Click **Publish** to make your function available for use across ConductorOne.
+</Step>
+</Steps>
+
+Once published, your function is available for use in [automations](/product/admin/functions-automations) or via manual invocation.
+
+## Best practices for writing functions
+
+Follow these patterns to write maintainable, debuggable functions.
+
+### Use TypeScript interfaces
+
+Define clear input and output types for better code quality:
+
+```typescript
+import { JSONObject } from "@c1/functions-sdk";
+
+interface Input {
+  userId: string;
+  action: string;
+}
+
+interface Output {
+  success: boolean;
+  message: string;
+}
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  const { userId, action } = input as unknown as Input;
+
+  // Your logic here
+
+  return { success: true, message: "Done" } as Output;
+}
+```
+
+### Validate inputs
+
+Always validate required parameters before proceeding:
+
+```typescript
+if (!input.userId) {
+  return { error: "userId is required" };
+}
+```
+
+### Use console logging
+
+Log important steps for debugging. Logs are captured and viewable in the UI:
+
+```typescript
+console.log("Processing user:", userId);
+console.log("API response:", response);
+```
+
+### Handle errors gracefully
+
+Wrap external API calls in try-catch blocks:
+
+```typescript
+try {
+  const result = await externalApiCall();
+  return { success: true, result };
+} catch (error) {
+  console.error("External API failed:", error);
+  return { success: false, error: error.message };
+}
+```
+
+### Keep functions focused
+
+Each function should do one thing well. Create multiple functions for complex workflows.

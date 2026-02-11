@@ -1,0 +1,239 @@
+---
+title: "Functions reference"
+og:title: "Functions reference"
+description: "Technical reference for ConductorOne functions, including SDK namespaces, runtime constraints, configuration options, and troubleshooting."
+og:description: "Technical reference for ConductorOne functions, including SDK namespaces, runtime constraints, configuration options, and troubleshooting."
+sidebarTitle: "Functions reference"
+---
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Please contact our Support team if you'd like to try it out or have any feedback.
+</Warning>
+
+## SDK namespaces
+
+The pre-authenticated `sdk` object provides type-safe access to the ConductorOne API through 60+ namespaces organized by resource type.
+
+| Category | Namespaces |
+|----------|------------|
+| Users & Identity | `user`, `userSearch`, `directory`, `attributes`, `attributeSearch` |
+| Apps & Entitlements | `apps`, `appSearch`, `appEntitlements`, `appEntitlementSearch`, `appUser`, `appResource`, `appResourceSearch`, `appOwners`, `appEntitlementOwners` |
+| Tasks & Access | `task`, `taskActions`, `taskSearch`, `taskAudit` |
+| Automations | `automation`, `automationExecution`, `automationSearch` |
+| Policies & Catalog | `policies`, `policySearch`, `requestCatalogManagement`, `requestCatalogSearch` |
+| Connectors | `connector`, `connectorCatalog` |
+| Functions | `functions`, `functionsSearch` |
+| Webhooks & Export | `webhooks`, `webhooksSearch`, `export`, `exportsSearch`, `systemLog` |
+
+## Common SDK operations
+
+```typescript
+import { JSONObject, sdk, functions } from "@c1/functions-sdk";
+
+// Users
+await sdk.user.list({ pageSize: 100, pageToken });
+await sdk.user.get({ id: "user_123" });
+await sdk.userSearch.search({ query: "alice@example.com" });
+
+// Apps
+await sdk.apps.list();
+await sdk.apps.get({ id: "app_456" });
+await sdk.appSearch.search({ query: "Slack" });
+
+// Entitlements
+await sdk.appEntitlements.list({ appId: "app_456" });
+await sdk.appEntitlementSearch.search({ appIds: ["app_456"] });
+
+// Tasks
+await sdk.task.get({ id: "task_789" });
+await sdk.taskSearch.search({ taskTypes: ["grant", "revoke"] });
+await sdk.task.createGrantTask({ appEntitlementId: "ent_456", appUserId: "appuser_123" });
+await sdk.task.createRevokeTask({ appEntitlementId: "ent_456", appUserId: "appuser_123" });
+
+// Connectors
+await sdk.connector.list();
+await sdk.connector.get({ id: "conn_123" });
+```
+
+## Pagination
+
+Use the pagination pattern to retrieve all results:
+
+```typescript
+const all = [];
+let pageToken: string | undefined;
+do {
+  const resp = await sdk.user.list({ pageSize: 100, pageToken });
+  if (resp.userServiceListResponse?.list) all.push(...resp.userServiceListResponse.list);
+  pageToken = resp.userServiceListResponse?.nextPageToken;
+} while (pageToken);
+```
+
+## Importing external libraries
+
+<Note>
+Dependency versions are pinned when you publish. To pick up newer versions, re-publish your function.
+</Note>
+
+The runtime is Deno-based. Import npm packages using the `npm:` specifier:
+
+```typescript
+import { z } from "npm:zod";
+import { format, subDays } from "npm:date-fns";
+import Stripe from "npm:stripe";
+```
+
+Packages are resolved at deploy time. No `package.json` or `node_modules` needed.
+
+`@c1/functions-sdk` and `@c1/test` are pre-configured and available without the `npm:` prefix.
+
+## Configuration options
+
+Configure secrets, network access, and scopes in the ConductorOne UI:
+
+<Steps>
+<Step>
+Navigate to **Workflows** > **Functions**.
+</Step>
+<Step>
+Click on your function.
+</Step>
+<Step>
+Click **...** (the more actions menu) and select **Edit config**.
+</Step>
+</Steps>
+
+The config drawer has three sections: **Secrets**, **Outbound network access**, and **Scopes**.
+
+### Secrets
+
+Store API keys and configuration values as key/value pairs. Secrets are encrypted at rest and decrypted at runtime.
+
+To access secrets in code:
+
+```typescript
+import { functions } from "@c1/functions-sdk";
+
+const config = await functions.getConfig();
+const webhookUrl = config.secrets["SLACK_WEBHOOK_URL"];
+const threshold = parseInt(config.secrets["THRESHOLD"], 10);
+```
+
+`functions.getConfig()` returns `{ secrets: Record<string, string> }`. Keys and values match what you defined in the UI.
+
+### Outbound network access
+
+<Warning>
+External domains must be added to the **Outbound network access** section in your function's config or the request will be blocked. All outbound network traffic is routed through an egress proxy that enforces your allowlist.
+</Warning>
+
+Add allowed domains to your function's config. This ensures functions can only communicate with endpoints you've explicitly approved, preventing unauthorized data exfiltration or unintended external calls.
+
+Here's an example external API call:
+
+```typescript
+import { JSONObject, functions } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  const config = await functions.getConfig();
+  const apiKey = config.secrets["EXTERNAL_API_KEY"];
+
+  const resp = await fetch("https://api.example.com/data", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ query: input.query }),
+  });
+
+  if (!resp.ok) {
+    return { success: false, error: `API returned ${resp.status}` };
+  }
+
+  return { success: true, data: await resp.json() };
+}
+```
+
+### Scopes
+
+By default, functions have no access to the ConductorOne APIs. To grant access, assign one or more roles in the **Scopes** section of the config drawer. The function's SDK credentials are created with only the permissions those roles allow.
+
+Currently available:
+
+- **Read-Only Administrator**: Read-only access to all ConductorOne APIs (such as users, apps, entitlements, tasks). The function can query data but cannot create, update, or delete resources.
+
+When you publish a function with scoped roles, new OAuth credentials are generated with those roles attached. At runtime, every SDK call is authorized against the function's assigned roles—calls outside the granted permissions are denied.
+
+## Testing with @c1/test
+
+```typescript
+// main.test.ts
+import { test } from "@c1/test";
+
+interface Input {
+  userId: string;
+  action: string;
+  appId: string;
+  dryRun?: boolean;
+}
+
+export default function registerTests({ handler }: { handler: (req: Input) => Promise<any> }) {
+  test("validates required fields", async ({ equal }) => {
+    const result = await handler({} as Input);
+    equal(result.success, false);
+    equal(result.error, "Missing required fields");
+  });
+
+  test("dry run returns without side effects", async ({ equal, ok }) => {
+    const result = await handler({ userId: "u1", action: "revoke", appId: "a1", dryRun: true });
+    equal(result.success, true);
+    ok(result.dryRun);
+  });
+}
+```
+
+**Available assertions:** `equal(actual, expected)`, `ok(value)`, `fail(message)`
+
+**Pattern:** `main.test.ts` exports `registerTests({ handler })`. The framework injects your `main` function as `handler`.
+
+**Running tests:** Click **Run tests** in the function editor to execute your test file against the current draft. Test results appear in the invocation details drawer alongside any console output.
+
+## Runtime constraints
+
+| Constraint | Detail |
+|------------|--------|
+| Runtime | Deno (V8-based). Native TS, ES modules, web standard APIs (`fetch`, `URL`, etc.) |
+| Filesystem | None. Functions are stateless. |
+| Network | Egress allowlist only. ConductorOne API subdomains pre-approved. |
+| State | No persistence between invocations. Each call starts fresh. |
+| Auth | OAuth2 + DPoP auto-injected. Never handle tokens. |
+| Dependencies | `@c1/functions-sdk` auto-available. Other npm packages resolved at publish time. |
+| Logging | `console.log/error/warn` captured. Retained 30 days. Don't log secrets. |
+
+## Troubleshooting functions
+
+Common issues and how to resolve them.
+
+### Function times out
+
+- Check for infinite loops
+- Verify external domains are in your allowlist
+- Break large operations into smaller batches
+
+### External API calls fail
+
+- Ensure domain is in the outbound network allowlist
+- Verify API credentials in secrets
+- Check console logs for detailed error messages
+
+### API returns 403 Forbidden
+
+- Check function's scopes configuration
+- Verify you have permissions for the API operation
+
+### Cannot deploy function
+
+- Verify you have admin access
+- Check for TypeScript syntax errors
+- Ensure all imports are valid

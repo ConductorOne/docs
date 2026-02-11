@@ -1,0 +1,207 @@
+---
+title: "Use functions in automations"
+og:title: "Use functions in automations"
+description: "Add custom function steps to ConductorOne automations to implement complex business logic, integrate with external systems, and make dynamic decisions in your workflows."
+og:description: "Add custom function steps to ConductorOne automations to implement complex business logic, integrate with external systems, and make dynamic decisions in your workflows."
+sidebarTitle: "Use functions in automations"
+---
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Please contact our Support team if you'd like to try it out or have any feedback.
+</Warning>
+
+Functions work as steps in automation workflows, allowing you to add custom logic between other automation actions. When configured as a function step, the automation engine:
+
+1. Evaluates argument expressions (CEL) against the automation context
+2. Passes the evaluated arguments as your function's `input`
+3. Captures your return value for use by subsequent steps
+
+<Tip>
+**When writing functions for use in automations, remember:** 
+
+- Your function doesn't need to know it's called from an automation. It receives JSON in, returns JSON out.
+- The **automation UI** defines which CEL expressions map to which input keys.
+- Your **return value** becomes available to subsequent automation steps via the step name (e.g., `check_training.approved`).
+- The function runs with the same security model regardless of trigger source: pre-authenticated SDK, egress allowlist, no filesystem.
+</Tip>
+
+## Step 1: Add a function step to an automation
+
+Before you begin, make sure you've [created and published a function](/product/admin/functions-create) and [set up an automation](/product/admin/automations). Once your function is published, you can add it as a step in any automation workflow:
+
+<Steps>
+<Step>
+Navigate to **Workflows** > **Automations** and open your automation in the editor.
+</Step>
+<Step>
+Click **Add Step**.
+</Step>
+<Step>
+Select **Call function**.
+</Step>
+<Step>
+Choose your published function from the dropdown.
+</Step>
+<Step> 
+Click **Add argument** to define the input your function receives. Read more about arguments in the next section. 
+</Step>
+</Steps>
+
+## Step 2: Pass argument input to your function
+
+In the automation UI, each argument is a CEL expression evaluated against the workflow context. These expressions are evaluated, marshaled to JSON, and passed as your function's input.
+
+### Available context
+
+| Variable | Description |
+|----------|-------------|
+| `trigger.user_id` | User ID from the automation trigger |
+| `trigger.app_id` | App ID from the trigger event |
+| `trigger.entitlement_id` | Entitlement ID from the trigger |
+| `previous_step_name.field` | Output field from a previously completed step |
+
+### Example inputs
+
+The examples below show how you configure arguments in the automation UI. The left side is the key name your function receives; the right side is a CEL expression that gets evaluated at runtime.
+
+**Pass data from a trigger:**
+
+| Key | CEL Expression |
+|-----|----------------|
+| `userId` | `trigger.user_id` |
+| `appId` | `trigger.app_id` |
+| `action` | `"verify"` (literal string) |
+
+Your function receives the evaluated values:
+
+```json
+{
+  "userId": "u-abc123",
+  "appId": "app-xyz789",
+  "action": "verify"
+}
+```
+
+**Pass output from a previous step:**
+
+| Key | CEL Expression |
+|-----|----------------|
+| `userId` | `steps.getUser.output.id` |
+| `department` | `steps.getUser.output.profile.department` |
+| `timestamp` | `now()` |
+
+**Static values:**
+
+For literal values, wrap strings in quotes within the CEL expression:
+
+| Key | CEL Expression |
+|-----|----------------|
+| `department` | `"Engineering"` |
+| `minAccessLevel` | `3` |
+
+## Step 3: Access function output in later steps
+
+The output of your function is available in subsequent steps via the step context. If your function step is named `checkTraining`, access its output like this:
+
+```
+steps.checkTraining.output.trainingCompleted
+steps.checkTraining.output.eligible
+steps.checkTraining.output.userId
+```
+
+## Example: Training verification workflow
+
+This example shows a complete workflow that checks a user's training status before approving access.
+
+### Function code
+
+```typescript
+import { JSONObject, functions, sdk } from "@c1/functions-sdk";
+
+export default async function main(input: JSONObject): Promise<JSONObject> {
+  const userId = input.userId as string;
+
+  // Get user from ConductorOne
+  const userResponse = await sdk.user.get({ id: userId });
+  const user = userResponse.user;
+
+  // Check training status from external API
+  const config = await functions.getConfig();
+  const trainingApiKey = config.secrets["TRAINING_API_KEY"];
+
+  const trainingResponse = await fetch(
+    `https://training.example.com/api/users/${user.email}/status`,
+    {
+      headers: { "Authorization": `Bearer ${trainingApiKey}` },
+    }
+  );
+
+  const training = await trainingResponse.json();
+
+  return {
+    success: true,
+    userId: userId,
+    email: user.email,
+    trainingCompleted: training.completed,
+    trainingDate: training.completedDate,
+    eligible: training.completed,
+  };
+}
+```
+
+### Automation workflow
+
+1. **Trigger:** Access request created
+2. **Step 1: Run Function** `checkTraining`
+    - Input: `{ "userId": "trigger.user_id" }`
+3. **Step 2: Conditional** - Check if training is completed
+    - Condition: `steps.checkTraining.output.eligible == true`
+    - **If true:** Approve the access request
+    - **If false:** Send notification to user with training link
+
+## Best practices
+
+Design your function outputs to work well with automation conditionals and debugging.
+
+### Return structured data
+
+Make your function outputs easy to use in conditionals:
+
+```typescript
+return {
+  success: true,
+  eligible: trainingCompleted && securityCheckPassed,
+  reason: trainingCompleted ? "approved" : "training_required",
+  metadata: {
+    trainingDate: training.completedDate,
+    securityScore: securityCheck.score,
+  }
+};
+```
+
+### Use Boolean flags for conditionals
+
+Return clear true/false values that work well in automation conditions:
+
+```typescript
+return {
+  shouldApprove: true,
+  shouldNotify: false,
+  requiresReview: false,
+};
+```
+
+### Include context for debugging
+
+Return enough information to troubleshoot issues:
+
+```typescript
+return {
+  success: true,
+  userId: userId,
+  timestamp: new Date().toISOString(),
+  checksPerformed: ["training", "security", "compliance"],
+  result: "approved",
+};
+```
+

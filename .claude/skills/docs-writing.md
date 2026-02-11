@@ -64,7 +64,7 @@ Follow this process when creating ConductorOne documentation:
 
 - **Voice**: Second person ("you"), active voice, direct language
 - **Tone**: Technical, precise, no marketing speak or promotional language
-- **Headings**: Sentence case only ("Getting started" not "Getting Started")
+- **Headings**: Sentence case only ("Getting started" not "Getting Started"); always include explanatory text after a heading before any subheadings
 - **Procedures**: Numbered steps starting with action verbs
 - **Optional steps**: Start with **Optional.** (e.g., "**Optional.** Configure advanced settings...")
 - **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
@@ -149,6 +149,7 @@ Follow this process when creating ConductorOne documentation:
 - Don't editorialize ("it's important to note")
 - Don't create duplicate content (update existing docs instead)
 - Don't use title case for headings
+- Don't use Latin abbreviations (i.e., e.g., etc.)—they're often misunderstood and don't localize well. Use plain English instead: "for example", "such as", "like", "that is", "in other words", "and so on"
 
 ## Reference Material
 
