@@ -167,20 +167,16 @@ When you publish a function with scoped roles, new OAuth credentials are generat
 
 ## Testing with @c1/test
 
+New functions are scaffolded with a `main.test.ts` file alongside `main.ts`. The test file exports a `registerTests` function that receives your `main` function as `handler`, so each test can invoke it with different inputs.
+
 ```typescript
 // main.test.ts
+import { JSONObject } from "@c1/functions-sdk";
 import { test } from "@c1/test";
 
-interface Input {
-  userId: string;
-  action: string;
-  appId: string;
-  dryRun?: boolean;
-}
-
-export default function registerTests({ handler }: { handler: (req: Input) => Promise<any> }) {
+export default function registerTests({handler}: {handler: (input: JSONObject) => Promise<JSONObject>}) {
   test("validates required fields", async ({ equal }) => {
-    const result = await handler({} as Input);
+    const result = await handler({});
     equal(result.success, false);
     equal(result.error, "Missing required fields");
   });
@@ -193,11 +189,33 @@ export default function registerTests({ handler }: { handler: (req: Input) => Pr
 }
 ```
 
-**Available assertions:** `equal(actual, expected)`, `ok(value)`, `fail(message)`
+### Assertions
 
-**Pattern:** `main.test.ts` exports `registerTests({ handler })`. The framework injects your `main` function as `handler`.
+Each `test()` callback receives an assertion object with these methods:
 
-**Running tests:** Click **Run tests** in the function editor to execute your test file against the current draft. Test results appear in the invocation details drawer alongside any console output.
+| Method | Description |
+|--------|-------------|
+| `equal(actual, expected)` | Strict equality check (`===`) |
+| `ok(value)` | Truthy check |
+| `fail(message)` | Force a test failure |
+
+### Test options
+
+Pass an options object as the third argument to `test()`:
+
+```typescript
+test("work in progress", async ({ ok }) => {
+  // ...
+}, { skip: true });
+
+test("debug this one", async ({ equal }) => {
+  // ...
+}, { only: true });
+```
+
+### Running tests
+
+Click **Test draft** when viewing a draft, or **Run tests** when viewing published code. Each `test()` call becomes an individual result in the test dialog, displayed with a pass/fail status chip. Click on a result to expand assertion details and logs.
 
 ## Runtime constraints
 
