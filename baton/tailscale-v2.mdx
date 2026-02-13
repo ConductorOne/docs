@@ -22,16 +22,52 @@ sidebarTitle: Tailscale
 | ACL rules    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>  |
 | SSH rules    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>    | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>  |
 
-## Gather Tailscale credentials 
+## Gather Tailscale credentials
 
-Configuring the connector requires you to pass in credentials generated in Tailscale. Gather these credentials before you move on. 
+Configuring the connector requires you to pass in credentials generated in Tailscale. Gather these credentials before you move on.
 
 <Warning>
 A user with the **Admin** role in Tailscale must perform this task.
 </Warning>
 
-### Generate a new API key
+Choose one of the following authentication methods:
 
+<Tabs>
+<Tab title="OAuth client credentials">
+OAuth client credentials provide more granular control over permissions and are the recommended authentication method.
+
+<Steps>
+<Step>
+Log into Tailscale as an Admin user and click **Settings**.
+</Step>
+<Step>
+Click **Trust Credentials**.
+</Step>
+<Step>
+Click **+ Credentials**. A modal opens to create new OAuth credentials.
+</Step>
+<Step>
+Enter a **Description** for these credentials (for example, "ConductorOne connector").
+</Step>
+<Step>
+Configure the scopes:
+
+   - Click the dropdown next to **Scopes** and select **All - Read**.
+
+   - If you want to enable provisioning with this connector, also enable **Write** for the following scopes:
+      - Policy File
+      - Users
+      - Posture Attributes
+</Step>
+<Step>
+Click **Save**. The Client ID and Client Secret are displayed.
+</Step>
+<Step>
+Copy and save both the **Client ID** and **Client Secret**. Store them securely—you'll need both to set up the connector.
+</Step>
+</Steps>
+</Tab>
+<Tab title="API key">
 <Steps>
 <Step>
 Log into Tailscale as an Admin user and click **Settings**.
@@ -46,6 +82,8 @@ Click **Generate API key**. A **Generated new key** window opens showing the ful
 Copy and save the API key.
 </Step>
 </Steps>
+</Tab>
+</Tabs>
 
 **That's it!** Next, move on to the connector configuration instructions. 
 
@@ -90,12 +128,16 @@ Click **Next**.
 Find the **Settings** area of the page and click **Edit**.
 </Step>
 <Step>
-Paste the API key you into the **Tailscale API key** field.
+Select your authentication method:
+
+   - **OAuth Client Credentials**: Enter the **Client ID** and **Client Secret** you generated in Tailscale.
+
+   - **API Key**: Enter the **Tailscale API key** you generated.
 </Step>
 <Step>
 In the **Tailnet** field, enter the name of your Tailscale network.
 
-  Find the name of your Tailnet in the top left corner of the Tailscale Admin Panel, next to the Tailscale logo.
+   Find the name of your Tailnet in the top left corner of the Tailscale Admin Panel, next to the Tailscale logo.
 </Step>
 <Step>
 Click **Save**.
@@ -157,6 +199,10 @@ Create two Kubernetes manifest files for your Tailscale connector deployment:
 
 #### Secrets configuration
 
+Choose either OAuth client credentials or an API key for Tailscale authentication.
+
+**Option 1: OAuth client credentials**
+
 ```yaml
 # baton-tailscale-secrets.yaml
 apiVersion: v1
@@ -168,7 +214,28 @@ stringData:
   # ConductorOne credentials
   BATON_CLIENT_ID: <ConductorOne client ID>
   BATON_CLIENT_SECRET: <ConductorOne client secret>
-  
+
+  # Tailscale OAuth credentials
+  BATON_AUTH_METHOD: oauth-client-credentials-flow-group
+  BATON_TAILSCALE_CLIENT_ID: <Tailscale OAuth client ID>
+  BATON_TAILSCALE_CLIENT_SECRET: <Tailscale OAuth client secret>
+  BATON_TAILNET: <Tailscale Tailnet (found in the top left corner of the Tailscale Admin Panel)>
+```
+
+**Option 2: API key**
+
+```yaml
+# baton-tailscale-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-tailscale-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+
   # Tailscale credentials
   BATON_API_KEY: <Tailscale API key>
   BATON_TAILNET: <Tailscale Tailnet (found in the top left corner of the Tailscale Admin Panel)>
