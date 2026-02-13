@@ -35,7 +35,7 @@ These files document specific function categories available in CEL expressions.
 
 | File | Use When User Asks About |
 |------|--------------------------|
-| `functions-directory.md` | GetManagers, FindByEmail, GetByID, DirectReports, GetEntitlementMembers |
+| `functions-directory.md` | GetManagers, FindByEmail, FindByName, GetByID, DirectReports, GetEntitlementMembers |
 | `functions-user.md` | HasEntitlement, HasApp, checking user access |
 | `functions-time.md` | Date/time operations, time.parse, time.format, now(), durations |
 | `functions-ip.md` | IP addresses, CIDR ranges, network-based access control |

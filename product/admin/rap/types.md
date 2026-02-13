@@ -184,6 +184,7 @@ An access request or task. Available as `task` in policy expressions.
 | `numericId` | string | Numeric task identifier |
 | `displayName` | string | Human-readable task name |
 | `origin` | TaskOrigin | Where the task was created |
+| `created_at` | timestamp | When the task was created |
 | `isGrantPermanent` | bool | Whether access is permanent |
 | `grantDuration` | duration | How long access is granted |
 | `subjectUserId` | string | ID of user who is subject of task |
