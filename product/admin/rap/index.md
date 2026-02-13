@@ -35,7 +35,7 @@ These files document specific function categories available in CEL expressions.
 
 | File | Use When User Asks About |
 |------|--------------------------|
-| `functions-directory.md` | GetManagers, FindByEmail, GetByID, DirectReports, GetEntitlementMembers |
+| `functions-directory.md` | GetManagers, FindByEmail, FindByName, GetByID, DirectReports, GetEntitlementMembers |
 | `functions-user.md` | HasEntitlement, HasApp, checking user access |
 | `functions-time.md` | Date/time operations, time.parse, time.format, now(), durations |
 | `functions-ip.md` | IP addresses, CIDR ranges, network-based access control |
@@ -85,6 +85,11 @@ These files document specific function categories available in CEL expressions.
 **User asks what's available:**
 - "What variables can I use?" -> `types.md` (built-in variables), then relevant `env-*.md`
 - "What functions exist?" -> `functions-directory.md`, `functions-user.md`, `functions-time.md`
+
+**User wants to look up a user:**
+- By email -> `functions-directory.md` (FindByEmail)
+- By name -> `functions-directory.md` (FindByName - note: names may not be unique)
+- By ID -> `functions-directory.md` (GetByID)
 
 ## File Characteristics
 

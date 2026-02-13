@@ -60,6 +60,25 @@ c1.directory.users.v1.GetByID(id: string) -> User
 
 ---
 
+## FindByName
+
+Look up a user by display name.
+
+```cel
+c1.directory.users.v1.FindByName(name: string) -> User
+```
+
+**Example:**
+```cel
+[c1.directory.users.v1.FindByName("Jane Smith")]
+```
+
+**Returns** null if no user found with that name.
+
+**Warning:** Display names are not guaranteed to be unique. If multiple users share the same name, results may be unpredictable. Use `FindByEmail` when you need to identify a specific user reliably.
+
+---
+
 ## DirectReports
 
 Get users who report to the given user(s).

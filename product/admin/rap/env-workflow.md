@@ -9,15 +9,27 @@ Use Workflow CEL for:
 - Passing data between workflow steps
 - Building dynamic messages and payloads
 - Conditional workflow logic
+- Passing arguments to function steps
 
-## The `ctx` Object
+## Context Variables
 
-All workflow expressions use the `ctx` object:
+There are two context patterns depending on step type:
+
+### Standard workflow steps (ctx object)
 
 | Path | Description |
 |------|-------------|
 | `ctx.trigger` | Data from the event that started the workflow |
 | `ctx.<step_name>` | Output from a completed step |
+
+### Function steps (trigger/steps objects)
+
+| Path | Description |
+|------|-------------|
+| `trigger.user_id` | User ID from the automation trigger |
+| `trigger.app_id` | App ID from the trigger event |
+| `trigger.entitlement_id` | Entitlement ID from the trigger |
+| `steps.<step_name>.output.<field>` | Output field from a previous step |
 
 ## Template Syntax
 
@@ -116,9 +128,37 @@ time.parse(ctx.trigger.date_field, "date")
 time.end_of(now(), "quarter")
 ```
 
+## Function Step Arguments
+
+When adding a function step to an automation, define arguments as CEL expressions:
+
+```cel
+// Pass trigger data
+userId: trigger.user_id
+appId: trigger.app_id
+
+// Pass literal values
+action: "verify"
+minLevel: 3
+
+// Pass previous step output
+department: steps.getUser.output.profile.department
+
+// Use current time
+timestamp: now()
+```
+
+Access function output in subsequent steps:
+
+```cel
+steps.checkTraining.output.eligible
+steps.checkTraining.output.trainingCompleted
+```
+
 ## Best Practice
 
 - Use descriptive step names (`lookup_manager`, not `step1`)
 - Keep step outputs small and focused
 - Test expressions before deploying
 - Always handle optional fields with `has()`
+- Return boolean flags from functions for easy conditional use
