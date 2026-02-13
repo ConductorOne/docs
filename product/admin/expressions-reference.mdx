@@ -4,7 +4,7 @@ og:title: CEL expressions reference - ConductorOne docs
 og:description: Complete reference for CEL expression objects, functions, and usage contexts in ConductorOne.
 description: Complete reference for CEL expression objects, functions, and usage contexts in ConductorOne.
 ---
-{/* Editor Refresh: 2026-02-06 */}
+{/* Editor Refresh: 2026-02-13 */}
 
 ## Type definitions
 
@@ -472,6 +472,7 @@ The task object is used in policy expressions to reference the current access re
 | `task.grantDuration` | duration | How long access is granted | `task.grantDuration > duration("2h")` | Time-based access control |
 | `task.subjectUserId` | string | ID of the user who is the subject of the task | `task.subjectUserId == task.requestorUserId` | Self-service access checks |
 | `task.requestorUserId` | string | ID of the user who created the task | `task.requestorUserId == "user123"` | Requestor-based routing |
+| `task.created_at` | timestamp | When the task was created | `task.created_at > now() - duration("24h")` | Time-based routing, after-hours handling |
 | `task.analysis` | analysis | Task analysis data | `task.analysis.hasConflictViolations` | Access conflict detection |
 
 See [TaskOrigin enum](#taskorigin) for all possible values.
@@ -632,6 +633,17 @@ task.isGrantPermanent == false && task.grantDuration > duration("2h")
 
 // Policy conditional - auto-approve self-service revocations
 task.subjectUserId == task.requestorUserId
+
+// Policy conditional - route after-hours requests to security team
+task.created_at.getHours("America/New_York") < 9 ||
+task.created_at.getHours("America/New_York") >= 17
+
+// Policy conditional - escalate tasks older than 24 hours
+now() - task.created_at > duration("24h")
+
+// Policy conditional - weekend requests require extra approval
+task.created_at.getDayOfWeek("America/New_York") == 0 ||
+task.created_at.getDayOfWeek("America/New_York") == 6
 ```
 
 ### Task analysis object
