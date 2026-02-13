@@ -86,6 +86,11 @@ These files document specific function categories available in CEL expressions.
 - "What variables can I use?" -> `types.md` (built-in variables), then relevant `env-*.md`
 - "What functions exist?" -> `functions-directory.md`, `functions-user.md`, `functions-time.md`
 
+**User wants to look up a user:**
+- By email -> `functions-directory.md` (FindByEmail)
+- By name -> `functions-directory.md` (FindByName - note: names may not be unique)
+- By ID -> `functions-directory.md` (GetByID)
+
 ## File Characteristics
 
 - Each file is under 300 lines
