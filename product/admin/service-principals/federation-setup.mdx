@@ -1,0 +1,88 @@
+---
+title: Set up workload federation
+og:title: Set up workload federation - ConductorOne docs
+og:description: Walk through the federation wizard to create a provider and trust, then test your token.
+description: Walk through the federation wizard to create a provider and trust, then test your token.
+sidebarTitle: Set up federation
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+This guide walks through the ConductorOne federation wizard to create a provider and trust. Before starting, you need a service principal -- if you don't have one yet, follow Step 1 of the [client credentials quick start](/product/admin/service-principals/client-credentials#step-1-create-a-service-principal). You don't need to create a credential; federation replaces credentials with OIDC tokens.
+
+## Create a federation trust
+
+<Steps>
+  <Step>
+    On the service principal detail page, select the **Federation** tab.
+  </Step>
+  <Step>
+    Click **Set up federation**.
+  </Step>
+  <Step>
+    **Choose a provider.** Select an existing provider, or create a new one. ConductorOne includes presets for common platforms:
+
+    | Provider | Issuer URL | Notes |
+    | :--- | :--- | :--- |
+    | **GitHub Actions** | `https://token.actions.githubusercontent.com` | Fixed issuer URL |
+    | **GitLab CI/CD** | `https://gitlab.com` (or self-managed URL) | Editable issuer URL |
+    | **HCP Terraform** | `https://app.terraform.io` (or custom hostname) | Editable issuer URL |
+    | **AWS IAM Outbound** | Account-specific issuer URL | Editable issuer URL |
+    | **Custom OIDC** | Any HTTPS issuer URL | For other OIDC-capable platforms |
+  </Step>
+  <Step>
+    **Configure the trust.** The wizard generates a CEL expression based on your inputs (organization, repository, branch, environment, and so on). You can switch to manual mode to write your own CEL expression.
+
+    **Optional.** Add IP restrictions and scoped roles for additional security. See [security controls](/product/admin/service-principals/security) for details.
+  </Step>
+  <Step>
+    Click **Create** to finish.
+  </Step>
+  <Step>
+    Copy the **client ID** -- you'll need it in your CI/CD configuration.
+  </Step>
+</Steps>
+
+## Test your token
+
+Before deploying to production, test the federation trust to make sure your CEL expression matches the expected JWT claims.
+
+<Steps>
+  <Step>
+    On the trust detail, click **Test**.
+  </Step>
+  <Step>
+    Paste a sample JWT from your CI/CD platform, or provide claims as JSON.
+  </Step>
+  <Step>
+    The test runner validates each step:
+
+    | Step | What it checks |
+    | :--- | :--- |
+    | JWT decode | Token is valid JWT format |
+    | Issuer match | Token issuer matches the provider |
+    | Signature validation | Token signature is valid via JWKS |
+    | Audience validation | Token audience matches your tenant |
+    | Token freshness | Token was issued within the last 10 minutes |
+    | CEL evaluation | Your condition expression returns `true` |
+    | CIDR check | Source IP is in the allowlist (if configured) |
+  </Step>
+</Steps>
+
+<Tip>
+You can also use the **Test CEL** tool at **Settings** > **Workload Federation** to test expressions against sample claims without a real JWT. This is useful for iterating on your CEL expression before creating a trust.
+</Tip>
+
+## Platform-specific guides
+
+Once your trust is created, follow the integration guide for your CI/CD platform:
+
+- [GitHub Actions](/product/admin/service-principals/github-actions) -- recommended for GitHub-based workflows
+- [GitLab CI](/product/admin/service-principals/gitlab-ci) -- uses GitLab's built-in `id_tokens`
+- [HCP Terraform](/product/admin/service-principals/hcp-terraform) -- auto-detected from workspace identity tokens
+- [Custom OIDC](/product/admin/service-principals/custom-oidc) -- any platform with OIDC support

@@ -1,0 +1,106 @@
+---
+title: Custom OIDC providers
+og:title: Custom OIDC providers - ConductorOne docs
+og:description: Set up workload federation with any OIDC-compliant identity provider.
+description: Set up workload federation with any OIDC-compliant identity provider.
+sidebarTitle: Custom OIDC providers
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+Any platform that issues OIDC tokens can be used with workload federation. This guide covers the generic token exchange flow for providers that don't have a built-in preset.
+
+## Provider requirements
+
+Your OIDC provider must:
+
+1. Serve a `/.well-known/openid-configuration` document at the issuer URL
+2. Have a publicly accessible JWKS (JSON Web Key Set) endpoint
+3. Issue JWTs with standard claims: `iss`, `aud`, `exp`, `iat`
+
+## Prerequisites
+
+- A service principal with a Custom OIDC federation trust. See [set up federation](/product/admin/service-principals/federation-setup) if you haven't created one yet. Use the **Custom OIDC** preset and enter your provider's issuer URL.
+- The trust's **client ID** (for example `quiet-bear-88456@yourcompany.conductor.one/wfe`)
+
+## Exchange the token
+
+Send the external OIDC JWT to ConductorOne's token exchange endpoint:
+
+```bash
+curl -s -X POST "https://yourcompany.conductor.one/auth/v1/token" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+  -d "subject_token=$YOUR_JWT" \
+  -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+  -d "client_id=quiet-bear-88456@yourcompany.conductor.one/wfe"
+```
+
+Response on success:
+
+```json
+{
+  "access_token": "eyJhbGciOiJFZERTQSIs...",
+  "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+  "token_type": "Bearer",
+  "expires_in": 1800
+}
+```
+
+Use the `access_token` in an `Authorization: Bearer` header for API calls.
+
+## Token requirements
+
+The JWT must satisfy these requirements:
+
+| Requirement | Detail |
+| :--- | :--- |
+| **Issuer (`iss`)** | Must match the provider's issuer URL exactly |
+| **Audience (`aud`)** | Must contain your ConductorOne tenant domain (for example `yourcompany.conductor.one`) |
+| **Expiration (`exp`)** | Must not be expired |
+| **Issued at (`iat`)** | Must be within the last 10 minutes |
+| **Signature** | Must be verifiable via the provider's JWKS endpoint |
+
+## Writing CEL expressions
+
+The CEL expression evaluates against the JWT's decoded claims. Write an expression that validates the `sub` claim and any additional claims for defense-in-depth scoping:
+
+```go
+claims.sub == "expected-subject" && claims.custom_claim == "expected-value"
+```
+
+### Tips for writing expressions
+
+- Always validate the `sub` claim or an equivalent unique identifier
+- Use additional claims for defense-in-depth: organization, project, environment
+- CEL string functions are available: `contains()`, `startsWith()`, `endsWith()`, `matches()`, `size()`
+- For namespaced claims (like AWS), use bracket notation: `claims["https://example.com/"].field`
+- Expressions are limited to 1,024 bytes
+
+<Tip>
+Use the **Test CEL** tool at **Settings** > **Workload Federation** to validate your expressions against sample claims before deploying.
+</Tip>
+
+## Using with ConductorOne tools
+
+Once you have the access token, set the `CONDUCTORONE_ACCESS_TOKEN` environment variable and all ConductorOne tools pick it up automatically:
+
+```bash
+export CONDUCTORONE_ACCESS_TOKEN=$(curl -s -X POST ... | jq -r '.access_token')
+
+# Use with any tool
+cone whoami
+terraform apply
+```
+
+Alternatively, set `CONDUCTORONE_OIDC_TOKEN` with the raw JWT and `CONDUCTORONE_CLIENT_ID` with the trust client ID. The Go SDK, Cone CLI, and Terraform provider all support this pattern and handle the token exchange internally.
+
+## Security guidance
+
+<Warning>
+Always validate the `sub` claim and use additional claims for defense-in-depth scoping. A CEL expression that only checks one claim may be too permissive if the provider issues tokens with broad subjects.
+</Warning>
