@@ -385,3 +385,105 @@ ConductorOne sends email alerts after three consecutive sync failures. Monitor:
 - Connector logs for errors
 - Memory usage (should stay stable)
 
+## Troubleshooting
+
+### Permission denied errors with read-only root filesystem
+
+Baton connectors write files to the working directory during sync operations. In Kubernetes environments where the container's root filesystem is read-only (a common security best practice), these writes fail with errors such as:
+
+```
+stat debug.log: permission denied
+```
+
+or
+
+```
+open sync.c1z: read-only file system
+```
+
+This happens because the connector needs a writable directory for:
+- **`sync.c1z`** — the sync data file uploaded to ConductorOne
+- **`debug.log`** — diagnostic log output created during sync tasks
+
+#### Fix: Provide a writable working directory
+
+The recommended fix is to set the container's working directory to a writable path and mount an `emptyDir` volume there. Update your Kubernetes deployment spec:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-yourservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: baton-yourservice
+  template:
+    metadata:
+      labels:
+        app: baton-yourservice
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65534
+      containers:
+      - name: baton-yourservice
+        image: ghcr.io/conductorone/baton-yourservice:latest
+        workingDir: /tmp/baton
+        envFrom:
+        - secretRef:
+            name: baton-yourservice-secrets
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - name: baton-workdir
+          mountPath: /tmp/baton
+      volumes:
+      - name: baton-workdir
+        emptyDir: {}
+```
+
+Key elements of this configuration:
+- **`workingDir: /tmp/baton`** tells the container to use a writable directory as its working directory.
+- **`emptyDir: {}`** provides an ephemeral writable volume that is cleaned up when the pod is removed.
+- **`readOnlyRootFilesystem: true`** enforces the security policy while the `emptyDir` mount provides the required writable space.
+- **`runAsNonRoot: true`** and **`fsGroup: 65534`** ensure the connector runs as a non-root user with appropriate file permissions on the mounted volume.
+
+#### Alternative: Use environment variables to redirect file output
+
+Instead of changing the working directory, you can use the `BATON_FILE` environment variable to write the sync file to a specific writable path:
+
+```yaml
+containers:
+- name: baton-yourservice
+  image: ghcr.io/conductorone/baton-yourservice:latest
+  env:
+  - name: BATON_FILE
+    value: "/tmp/baton/sync.c1z"
+  envFrom:
+  - secretRef:
+      name: baton-yourservice-secrets
+  volumeMounts:
+  - name: baton-workdir
+    mountPath: /tmp/baton
+```
+
+<Note>
+`BATON_FILE` controls where the `sync.c1z` file is written. The `debug.log` file location is determined by the working directory or the system's temporary directory. Setting `workingDir` to a writable path is the most reliable way to ensure all connector file writes succeed.
+</Note>
+
+### Connector logs show "no temporal folder found"
+
+If you see a warning like the following in connector logs:
+
+```
+no temporal folder found on this system according to our task manager,
+we may create files in the current working directory by mistake
+```
+
+This indicates the connector could not find a writable temporary directory and is falling back to the current working directory. If the working directory is also not writable (for example, due to a read-only root filesystem), subsequent file operations will fail.
+
+To resolve this, ensure the container has a writable working directory using the `emptyDir` volume approach described above.
+
