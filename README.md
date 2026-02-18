@@ -30,7 +30,7 @@ This repo includes [Claude Code](https://claude.ai/code) skills to help you writ
 
 - `/docs-writing` — General documentation style and formatting
 - `/connector-docs` — Connector documentation template
-- `/rap-documentation` — Creating RAP (Retrieval Augmented Prompt) docs for AI agents (see `rap/` and `product/admin/rap/` for examples)
+- `/rap-documentation` — Creating RAP (Retrieval Augmented Prompt) docs for AI agents (see `rap/` for examples)
 
 Clone the repo, open it in Claude Code, and invoke the skill to get started.
 
