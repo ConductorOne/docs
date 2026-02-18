@@ -27,9 +27,80 @@ Profile types are most commonly used to segment different broad categories of em
 
 This second profile type could be named for a specific employee type or could be a general category such as **Other employees**. 
 
-The ideal profile type design will depend on how your organization is structured and what kind of employee data is important to keep segmented. 
+The ideal profile type design will depend on how your organization is structured and what kind of employee data is important to keep segmented.
 
-## Create a new profile type 
+## How do custom attributes reach user profiles?
+
+Custom attribute data doesn't appear on a ConductorOne user automatically. It flows through a series of steps, and each step must be configured for the data to reach the user's profile. Understanding this chain helps you troubleshoot when an attribute you expect to see isn't showing up.
+
+Here's the full lifecycle of a custom attribute:
+
+1. **Connector syncs data from the source system.** When a connector syncs with a source application (like Workday, Active Directory, or Okta), it pulls user account data into ConductorOne. This data is stored on the user's **account** within the connected application. Custom fields from the source system are included in the account's profile as key-value pairs.
+
+2. **You create an attribute mapping.** In the [Attribute manager](/product/admin/attributes), you create a custom attribute and tell ConductorOne which application and which field to pull the data from. This is how ConductorOne knows, for example, that "Employment Type" should come from the `employmentType` field on the user's Workday account.
+
+3. **You bind the attribute to a profile type.** When you [create or edit a profile type](#step-2-add-relevant-attributes-to-the-profile-type), you select which custom attributes belong to it. This binding controls which attributes appear on users assigned to that profile type.
+
+4. **You assign users to the profile type.** Using a [user automation rule](#step-3-assign-users-to-the-profile-type) or manual assignment, you define which ConductorOne users belong to the profile type. Users who aren't assigned to any profile type with the attribute won't see that attribute on their profile.
+
+5. **The attribute appears on the ConductorOne user.** After the next directory sync, the attribute value flows from the account through the mapping and profile type, and appears in the **Profile attributes** section of the ConductorOne user's page. From here, it can be used in policies, access review campaigns, CEL expressions, and [account correlation](#example-using-a-custom-ad-attribute-for-account-correlation).
+
+<Warning>
+If any step in this chain is missing, the attribute won't appear on the ConductorOne user. The most common issue is creating the attribute mapping and profile type but forgetting to assign users to the profile type.
+</Warning>
+
+### Example: Workday cost center for policy routing
+
+Suppose you want to use a "Cost Center" field from Workday to route access requests to the right approver.
+
+<Steps>
+<Step>
+Make sure your Workday connector is set up and syncing. After a sync completes, the Cost Center value is stored on each user's Workday account.
+</Step>
+<Step>
+Navigate to **Directory** > **User data sources** > **Attribute manager** and click **Add attribute**. Select **Custom**, name it "Cost Center", and use **Direct mapping** to select your Workday application and the `costCenter` field. Click **Create**.
+</Step>
+<Step>
+Navigate to the **Profile types** tab and select (or [create](#create-a-new-profile-type)) the profile type you want to associate this attribute with, such as "Full-time employees". On the **Details** tab, click **Edit**, select the **Cost Center** attribute, and click **Save**.
+</Step>
+<Step>
+On the profile type's **User automation** tab, set up a rule to assign the appropriate users. For example, you might match all users with an `employmentType` of "Full-Time".
+</Step>
+<Step>
+After the next connector sync and directory merge, the Cost Center value appears on each assigned user's profile. You can now reference it in policies and CEL expressions.
+</Step>
+</Steps>
+
+### Example: Active Directory attribute for account correlation
+
+Suppose your organization stores GitHub usernames in a custom Active Directory attribute called `githubUserName`, and you want ConductorOne to use that attribute to match users to their GitHub accounts.
+
+<Steps>
+<Step>
+Make sure your Active Directory connector is set up and syncing. After sync, the `githubUserName` value is available on each user's AD account.
+</Step>
+<Step>
+Navigate to **Directory** > **User data sources** > **Attribute manager** and click **Add attribute**. Select **Custom**, name it "GitHub Username", and use **Direct mapping** to select your Active Directory application and the `githubUserName` field. Click **Create**.
+</Step>
+<Step>
+Add the **GitHub Username** attribute to the appropriate profile type and make sure the relevant users are assigned to it.
+</Step>
+<Step>
+After the next sync, the GitHub Username value appears on each assigned ConductorOne user's profile. You can now use this attribute in an [account correlation rule](/product/admin/managing-accounts) to automatically match ConductorOne users to their GitHub accounts.
+</Step>
+</Steps>
+
+### Troubleshooting missing attributes
+
+**Attribute mapped but not visible on users.** The most common cause is that the attribute isn't bound to a profile type, or users aren't assigned to the profile type that has the attribute. Check both the profile type's **Details** tab (for attribute bindings) and **Assigned users** tab (for membership).
+
+**Changes don't appear immediately.** Attribute values update during connector sync and directory merge cycles. After making configuration changes, you can trigger a sync manually from the application's details page or wait for the next scheduled sync.
+
+**Legacy profile type behavior.** Tenants created before November 2025 have an auto-created **Legacy** profile type that contains all users. If your tenant has a Legacy profile type, its custom attributes apply to all users as a baseline. When you create new profile types and assign users to them, those profile types take priority over the Legacy type for the attributes they define. Users who aren't assigned to any non-Legacy profile type continue to receive attributes from the Legacy type.
+
+**Custom versus standard attributes.** Most standard user attributes (like `user.department` or `user.jobTitle`) are available in CEL expressions. However, only custom attributes can be bound to profile types. If you need a custom attribute that contains the same data as a standard attribute, [create a custom attribute mapping](/product/admin/attributes#create-and-map-custom-user-attributes) that points to the same source field.
+
+## Create a new profile type
 
 <Tip>
 By default, a ConductorOne tenant supports two profile types. For customers whose tenants were in use before November 2025, you'll initially find one auto-created **Legacy** profile type containing all your users and the capacity to create two additional profile types. 
