@@ -1,0 +1,155 @@
+---
+title: Manage service principals
+og:title: Manage service principals - ConductorOne docs
+og:description: View, edit, disable, delete, rotate credentials, and assign owners for service principals.
+description: View, edit, disable, delete, rotate credentials, and assign owners for service principals.
+sidebarTitle: Manage service principals
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+## Viewing service principals
+
+Navigate to **Settings** > **Developers** > **Service principals** to see all service principals in your tenant. Click any service principal to view its details, credentials, and federation trusts.
+
+Service principals also appear in **Directory** > **Users** with a distinct robot avatar. To find them, use the **Origin** filter and select **Local** -- service principals have a Local origin, which distinguishes them from directory-synced human users.
+
+## Editing a service principal
+
+On the service principal detail page:
+
+- Click the display name to edit it inline
+- Use the **Enable/Disable** toggle to activate or deactivate the service principal
+- Click **Delete** to permanently remove the service principal and all its credentials and trusts
+
+<Warning>
+Disabling a service principal blocks all API access -- both new token issuance and existing tokens. The change takes effect within about 90 seconds due to internal caching.
+</Warning>
+
+## Editing credentials
+
+Click any credential in the **Credentials** tab to open its detail drawer. You can update:
+
+- **Display name**
+- **IP allowlist** (CIDR ranges)
+- **Scoped roles**
+- **DPoP requirement**
+
+Credential expiration can't be changed after creation. To use a different expiration, create a new credential and revoke the old one.
+
+## Editing federation trusts
+
+Click any trust in the **Federation** tab to open its detail drawer. Click **Edit** to modify:
+
+- **Display name**
+- **CEL condition** -- the editor includes AI assistance for writing and refining expressions
+- **IP allowlist** (CIDR ranges)
+- **Scoped roles** -- restricts the trust's effective permissions to the intersection of the service principal's roles and the selected role
+
+Use the **Enable/Disable** toggle in the drawer header to activate or deactivate the trust without deleting it.
+
+## Editing providers
+
+Click any provider in **Settings** > **Developers** > **Workload federation** to open its detail drawer. Click the pencil icon next to the name to rename the provider.
+
+The issuer URL can't be changed after creation because existing trusts depend on it.
+
+Use the **Enable/Disable** toggle in the drawer header to activate or deactivate the provider.
+
+## Credential rotation
+
+To rotate a credential without downtime:
+
+<Steps>
+  <Step>
+    Create a new credential on the same service principal.
+  </Step>
+  <Step>
+    Update your automation to use the new client ID and secret.
+  </Step>
+  <Step>
+    Verify the new credential works.
+  </Step>
+  <Step>
+    Revoke the old credential.
+  </Step>
+</Steps>
+
+A service principal can have multiple active credentials simultaneously, so there's no downtime during rotation.
+
+## Revoking credentials
+
+<Steps>
+  <Step>
+    On the service principal detail page, select the **Credentials** tab.
+  </Step>
+  <Step>
+    Click the credential you want to revoke to open its detail drawer.
+  </Step>
+  <Step>
+    Click **Revoke** and confirm.
+  </Step>
+</Steps>
+
+Revoking a credential immediately prevents it from issuing new tokens.
+
+## Deleting federation trusts
+
+<Steps>
+  <Step>
+    On the service principal detail page, select the **Federation** tab.
+  </Step>
+  <Step>
+    Click the trust you want to delete to open its detail drawer.
+  </Step>
+  <Step>
+    Click **Delete** and confirm.
+  </Step>
+</Steps>
+
+## Ownership
+
+Each service principal has one or more owners. Owners can:
+
+- Edit the service principal's display name
+- Create, update, and revoke credentials
+- Create, update, and delete federation trusts
+- Delete the service principal
+
+To manage owners, navigate to the service principal detail page and use the **Owners** section.
+
+<Note>
+Only Super Admins can create new service principals. Once created, delegated owners can manage the service principal.
+</Note>
+
+## Permissions
+
+| Role | Capabilities |
+| :--- | :--- |
+| **Super Admin** | Create, view, edit, delete service principals. Create and manage providers. View all trusts and credentials. Full access. |
+| **Service principal owner** | View, edit, delete the owned service principal. Create, update, and revoke its credentials and trusts. Can't create new service principals. |
+| **Authenticated user** | View the list of service principals (metadata only). Can't create, edit, or manage credentials. |
+
+Workload federation provider management is restricted to Super Admins.
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="What happens if my credential expires?">
+    Expired credentials can't issue new tokens. Any existing tokens issued before expiry remain valid until they naturally expire (typically 1 hour). Create a new credential and update your configuration before the old one expires.
+  </Accordion>
+  <Accordion title="Can a service principal have both credentials and federation trusts?">
+    Yes. A single service principal can have multiple credentials and multiple federation trusts. This is useful when you want secretless federation for CI/CD but also need a credential for local development or debugging.
+  </Accordion>
+  <Accordion title="What happens if I disable a service principal?">
+    All API access is blocked -- both new token issuance and existing tokens. The change takes effect within about 90 seconds due to internal caching. Re-enable the service principal to restore access.
+  </Accordion>
+  <Accordion title="How do I rotate credentials without downtime?">
+    Create a new credential, update your automation to use it, verify it works, then revoke the old credential. The service principal can have multiple active credentials simultaneously.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,99 @@
+---
+title: Service principals
+og:title: Service principals - ConductorOne docs
+og:description: Create machine identities for API automation with client credentials or secretless workload federation.
+description: Create machine identities for API automation with client credentials or secretless workload federation.
+sidebarTitle: Overview
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+Service principals are machine identities in ConductorOne. They give your scripts, CI/CD pipelines, and Terraform runs their own identity and credentials, separate from any human user.
+
+## What's a service principal?
+
+A service principal is a dedicated, non-human identity purpose-built for automation. It appears in the user directory alongside human users, but it's designed for scripts, CI/CD pipelines, Terraform runs, and API integrations.
+
+Each service principal:
+
+- Has a display name and unique ID
+- Can be assigned ConductorOne roles, just like a human user
+- Has owners who manage it
+- Can have multiple credentials or federation trusts
+
+<Tip>
+You don't need a service principal to use the ConductorOne API for personal use. You can use existing personal API credentials (**Profile** > **API Keys**) for individual tasks. Service principals are designed for shared automation where the identity should not be tied to a specific person.
+</Tip>
+
+## Two ways to authenticate
+
+Service principals support two authentication methods. You can use either one, or both on the same service principal.
+
+| | Client credentials | Workload federation |
+| :--- | :--- | :--- |
+| **How** | Client ID + secret sent to token endpoint | External OIDC JWT exchanged for ConductorOne token |
+| **Secrets** | Client secret must be stored and rotated | No secrets -- uses your CI/CD platform's built-in OIDC |
+| **Best for** | Local development, scripts, cron jobs, Terraform (simple setup) | GitHub Actions, GitLab CI, HCP Terraform, AWS (production) |
+| **Credential lifetime** | Maximum 180 days; must be rotated before expiry | No credentials to manage; tokens are per-run |
+| **Security** | Secret can leak; mitigate with CIDR + expiration + scoped roles | No secret to leak; token valid only for a single CI/CD run |
+| **Grant type** | `client_credentials` | `urn:ietf:params:oauth:grant-type:token-exchange` |
+
+## Choosing the right method
+
+- **Use client credentials** if you want a straightforward path to calling the API. Best for scripts, local development, and environments where storing a secret is acceptable.
+- **Use workload federation** for production CI/CD. No secrets to rotate, tighter scoping, and tokens are tied to individual workflow runs.
+
+## Environment variables
+
+All ConductorOne client tools (Go SDK, Terraform provider, Cone CLI, oidc-token-action) recognize the same environment variables:
+
+| Variable | Purpose |
+| :--- | :--- |
+| `CONDUCTORONE_CLIENT_ID` | Client ID for authentication (client credentials or workload federation trust) |
+| `CONDUCTORONE_CLIENT_SECRET` | Ed25519 private key for client credentials |
+| `CONDUCTORONE_ACCESS_TOKEN` | Pre-exchanged bearer token (highest priority, skips all other auth) |
+| `CONDUCTORONE_OIDC_TOKEN` | Raw OIDC JWT for workload federation token exchange |
+| `CONDUCTORONE_TENANT_DOMAIN` | Tenant domain override |
+| `CONDUCTORONE_SERVER_URL` | Full server URL override |
+
+When multiple variables are set, tools use this priority order:
+
+1. `CONDUCTORONE_ACCESS_TOKEN` -- static bearer token, no exchange needed
+2. `CONDUCTORONE_OIDC_TOKEN` -- token exchange using `CONDUCTORONE_CLIENT_ID`
+3. `CONDUCTORONE_CLIENT_ID` + `CONDUCTORONE_CLIENT_SECRET` -- Ed25519 JWT assertion
+
+## Prerequisites
+
+Before creating service principals:
+
+1. Contact your ConductorOne account team to enable the feature (it's gated behind a feature flag during early access)
+2. You need **Super Admin** permissions to create and manage service principals
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Quick start: Client credentials" icon="key" href="/product/admin/service-principals/client-credentials">
+    Get from zero to a working API call in under 5 minutes.
+  </Card>
+  <Card title="Workload federation" icon="shield-check" href="/product/admin/service-principals/workload-federation">
+    Set up secretless authentication from CI/CD platforms.
+  </Card>
+</Columns>
+
+## Limits
+
+| Limit | Value |
+| :--- | :--- |
+| Maximum credential lifetime | 180 days (rotation required) |
+| CEL expression size | 1,024 bytes |
+| CIDR ranges per credential or trust | 32 |
+| Workload federation provider requirement | Publicly accessible JWKS endpoint |
+
+<Note>
+Credential expiration can't be extended after creation. To continue access, create a new credential with the desired expiration and revoke the old one. See [credential rotation](/product/admin/service-principals/manage#credential-rotation).
+</Note>

@@ -1,0 +1,89 @@
+---
+title: GitLab CI integration
+og:title: GitLab CI integration - ConductorOne docs
+og:description: Set up secretless authentication from GitLab CI to ConductorOne using OIDC id_tokens.
+description: Set up secretless authentication from GitLab CI to ConductorOne using OIDC id_tokens.
+sidebarTitle: GitLab CI
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+GitLab CI/CD can issue OIDC tokens for each job via the `id_tokens` keyword. You exchange this token for a ConductorOne access token using a curl command in your pipeline.
+
+## Prerequisites
+
+- A service principal with a GitLab CI federation trust. See [set up federation](/product/admin/service-principals/federation-setup) if you haven't created one yet. Use the **GitLab CI/CD** preset.
+- The trust's **client ID** (for example `bright-eagle-55012@yourcompany.conductor.one/wfe`)
+
+## Configure the pipeline
+
+Add `id_tokens` to your job to request a GitLab OIDC token, then exchange it for a ConductorOne access token:
+
+```yaml
+# .gitlab-ci.yml
+deploy:
+  id_tokens:
+    C1_TOKEN:
+      aud: yourcompany.conductor.one
+  script:
+    - >
+      C1_ACCESS_TOKEN=$(curl -s -X POST
+      "https://yourcompany.conductor.one/auth/v1/token"
+      -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
+      -d "subject_token=$C1_TOKEN"
+      -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt"
+      -d "client_id=bright-eagle-55012@yourcompany.conductor.one/wfe"
+      | jq -r '.access_token')
+    - >
+      curl -s "https://yourcompany.conductor.one/api/v1/apps"
+      -H "Authorization: Bearer $C1_ACCESS_TOKEN"
+```
+
+The `id_tokens` block tells GitLab to generate a signed JWT with your ConductorOne tenant domain as the audience. The token is available as the `C1_TOKEN` environment variable within the job.
+
+## CEL expression examples
+
+When creating the federation trust, the CEL expression controls which GitLab CI jobs can authenticate.
+
+### Restrict to a project
+
+```go
+claims.project_path == "acme/infra"
+```
+
+### Restrict to a project on protected refs only
+
+```go
+claims.project_path == "acme/infra" && claims.ref_protected == "true"
+```
+
+### Restrict to a specific branch
+
+```go
+claims.project_path == "acme/infra" && claims.ref == "main" && claims.ref_protected == "true"
+```
+
+### Common GitLab OIDC claims
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `project_path` | `acme/infra` | Full project path including group |
+| `project_id` | `12345` | Numeric project ID |
+| `namespace_path` | `acme` | Group or user namespace |
+| `ref` | `main` | Branch or tag name |
+| `ref_protected` | `true` | Whether the ref is protected |
+| `ref_type` | `branch` | `branch` or `tag` |
+| `pipeline_source` | `push` | What triggered the pipeline |
+| `environment` | `production` | Environment name (if used) |
+| `environment_protected` | `true` | Whether the environment is protected |
+
+## Security guidance
+
+<Warning>
+Keep "Require protected ref" enabled (`claims.ref_protected == "true"`) to ensure only jobs running on protected branches or tags can authenticate. For high-privilege access, also bind to a specific ref value. GitLab lets you set the audience per-job via `id_tokens` -- your tenant domain is used as the expected audience.
+</Warning>

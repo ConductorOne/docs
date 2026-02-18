@@ -1,0 +1,104 @@
+---
+title: HCP Terraform integration
+og:title: HCP Terraform integration - ConductorOne docs
+og:description: Set up secretless authentication from HCP Terraform to ConductorOne using workload identity tokens.
+description: Set up secretless authentication from HCP Terraform to ConductorOne using workload identity tokens.
+sidebarTitle: HCP Terraform
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+HCP Terraform (formerly Terraform Cloud) can issue workload identity tokens for each run. The ConductorOne Terraform provider auto-detects these tokens, so your runs authenticate without stored secrets.
+
+## Prerequisites
+
+- A service principal with an HCP Terraform federation trust. See [set up federation](/product/admin/service-principals/federation-setup) if you haven't created one yet. Use the **HCP Terraform** preset.
+- The trust's **client ID** (for example `clever-fox@yourcompany.conductor.one/wfe`)
+
+## Step 1: Configure workspace environment variables
+
+In your HCP Terraform workspace, set this environment variable:
+
+| Variable | Value |
+| :--- | :--- |
+| `TFC_WORKLOAD_IDENTITY_AUDIENCE` | `yourcompany.conductor.one` (your ConductorOne tenant domain) |
+
+HCP Terraform automatically generates a `TFC_WORKLOAD_IDENTITY_TOKEN` environment variable for each run. This token is a signed JWT containing metadata about the Terraform run.
+
+## Step 2: Configure the provider
+
+The ConductorOne Terraform provider auto-detects `TFC_WORKLOAD_IDENTITY_TOKEN`. You only need to provide the trust's client ID:
+
+```hcl
+provider "conductorone" {
+  client_id = "clever-fox@yourcompany.conductor.one/wfe"
+  # oidc_token is auto-detected from TFC_WORKLOAD_IDENTITY_TOKEN
+}
+```
+
+That's it. When `terraform plan` or `terraform apply` runs in HCP Terraform, the provider exchanges the workload identity token for a ConductorOne access token automatically.
+
+### Explicit configuration
+
+If you prefer to be explicit, or if you need multiple audience values, use a Terraform variable:
+
+```hcl
+variable "tfc_conductorone_token" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+provider "conductorone" {
+  oidc_token = var.tfc_conductorone_token
+  client_id  = "clever-fox@yourcompany.conductor.one/wfe"
+}
+```
+
+For multiple audiences, set `TFC_WORKLOAD_IDENTITY_AUDIENCE_CONDUCTORONE` in your workspace. HCP Terraform generates a corresponding `TFC_WORKLOAD_IDENTITY_TOKEN_CONDUCTORONE` variable.
+
+### Provider auth priority
+
+The provider resolves authentication in this order:
+
+1. `CONDUCTORONE_ACCESS_TOKEN` environment variable (static bearer token)
+2. `oidc_token` attribute, then `CONDUCTORONE_OIDC_TOKEN` env var, then `TFC_WORKLOAD_IDENTITY_TOKEN` env var
+3. `client_id` + `client_secret` attributes or `CONDUCTORONE_CLIENT_ID` + `CONDUCTORONE_CLIENT_SECRET` env vars
+
+## CEL expression examples
+
+When creating the federation trust, the CEL expression controls which HCP Terraform runs can authenticate.
+
+### Restrict to an organization and workspace
+
+```go
+claims.terraform_organization == "acme" && claims.terraform_workspace_name == "infra-prod"
+```
+
+### Restrict to apply phase only
+
+```go
+claims.terraform_organization == "acme" && claims.terraform_workspace_name == "infra-prod" && claims.terraform_run_phase == "apply"
+```
+
+### Common HCP Terraform OIDC claims
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `terraform_organization` | `acme` | Terraform Cloud organization name |
+| `terraform_workspace_name` | `infra-prod` | Workspace name |
+| `terraform_workspace_id` | `ws-abc123` | Workspace ID |
+| `terraform_run_phase` | `apply` | Run phase: `plan` or `apply` |
+| `terraform_run_id` | `run-xyz789` | Unique run ID |
+| `terraform_project_name` | `infrastructure` | Project name |
+
+## Security guidance
+
+<Warning>
+Restricting to "apply only" prevents plan-phase runs from obtaining credentials. This is the recommended default for workloads that modify infrastructure. If you need separate permissions for plan and apply, create two trusts with different scoped roles -- one for plan (read-only) and one for apply (write).
+</Warning>

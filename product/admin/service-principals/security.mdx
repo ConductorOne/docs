@@ -1,0 +1,142 @@
+---
+title: Security controls
+og:title: Security controls - ConductorOne docs
+og:description: Scoped roles, IP allowlists, credential expiration, DPoP, CEL expressions, and audit log events for service principals.
+description: Scoped roles, IP allowlists, credential expiration, DPoP, CEL expressions, and audit log events for service principals.
+sidebarTitle: Security controls
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+Service principals and workload federation include several security controls to limit access and maintain auditability.
+
+## Scoped roles
+
+Every credential and federation trust can be limited to a subset of the service principal's roles. The effective permissions are the **intersection** of:
+
+1. The roles assigned to the service principal
+2. The scoped roles on the credential or trust
+
+If no scoped roles are selected ("Full permissions"), the credential or trust inherits all of the service principal's roles.
+
+| Role | Description | Use case |
+| :--- | :--- | :--- |
+| **Full permissions** | All of the service principal's assigned roles | General-purpose automation |
+| **Basic User** | Standard user permissions | Access requests, basic operations |
+| **Read-Only Administrator** | Read-only access to all features | Monitoring, reporting, dashboards |
+| **Read-Only to System Logs** | Can view system logs only | SIEM integration, log forwarding |
+
+## IP allowlists
+
+Both credentials and federation trusts support CIDR-based IP restrictions. When configured, only requests from the specified IP ranges are accepted.
+
+- Add up to 32 CIDR ranges per credential or trust
+- Leave empty to allow all IPs
+- Supports both IPv4 and IPv6 CIDR notation
+
+<Note>
+IP allowlists work best with self-hosted runners or fixed egress IPs. GitHub-hosted runners use thousands of IP ranges that change frequently, making CIDR restrictions impractical for them.
+</Note>
+
+## Credential expiration
+
+Credentials expire after a set duration:
+
+| Duration | Use case |
+| :--- | :--- |
+| **30 days** | Short-lived, for temporary automation |
+| **60 days** | Medium-term |
+| **90 days** | Recommended default |
+| **180 days** | Maximum allowed |
+
+Expired credentials can't issue new tokens. Plan credential rotation before expiry. See [credential rotation](/product/admin/service-principals/manage#credential-rotation) for a zero-downtime rotation procedure.
+
+<Note>
+Credential expiration can't be extended. Create a new credential with the desired expiration and revoke the old one.
+</Note>
+
+## DPoP (Demonstrating Proof-of-Possession)
+
+DPoP ([RFC 9449](https://datatracker.ietf.org/doc/html/rfc9449)) binds access tokens to a specific cryptographic key. Even if a token is intercepted, it can't be used without the corresponding private key.
+
+Enable DPoP when creating a credential by toggling **Require DPoP**. When enabled:
+
+- The client must include a `DPoP` proof header with every token request
+- Issued tokens are type `DPoP` instead of `Bearer`
+- API requests must include both the token and a fresh DPoP proof
+
+This is an advanced feature for high-security environments.
+
+## CEL conditions (federation)
+
+Federation trusts use CEL (Common Expression Language) expressions to control which tokens are accepted. The expression is evaluated against the JWT claims and must return `true`.
+
+### CEL environment
+
+The CEL environment exposes:
+
+- `claims` -- a map of all decoded JWT claims
+
+Standard CEL string functions are available: `contains()`, `startsWith()`, `endsWith()`, `matches()`, `size()`.
+
+### Example expressions
+
+| Provider | Expression |
+| :--- | :--- |
+| GitHub Actions | `claims.repository == "acme/infra" && claims.environment == "production"` |
+| GitLab CI | `claims.project_path == "acme/infra" && claims.ref_protected == "true"` |
+| HCP Terraform | `claims.terraform_organization == "acme" && claims.terraform_workspace_name == "infra-prod"` |
+| AWS IAM | `claims["https://sts.amazonaws.com/"].aws_account == "123456789012"` |
+
+### Writing expressions
+
+- Expressions are limited to 1,024 bytes
+- Always validate the `sub` claim or an equivalent identifier
+- Use additional claims for defense-in-depth scoping
+- Use the **Test CEL** tool at **Settings** > **Workload Federation** to validate expressions against sample claims without a real JWT
+
+<Tip>
+For more on CEL syntax, see the [CEL expressions](/product/admin/expressions) documentation.
+</Tip>
+
+## System log events
+
+All service principal and workload federation activity is recorded in the ConductorOne system log.
+
+### Authentication events
+
+Token operations are logged as OCSF Authentication events (class 3002). The `activity_name` corresponds to the OAuth grant type used.
+
+| Event | Activity name | Description |
+| :--- | :--- | :--- |
+| **Client credential grant** | `client_credentials` | Service principal authenticated with client ID + secret or client assertion |
+| **Token exchange** | `token_exchange` | Workload federation token exchange attempt (success or failure) |
+
+Each authentication event includes:
+
+- **Outcome**: Success or Failure
+- **Status detail**: Specific failure reason (for example `trust_not_found`, `issuer_mismatch`, `invalid_jwt_format`, `cel_condition_not_met`, `token_too_old`, `sp_disabled`)
+- **Client IP**: Source IP address of the request
+- **Client ID**: The credential or trust client ID used
+
+### API activity events
+
+Service principal and workload federation CRUD operations are logged as OCSF API Activity events.
+
+| Event | API operation | Description |
+| :--- | :--- | :--- |
+| **SP created** | `ServicePrincipalService/Create` | New service principal created |
+| **SP deleted** | `ServicePrincipalService/Delete` | Service principal deleted |
+| **Credential created** | `ServicePrincipalService/CreateCredential` | New credential generated |
+| **Credential revoked** | `ServicePrincipalService/RevokeCredential` | Credential revoked |
+| **Provider created** | `WorkloadFederationService/CreateProvider` | New OIDC provider registered |
+| **Provider deleted** | `WorkloadFederationService/DeleteProvider` | OIDC provider removed |
+| **Trust created** | `WorkloadFederationService/CreateTrust` | New federation trust created |
+| **Trust deleted** | `WorkloadFederationService/DeleteTrust` | Federation trust removed |
+
+View these events in the [system log](/product/admin/system-log).

@@ -1,0 +1,141 @@
+---
+title: GitHub Actions integration
+og:title: GitHub Actions integration - ConductorOne docs
+og:description: Set up secretless authentication from GitHub Actions to ConductorOne using the oidc-token-action.
+description: Set up secretless authentication from GitHub Actions to ConductorOne using the oidc-token-action.
+sidebarTitle: GitHub Actions
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+The `conductorone/oidc-token-action` GitHub Action exchanges a GitHub Actions OIDC token for a ConductorOne access token in a single step. No secrets to store or rotate.
+
+## Prerequisites
+
+- A service principal with a GitHub Actions federation trust. See [set up federation](/product/admin/service-principals/federation-setup) if you haven't created one yet.
+- The trust's **client ID** (for example `swift-otter-19384@yourcompany.conductor.one/wfe`)
+
+## Set up the workflow
+
+Add the action to your workflow file. Your workflow must have `id-token: write` permission for GitHub to issue the OIDC token.
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy with ConductorOne
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: conductorone/oidc-token-action@v1
+        with:
+          audience: yourcompany.conductor.one
+          client_id: swift-otter-19384@yourcompany.conductor.one/wfe
+
+      # CONDUCTORONE_ACCESS_TOKEN is now set for all subsequent steps
+```
+
+The action:
+
+1. Requests a GitHub OIDC token with your tenant domain as the audience
+2. Exchanges it for a ConductorOne access token via token exchange
+3. Exports `CONDUCTORONE_ACCESS_TOKEN` and `CONDUCTORONE_CLIENT_ID` as environment variables
+4. Masks the token in logs to prevent accidental exposure
+5. Cleans up the environment variables when the job finishes
+
+## Use with downstream tools
+
+After the action runs, `CONDUCTORONE_ACCESS_TOKEN` is available to all subsequent steps. Every ConductorOne tool recognizes this variable automatically.
+
+### Cone CLI
+
+```yaml
+      - uses: conductorone/oidc-token-action@v1
+        with:
+          audience: yourcompany.conductor.one
+          client_id: swift-otter-19384@yourcompany.conductor.one/wfe
+
+      - run: cone whoami
+```
+
+### Terraform
+
+```yaml
+      - uses: conductorone/oidc-token-action@v1
+        with:
+          audience: yourcompany.conductor.one
+          client_id: swift-otter-19384@yourcompany.conductor.one/wfe
+
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform apply
+```
+
+### Direct API calls
+
+```yaml
+      - uses: conductorone/oidc-token-action@v1
+        with:
+          audience: yourcompany.conductor.one
+          client_id: swift-otter-19384@yourcompany.conductor.one/wfe
+
+      - run: |
+          curl -s "https://yourcompany.conductor.one/api/v1/apps" \
+            -H "Authorization: Bearer $CONDUCTORONE_ACCESS_TOKEN"
+```
+
+## CEL expression examples
+
+When creating the federation trust, the CEL expression controls which GitHub Actions workflows can authenticate. The expression evaluates against the GitHub OIDC token's claims.
+
+### Restrict to a repository
+
+```go
+claims.repository == "acme/infra"
+```
+
+### Restrict to a repository and branch
+
+```go
+claims.repository == "acme/infra" && claims.ref == "refs/heads/main"
+```
+
+### Restrict to a repository and environment
+
+```go
+claims.repository == "acme/infra" && claims.environment == "production"
+```
+
+### Common GitHub OIDC claims
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `repository` | `acme/infra` | Owner and repository name |
+| `repository_owner` | `acme` | Repository owner (organization or user) |
+| `ref` | `refs/heads/main` | Git ref that triggered the workflow |
+| `environment` | `production` | GitHub Environment name (if used) |
+| `job_workflow_ref` | `acme/infra/.github/workflows/deploy.yml@refs/heads/main` | Full workflow file reference |
+| `actor` | `octocat` | GitHub user who triggered the run |
+| `event_name` | `push` | Event that triggered the workflow |
+
+## Security guidance
+
+<Warning>
+For production workloads, enable [GitHub Environments](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) and add an environment constraint to your CEL expression. This prevents any branch or workflow in the repo from authenticating -- only jobs running in the specified environment can.
+</Warning>
+
+For maximum security, pin to a specific reusable workflow via `job_workflow_ref`:
+
+```go
+claims.job_workflow_ref == "acme/infra/.github/workflows/deploy.yml@refs/heads/main"
+```
+
+This ensures only a specific workflow file on a specific branch can authenticate, even if other workflows in the same repo have `id-token: write` permission.

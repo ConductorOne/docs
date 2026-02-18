@@ -1,0 +1,100 @@
+---
+title: Workload federation
+og:title: Workload federation - ConductorOne docs
+og:description: Eliminate stored secrets by exchanging OIDC tokens from CI/CD platforms for ConductorOne access tokens.
+description: Eliminate stored secrets by exchanging OIDC tokens from CI/CD platforms for ConductorOne access tokens.
+sidebarTitle: Workload federation
+---
+
+{/* Editor Refresh: 2026-02-14 */}
+
+<Warning>
+**Early access.** Service principals and workload federation are in early access.
+Contact your ConductorOne account team to enable this feature for your tenant.
+</Warning>
+
+Workload federation eliminates stored secrets entirely. Your CI/CD platform's built-in OIDC (OpenID Connect) tokens are exchanged directly for ConductorOne access tokens -- no client secrets to store, rotate, or risk leaking.
+
+## How it works
+
+Most CI/CD platforms (GitHub Actions, GitLab CI, HCP Terraform) can issue short-lived OIDC tokens that identify the running workload. Workload federation lets ConductorOne trust these tokens directly:
+
+1. Your CI/CD platform issues a signed JWT (JSON Web Token) for the current workflow run
+2. Your workflow sends this JWT to ConductorOne's token exchange endpoint
+3. ConductorOne validates the token: issuer, signature, audience, freshness, and your conditions
+4. ConductorOne issues a short-lived access token scoped to the service principal's roles
+
+The entire flow is secretless. No credentials are stored anywhere -- the OIDC token is only valid for a single CI/CD run, typically for a few minutes.
+
+## Two building blocks
+
+Workload federation has two layers:
+
+### Providers
+
+A **provider** represents an OIDC token issuer, for example GitHub Actions or HCP Terraform. Providers are created once at the tenant level and shared across service principals.
+
+Each provider has:
+- An **issuer URL** (for example `https://token.actions.githubusercontent.com` for GitHub Actions)
+- A public JWKS (JSON Web Key Set) endpoint for signature verification
+
+ConductorOne includes presets for common platforms:
+
+| Provider | Issuer URL | Notes |
+| :--- | :--- | :--- |
+| **GitHub Actions** | `https://token.actions.githubusercontent.com` | Fixed issuer URL |
+| **GitLab CI/CD** | `https://gitlab.com` (or self-managed URL) | Editable issuer URL |
+| **HCP Terraform** | `https://app.terraform.io` (or custom hostname) | Editable issuer URL |
+| **AWS IAM Outbound** | Account-specific issuer URL | Editable issuer URL |
+| **Custom OIDC** | Any HTTPS issuer URL | For other OIDC-capable platforms |
+
+### Trusts
+
+A **trust** binds a provider to a specific service principal with conditions. It controls which tokens from that provider are accepted and what permissions they receive.
+
+Each trust has:
+- A **client ID** (for example `swift-otter-19384@yourcompany.conductor.one/wfe`)
+- A **CEL condition expression** that the JWT claims must satisfy
+- **Optional** IP restrictions and scoped roles
+
+The CEL (Common Expression Language) expression evaluates against the JWT's claims. For example, this expression restricts access to a specific GitHub repository and environment:
+
+```go
+claims.repository == "acme/infra" && claims.environment == "production"
+```
+
+## Supported platforms
+
+<Columns cols={2}>
+  <Card title="GitHub Actions" icon="github" href="/product/admin/service-principals/github-actions">
+    Use the conductorone/oidc-token-action for one-step setup.
+  </Card>
+  <Card title="GitLab CI" icon="gitlab" href="/product/admin/service-principals/gitlab-ci">
+    Use GitLab's built-in id_tokens with a curl exchange.
+  </Card>
+  <Card title="HCP Terraform" icon="cloud" href="/product/admin/service-principals/hcp-terraform">
+    Auto-detected from TFC_WORKLOAD_IDENTITY_TOKEN.
+  </Card>
+  <Card title="Custom OIDC" icon="shield-check" href="/product/admin/service-principals/custom-oidc">
+    Any platform with OIDC support.
+  </Card>
+</Columns>
+
+## Next steps
+
+- [Set up federation](/product/admin/service-principals/federation-setup) -- step-by-step wizard walkthrough
+- [Security controls](/product/admin/service-principals/security) -- scoped roles, CIDR, CEL reference
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="What OIDC providers are supported?">
+    Any OIDC-compliant provider that serves a `/.well-known/openid-configuration` document, has a public JWKS endpoint, and issues JWTs with standard claims (`iss`, `aud`, `exp`, `iat`). Built-in presets are available for GitHub Actions, GitLab CI/CD, HCP Terraform, and AWS IAM. Use "Custom OIDC" for any other provider.
+  </Accordion>
+  <Accordion title="Can I restrict which branches or environments can authenticate?">
+    Yes. The CEL condition expression controls exactly which tokens are accepted. For GitHub Actions, restrict by `claims.repository`, `claims.ref`, and `claims.environment`. For GitLab, use `claims.project_path` and `claims.ref_protected`.
+  </Accordion>
+  <Accordion title="How do scoped roles work with federation trusts?">
+    The trust's scoped roles are intersected with the service principal's assigned roles at token issuance time. For example, if the service principal has [Super Admin, Basic User] and the trust has [Basic User], the token's effective permissions are [Basic User] only.
+  </Accordion>
+</AccordionGroup>
