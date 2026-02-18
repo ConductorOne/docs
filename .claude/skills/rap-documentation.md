@@ -17,19 +17,41 @@ Full documentation may exceed context windows. RAP format allows agents to:
 
 ## Structure
 
-```
-docs/                    # Human-readable, full documentation
-  01_GETTING_STARTED.md
-  02_CORE_CONCEPTS.md
-  ...
+RAP documentation lives in a unified `rap/` directory with subdirectories for each knowledge domain:
 
-rap/             # Agent-optimized, chunked for retrieval
-  INDEX.md               # Always in context, describes all sections
-  concepts-overview.md   # Self-contained skill file
-  concepts-resources.md
-  build-setup.md
-  debug-errors.md
-  ...
+```
+rap/
+  INDEX.md                   # Master index routing to subdomains
+  connectors/                # Baton connector development
+    INDEX.md                 # Domain-specific retrieval guide
+    concepts-overview.md
+    build-setup.md
+    ...
+  service-principals/        # API automation, workload federation
+    INDEX.md
+    concepts-overview.md
+    auth-client-credentials.md
+    ...
+  cel-expressions/           # CEL in policies, groups, automations
+    index.md
+    env-policy-conditions.md
+    functions-directory.md
+    ...
+```
+
+**When to use subdirectories:**
+- Each subdirectory represents a distinct knowledge domain
+- Create a new subdirectory when adding RAP docs for a major feature area
+- Each subdirectory has its own INDEX.md with domain-specific retrieval guidance
+
+**Master INDEX.md** routes LLMs to the correct subdomain:
+
+```markdown
+| Domain | Path | Use for |
+|--------|------|---------|
+| Connectors | `connectors/INDEX.md` | Building Baton connectors |
+| Service Principals | `service-principals/INDEX.md` | API automation |
+| CEL Expressions | `cel-expressions/index.md` | Writing CEL expressions |
 ```
 
 ## INDEX.md Requirements
@@ -126,14 +148,22 @@ Don't create when:
 
 ## The Breadcrumb Pattern
 
-Add a comment at the bottom of the main human-readable doc pointing LLMs to the RAP index.
+Add a comment at the bottom of the main human-readable doc pointing LLMs to the RAP index. Point to the specific subdirectory index, not the master index.
 
 **For MDX files** (Mintlify, Docusaurus, etc.) - use JSX comment syntax:
 
 ```jsx
 {/*
-LLM Note: For AI assistants answering questions about [topic],
-a structured knowledge base is available at [path]/rap/INDEX.md
+LLM Note: For AI assistants answering questions about Baton connector development,
+a structured knowledge base is available at rap/connectors/INDEX.md
+with focused, retrievable documentation chunks.
+*/}
+```
+
+```jsx
+{/*
+LLM Note: For AI assistants answering questions about service principals and workload federation,
+a structured knowledge base is available at rap/service-principals/INDEX.md
 with focused, retrievable documentation chunks.
 */}
 ```
@@ -142,8 +172,8 @@ with focused, retrievable documentation chunks.
 
 ```html
 <!--
-LLM Note: For AI assistants answering questions about [topic],
-a structured knowledge base is available at [path]/rap/INDEX.md
+LLM Note: For AI assistants answering questions about CEL expressions in ConductorOne,
+a structured knowledge base is available at rap/cel-expressions/index.md
 with focused, retrievable documentation chunks.
 -->
 ```
