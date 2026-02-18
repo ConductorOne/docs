@@ -27,6 +27,26 @@ Use this skill when:
 - Optional: `og:title`, `og:description`, `sidebarTitle`
 - Add editor refresh comment: `{/* Editor Refresh: YYYY-MM-DD */}`
 
+## File and Folder Structure
+
+ConductorOne docs use Mintlify, where **file path = URL**. Structure decisions are permanent without redirects, so be intentional.
+
+### Folder rules
+
+- **Flat by default**: Single pages live directly under their section folder — `/admin/page-name`, not `/admin/subsection/page-name`.
+- **Add a subfolder when**: A section has three or more related pages that form a coherent group. At that threshold, a subfolder improves navigation in both the repo and the published URLs.
+- **Name folders after the primary UI term**: Use the exact term as it appears in the product interface. If the UI says "Service principals," the folder is `service-principals`.
+
+### What not to do
+
+- Don't create a subfolder for a single page.
+- Don't invent folder names that don't match UI terminology.
+- Don't add folder layers to mirror internal team structures or product roadmap groupings — organize for users, not for the company.
+
+### docs.json
+
+Sidebar grouping in `docs.json` is independent of folder structure. You can visually group pages in the nav without creating subfolders, which is useful when a section is growing but hasn't reached the three-page threshold yet.
+
 ## Writing Process
 
 Follow this process when creating ConductorOne documentation:
