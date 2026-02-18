@@ -36,11 +36,11 @@ Service principals support two authentication methods. You can use either one, o
 
 | | Client credentials | Workload federation |
 | :--- | :--- | :--- |
-| **How** | Client ID + secret sent to token endpoint | External OIDC JWT exchanged for ConductorOne token |
+| **How** | Client ID + secret sent to token endpoint | External OIDC (OpenID Connect) token exchanged for ConductorOne token |
 | **Secrets** | Client secret must be stored and rotated | No secrets -- uses your CI/CD platform's built-in OIDC |
 | **Best for** | Local development, scripts, cron jobs, Terraform (simple setup) | GitHub Actions, GitLab CI, HCP Terraform, AWS (production) |
 | **Credential lifetime** | Maximum 180 days; must be rotated before expiry | No credentials to manage; tokens are per-run |
-| **Security** | Secret can leak; mitigate with CIDR + expiration + scoped roles | No secret to leak; token valid only for a single CI/CD run |
+| **Security** | Secret can leak; mitigate with IP restrictions + expiration + scoped roles | No secret to leak; token valid only for a single CI/CD run |
 | **Grant type** | `client_credentials` | `urn:ietf:params:oauth:grant-type:token-exchange` |
 
 ## Choosing the right method
@@ -50,7 +50,7 @@ Service principals support two authentication methods. You can use either one, o
 
 ## Environment variables
 
-All ConductorOne client tools (Go SDK, Terraform provider, Cone CLI, oidc-token-action) recognize the same environment variables:
+All ConductorOne client tools (Go SDK, [Terraform provider](/developer/terraform), [Cone CLI](/product/cli/install), oidc-token-action) recognize the same environment variables:
 
 | Variable | Purpose |
 | :--- | :--- |
@@ -67,12 +67,12 @@ When multiple variables are set, tools use this priority order:
 2. `CONDUCTORONE_OIDC_TOKEN` -- token exchange using `CONDUCTORONE_CLIENT_ID`
 3. `CONDUCTORONE_CLIENT_ID` + `CONDUCTORONE_CLIENT_SECRET` -- Ed25519 JWT assertion
 
-## Prerequisites
+## Before you begin
 
 Before creating service principals:
 
 1. Contact your ConductorOne account team to enable the feature (it's gated behind a feature flag during early access)
-2. You need **Super Admin** permissions to create and manage service principals
+2. You need **[Super Admin](/product/admin/user-roles#super-administrator)** permissions to create and manage service principals
 
 ## Next steps
 
@@ -85,14 +85,14 @@ Before creating service principals:
   </Card>
 </Columns>
 
-## Limits
+## Service principal limits
 
 | Limit | Value |
 | :--- | :--- |
 | Maximum credential lifetime | 180 days (rotation required) |
-| CEL expression size | 1,024 bytes |
-| CIDR ranges per credential or trust | 32 |
-| Workload federation provider requirement | Publicly accessible JWKS endpoint |
+| [CEL expression](/product/admin/expressions) size | 1,024 bytes |
+| IP address ranges per credential or trust | 32 |
+| Workload federation provider requirement | Publicly accessible JWKS (JSON Web Key Set) endpoint |
 
 <Note>
 Credential expiration can't be extended after creation. To continue access, create a new credential with the desired expiration and revoke the old one. See [credential rotation](/product/admin/service-principals/manage#credential-rotation).
