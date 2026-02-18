@@ -133,6 +133,23 @@ Follow this process when creating ConductorOne documentation:
 - **Code examples**: Simple, practical, tested before inclusion
 - **Links**: Verify all external links work
 
+## Early Access Notes
+
+When documenting features that are in early access, add a standardized warning callout at the top of the page (after the frontmatter and any editor refresh comment):
+
+```mdx
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
+</Warning>
+```
+
+**Key points:**
+- Always use `<Warning>` (not `<Info>` or `<Note>`)
+- Always use "the ConductorOne Support team" (not "our Support team" or "your account team")
+- Don't name the specific feature (use "This feature")
+- Include the explanation of what early access means
+- Use "share feedback" (not "have any feedback")
+
 ## Navigation (docs.json)
 
 - Pages map to MDX files (no extension)
