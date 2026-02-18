@@ -413,7 +413,148 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 <Tab title="Self-hosted">
 **Follow these instructions to use the Google Cloud Platform with Google Workspace connector, hosted and run in your own environment.**
 
-_Self-hosted connector not currently available._
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Resources 
+
+* [Official download center](https://dist.conductorone.com/ConductorOne/baton-google-cloud-platform): For stable binaries (Windows/Linux/macOS) and container images.
+
+### Step 1: Set up a new Google Cloud Platform with Google Workspace connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Google Cloud Platform with Google Workspace connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Google Cloud Platform with Google Workspace connector deployment:
+
+#### Secrets configuration
+
+```yaml
+# baton-google-cloud-platform-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-google-cloud-platform-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+  # Google Cloud Platform with Google Workspace credentials
+  BATON_CUSTOMER_ID: <customer ID>
+  BATON_DOMAIN: <domain>
+  BATON_ADMIN_EMAIL: <admin email>
+  BATON_CREDENTIALS_JSON: <service account credentials JSON>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: true
+
+  # Optional: include to skip Google-managed system accounts
+  BATON_SKIP_SYSTEM_ACCOUNTS: true
+
+  # Optional: include to sync Cloud Storage buckets (requires the storage.buckets.list permission)
+  BATON_SYNC_BUCKETS: true
+
+  # Optional: include to sync API keys and service account keys
+  BATON_SYNC_SECRETS: true
+
+  # Optional: include to sync Secret Manager secrets (requires the Secret Manager API)
+  BATON_SYNC_SECRET_MANAGER_SECRETS: true
+
+  # Optional: include to alway sync custom roles, even without assignments
+  BATON_ALWAYS_SYNC_CUSTOM_ROLES: true
+
+  # Optional: include to enable workforce identity federation support
+  BATON_ENABLE_WORKFORCE_IDENTITY_FEDERATION: true
+  BATON_WORKFORCE_IDENTITY_POOL_ID: <workforce identity pool ID>
+  BATON_WORKFORCE_IDENTITY_POOL_PROVIDER_ID: <workforce identity pool provider ID>
+
+  # Optional: include to limit sync to specific projects (enter project IDs, not names)
+  BATON_PROJECT_FILTER: <comma-separated list of project IDs>
+
+  # Optional: Include to always sync specific roles (enter role IDs, not names)
+  BATON_ALWAYS_SYNC_ROLES_FILTER: <comma-separated list of role IDs>
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-google-cloud-platform.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-google-cloud-platform
+  labels:
+    app: baton-google-cloud-platform
+spec:
+  selector:
+    matchLabels:
+      app: baton-google-cloud-platform
+  template:
+    metadata:
+      labels:
+        app: baton-google-cloud-platform
+        baton: true
+        baton-app: google-cloud-platform
+    spec:
+      containers:
+      - name: baton-google-cloud-platform
+        image: ghcr.io/conductorone/baton-google-cloud-platform:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-google-cloud-platform
+        envFrom:
+        - secretRef:
+            name: baton-google-cloud-platform-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the google-cloud-platform connector to. google-cloud-platform data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+**That's it!** Your Google Cloud Platform with Google Workspace connector is now pulling access data into ConductorOne.
 
 </Tab>
 </Tabs>
