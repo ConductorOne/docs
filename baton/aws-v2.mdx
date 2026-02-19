@@ -58,6 +58,38 @@ If you're using this setup, make sure to click **Enable support for AWS Organiza
 	`{ "Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "arn:aws:iam::*:role/OrganizationAccountAccessRole" }`
 - Create a new custom role by following the steps below
 
+#### Get a ConductorOne-provided External ID
+
+AWS [requires the use of External IDs](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) when granting third-party access to your AWS account. This security measure prevents the "confused deputy" problem and ensures that only authorized parties can assume the role.
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **AWS v2** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new AWS connector:
+	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+	- Add the connector to a managed app (select from the list of existing managed apps)
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+	If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+    <Step>
+    Click **Next**.
+    </Step>
+    <Step>
+    Find the **Settings** area of the page and click **Edit**.
+    </Step>
+    <Step>
+    Copy and save the External ID populated in the **External ID** field.
+    </Step>
+</Steps>
+
 #### Create a custom IAM role
 
 This custom role acts as a bridge, allowing ConductorOne to securely access your child account. The trust policy you're about to create is the key to this connection.
@@ -67,27 +99,33 @@ This custom role acts as a bridge, allowing ConductorOne to securely access your
     Navigate to the [IAM Dashboard](https://us-east-1.console.aws.amazon.com/iamv2/home?) and select **Roles** > **Create Role**.
     </Step>
     <Step>
-    Select **Custom Trust Policy** and paste the following into the Trust Policy JSON editor, replacing `{ROOT_ID}` with the root ID from the main account, `ConductorOneService` with the role name from the root account, and `EXTERNAL_ID_FROM_C1_INTEGRATIONS_PAGE` with the External ID from ConductorOne.
+    Select **Custom Trust Policy** and paste the following into the Trust Policy JSON editor, replacing `{ROOT_ID}` with the root ID from the main account and `EXTERNAL_ID_FROM_C1_INTEGRATIONS_PAGE` with the External ID you copied from ConductorOne.
 
     ```json
     {
-    "Version": "2012-10-17",
-    "Statement": [
+      "Version": "2012-10-17",
+      "Statement": [
         {
-        "Sid": "Statement1",
-        "Effect": "Allow",
-        "Principal": {
+          "Sid": "Statement1",
+          "Effect": "Allow",
+          "Principal": {
             "AWS": "arn:aws:iam::{ROOT_ID}:role/ConductorOneService"
-        },
-        "Action": "sts:AssumeRole"
+          },
+          "Action": "sts:AssumeRole",
+          "Condition": {
+            "StringEquals": {
+              "sts:ExternalId": "EXTERNAL_ID_FROM_C1_INTEGRATIONS_PAGE"
+            }
+          }
         }
-    ]
+      ]
     }
     ```
 
 	**Notes on the Trust Policy:**
 	**"Action": "sts:AssumeRole"**: This is the core permission. It's the only action allowed by this policy, and it specifically allows the ConductorOne role in your root account to temporarily assume this role in the child account. Think of it like a temporary key that only the main account can use.
 	**"Principal": "arn:aws:iam::`{ROOT\_ID}`:role/ConductorOneService"**: This is the trusted entity. It specifies that only the ConductorOne role in your main root account is allowed to assume this role. This ensures that no other account can use this trust policy.
+	**"Condition": "sts:ExternalId"**: The External ID acts as a shared identifier between you and ConductorOne, confirming which trust relationship is being used. This helps prevent the "confused deputy" problem by ensuring the request is coming from the expected context. Learn more about [granting access using External IDs](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html).
     </Step>
     <Step>
     Click **Next**.
@@ -213,6 +251,8 @@ Next, you will create an inline policy to define the specific data this role can
 Follow these steps to gather the credentials needed for an AWS IAM Identity Center (SSO) setup of the AWS connector.
 
 #### Get a ConductorOne-provided External ID
+
+AWS [requires the use of External IDs](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) when granting third-party access to your AWS account. This security measure prevents the "confused deputy" problem and ensures that only authorized parties can assume the role.
 
 <Steps>
     <Step>
