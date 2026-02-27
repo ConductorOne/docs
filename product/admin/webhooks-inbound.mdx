@@ -1,0 +1,362 @@
+---
+title: "Inbound webhooks"
+og:title: "Inbound webhooks - ConductorOne docs"
+og:description: "Configure inbound webhooks to let external systems trigger ConductorOne automations via authenticated HTTP requests."
+description: "Configure inbound webhooks to let external systems trigger ConductorOne automations via authenticated HTTP requests."
+sidebarTitle: "Inbound webhooks"
+---
+
+{/* Editor Refresh: 2026-02-27 */}
+
+Inbound webhooks let external systems trigger [automations](/product/admin/automations) in ConductorOne by sending authenticated HTTP POST requests, so events in your HRIS, ticketing system, or CI/CD pipeline can initiate access management workflows automatically.
+
+For example, you can use inbound webhooks to:
+
+- Trigger an offboarding automation when an employee's status changes to "Inactive" in Workday
+- Revoke sensitive access when a security tool detects a compromised account
+- Start an onboarding workflow when a new hire is created in BambooHR
+- Grant temporary access when a deployment pipeline needs elevated permissions
+
+## How it works
+
+1. You create an automation with an **Incoming webhook** trigger, choosing either HMAC or JWT authentication.
+2. ConductorOne generates a unique webhook listener endpoint URL.
+3. Your external system sends authenticated POST requests to that URL with a JSON payload.
+4. ConductorOne validates the request's authentication and runs the automation, passing the webhook payload as context data that can be used in automation steps.
+
+```
+External system                          ConductorOne
+     |                                        |
+     |  POST /api/v1/webhooks/incoming/{id}   |
+     |  + Auth headers + JSON body            |
+     |--------------------------------------->|
+     |                                        |-- Validate auth (HMAC/JWT)
+     |                                        |-- Check idempotency (event ID)
+     |                                        |-- Run linked automation
+     |            200 OK                      |
+     |<---------------------------------------|
+```
+
+## Set up an inbound webhook
+
+<Warning>
+A user with the **Super Admin** role in ConductorOne must complete this task.
+</Warning>
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Automations** and click **New automation** (or open an existing automation).
+</Step>
+<Step>
+Click **Set automation trigger** and select **Incoming webhook**.
+</Step>
+<Step>
+Choose an authentication method:
+
+- **HMAC** (recommended for simplicity): ConductorOne generates a shared secret. You use this secret to sign each request.
+- **JWT**: You provide a JWKS URL where ConductorOne can fetch your public keys. You sign each request with your private key.
+
+See [Authentication methods](#authentication-methods) for details on each option.
+</Step>
+<Step>
+Save the trigger configuration. ConductorOne generates a **Listener ID**, which is part of your webhook URL:
+
+```
+https://{your-tenant}.conductor.one/api/v1/webhooks/incoming/{listener_id}
+```
+</Step>
+<Step>
+Add automation steps that use the webhook payload data, then **Publish** the automation.
+</Step>
+<Step>
+Configure your external system to send POST requests to the webhook URL with the appropriate authentication headers. See [Send a webhook request](#send-a-webhook-request) for the required headers and format.
+</Step>
+</Steps>
+
+## Authentication methods
+
+Every inbound webhook request must be authenticated. ConductorOne supports two methods:
+
+### HMAC authentication
+
+HMAC (Hash-based Message Authentication Code) uses a shared secret to sign requests. This is the simpler option, suitable for most use cases.
+
+**How it works:**
+
+1. When you configure the webhook trigger, ConductorOne generates a 256-bit secret and provides it as a base64url-encoded string.
+2. For each request, you compute an HMAC-SHA256 signature over the timestamp, event ID, and request body.
+3. ConductorOne verifies the signature against the stored secret.
+
+**Computing the signature:**
+
+The signature input is the string `{timestamp}.{event_id}.{body}` (the three values joined with periods). Use the secret string exactly as provided (do not base64-decode it) as the HMAC key. Compute HMAC-SHA256, then base64url-encode the result (without padding).
+
+```python
+import hmac
+import hashlib
+import base64
+import time
+import uuid
+import json
+import requests
+
+secret = "your-base64url-secret"  # From ConductorOne
+timestamp = str(int(time.time()))
+event_id = str(uuid.uuid4())
+body = json.dumps({"employee_id": "12345", "status": "terminated"})
+
+# Compute HMAC-SHA256 signature
+signature_input = f"{timestamp}.{event_id}.{body}"
+sig = hmac.new(
+    secret.encode("utf-8"),
+    signature_input.encode("utf-8"),
+    hashlib.sha256
+).digest()
+signature = base64.urlsafe_b64encode(sig).rstrip(b"=").decode("utf-8")
+
+# Send the request
+resp = requests.post(
+    "https://your-tenant.conductor.one/api/v1/webhooks/incoming/{listener_id}",
+    headers={
+        "Content-Type": "application/json",
+        "Webhook-Timestamp": timestamp,
+        "Webhook-Event-Id": event_id,
+        "Webhook-Signature": signature,
+    },
+    data=body,
+)
+```
+
+### JWT authentication
+
+JWT (JSON Web Token) authentication uses public key cryptography. You host a JWKS (JSON Web Key Set) endpoint, and ConductorOne fetches your public keys to verify request signatures.
+
+**Supported algorithms:** RS256, ES256, EdDSA
+
+**How it works:**
+
+1. You generate a key pair and host the public key as a JWKS endpoint.
+2. When you configure the webhook trigger, you provide the JWKS URL.
+3. For each request, you create a JWT with specific claims and sign it with your private key.
+4. ConductorOne fetches your JWKS and verifies the JWT signature and claims.
+
+<Steps>
+<Step>
+**Generate a key pair**
+
+You can use RSA, ECDSA, or Ed25519 keys. Here's an example with RSA:
+
+```bash
+# Generate a 2048-bit RSA private key
+openssl genrsa -out private_key.pem 2048
+
+# Extract the public key
+openssl rsa -in private_key.pem -pubout -out public_key.pem
+```
+</Step>
+<Step>
+**Create and host a JWKS document**
+
+Format your public key as a JSON Web Key Set:
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "kid": "webhook-key-1",
+      "n": "<base64url-encoded-modulus>",
+      "e": "<base64url-encoded-exponent>",
+      "alg": "RS256"
+    }
+  ]
+}
+```
+
+Host this document at a stable HTTPS URL (for example, a GitHub Gist raw URL, an S3 bucket, or your application's `/.well-known/jwks.json` endpoint).
+</Step>
+<Step>
+**Configure the webhook trigger**
+
+In the automation's webhook trigger settings, select **JWT authentication** and enter your JWKS URL.
+
+**Required JWT claims:**
+
+| Claim | Description |
+| :--- | :--- |
+| `sub` | Your ConductorOne tenant base URL (e.g., `https://your-tenant.conductor.one`) |
+| `aud` | The full webhook endpoint URL (e.g., `https://your-tenant.conductor.one/api/v1/webhooks/incoming/{listener_id}`) |
+| `exp` | Token expiration (must be within 10 minutes of the current time) |
+| `jti` | A UUID v4 matching the `Webhook-Event-Id` header |
+| `htm` | The HTTP method (`POST`) |
+| `htb_s256` | Base64url-encoded (no padding) SHA-256 hash of the request body |
+
+```python
+import jwt  # PyJWT
+import hashlib
+import base64
+import time
+import uuid
+import json
+import requests
+
+tenant_url = "https://your-tenant.conductor.one"
+listener_id = "your-listener-id"
+endpoint = f"{tenant_url}/api/v1/webhooks/incoming/{listener_id}"
+
+body = json.dumps({"employee_id": "12345", "status": "terminated"})
+event_id = str(uuid.uuid4())
+timestamp = str(int(time.time()))
+
+# Compute body hash
+body_hash = hashlib.sha256(body.encode("utf-8")).digest()
+htb_s256 = base64.urlsafe_b64encode(body_hash).rstrip(b"=").decode("utf-8")
+
+# Create and sign the JWT
+token = jwt.encode(
+    {
+        "sub": tenant_url,
+        "aud": endpoint,
+        "exp": int(time.time()) + 300,
+        "jti": event_id,
+        "htm": "POST",
+        "htb_s256": htb_s256,
+    },
+    open("private_key.pem").read(),
+    algorithm="RS256",
+    headers={"kid": "webhook-key-1"},
+)
+
+# Send the request
+resp = requests.post(
+    endpoint,
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+        "Webhook-Timestamp": timestamp,
+        "Webhook-Event-Id": event_id,
+    },
+    data=body,
+)
+```
+</Step>
+</Steps>
+
+## Send a webhook request
+
+All inbound webhook requests are HTTP POST requests to:
+
+```
+https://{your-tenant}.conductor.one/api/v1/webhooks/incoming/{listener_id}
+```
+
+### Required headers
+
+| Header | Description |
+| :--- | :--- |
+| `Webhook-Timestamp` | Current Unix timestamp in seconds. Must be within 5 minutes of ConductorOne's server time. |
+| `Webhook-Event-Id` | A UUID v4 that uniquely identifies this event. Used for idempotency. |
+| `Authorization` | (JWT auth only) `Bearer {jwt_token}` |
+| `Webhook-Signature` | (HMAC auth only) Base64url-encoded HMAC-SHA256 signature (no padding). |
+| `Content-Type` | `application/json` |
+
+### Request body
+
+The body must be valid JSON and cannot exceed 64 KB. The JSON content is passed to the automation as context data, accessible in automation steps and CEL expressions.
+
+```json
+{
+  "employee_id": "12345",
+  "event_type": "status_change",
+  "new_status": "terminated",
+  "effective_date": "2026-03-01"
+}
+```
+
+### Response codes
+
+| Code | Meaning |
+| :--- | :--- |
+| `200` | Request accepted and automation triggered. |
+| `400` | Invalid request (missing headers, bad timestamp, invalid JSON, etc.). |
+| `401` | Authentication failed (invalid signature, expired JWT, missing auth header). |
+| `403` | Source IP not in the allowed CIDR list (if IP restrictions are enabled). |
+| `409` | Duplicate event ID. The event was already processed. This is not an error; it indicates idempotency protection. |
+
+## Curl example
+
+Here's a minimal example using curl with HMAC authentication:
+
+```bash
+# Set variables
+TENANT="your-tenant"
+LISTENER_ID="your-listener-id"
+SECRET="your-hmac-secret"
+TIMESTAMP=$(date +%s)
+EVENT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+BODY='{"event":"test","data":"hello"}'
+
+# Compute HMAC-SHA256 signature
+SIGNATURE=$(printf '%s.%s.%s' "$TIMESTAMP" "$EVENT_ID" "$BODY" \
+  | openssl dgst -sha256 -hmac "$SECRET" -binary \
+  | openssl base64 -A \
+  | tr '+/' '-_' \
+  | tr -d '=')
+
+# Send the webhook
+curl -X POST "https://${TENANT}.conductor.one/api/v1/webhooks/incoming/${LISTENER_ID}" \
+  -H "Content-Type: application/json" \
+  -H "Webhook-Timestamp: ${TIMESTAMP}" \
+  -H "Webhook-Event-Id: ${EVENT_ID}" \
+  -H "Webhook-Signature: ${SIGNATURE}" \
+  -d "${BODY}"
+```
+
+## Security features
+
+Inbound webhooks include several layers of protection against replay attacks and unauthorized access.
+
+### Idempotency
+
+Each request includes a `Webhook-Event-Id` header with a UUID v4. If ConductorOne receives a second request with the same event ID for the same listener, it returns a `409` response and does not re-run the automation. Event records are retained for 7 days.
+
+### Timestamp validation
+
+The `Webhook-Timestamp` header must be within 5 minutes of the current server time. This prevents replay attacks where a captured request is resent later.
+
+### IP restrictions
+
+You can optionally restrict inbound webhooks to specific source IP ranges by configuring allowed CIDRs on the webhook listener. Requests from IPs outside the allowed ranges are rejected with a `403` response.
+
+### Body integrity
+
+Both authentication methods verify the integrity of the request body:
+
+- **HMAC**: The body is included in the HMAC signature input, so any modification invalidates the signature.
+- **JWT**: The `htb_s256` claim contains a SHA-256 hash of the body, verified by ConductorOne.
+
+## Use webhook data in automation steps
+
+The JSON body from the webhook request is available as context data within the automation. You can reference webhook payload fields in CEL expressions used in automation steps. For example, if your webhook sends:
+
+```json
+{
+  "employee_id": "12345",
+  "department": "Engineering"
+}
+```
+
+You can use these values in CEL expressions within your automation steps to make decisions, filter actions, or pass data to downstream systems.
+
+## Troubleshooting inbound webhook error codes
+
+| Issue | Possible cause | Solution |
+| :--- | :--- | :--- |
+| `401` Unauthenticated | HMAC signature mismatch | Verify the signature format: `{timestamp}.{event_id}.{body}`. Ensure the secret matches and use base64url encoding without padding. |
+| `401` Unauthenticated | JWT verification failed | Check that your JWKS URL is accessible, the `kid` in the JWT matches a key in the JWKS, and all required claims are present. |
+| `400` Invalid timestamp | Timestamp out of range | Ensure `Webhook-Timestamp` is within 5 minutes of the current UTC time. Check for clock skew on your sending system. |
+| `400` Invalid event ID | Event ID format error | The `Webhook-Event-Id` must be a valid UUID v4. |
+| `409` Already exists | Duplicate event | This event ID was already processed. Generate a new UUID for each webhook request. |
+| `403` IP restricted | Source IP not allowed | Check the CIDR restrictions configured on the webhook listener. |
+| Automation doesn't run | Automation not published | Verify the automation is in a published state and the trigger toggle is enabled. |
