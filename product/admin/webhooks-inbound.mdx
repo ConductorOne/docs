@@ -8,9 +8,9 @@ sidebarTitle: "Inbound webhooks"
 
 {/* Editor Refresh: 2026-02-27 */}
 
-Inbound webhooks allow external systems to trigger [automations](/product/admin/automations) in ConductorOne by sending authenticated HTTP POST requests. This lets you integrate ConductorOne with your broader technology ecosystem: events in HRIS platforms, ticketing systems, CI/CD pipelines, or custom applications can initiate access management workflows automatically.
+Inbound webhooks let external systems trigger [automations](/product/admin/automations) in ConductorOne by sending authenticated HTTP POST requests, so events in your HRIS, ticketing system, or CI/CD pipeline can initiate access management workflows automatically.
 
-For example, you could:
+For example, you can use inbound webhooks to:
 
 - Trigger an offboarding automation when an employee's status changes to "Inactive" in Workday
 - Revoke sensitive access when a security tool detects a compromised account
@@ -56,7 +56,7 @@ Choose an authentication method:
 - **HMAC** (recommended for simplicity): ConductorOne generates a shared secret. You use this secret to sign each request.
 - **JWT**: You provide a JWKS URL where ConductorOne can fetch your public keys. You sign each request with your private key.
 
-See [Authentication methods](#authentication-methods) below for details on each option.
+See [Authentication methods](#authentication-methods) for details on each option.
 </Step>
 <Step>
 Save the trigger configuration. ConductorOne generates a **Listener ID**, which is part of your webhook URL:
@@ -140,7 +140,9 @@ JWT (JSON Web Token) authentication uses public key cryptography. You host a JWK
 3. For each request, you create a JWT with specific claims and sign it with your private key.
 4. ConductorOne fetches your JWKS and verifies the JWT signature and claims.
 
-**Step 1: Generate a key pair**
+<Steps>
+<Step>
+**Generate a key pair**
 
 You can use RSA, ECDSA, or Ed25519 keys. Here's an example with RSA:
 
@@ -151,8 +153,9 @@ openssl genrsa -out private_key.pem 2048
 # Extract the public key
 openssl rsa -in private_key.pem -pubout -out public_key.pem
 ```
-
-**Step 2: Create and host a JWKS document**
+</Step>
+<Step>
+**Create and host a JWKS document**
 
 Format your public key as a JSON Web Key Set:
 
@@ -172,8 +175,9 @@ Format your public key as a JSON Web Key Set:
 ```
 
 Host this document at a stable HTTPS URL (for example, a GitHub Gist raw URL, an S3 bucket, or your application's `/.well-known/jwks.json` endpoint).
-
-**Step 3: Configure the webhook trigger**
+</Step>
+<Step>
+**Configure the webhook trigger**
 
 In the automation's webhook trigger settings, select **JWT authentication** and enter your JWKS URL.
 
@@ -236,6 +240,8 @@ resp = requests.post(
     data=body,
 )
 ```
+</Step>
+</Steps>
 
 ## Send a webhook request
 
@@ -278,7 +284,38 @@ The body must be valid JSON and cannot exceed 64 KB. The JSON content is passed 
 | `403` | Source IP not in the allowed CIDR list (if IP restrictions are enabled). |
 | `409` | Duplicate event ID. The event was already processed. This is not an error; it indicates idempotency protection. |
 
+## Curl example
+
+Here's a minimal example using curl with HMAC authentication:
+
+```bash
+# Set variables
+TENANT="your-tenant"
+LISTENER_ID="your-listener-id"
+SECRET="your-hmac-secret"
+TIMESTAMP=$(date +%s)
+EVENT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+BODY='{"event":"test","data":"hello"}'
+
+# Compute HMAC-SHA256 signature
+SIGNATURE=$(printf '%s.%s.%s' "$TIMESTAMP" "$EVENT_ID" "$BODY" \
+  | openssl dgst -sha256 -hmac "$SECRET" -binary \
+  | openssl base64 -A \
+  | tr '+/' '-_' \
+  | tr -d '=')
+
+# Send the webhook
+curl -X POST "https://${TENANT}.conductor.one/api/v1/webhooks/incoming/${LISTENER_ID}" \
+  -H "Content-Type: application/json" \
+  -H "Webhook-Timestamp: ${TIMESTAMP}" \
+  -H "Webhook-Event-Id: ${EVENT_ID}" \
+  -H "Webhook-Signature: ${SIGNATURE}" \
+  -d "${BODY}"
+```
+
 ## Security features
+
+Inbound webhooks include several layers of protection against replay attacks and unauthorized access.
 
 ### Idempotency
 
@@ -312,7 +349,7 @@ The JSON body from the webhook request is available as context data within the a
 
 You can use these values in CEL expressions within your automation steps to make decisions, filter actions, or pass data to downstream systems.
 
-## Troubleshooting
+## Troubleshooting inbound webhook error codes
 
 | Issue | Possible cause | Solution |
 | :--- | :--- | :--- |
@@ -323,32 +360,3 @@ You can use these values in CEL expressions within your automation steps to make
 | `409` Already exists | Duplicate event | This event ID was already processed. Generate a new UUID for each webhook request. |
 | `403` IP restricted | Source IP not allowed | Check the CIDR restrictions configured on the webhook listener. |
 | Automation doesn't run | Automation not published | Verify the automation is in a published state and the trigger toggle is enabled. |
-
-## Curl example
-
-Here's a minimal example using curl with HMAC authentication:
-
-```bash
-# Set variables
-TENANT="your-tenant"
-LISTENER_ID="your-listener-id"
-SECRET="your-hmac-secret"
-TIMESTAMP=$(date +%s)
-EVENT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-BODY='{"event":"test","data":"hello"}'
-
-# Compute HMAC-SHA256 signature
-SIGNATURE=$(printf '%s.%s.%s' "$TIMESTAMP" "$EVENT_ID" "$BODY" \
-  | openssl dgst -sha256 -hmac "$SECRET" -binary \
-  | openssl base64 -A \
-  | tr '+/' '-_' \
-  | tr -d '=')
-
-# Send the webhook
-curl -X POST "https://${TENANT}.conductor.one/api/v1/webhooks/incoming/${LISTENER_ID}" \
-  -H "Content-Type: application/json" \
-  -H "Webhook-Timestamp: ${TIMESTAMP}" \
-  -H "Webhook-Event-Id: ${EVENT_ID}" \
-  -H "Webhook-Signature: ${SIGNATURE}" \
-  -d "${BODY}"
-```
