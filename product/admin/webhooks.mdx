@@ -144,97 +144,9 @@ To reassign a request and add a comment:
 
 ## Using a webhook to trigger a ConductorOne automation
 
-C1 webhook triggers allow external systems to initiate automations by sending authenticated HTTP requests. The JWT (JSON Web Token) authentication method provides cryptographic security through public key infrastructure.
+You can configure external systems to trigger ConductorOne automations by sending authenticated HTTP requests to an inbound webhook endpoint. ConductorOne supports both HMAC and JWT authentication methods.
 
-### Step 1: Generate a RSA key pair
-
-Generate a 2048-bit RSA private key and extract the public key. Keep the private key secure - it will be used to sign your webhook requests.
-
-**Using OpenSSL:**
-
-```bash
-# Generate private key
-openssl genrsa -out private_key.pem 2048
-
-# Extract public key
-openssl rsa -in private_key.pem -pubout -out public_key.pem
-```
-
-**Using ssh-keygen:**
-
-```bash
-# Generate key pair
-ssh-keygen -t rsa -b 2048 -m PEM -f webhook_key -N ""
-
-# Convert to PEM format if needed
-openssl rsa -in webhook_key -out private_key.pem
-```
-
-### Step 2: Create a JWKS document
-
-Format your public key as a JSON Web Key Set (JWKS):
-
-```json
-{"keys": [{
-    "kty": "RSA",
-    "use": "sig",
-    "kid": "webhook-key-1",
-    "n": "<base64url-encoded-modulus>",
-    "e": "<base64url-encoded-exponent>",
-    "alg": "RS256"}]}
-```
-
-The kid (key ID) is your unique identifier for this key - you'll reference it when signing JWTs.
-
-### Step 3: Host the JWKS endpoint
-
-Your JWKS must be accessible via HTTPS at a stable URL. Options include:
-
-* GitHub Gist (Quick testing): Create a gist with your JWKS JSON and use the raw URL
-* Static hosting: GitHub Pages, S3, or any CDN that serves JSON
-* Dynamic endpoint: Your application's .well-known/jwks.json path
-
-### Step 4: Configure a webhook listener in C1
-
-<Steps>
-<Step>
-Navigate to your automation's webhook trigger settings.
-</Step>
-<Step>
-Select <b>JWT authentication</b>.
-</Step>
-<Step>
-Enter your JWKS URL.
-</Step>
-<Step>
-Save the configuration and copy the listener ID.
-</Step>
-</Steps>
-
-### Step 5: Send an authenticated webhook
-
-Send a POST request to:
-
-`https://{tenant}.conductor.one/api/v1/webhooks/incoming/{listener_id}`
-
-With headers:
-
-* `Authorization: Bearer {jwt_token}`
-* `Content-Type: application/json`
-* `Webhook-Timestamp: {unix_seconds}`
-* `Webhook-Event-Id: {uuid_v4}`
-* `Webhook-Signature: {jwt_token}`
-
-### Important notes
-
-* JWKS must be accessible at the configured URL
-* Private key must match public key in JWKS
-* JWT kid header must match a key in JWKS
-* JWT must be signed with RS256
-* JWT must contain all required claims
-* Body hash (htb_s256) must match SHA256 of request body
-* JWT expiration window is 10 minutes
-* Event ID must be UUID v4
+For complete setup instructions, authentication details, code examples, and troubleshooting, see [Inbound webhooks](/product/admin/webhooks-inbound).
 
 ## Using webhooks for provisioning in ConductorOne
 
