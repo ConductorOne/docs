@@ -153,6 +153,31 @@ Follow this process when creating ConductorOne documentation:
 - **Code examples**: Simple, practical, tested before inclusion
 - **Links**: Verify all external links work
 
+## FAQ Sections
+
+When a page includes a FAQ section, always use `<AccordionGroup>` with individual `<Accordion>` components — one per question. This improves search quality and keeps pages visually clean and interactive.
+
+**Section heading**: Always be explicit about what the FAQ covers. Use the format "Frequently asked questions about [topic]" rather than just "FAQ". This improves search quality and sets clear expectations.
+
+```mdx
+## Frequently asked questions about [topic]
+
+<AccordionGroup>
+  <Accordion title="Question goes here?">
+    Answer goes here.
+  </Accordion>
+
+  <Accordion title="Another question?">
+    Another answer.
+  </Accordion>
+</AccordionGroup>
+```
+
+**Key points:**
+- Write questions in the first or second person as a user would ask them ("Can I...", "What happens when...", "How do I...")
+- Keep answers concise — accordion format encourages brevity
+- Order questions from most common or fundamental to more specific
+
 ## Early Access Notes
 
 When documenting features that are in early access, add a standardized warning callout at the top of the page (after the frontmatter and any editor refresh comment):
