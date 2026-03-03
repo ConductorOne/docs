@@ -24,9 +24,11 @@ Baton-runner is configured with a single YAML file. By default it looks for `con
 baton-runner -c /path/to/config.yaml
 ```
 
-A complete `config.yaml` has two top-level sections: `connectors` and `secrets`.
+A `config.yaml` has three top-level keys: `log-level`, `connectors`, and `secrets`.
 
 ```yaml
+log-level: info
+
 connectors:
   - name: github-org1
     path: /usr/local/bin/baton-github
@@ -54,6 +56,66 @@ secrets:
       org1: org1.yaml
       org2: org2.yaml
 ```
+
+### Real-world example
+
+Here's what a production config looks like when running multiple config-driven connectors of the same type — in this case, several SQL Server databases and two HTTP API applications, each with its own connector-specific config file:
+
+```yaml
+log-level: info
+
+connectors:
+  - name: Database_01
+    path: C:\ConductorOne\baton-sql.exe
+    config:
+      env:
+        BATON_CONFIG_PATH: C:\ConductorOne\Database_01.yaml
+        BATON_FILE: C:\ConductorOne\Database_01.c1z
+        BATON_PROVISIONING: true
+      envFrom:
+        secrets:
+          DB_PASSWORD: Database_01:DB_PASSWORD
+          BATON_CLIENT_ID: Database_01:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: Database_01:BATON_CLIENT_SECRET
+
+  - name: Database_02
+    path: C:\ConductorOne\baton-sql.exe
+    config:
+      env:
+        BATON_CONFIG_PATH: C:\ConductorOne\Database_02.yaml
+        BATON_FILE: C:\ConductorOne\Database_02.c1z
+        BATON_PROVISIONING: true
+      envFrom:
+        secrets:
+          DB_PASSWORD: Database_02:DB_PASSWORD
+          BATON_CLIENT_ID: Database_02:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: Database_02:BATON_CLIENT_SECRET
+
+  - name: HTTP_API_App_01
+    path: C:\ConductorOne\baton-http.exe
+    config:
+      env:
+        BATON_CONFIG_PATH: C:\ConductorOne\HTTP_API_App_01.yaml
+        BATON_FILE: C:\ConductorOne\HTTP_API_App_01.c1z
+        BATON_PROVISIONING: true
+      envFrom:
+        secrets:
+          DB_PASSWORD: HTTP_API_App_01:DB_PASSWORD
+          BATON_CLIENT_ID: HTTP_API_App_01:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: HTTP_API_App_01:BATON_CLIENT_SECRET
+
+secrets:
+  wincred:
+    secrets:
+      Database_01: Database_01
+      Database_02: Database_02
+      HTTP_API_App_01: HTTP_API_App_01
+```
+
+A few patterns to note:
+- `BATON_CONFIG_PATH` points each connector to its own config file, which is how config-driven connectors like `baton-sql` and `baton-http` handle per-instance settings.
+- `BATON_FILE` gives each connector a unique output path so sync files don't overwrite each other.
+- `BATON_PROVISIONING: true` enables write-back provisioning for each connector.
 
 ### Connector options
 
@@ -216,10 +278,14 @@ If `username` and `password` are omitted, baton-runner uses NTLM authentication.
 
 ## Log level
 
-Set the `BATON_LOG_LEVEL` environment variable to control log verbosity. Valid values: `debug`, `info`, `warn`, `error`, `panic`.
+Set the log level using the `log-level` key in `config.yaml` or the `BATON_LOG_LEVEL` environment variable. Valid values: `debug`, `info`, `warn`, `error`, `panic`. The default is `info`.
 
-```bash
-BATON_LOG_LEVEL=debug baton-runner -c config.yaml
+```yaml
+# In config.yaml
+log-level: debug
 ```
 
-The default log level is `info`.
+```bash
+# As an environment variable
+BATON_LOG_LEVEL=debug baton-runner -c config.yaml
+```
