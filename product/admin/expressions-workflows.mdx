@@ -1,0 +1,326 @@
+---
+title: Workflow expressions
+og:title: Workflow expressions - ConductorOne docs
+og:description: Use CEL expressions in workflows to pass data between steps, access trigger context, and build dynamic automations.
+description: Use CEL expressions in workflows to pass data between steps, access trigger context, and build dynamic automations.
+---
+
+Workflow expressions let you pass data between steps in ConductorOne automations - like threading a user's email from a trigger into a lookup step, then into a notification. This is the most powerful CEL context because data flows through multiple steps, and each step can access outputs from all previous steps.
+
+## Core concept: The ctx object
+
+All workflow expressions access data through the `ctx` object, which contains:
+
+| Path | Description |
+|:-----|:------------|
+| `ctx.trigger` | Data from the event that started the workflow |
+| `ctx.<step_name>` | Output data from a completed step |
+
+Steps can only access data from **previously completed** steps. The `ctx` object grows as the workflow progresses - each step adds its output.
+
+```go
+// In step 3, you can access:
+ctx.trigger          // Always available
+ctx.step_one         // If step_one completed before step 3
+ctx.step_two         // If step_two completed before step 3
+// ctx.step_four     // NOT available - hasn't run yet
+```
+
+---
+
+## Template syntax
+
+Workflow expressions use double curly braces for interpolation:
+
+```
+{{ <cel_expression> }}
+```
+
+The expression is evaluated and replaced with its result.
+
+### String templates
+
+```
+Hello {{ ctx.trigger.user.display_name }}!
+```
+
+Result: `Hello John Smith!`
+
+### JSON templates
+
+When the entire template is valid JSON after interpolation, it's parsed as a structured object:
+
+```json
+{
+  "name": "{{ ctx.trigger.user.display_name }}",
+  "email": "{{ ctx.step_one.email }}"
+}
+```
+
+Result: A structured object with `name` and `email` fields accessible in later steps.
+
+<Info>
+Template expressions are evaluated at runtime when the step executes. If a referenced field doesn't exist, the step will fail.
+</Info>
+
+---
+
+## Available variables
+
+### From trigger
+
+The trigger context varies by workflow trigger type. Common patterns:
+
+```go
+// User who triggered the workflow
+ctx.trigger.user.display_name
+ctx.trigger.user.email
+ctx.trigger.user_id
+
+// For user change triggers
+// WRONG TRIGGER TYPE: Fails if this isn't a user-change trigger
+ctx.trigger.oldUser.email
+ctx.trigger.newUser.email
+
+// Custom trigger data
+// DANGER: Fails if these fields don't exist - check has() first
+ctx.trigger.source_ip
+ctx.trigger.custom_field
+```
+
+### From previous steps
+
+Access output from any completed step by its step name:
+
+```go
+// Assuming step_one completed with output containing user_id
+// DANGER: Fails if step_one doesn't exist or didn't produce user_id
+ctx.step_one.user_id
+
+// Array access from step output
+ctx.lookup_step.users[0].email
+
+// Nested object access
+ctx.api_call.response.data.id
+```
+
+<Warning>
+Step names in `ctx.<step_name>` must match exactly. If you rename a step, update all references to it in later steps.
+</Warning>
+
+---
+
+## Step data flow patterns
+
+### Pass user from trigger to lookup
+
+**Step 1 (trigger):** User change event fires
+
+**Step 2 (lookup):** Find user details
+```
+{{ ctx.trigger.user_id }}
+```
+
+**Step 3 (action):** Use looked-up data
+```
+{{ ctx.step_2.user.email }}
+```
+
+### Chain multiple lookups
+
+```go
+// Step 1: Get user
+ctx.trigger.user_id
+
+// Step 2: Get user's manager (uses step 1 output)
+ctx.step_1.user.manager_id
+
+// Step 3: Get manager's email (uses step 2 output)
+ctx.step_2.manager.email
+```
+
+### Conditional step execution
+
+Use CEL in step conditions to skip steps based on previous data:
+
+```go
+// Only run this step if the user is a contractor
+ctx.trigger.user.employment_type == "contractor"
+
+// Only run if previous step found results
+size(ctx.lookup_step.results) > 0
+
+// Only run if user changed departments
+ctx.trigger.oldUser.department != ctx.trigger.newUser.department
+```
+
+---
+
+## Common workflow expressions
+
+### User change detection
+
+```go
+// Detect any email change
+ctx.trigger.oldUser.email != ctx.trigger.newUser.email
+
+// Detect status change to disabled
+ctx.trigger.oldUser.status == UserStatus.ENABLED &&
+  ctx.trigger.newUser.status == UserStatus.DISABLED
+
+// Detect department change
+ctx.trigger.oldUser.department != ctx.trigger.newUser.department
+```
+
+### Building notification messages
+
+```
+User {{ ctx.trigger.user.display_name }} ({{ ctx.trigger.user.email }})
+has been {{ ctx.trigger.newUser.status == UserStatus.DISABLED ? "disabled" : "updated" }}.
+```
+
+### Extracting data for API calls
+
+```json
+{
+  "user_id": "{{ ctx.trigger.user_id }}",
+  "action": "{{ ctx.trigger.action_type }}",
+  "timestamp": "{{ ctx.trigger.timestamp }}"
+}
+```
+
+### Safe field access with has()
+
+```go
+// Check if field exists before using it
+has(ctx.trigger.user.manager_id) ? ctx.trigger.user.manager_id : "no-manager"
+
+// Check nested fields
+has(ctx.trigger.user.profile) && has(ctx.trigger.user.profile.cost_center)
+  ? ctx.trigger.user.profile.cost_center
+  : "unknown"
+```
+
+---
+
+## What can go wrong
+
+### Referencing undefined step
+
+**Error:** Step fails with "undefined reference"
+
+**Cause:** Referencing a step that hasn't run yet or doesn't exist.
+
+```go
+// BAD: step_five hasn't completed yet (you're in step 3)
+ctx.step_five.result
+
+// BAD: Typo in step name
+ctx.step_on.result  // Should be step_one
+```
+
+**Solution:** Only reference steps that complete before the current step. Check step names match exactly.
+
+### Wrong trigger type
+
+**Error:** Field not found in trigger
+
+**Cause:** Using user-change fields when trigger is account-change (or vice versa).
+
+```go
+// FAILS if this is an account trigger, not a user trigger
+ctx.trigger.oldUser.email
+
+// Use the right object for your trigger type
+ctx.trigger.oldAccount.status  // For account triggers
+```
+
+### Template syntax errors
+
+**Error:** `{{ERROR}}` appears in output
+
+**Cause:** Malformed template expression.
+
+```go
+// BAD: Missing closing braces
+{{ ctx.trigger.user.email }
+
+// BAD: Extra spaces inside braces (depends on parser)
+{{  ctx.trigger.user.email  }}
+
+// GOOD: Clean syntax
+{{ ctx.trigger.user.email }}
+```
+
+### Null reference in chain
+
+**Error:** Step fails partway through
+
+**Cause:** Intermediate value is null.
+
+```go
+// DANGER: Fails if user has no manager
+ctx.step_1.user.manager.email
+
+// SAFE: Check each level
+has(ctx.step_1.user.manager) ? ctx.step_1.user.manager.email : "no-manager@company.com"
+```
+
+---
+
+## Best practices
+
+### Name steps clearly
+
+Use descriptive step names that indicate what they do:
+
+```
+lookup_user        (not step_1)
+get_manager        (not step_2)
+send_notification  (not step_3)
+```
+
+This makes expressions self-documenting:
+```go
+ctx.lookup_user.email           // Clear
+ctx.get_manager.display_name    // Clear
+ctx.step_1.email                // Unclear
+```
+
+### Check for nulls in chains
+
+When accessing nested data across steps:
+
+```go
+// Build up safely
+has(ctx.trigger.user) &&
+has(ctx.trigger.user.profile) &&
+has(ctx.trigger.user.profile.cost_center)
+  ? ctx.trigger.user.profile.cost_center
+  : "default"
+```
+
+### Use step conditions to skip gracefully
+
+Instead of failing on missing data, use step conditions:
+
+```go
+// Step condition: Only run if user has a manager
+has(ctx.trigger.user.manager_id) && ctx.trigger.user.manager_id != ""
+```
+
+### Test with representative data
+
+Before deploying:
+1. Identify the trigger type and what data it provides
+2. Trace the data flow through each step
+3. Check for potential null values at each step
+4. Verify step execution order
+
+---
+
+## Related documentation
+
+- [Automations overview](/product/admin/automations) - Creating and managing automations
+- [Expressions reference](/product/admin/expressions-reference) - All available objects and functions
+- [Troubleshooting expressions](/product/admin/expressions-troubleshooting) - Debug common errors

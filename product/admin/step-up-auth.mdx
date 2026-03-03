@@ -1,0 +1,543 @@
+---
+title: Step-up authentication
+og:title: Step-up authentication - ConductorOne docs
+og:description: Require additional authentication for sensitive approvals to enhance security and create clear audit trails.
+description: Require additional authentication for sensitive approvals to enhance security and create clear audit trails.
+sidebarTitle: Step-up authentication
+---
+
+{/* Editor Refresh: 2026-02-08 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Step-up authentication enhances your approval workflows by requiring approvers to re-authenticate with stronger verification before approving sensitive requests. Instead of relying solely on a user's initial session, this feature forces an additional authentication challenge at the moment of approval.
+
+## What's step-up authentication?
+
+When you enable step-up authentication for an approval step, users must complete additional identity verification before they can approve the request. This creates a clear security boundary and audit trail for critical actions.
+
+The flow works like this:
+
+1. Users authenticate normally to access ConductorOne
+2. When attempting to approve sensitive requests, users are redirected to your identity provider
+3. The identity provider verifies the user with the required authentication factors (such as MFA)
+4. Upon verification, the approval is processed with an audit trail of the enhanced authentication
+
+ConductorOne implements the [RFC 9470 OAuth 2.0 Step Up Authentication Challenge Protocol](https://www.rfc-editor.org/rfc/rfc9470.html), which means each approval requiring step-up authentication generates a new authentication challenge. In other words, authentication state isn't cached between approvals.
+
+## When to use step-up authentication
+
+Consider enabling step-up authentication for approval workflows involving:
+
+- Administrative access (system admin, database admin roles)
+- Production environment access
+- Customer data access
+- Financial systems access
+- Critical infrastructure changes
+- Privileged role assignments
+
+## Add a step-up authentication provider
+
+<Warning>
+Step-up authentication is currently **not supported** for approvals made through Slack or the `cone` CLI. 
+</Warning>
+
+ConductorOne supports two provider types:
+
+- **OAuth2 providers** (RFC 9470 compliant): Okta and other compliant providers
+- **Microsoft Entra**: Uses Conditional Access policies or authentication contexts
+
+### Prerequisites
+
+Before you configure step-up authentication, make sure you have:
+
+- The **Super Administrator** role in ConductorOne
+- Administrator access to your identity provider (Okta or Microsoft Entra)
+- The ability to create OAuth applications in your identity provider
+- **Microsoft Entra only**: Microsoft Entra ID P1 or P2 license if using Conditional Access for MFA
+
+To add a provider:
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** > **Step Up Authentication**.
+</Step>
+<Step>
+Click **Add Step Up provider**.
+</Step>
+<Step>
+Select your provider type (OAuth2 or Microsoft Entra).
+</Step>
+<Step>
+Complete the configuration fields for your provider.
+</Step>
+</Steps>
+
+See the [Okta integration guide](#okta-integration-guide) or [Microsoft Entra integration guide](#microsoft-entra-integration-guide) below for detailed setup instructions.
+
+### Test your configuration
+
+After configuring a provider, test it before using it in production:
+
+<Steps>
+<Step>
+Click **Test Step Up** on the provider detail page.
+</Step>
+<Step>
+Complete the authentication flow with your identity provider.
+</Step>
+<Step>
+Verify you're redirected back to ConductorOne with a success message.
+</Step>
+</Steps>
+
+Successful tests update the "Last Tested" timestamp on the provider.
+
+## Okta integration guide
+
+### Create an Okta application
+
+<Steps>
+<Step>
+Log in to your Okta Admin Dashboard.
+</Step>
+<Step>
+Navigate to **Applications** > **Applications**.
+</Step>
+<Step>
+Click **Create App Integration**.
+</Step>
+<Step>
+Select **OIDC - OpenID Connect** and **Web Application**, then click **Next**.
+</Step>
+<Step>
+Configure the application:
+   - **Name**: ConductorOne Step Up Authentication
+   - **Grant type**: Authorization Code
+   - **Sign-in redirect URIs**: `https://accounts.conductor.one/auth/callback`
+   - **Controlled access**: Select options based on your security requirements
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+Copy the **Client ID** and **Client Secret** for use in ConductorOne.
+</Step>
+</Steps>
+
+### Configure Okta authentication policies
+
+For granular control over authentication requirements:
+
+<Steps>
+<Step>
+Navigate to **Security** > **Authentication Policies**.
+</Step>
+<Step>
+Create a policy specifically for ConductorOne Step Up Authentication.
+</Step>
+<Step>
+Define rules that require stronger authentication methods (such as MFA).
+</Step>
+<Step>
+Assign the policy to your ConductorOne Step Up application.
+</Step>
+</Steps>
+
+### Add Okta as a step-up provider
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Admin** > **Settings** > **Step Up Authentication**.
+</Step>
+<Step>
+Click **Add Step Up Provider**.
+</Step>
+<Step>
+Select **OAuth2 (RFC 9470 compliant)**.
+</Step>
+<Step>
+Enter the following details:
+   - **Provider name**: Okta Step Up
+   - **Issuer URL**: Your Okta domain (for example, `https://your-company.okta.com`)
+   - **Client ID**: The Client ID from your Okta application
+   - **Client secret**: The Client Secret from your Okta application
+   - **ACR values**: Select values based on your security requirements
+</Step>
+</Steps>
+
+### Okta ACR values reference
+
+| ACR value | Description | Security level |
+| --- | --- | --- |
+| `urn:okta:loa:1fa:any` | Any single-factor authentication | Low |
+| `urn:okta:loa:1fa:pwd` | Password authentication | Low |
+| `urn:okta:loa:2fa:any` | Any multi-factor authentication | Medium |
+| `urn:okta:loa:2fa:any:ifpossible` | MFA if available | Medium |
+| `phr` | Phishing-resistant authentication | High |
+| `phrh` | Phishing-resistant hardware | Very high |
+
+<Tip>
+For general approvals with moderate sensitivity, use `urn:okta:loa:2fa:any`. For highly sensitive approvals like admin rights, use `phr` or `phrh`. For testing or gradual rollout, try `urn:okta:loa:2fa:any:ifpossible`.
+</Tip>
+
+## Microsoft Entra integration guide
+
+Microsoft Entra supports two validation modes for step-up authentication:
+
+| Validation mode | How it works | Best for |
+| --- | --- | --- |
+| **OIDC** (Require re-authentication) | Uses OAuth max_age to force re-authentication. Pair with a Conditional Access policy targeting the Cloud App to require MFA. | Simpler setup, most deployments |
+| **ACRS** (Require authentication context) | Uses Microsoft's Authentication Context Class References. Requires creating authentication contexts and targeting them with Conditional Access policies. | Granular control, multiple authentication levels |
+
+<Tabs>
+  <Tab title="OIDC mode (Cloud Apps)">
+
+This approach uses Conditional Access policies targeting the ConductorOne Cloud App. It's recommended for most deployments.
+
+### Part 1: Configure Microsoft Entra
+
+#### Step 1: Create an app registration
+
+<Steps>
+<Step>
+Sign in to the [Azure Portal](https://portal.azure.com/) and navigate to **App registrations**.
+</Step>
+<Step>
+Click **New registration**.
+</Step>
+<Step>
+Configure the application:
+   - **Name**: ConductorOne Step-Up Authentication
+   - **Supported account types**: Accounts in this organizational directory only (Single tenant)
+   - **Redirect URI**: Platform: Web, URI: `https://accounts.conductor.one/auth/callback`
+</Step>
+<Step>
+Click **Register**.
+</Step>
+</Steps>
+
+#### Step 2: Enable ID tokens
+
+<Steps>
+<Step>
+In your app registration, go to **Manage** > **Authentication**.
+</Step>
+<Step>
+Under **Implicit grant and hybrid flows**, check **ID tokens (used for implicit and hybrid flows)**.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+<Note>
+OIDC mode requires an ID token in the token response. If you see "ID token not found in response," confirm the request includes the `openid` scope and that your chosen flow returns ID tokens (enable implicit/hybrid only if you explicitly use those flows).
+</Note>
+
+#### Step 3: Configure API permissions
+
+<Steps>
+<Step>
+Go to **Manage** > **API permissions**.
+</Step>
+<Step>
+Click **Add a permission** and select **Microsoft Graph**.
+</Step>
+<Step>
+Choose **Delegated permissions** and add: `openid`, `profile`, `email`.
+</Step>
+<Step>
+Click **Add permissions**, then click **Grant admin consent for your organization**.
+</Step>
+</Steps>
+
+#### Step 4: Create a client secret
+
+<Steps>
+<Step>
+Navigate to **Manage** > **Certificates & secrets**.
+</Step>
+<Step>
+Click **New client secret**.
+</Step>
+<Step>
+Provide a description (for example, "ConductorOne Step-Up") and select an expiration period.
+</Step>
+<Step>
+Click **Add**.
+</Step>
+<Step>
+Copy the secret value immediately—you won't be able to view it again.
+</Step>
+</Steps>
+
+<Note>
+Set a calendar reminder to rotate the secret before it expires.
+</Note>
+
+#### Step 5: Create a Conditional Access policy
+
+<Steps>
+<Step>
+In the Azure Portal, navigate to **Microsoft Entra** > **Security** > **Conditional Access**.
+</Step>
+<Step>
+Click **New policy**.
+</Step>
+<Step>
+Configure the policy:
+   - **Name**: Require MFA for ConductorOne Step-Up
+   - **Users**: Include users or groups who will use step-up authentication
+   - **Target resources**: Select **Cloud apps**, then choose the ConductorOne app registration you created
+   - **Grant**: Select "Grant access" and check **Require multi-factor authentication**
+</Step>
+<Step>
+Set **Enable policy** to **On** and click **Create**.
+</Step>
+</Steps>
+
+#### Step 6: Gather configuration values
+
+Collect these values from Azure:
+
+- **Application (client) ID**: Found in your app registration overview
+- **Client secret**: The value you copied in Step 4
+- **Tenant ID**: Located in **Microsoft Entra** > **Overview**
+
+### Part 2: Configure ConductorOne
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** > **Step Up Authentication**.
+</Step>
+<Step>
+Click **Add Step Up Provider** and select **Microsoft Entra**.
+</Step>
+<Step>
+Enter the configuration details:
+   - **Provider name**: Microsoft Entra MFA
+   - **Issuer URL**: `https://login.microsoftonline.com/{TENANT_ID}/v2.0` (replace `{TENANT_ID}` with your tenant ID)
+   - **Client ID**: Your Application (client) ID from Azure
+   - **Client secret**: The secret value from Step 4
+   - **Validation mode**: Select **Require re-authentication (OIDC)**
+</Step>
+<Step>
+Save the configuration.
+</Step>
+</Steps>
+
+### Troubleshooting
+
+| Issue | Solution |
+| --- | --- |
+| "ID token not found in response" | Enable **ID tokens** in the app's Authentication settings (Step 2) |
+| MFA not being enforced | Verify the Conditional Access policy is enabled and targets the correct Cloud App |
+
+  </Tab>
+  <Tab title="ACRS mode (Authentication Contexts)">
+
+This approach uses Microsoft's authentication contexts for more granular control. Use this when you need different authentication levels for different scenarios.
+
+### Part 1: Configure Microsoft Entra
+
+#### Step 1: Create an app registration
+
+<Steps>
+<Step>
+Sign in to the [Azure Portal](https://portal.azure.com/) and navigate to **App registrations**.
+</Step>
+<Step>
+Click **New registration**.
+</Step>
+<Step>
+Configure the application:
+   - **Name**: ConductorOne Step-Up Authentication
+   - **Supported account types**: Accounts in this organizational directory only (Single tenant)
+   - **Redirect URI**: Platform: Web, URI: `https://accounts.conductor.one/auth/callback`
+</Step>
+<Step>
+Click **Register**.
+</Step>
+</Steps>
+
+#### Step 2: Configure API permissions
+
+<Steps>
+<Step>
+Go to **Manage** > **API permissions**.
+</Step>
+<Step>
+Click **Add a permission** and select **Microsoft Graph**.
+</Step>
+<Step>
+Choose **Delegated permissions** and add: `openid`, `profile`, `email`.
+</Step>
+<Step>
+Click **Add permissions**, then click **Grant admin consent for your organization**.
+</Step>
+</Steps>
+
+#### Step 3: Create a client secret
+
+<Steps>
+<Step>
+Navigate to **Manage** > **Certificates & secrets**.
+</Step>
+<Step>
+Click **New client secret**.
+</Step>
+<Step>
+Provide a description and select an expiration period.
+</Step>
+<Step>
+Click **Add** and copy the secret value immediately.
+</Step>
+</Steps>
+
+#### Step 4: Create an authentication context
+
+<Steps>
+<Step>
+In the Azure Portal, navigate to **Microsoft Entra** > **Conditional Access**.
+</Step>
+<Step>
+Click **New authentication context**.
+</Step>
+<Step>
+Configure the context:
+   - **Display name**: Step-Up for Approvals
+   - **Description**: Required for approving sensitive access requests in ConductorOne
+   - **Publish to apps**: Enable this option
+   - **ID**: Select an available identifier (C1 through C99)
+</Step>
+<Step>
+Click **Save** and note the ID you selected.
+</Step>
+</Steps>
+
+#### Step 5: Create a Conditional Access policy
+
+<Steps>
+<Step>
+In Conditional Access, go to **Policies** and click **New policy**.
+</Step>
+<Step>
+Configure the policy:
+   - **Name**: Require MFA for Step-Up Context
+   - **Users**: Include users or groups who will use step-up authentication
+   - **Cloud apps**: Select the ConductorOne app registration
+   - **Conditions** > **Authentication context**: Choose the context you created (for example, C1)
+   - **Grant**: Select "Grant access" and check **Require multi-factor authentication**
+</Step>
+<Step>
+Set **Enable policy** to **On** and click **Create**.
+</Step>
+</Steps>
+
+#### Step 6: Gather configuration values
+
+Collect these values from Azure:
+
+- **Application (client) ID**: Found in your app registration overview
+- **Client secret**: The value you copied in Step 3
+- **Tenant ID**: Located in **Microsoft Entra** > **Overview**
+- **Conditional Access ID**: The authentication context ID from Step 4 (for example, C1)
+
+### Part 2: Configure ConductorOne
+
+<Steps>
+<Step>
+Navigate to **Admin** > **Settings** > **Step Up Authentication**.
+</Step>
+<Step>
+Click **Add Step Up Provider** and select **Microsoft Entra**.
+</Step>
+<Step>
+Enter the configuration details:
+   - **Provider name**: Microsoft Entra MFA
+   - **Issuer URL**: `https://login.microsoftonline.com/{TENANT_ID}/v2.0` (replace `{TENANT_ID}` with your tenant ID)
+   - **Client ID**: Your Application (client) ID from Azure
+   - **Client secret**: The secret value from Step 3
+   - **Validation mode**: Select **Require ACRS**
+   - **Conditional Access IDs**: The authentication context ID(s) you created (for example, C1)
+   - **Microsoft Tenant ID**: Your Azure tenant ID
+</Step>
+<Step>
+Save the configuration.
+</Step>
+</Steps>
+
+  </Tab>
+</Tabs>
+
+## Enable step-up in policies
+
+Once your provider is configured and tested, enable step-up authentication in your approval policies:
+
+<Steps>
+<Step>
+Navigate to **Policies** in ConductorOne.
+</Step>
+<Step>
+Edit an existing policy or create a new one.
+</Step>
+<Step>
+For any approval step, enable **Requires Step Up Authentication**.
+</Step>
+<Step>
+Select your configured provider from the dropdown.
+</Step>
+<Step>
+Save the policy.
+</Step>
+</Steps>
+
+<Note>
+When step-up authentication is enabled for an approval step, auto-approval is automatically disabled since there's no user to perform the additional authentication.
+</Note>
+
+## End-user experience
+
+When a task requires step-up authentication for approval:
+
+1. The task displays a "Requires Step Up Authentication" indicator.
+2. Instead of a standard **Approve** button, users see **Approve with Step Up**.
+3. Clicking this button redirects the user to the configured identity provider.
+4. The user completes the required authentication steps (such as MFA).
+5. Upon successful authentication, the user is returned to ConductorOne.
+6. The approval is processed and an audit trail is created.
+
+## Frequently asked questions
+
+**How does step-up authentication affect automated approvals?**
+
+When step-up authentication is enabled for an approval step, automated approvals are automatically disabled since there's no user to perform the additional authentication.
+
+**What happens if a user doesn't have MFA enabled in the identity provider?**
+
+The behavior depends on your ACR values and provider policies. In Okta, if the ACR value is `urn:okta:loa:2fa:any:ifpossible`, the system will use MFA if available but proceed without it if not. With strict MFA requirements, users without MFA can't complete the approval.
+
+**Can different policies use different step-up providers?**
+
+Yes. Each approval step can be configured with a different step-up provider, allowing you to require different authentication strengths for different types of approvals.
+
+**How does this work with SSO?**
+
+Step-up authentication works outside of the SSO flow. Users still authenticate via SSO initially, but are prompted for additional verification when performing sensitive approvals based on the configured policy.
+
+**What happens during identity provider outages?**
+
+If the identity provider is unavailable, users can't complete the step-up authentication flow.
+
+**Does this feature support mobile applications?**
+
+Yes. The feature works on both web browsers and mobile devices using standard OAuth 2.0 redirect flows.
+
+**Which Microsoft Entra validation mode should I use?**
+
+For most deployments, **OIDC mode** (Cloud Apps approach) is recommended due to its simpler setup—you don't need to create authentication contexts. Use **ACRS mode** (Authentication Contexts approach) if you need multiple authentication contexts for different scenarios or require the ACRS claim in the token for compliance purposes.
+
+

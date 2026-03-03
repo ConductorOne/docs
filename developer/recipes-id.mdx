@@ -1,0 +1,96 @@
+---
+title: "ID correlation recipes"
+sidebarTitle: "ID recipes"
+description: "Battle-tested patterns for RawId annotation and per-connector ID formats."
+---
+
+Each recipe includes the problem, solution code, and rationale.
+
+## Per-connector ID formats
+
+**Problem:** Different external systems use different ID formats. Knowing what value to use for `RawId` annotation is critical for correlation.
+
+**Solution:** Use the external system's native stable identifier:
+
+| Connector | ID source | Format | Example |
+|-----------|-----------|--------|---------|
+| **Okta** | `app.Id` / `group.Id` | 20-char alphanumeric | `0oa1xyz789abcdef0h7` |
+| **Azure AD** | Object ID (not App ID) | UUID | `12345678-1234-1234-1234-123456789012` |
+| **GCP** | Resource path | `projects/{id}` | `projects/my-project-123` |
+| **AWS** | ARN | Full ARN | `arn:aws:iam::123456789012:role/Admin` |
+| **GitHub** | Node ID or numeric ID | Integer as string | `12345678` |
+| **Salesforce** | Salesforce ID | 18-char ID | `00e3h000000bRQAAA2` |
+| **Google Workspace** | Google Group ID | Variable | `00gjdgxs3x1h123` |
+
+**Why this matters:** ConductorOne uses these IDs to correlate resources across syncs. Using the wrong ID causes duplicate objects or failed correlations.
+
+**Key points:**
+- Azure AD has two IDs: Object ID (use this) and Application ID (client ID for OAuth)
+- AWS uses full ARNs, not account IDs alone
+- GitHub has numeric IDs and GraphQL node IDs; either works but be consistent
+
+## Setting RawId annotation
+
+**Problem:** Ensure ConductorOne can correlate your resources across syncs and match resources created via Terraform.
+
+**What is RawId?** A string annotation containing the external system's native identifier. ConductorOne uses this to match resources across syncs and to merge Terraform-created objects with connector-discovered ones.
+
+**Solution:** Add the `RawId` annotation when building resources:
+
+```go
+// Inline with resource creation (preferred)
+userResource, err := resource.NewUserResource(
+    user.DisplayName,
+    userResourceType,
+    user.ID,
+    userTraitOptions,
+    resource.WithAnnotation(&v2.RawId{Id: user.ID}),
+)
+
+// Or add after creation
+groupResource, err := resource.NewGroupResource(
+    group.Name,
+    groupResourceType,
+    group.ID,
+    groupTraitOptions,
+)
+groupResource.WithAnnotation(&v2.RawId{Id: group.Email})
+```
+
+**What value to use:** The external system's native, stable identifier. Choose an ID that:
+- Won't change when the resource is renamed or modified
+- Is unique within that resource type
+- Is what an admin would recognize from the external system
+
+## Examples from production connectors
+
+| System | Resource | RawId value | Why |
+|--------|----------|-------------|-----|
+| Okta | User | `user.Id` (`00u1abc...`) | Okta's internal ID, stable across renames |
+| Okta | App | `app.Id` (`0oa1xyz...`) | Okta's internal app ID |
+| Google Workspace | User | `user.PrimaryEmail` | Email is the canonical identifier |
+| Google Workspace | Group | `group.Email` | Group email is stable and recognizable |
+| GCP | Project | `project.ProjectId` | Project ID (not display name) |
+| AWS | Role | Full ARN | ARNs are globally unique |
+| Azure AD | User | Object ID (UUID) | Not the UPN, which can change |
+
+## Common mistakes
+
+| Mistake | Problem | Fix |
+|---------|---------|-----|
+| Using display names | Change when renamed | Use system-generated IDs |
+| Using array indices | Change with ordering | Use stable identifiers |
+| Different IDs for same resource | Correlation fails | Use consistent ID source |
+| Using mutable fields | Resource appears as new each sync | Use immutable system IDs |
+
+## When to use RawId
+
+**Should have RawId:**
+- Apps, groups, roles, and any resource that might be pre-created via Terraform
+- Resources that need stable correlation across syncs
+- Any resource type where admins might reference objects by external ID
+
+**May not need RawId:**
+- Ephemeral or derived resources
+- Resources only used internally by the connector
+

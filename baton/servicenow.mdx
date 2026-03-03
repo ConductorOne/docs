@@ -16,9 +16,18 @@ sidebarTitle: ServiceNow
 
 The ServiceNow connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
-This connector does not support account deprovisioning. You must deprovision accounts directly in ServiceNow.
+This connector does not support full account deprovisioning. You can disable accounts using a connector action, but you must deprovision accounts directly in ServiceNow.
 
 This connector can also be configured to automatically create and update ServiceNow tickets to track manual provisioning assignments. Go to [Configure ServiceNow as an external ticketing provider](/product/admin/external-ticketing#configure-servicenow-as-an-external-ticketing-provider) to learn more.
+
+### Connector actions
+
+Connector actions are custom capabilities that extend ConductorOne automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| enable_user | `user_id` (string, required) | Enables a disabled ServiceNow user account |
+| disable_user     | `user_id` (string, required) | Disables an active ServiceNow user account |
 
 ## Gather ServiceNow credentials 
 
@@ -212,7 +221,7 @@ To complete this task, you'll need:
 
 <Steps>
 <Step>
-In ConductorOne, navigate to **Admin** > **Connectors** and click **Add connector**.
+In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
 </Step>
 <Step>
 Search for **ServiceNow** and click **Add**. 
@@ -238,11 +247,18 @@ Click **Next**.
 Find the **Settings** area of the page and click **Edit**.
 </Step>
 <Step>
-**Optional.** In the **Allowed emails domains** field, enter the email domain or domains (such as `acme.com` and `contractors.acme.com`) associated with the accounts that you want ConductorOne to sync. 
+**Optional.** In the **Allowed emails domains** field, enter the email domain or domains (such as `acme.com` and `contractors.acme.com`) associated with the accounts that you want ConductorOne to sync.
 
-   To add multiple allowed domains, press **Enter** between each domain. 
+   To add multiple allowed domains, press **Enter** between each domain.
 
-   If you leave this field blank, ConductorOne will sync all accounts in your ServiceNow instance, regardless of the email domain associated with the account. 
+   If you leave this field blank, ConductorOne will sync all accounts in your ServiceNow instance, regardless of the email domain associated with the account.
+</Step>
+<Step>
+**Optional.** In the **Custom user attributes** field, enter the names of any custom user attribute fields you want ConductorOne to sync from ServiceNow. These are fields that start with `u_` in ServiceNow, such as `u_type`.
+
+   To add multiple attributes, press **Enter** between each field name.
+
+   Synced custom attributes are included in user profiles in ConductorOne and can be used to filter groups by attribute values.
 </Step>
 <Step>
 In the **Deployment** field, enter the ServiceNow deployment ID.
@@ -277,16 +293,22 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 </Tab>
 
 <Tab title="Self-hosted">
-**Follow these instructions to use the [ServiceNow](https://github.com/ConductorOne/baton-servicenow) connector, hosted and run in your own environment.**
+**Follow these instructions to use the ServiceNow connector, hosted and run in your own environment.**
 
 
 When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Resources
+
+* [Official download center](https://dist.conductorone.com/ConductorOne/baton-servicenow): For stable binaries (Windows/Linux/macOS) and container images.
+
+* [GitHub repository](https://github.com/ConductorOne/baton-servicenow): Access the source code, report issues, or contribute to the project.
 
 ### Step 1: Set up a new ServiceNow connector
 
 <Steps>
 <Step>
-In ConductorOne, navigate to **Connectors** > **Add connector**.
+In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -348,6 +370,10 @@ stringData:
   # Note: include each allowed domain as a separate entry
   BATON_ALLOWED_DOMAINS: <Email domain, such as "acme.com">
   BATON_ALLOWED_DOMAINS: <Email domain, such as "contractors.acme.com">
+
+  # Optional: include if you want to sync custom user attribute fields (fields starting with u_)
+  # Note: include each attribute as a separate entry
+  BATON_CUSTOM_USER_FIELDS: <Custom attribute name, such as "u_type">
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -392,7 +418,7 @@ spec:
 Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files. 
 </Step>
 <Step>
-Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the ServiceNow connector to. ServiceNow data should be found on the **Entitlements** and **Accounts** tabs.
+Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the ServiceNow connector to. ServiceNow data should be found on the **Entitlements** and **Accounts** tabs.
 </Step>
 </Steps>
 

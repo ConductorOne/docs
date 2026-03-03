@@ -1,0 +1,287 @@
+---
+title: "Error codes reference"
+sidebarTitle: "Error codes"
+description: "Identify and resolve errors from connector output. Each error includes the cause and how to fix it."
+---
+
+This reference documents common errors from the baton-sdk and connector runtime.
+
+## Configuration errors
+
+### Connector does not have account manager configured
+
+**Cause:** Attempted to create an account but the connector doesn't implement `AccountManager`.
+
+**Solution:** Either:
+- Implement the `AccountManager` interface for account creation
+- Don't call account creation operations on this connector
+
+```go
+// To support account creation, implement:
+type AccountManager interface {
+    CreateAccount(ctx context.Context, accountInfo *v2.AccountInfo,
+        credentialOptions *v2.CredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
+}
+```
+
+### Resource type does not have credential manager configured
+
+**Cause:** Attempted credential rotation but the resource type doesn't support it.
+
+**Solution:** Implement `CredentialManager` for that resource type, or don't attempt rotation.
+
+### Error: old account manager interface implemented
+
+**Cause:** Using deprecated v1 interface instead of v2.
+
+**Solution:** Update to implement `AccountManagerV2`:
+
+```go
+// Old (deprecated):
+type AccountManager interface { ... }
+
+// New (correct):
+type AccountManagerV2 interface {
+    CreateAccount(ctx context.Context, accountInfo *v2.AccountInfo,
+        credentialOptions *v2.LocalCredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
+}
+```
+
+### Error: duplicate resource type found for account manager
+
+**Cause:** Registered the same resource type twice with the builder.
+
+**Solution:** Only register each resource type once:
+
+```go
+// BAD
+b.WithAccountManager(userBuilder)
+b.WithAccountManager(userBuilder)  // Duplicate!
+
+// GOOD
+b.WithAccountManager(userBuilder)
+b.WithAccountManager(groupBuilder)
+```
+
+## Provisioning errors
+
+### Error: provisioner not found for resource type
+
+**Cause:** Grant/Revoke called on a resource type that doesn't implement provisioning.
+
+**Solution:** Implement `ResourceProvisionerV2`:
+
+```go
+type ResourceProvisionerV2 interface {
+    Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error)
+    Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error)
+}
+```
+
+### Error: preferred credential creation option is not set
+
+**Cause:** Account creation request missing required credential option.
+
+**Solution:** Include credential options in the request, or check connector capabilities first.
+
+### Error: preferred credential rotation option is not part of the supported options
+
+**Cause:** Requested credential type not supported by this connector.
+
+**Solution:** Check `GetCapabilities()` for supported credential options before requesting rotation.
+
+## Pagination errors
+
+### Next page token is the same as the current page token
+
+**Cause:** Your List/Entitlements/Grants method returned the same token it received, creating an infinite loop.
+
+**Solution:**
+
+```go
+// BAD - Returns input token
+return resources, pToken.Token, nil, nil
+
+// GOOD - Returns next token from API or empty string
+return resources, nextPageToken, nil, nil
+```
+
+See [Troubleshooting - Pagination Loop](/developer/debugging#pagination-loop-detected).
+
+## C1z file errors
+
+### C1z: invalid file
+
+**Cause:** The .c1z file is corrupted or not a valid c1z format.
+
+**Solution:**
+- Re-run the sync to generate a fresh file
+- Check disk space and write permissions
+- Verify the file wasn't truncated
+
+### C1z: max decoded size exceeded
+
+**Cause:** The decompressed c1z file exceeds the default size limit.
+
+**Solution:** Set environment variable to increase limit:
+
+```bash
+export C1Z_DECODER_MAX_DECODED_SIZE=10737418240  # 10GB
+```
+
+### C1z: window size exceeded
+
+**Cause:** Decompression requires more memory than allowed.
+
+**Solution:** Increase decoder memory:
+
+```bash
+export C1Z_DECODER_MAX_MEMORY=4294967296  # 4GB
+```
+
+### C1file: output file path is empty
+
+**Cause:** Connector invoked without specifying output path.
+
+**Solution:**
+
+```bash
+./baton-yourservice --file output.c1z
+# or
+./baton-yourservice -f output.c1z
+```
+
+### C1file: sync is not active
+
+**Cause:** Attempted to write data outside of an active sync operation.
+
+**Solution:** This is usually an SDK internal error. Ensure you're not calling SDK methods outside the sync lifecycle.
+
+## Action errors
+
+### Error: action manager not implemented
+
+**Cause:** Connector doesn't support custom actions.
+
+**Solution:** Implement `CustomActionManager` if you need actions, or don't call action endpoints.
+
+### Action %s not found
+
+**Cause:** Requested an action that doesn't exist.
+
+**Solution:** List available actions first:
+
+```bash
+./baton-yourservice actions list
+```
+
+### Action handler timed out
+
+**Cause:** Custom action took too long to complete.
+
+**Solution:** Optimize the action implementation or increase timeout (if configurable).
+
+## Validation errors
+
+### Error: validate provider not implemented
+
+**Cause:** Connector doesn't implement configuration validation.
+
+**Solution:** Implement `ValidateProvider` for config validation:
+
+```go
+type ValidateProvider interface {
+    Validate(ctx context.Context) (annotations.Annotations, error)
+}
+```
+
+### Validate failed: %w
+
+**Cause:** Connector validation failed (wrapped error contains details).
+
+**Solution:** Check the inner error message for specifics (usually credential or connectivity issues).
+
+## Input errors
+
+### Input cannot be nil
+
+**Cause:** Passed nil to a builder function.
+
+**Solution:** Ensure all required parameters are provided.
+
+### Input is not a connectorserver, connectorbuilder, or connectorbuilderv2
+
+**Cause:** Passed wrong type to connector initialization.
+
+**Solution:** Use the correct builder type:
+
+```go
+builder, err := connectorbuilder.NewConnector(ctx, yourConnector)
+```
+
+## S3/storage errors
+
+### Attempting to save to s3 without a valid client
+
+**Cause:** S3 upload configured but client not initialized.
+
+**Solution:** Ensure AWS credentials and S3 configuration are provided.
+
+### Attempting to save to s3 without a valid file path specified
+
+**Cause:** S3 destination path not configured.
+
+**Solution:** Set the S3 bucket and key path in configuration.
+
+### Accesskeyid and secretaccesskey must be specified
+
+**Cause:** AWS credentials incomplete.
+
+**Solution:**
+
+```bash
+export AWS_ACCESS_KEY_ID=your-key
+export AWS_SECRET_ACCESS_KEY=your-secret
+```
+
+## Encryption errors
+
+### Age: failed to encrypt: %w
+
+**Cause:** Encryption failed (age library error).
+
+**Solution:** Check the wrapped error for details. Common causes:
+- Invalid recipient public key
+- Memory allocation failure
+
+### Age: failed to decrypt: %w
+
+**Cause:** Decryption failed.
+
+**Solution:** Verify you're using the correct private key that matches the encryption.
+
+## Quick reference
+
+### Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `C1Z_DECODER_MAX_DECODED_SIZE` | Max decompressed c1z size |
+| `C1Z_DECODER_MAX_MEMORY` | Max memory for decompression |
+| `AWS_ACCESS_KEY_ID` | AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
+
+### Diagnostic commands
+
+```bash
+# Enable debug logging to see full error context
+./baton-yourservice --log-level debug
+
+# Check connector capabilities
+./baton-yourservice capabilities
+
+# Validate configuration
+./baton-yourservice --validate-only
+```
+
+

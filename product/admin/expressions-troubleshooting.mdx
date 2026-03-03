@@ -1,0 +1,342 @@
+---
+title: Troubleshoot CEL expressions
+og:title: Troubleshoot CEL expressions - ConductorOne docs
+og:description: Debug common errors, understand failure modes, and fix CEL expressions in ConductorOne.
+description: Debug common errors, understand failure modes, and fix CEL expressions in ConductorOne.
+---
+
+When your CEL expression doesn't work, this guide helps you figure out why. Most problems fall into two categories: errors caught when you save (easy to fix) and silent failures at runtime (harder to debug).
+
+## Error types
+
+| Type | When caught | Example |
+|:-----|:------------|:--------|
+| **Compile-time** | When you save the expression | Syntax errors, type mismatches, undefined variables |
+| **Runtime** | When the expression evaluates | Empty lists, missing users, function failures |
+
+Compile-time errors are caught immediately and prevent saving. Runtime errors are more subtle - your expression saves fine but behaves unexpectedly when it runs.
+
+---
+
+## Common compile-time errors
+
+### Syntax errors
+
+**Error:** `Syntax error: mismatched input`
+
+```go
+// BAD: Missing closing parenthesis
+subject.department == "Engineering"
+
+// BAD: Wrong quote type - single quotes not valid in CEL
+subject.department == 'Engineering'
+
+// GOOD:
+subject.department == "Engineering"
+```
+
+---
+
+### Undefined variable
+
+**Error:** `undeclared reference to 'xyz'`
+
+```go
+// BAD: Typo in variable name
+subjct.department == "Engineering"
+
+// BAD: Variable not available in this environment
+ctx.trigger.user_id  // ctx only available in workflows and automations
+
+// GOOD:
+subject.department == "Engineering"
+```
+
+<Tip>
+Check the [expressions reference](/product/admin/expressions-reference) to see which variables are available in each context.
+</Tip>
+
+---
+
+### Type mismatch
+
+**Error:** `found no matching overload`
+
+```go
+// BAD: Comparing string to number
+subject.profile["level"] > 5  // level might be stored as a string
+
+// GOOD: Convert to same type
+int(subject.profile["level"]) > 5
+subject.profile["level"] == "5"
+```
+
+---
+
+### Wrong return type
+
+**Error:** `expected type 'bool' but found 'User'`
+
+```go
+// BAD: Policy condition must return true/false, not a User
+c1.directory.users.v1.FindByEmail("alice@company.com")
+
+// GOOD: Return a boolean by adding a comparison
+c1.directory.users.v1.FindByEmail("alice@company.com").department == "Engineering"
+```
+
+**Required return types by context:**
+
+| Context | Must return |
+|:--------|:------------|
+| Policy conditions | `true` or `false` |
+| Dynamic groups | `true` or `false` |
+| Policy step approvers | One or more users |
+| Access review filters | `true` or `false` |
+| Automation triggers | `true` or `false` |
+| Account provisioning | Text value |
+
+---
+
+## Common runtime issues
+
+These problems don't show errors when you save - they only appear when the expression runs against real data.
+
+### Empty list causes step skip
+
+**Symptom:** Policy step is skipped unexpectedly.
+
+**Cause:** Approver expression returned an empty list `[]`.
+
+```go
+// DANGER: Returns [] if user has no manager -> step is SKIPPED, not failed
+c1.directory.users.v1.GetManagers(subject)
+```
+
+**Solution:** Add a fallback approver:
+
+```go
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? c1.directory.users.v1.GetManagers(subject)
+  : appOwners
+```
+
+<Warning>
+This is the most common source of unexpected behavior in policy expressions. An empty approver list doesn't fail - it silently skips the step entirely.
+</Warning>
+
+---
+
+### Index out of bounds
+
+**Symptom:** Expression fails with index error.
+
+**Cause:** Accessing `[0]` on an empty list.
+
+```go
+// BAD: Fails if no managers exist
+c1.directory.users.v1.GetManagers(subject)[0]
+
+// GOOD: Check size first
+size(c1.directory.users.v1.GetManagers(subject)) > 0
+  ? [c1.directory.users.v1.GetManagers(subject)[0]]
+  : appOwners
+```
+
+---
+
+### User not found
+
+**Symptom:** `FindByEmail` or `GetByID` fails.
+
+**Cause:** The user doesn't exist in your directory, or the email/ID is wrong.
+
+```go
+// DANGER: Fails if email doesn't exist
+c1.directory.users.v1.FindByEmail("nonexistent@company.com")
+```
+
+**Solutions:**
+1. Verify the user/email exists before deploying
+2. Use entitlement-based approvers instead of hardcoded emails
+3. For optional lookups, use conditional logic
+
+---
+
+### Empty string comparisons
+
+**Symptom:** Expression returns `false` when you expect `true`.
+
+**Cause:** The field is empty, so it doesn't match your expected value.
+
+```go
+// Returns false if department is empty (might be intentional, might not)
+subject.department == "Engineering"
+
+// Explicit check for whether the field has a value
+has(subject.department) && subject.department == "Engineering"
+```
+
+<Info>
+`has()` checks if a field **exists**, not if it has a non-empty value. A field can exist with an empty string `""`, and `has()` will return `true`.
+</Info>
+
+---
+
+### Profile key missing
+
+**Symptom:** Expression fails when accessing profile data.
+
+**Cause:** The profile key doesn't exist for this user.
+
+```go
+// BAD: Fails if costCenter doesn't exist in profile
+subject.profile["costCenter"] == "CC-123"
+
+// GOOD: Check first using has()
+has(subject.profile.costCenter) && subject.profile["costCenter"] == "CC-123"
+
+// ALTERNATIVE: Use "in" operator
+"costCenter" in subject.profile && subject.profile["costCenter"] == "CC-123"
+```
+
+---
+
+### Profile key has spaces
+
+**Symptom:** Syntax error or unexpected behavior.
+
+**Cause:** Dot notation doesn't work with spaces in key names.
+
+```go
+// BAD: Dot notation fails with spaces
+subject.profile.Cost Center
+
+// GOOD: Use bracket notation with quotes
+"Cost Center" in subject.profile && subject.profile["Cost Center"] == "R&D"
+```
+
+---
+
+## Debugging strategies
+
+### 1. Check return type first
+
+Before deploying, verify your expression returns the correct type:
+
+| If you're writing... | Expression must return... |
+|:--------------------|:-------------------------|
+| Policy condition | `true` or `false` |
+| Dynamic group membership | `true` or `false` |
+| Policy step approvers | One or more users |
+
+### 2. Preview dynamic groups
+
+Before saving a dynamic group expression:
+1. Use the preview feature to see which users would be included
+2. Check for both false positives (included but shouldn't be) and false negatives (excluded but shouldn't be)
+3. Verify the group isn't empty or doesn't include everyone
+
+### 3. Test with specific users
+
+When debugging:
+1. Pick a user who should match and one who shouldn't
+2. Mentally evaluate the expression against both
+3. Check intermediate values if using compound expressions
+
+### 4. Simplify and isolate
+
+For complex expressions, break them apart:
+
+```go
+// Hard to debug
+(a && b) || (c && !d && e)
+
+// Easier: Test each part separately
+a  // Does this work?
+b  // Does this work?
+a && b  // Now combine
+```
+
+---
+
+## Error messages reference
+
+### Compile-time errors
+
+| Error message | Meaning | Fix |
+|:--------------|:--------|:----|
+| `Syntax error: mismatched input` | Brackets, quotes, or operators are wrong | Check syntax carefully |
+| `undeclared reference to 'x'` | Variable doesn't exist or is misspelled | Check spelling, check context |
+| `found no matching overload for 'func'` | Wrong argument types for function | Check function signature |
+| `expected type 'X' but found 'Y'` | Return type doesn't match what's needed | Match the required return type |
+
+### Runtime behaviors
+
+| Behavior | Cause | Solution |
+|:---------|:------|:---------|
+| Step skipped | Approver expression returned `[]` | Add fallback approvers |
+| Always false | Field is empty or missing | Use `has()` to check first |
+| Index error | Accessing element in empty list | Check `size() > 0` first |
+| Function error | User or resource not found | Verify IDs/emails before deploying |
+
+---
+
+## Context-specific issues
+
+| Context | Common issue | Solution |
+|:--------|:-------------|:---------|
+| Automation triggers | Using wrong object type | Check if trigger is for users or accounts |
+| Automation triggers | Nested nil objects | Check parent exists with `has()` |
+| Access reviews | Using wrong scope | Know if you're in User scope or Account scope |
+| Dynamic groups | Expression always true | Everyone gets included - narrow the filter |
+| Workflows | Reference undefined step | Check step order and naming |
+| Workflows | Template syntax error | Check matching `{{ }}` braces |
+| Account provisioning | Optional variable not provided | Check if entitlement/task are available in context |
+
+---
+
+## Best practices
+
+### Start simple
+
+```go
+// Start with the simplest version
+subject.department == "Engineering"
+
+// Add complexity only as needed
+subject.department == "Engineering" && subject.jobTitle.contains("Manager")
+```
+
+### Always use fallbacks for approvers
+
+```go
+// Always have a fallback so steps don't get skipped
+size(managers) > 0 ? managers : appOwners
+```
+
+### Avoid hardcoded users
+
+```go
+// BAD: Breaks when user leaves company
+[c1.directory.users.v1.FindByEmail("john@company.com")]
+
+// GOOD: Uses a managed entitlement that can be updated
+c1.directory.apps.v1.GetEntitlementMembers("approvers-app", "security-team")
+```
+
+### Document complex expressions
+
+If your expression is complex enough to need debugging, consider:
+- Breaking it into multiple policy rules
+- Adding comments (CEL supports `//` comments)
+- Using multiple policy steps instead of complex approver logic
+
+---
+
+## Getting help
+
+1. **Check this guide** - Most issues are covered above
+2. **Check the reference** - Variable availability varies by context
+3. **Preview first** - Always preview dynamic groups before saving
+4. **Test incrementally** - Build complex expressions piece by piece

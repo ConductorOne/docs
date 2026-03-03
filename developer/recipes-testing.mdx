@@ -1,0 +1,233 @@
+---
+title: "Testing recipes"
+sidebarTitle: "Testing recipes"
+description: "Battle-tested patterns for testing connectors without hitting production."
+---
+
+Each recipe includes the problem, solution code, and rationale.
+
+## Configurable base URL for mocks
+
+**Problem:** Test connector against mock server without hitting production.
+
+**Solution:**
+
+```go
+// pkg/config/config.go
+type Config struct {
+    APIKey  string `mapstructure:"api-key"`
+    BaseURL string `mapstructure:"base-url"` // Required for testability
+}
+
+// cmd/baton-example/main.go
+func main() {
+    fields := []field.SchemaField{
+        field.StringField("api-key",
+            field.WithRequired(true),
+            field.WithDescription("API key for authentication"),
+        ),
+        field.StringField("base-url",
+            field.WithDefaultValue("https://api.example.com"),
+            field.WithDescription("Base URL (use http://localhost:8080 for testing)"),
+        ),
+    }
+    // ...
+}
+
+// pkg/client/client.go
+func New(cfg *Config) *Client {
+    baseURL := cfg.BaseURL
+    if baseURL == "" {
+        baseURL = "https://api.example.com"
+    }
+    return &Client{baseURL: baseURL}
+}
+```
+
+**Usage:**
+
+```bash
+# Production
+./baton-example --api-key $KEY
+
+# Testing
+./baton-example --api-key test --base-url http://localhost:8080
+```
+
+**Why:** Without configurable base URL, you can't test without hitting production. This breaks CI/CD and risks exposing production data.
+
+## Insecure TLS for local testing
+
+**Problem:** Test against mock server with self-signed certificate.
+
+**Solution:**
+
+```go
+// pkg/config/config.go
+type Config struct {
+    APIKey   string `mapstructure:"api-key"`
+    BaseURL  string `mapstructure:"base-url"`
+    Insecure bool   `mapstructure:"insecure"` // Skip TLS verification
+}
+
+// pkg/client/client.go
+func New(ctx context.Context, cfg *Config) (*Client, error) {
+    opts := []uhttp.Option{}
+
+    if cfg.Insecure {
+        transport := &http.Transport{
+            TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+        }
+        opts = append(opts, uhttp.WithTransport(transport))
+    }
+
+    httpClient, err := uhttp.NewBaseHttpClient(ctx, opts...)
+    if err != nil {
+        return nil, err
+    }
+
+    return &Client{http: httpClient, baseURL: cfg.BaseURL}, nil
+}
+```
+
+**Usage:**
+
+```bash
+# Testing with self-signed cert
+./baton-example --api-key test --base-url https://localhost:8443 --insecure
+```
+
+**Why:** Mock servers often use self-signed certificates. The `--insecure` flag enables testing without installing custom CAs.
+
+<Warning>
+Never use `--insecure` in production. This flag is strictly for local testing with mock servers.
+</Warning>
+
+## LDAP server-side paging
+
+**Problem:** Paginate large LDAP result sets.
+
+**Solution:**
+
+```go
+import (
+    "encoding/base64"
+    "github.com/go-ldap/ldap/v3"
+)
+
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
+    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+
+    const pageSize = 1000
+
+    // Create paging control
+    pagingControl := ldap.NewControlPaging(uint32(pageSize))
+
+    // Restore cookie from token if continuing
+    if pToken.Token != "" {
+        cookie, err := base64.StdEncoding.DecodeString(pToken.Token)
+        if err != nil {
+            return nil, "", nil, fmt.Errorf("invalid pagination token: %w", err)
+        }
+        pagingControl.SetCookie(cookie)
+    }
+
+    // Execute search with paging control
+    searchRequest := ldap.NewSearchRequest(
+        "dc=example,dc=com",
+        ldap.ScopeWholeSubtree,
+        ldap.NeverDerefAliases,
+        0, 0, false,
+        "(objectClass=user)",
+        []string{"cn", "mail", "sAMAccountName"},
+        []ldap.Control{pagingControl},
+    )
+
+    result, err := u.conn.Search(searchRequest)
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    // Convert entries to resources
+    var resources []*v2.Resource
+    for _, entry := range result.Entries {
+        r, _ := resource.NewUserResource(
+            entry.GetAttributeValue("cn"),
+            userResourceType,
+            entry.GetAttributeValue("sAMAccountName"),
+            resource.WithEmail(entry.GetAttributeValue("mail"), true),
+        )
+        resources = append(resources, r)
+    }
+
+    // Extract next page cookie
+    nextToken := ""
+    pagingResult := ldap.FindControl(result.Controls, ldap.ControlTypePaging)
+    if pc, ok := pagingResult.(*ldap.ControlPaging); ok && len(pc.Cookie) > 0 {
+        nextToken = base64.StdEncoding.EncodeToString(pc.Cookie)
+    }
+
+    return resources, nextToken, nil, nil
+}
+```
+
+**Why:** LDAP servers handle pagination server-side with cookies. The cookie must be base64-encoded to fit in the string token.
+
+## Nested pagination with Bag
+
+**Problem:** Paginate children within paginated parents (e.g., members within each group).
+
+**Solution:**
+
+```go
+func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource,
+    pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+
+    bag := &pagination.Bag{}
+    if err := bag.Unmarshal(pToken.Token); err != nil {
+        return nil, "", nil, err
+    }
+
+    // On first call for this resource, push initial state
+    if bag.Current() == nil {
+        bag.Push(pagination.PageState{
+            ResourceID:     resource.Id.Resource,
+            ResourceTypeID: resource.Id.ResourceType,
+        })
+    }
+
+    // Get current page of members
+    members, nextCursor, err := g.client.GetGroupMembers(ctx,
+        bag.Current().ResourceID,
+        bag.PageToken())
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    // Convert to grants
+    var grants []*v2.Grant
+    for _, member := range members {
+        g := grant.NewGrant(resource, "member",
+            &v2.ResourceId{ResourceType: "user", Resource: member.ID})
+        grants = append(grants, g)
+    }
+
+    // Update bag with next page cursor
+    if nextCursor != "" {
+        bag.Next(nextCursor)
+    } else {
+        bag.Pop() // Done with this resource
+    }
+
+    nextToken, err := bag.Marshal()
+    if err != nil {
+        return nil, "", nil, err
+    }
+
+    return grants, nextToken, nil, nil
+}
+```
+
+**Why:** The `Bag` type is a stack that manages nested pagination state. Push when entering a nested level, pop when done.
+
+

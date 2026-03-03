@@ -1,0 +1,145 @@
+---
+title: "Glossary"
+sidebarTitle: "Glossary"
+description: "Quick reference for terms used throughout the connector documentation."
+---
+
+When in doubt about terminology, check here first.
+
+## Core terms
+
+| Term | Definition |
+|------|------------|
+| **Baton** | The connector framework: Go SDK + individual connectors |
+| **baton-sdk** | Go library that handles sync orchestration, pagination, and connector runtime |
+| **Connector** | A Go binary that syncs access control data from a third-party service into ConductorOne |
+| **c1z** | Compressed sync output file format (gzip SQLite) |
+| **c1in** | C1 Integration Network - the overall connector ecosystem |
+| **cone** | ConductorOne CLI for access management |
+| **conductorone-sdk-go** | Go SDK for ConductorOne API integration |
+| **Connector Hub** | User-facing name for the connector marketplace |
+| **Meta-connector** | Configuration-driven connector that maps external systems via YAML instead of Go code |
+| **baton-http** | Meta-connector for REST APIs using YAML configuration and CEL expressions |
+| **baton-sql** | Meta-connector for SQL databases using YAML configuration and CEL expressions |
+
+## Access control model
+
+| Term | Definition |
+|------|------------|
+| **Resource** | An entity in the target system: User, Group, Role, App, or custom type |
+| **Resource Type** | Classification of resources (e.g., "user", "group", "role") with associated traits |
+| **Entitlement** | A permission that can be granted (e.g., "Admin on Database X") |
+| **Entitlement Slug** | Stable identifier for an entitlement (e.g., "member", "admin", "read") |
+| **Grant** | An assignment of an entitlement to a principal (e.g., "Alice has Admin on Database X") |
+| **Principal** | An entity that receives grants (typically users or service accounts) |
+| **Trait** | Resource type classification: TRAIT_USER, TRAIT_GROUP, TRAIT_ROLE, TRAIT_APP, TRAIT_SECRET |
+| **Parent Resource** | Resource that contains child resources in a hierarchy (e.g., Organization containing Repositories) |
+| **Child Resource** | Resource that exists within a parent resource context |
+| **ChildResourceType Annotation** | Marker on parent declaring what child types it contains |
+
+## SDK concepts
+
+| Term | Definition |
+|------|------------|
+| **ResourceSyncer** | Interface that defines how to sync a resource type (ResourceType, List, Entitlements, Grants methods) |
+| **Sync lifecycle** | The ordered stages: ResourceType -> List -> Entitlements -> Grants |
+| **Sync stage** | One stage of the sync lifecycle (Stage 1-4: ResourceType, List, Entitlements, Grants) |
+| **Inversion of control** | Pattern where SDK orchestrates when your code is called; you define builders, SDK calls them |
+| **Resource Builder** | Implementation of ResourceSyncer for a specific resource type |
+| **pagination.Token** | SDK type for managing page cursors across List/Entitlements/Grants calls |
+| **pagination.Bag** | SDK type for managing nested pagination state (stack-based) |
+| **PageState** | Single pagination state within a Bag (contains Token, ResourceTypeID, ResourceID) |
+| **uhttp** | SDK package providing HTTP client with automatic retries and rate limiting |
+| **Annotations** | Metadata attached to resources, entitlements, or grants (e.g., ChildResourceType, RawId) |
+| **RawId** | Annotation carrying the external system's identifier; used for ID correlation during uplift |
+
+## Execution modes
+
+| Term | Definition |
+|------|------------|
+| **One-shot mode** | CLI mode: runs once, produces c1z file, exits (no --client-id) |
+| **Daemon mode** | Long-running mode that polls ConductorOne for tasks (requires --client-id and --client-secret) |
+| **Hosted mode** | Connector run by ConductorOne infrastructure on behalf of customers |
+| **Service mode** | Synonym for daemon mode |
+| **Client credentials** | OAuth2 client ID and secret for authenticating connector to ConductorOne |
+| **Task polling** | Daemon mode behavior of periodically checking ConductorOne for work |
+
+## Provisioning operations
+
+| Term | Definition |
+|------|------------|
+| **Grant** (operation) | Operation to add an entitlement to a principal |
+| **Revoke** | Operation to remove an entitlement from a principal |
+| **CreateAccount** | JIT provisioning - create user account in target system |
+| **DeleteResource** | Remove a resource from the target system |
+| **ResourceProvisionerV2** | SDK interface for Grant/Revoke operations (recommended) |
+| **AccountManager** | SDK interface for CreateAccount operations |
+| **ResourceDeleterV2** | SDK interface for Delete operations |
+| **Capability Manifest** | JSON file (baton_capabilities.json) declaring supported operations |
+
+## Integration concepts
+
+| Term | Definition |
+|------|------------|
+| **Sync** | Reading access data from a system into ConductorOne; produces .c1z file |
+| **Uplift** | ConductorOne process that transforms raw connector records into domain objects (Apps, Resources, Grants) |
+| **Provision** | Writing access changes back to a system (grant, revoke, create, delete) |
+| **Reconciliation** | Comparing actual access (from sync) to desired access (from policy) and correcting drift |
+| **external_id** | The identifier from an external system, stored with connector records during sync |
+| **source_connector_ids** | Map on domain objects tracking which connector provided which external ID |
+| **ID Correlation** | Matching connector output to existing ConductorOne objects using RawId and external_id |
+| **JIT Provisioning** | Just-In-Time provisioning - creating user account when first needed, not before |
+| **IdP** | Identity Provider - authoritative source of user identities (Okta, Azure AD, Google Workspace) |
+| **Source of Truth** | The system that authoritatively defines an entity (IdPs are typically source of truth for users) |
+| **Access Review** | Process of verifying that existing access grants are still appropriate |
+| **Drift** | Difference between actual access state and desired access state |
+
+## Pagination
+
+| Term | Definition |
+|------|------------|
+| **Cursor-based pagination** | Pagination using opaque tokens returned by the API |
+| **Offset-based pagination** | Pagination using numeric offset and limit parameters |
+| **Page token** | String passed between calls to continue pagination |
+| **LDAP paging** | Server-side pagination for LDAP using cookies |
+| **Nested pagination** | Paginating children within each paginated parent (managed with Bag) |
+
+## Authentication
+
+| Term | Definition |
+|------|------------|
+| **API Key** | Simple token-based authentication passed in headers |
+| **Bearer Token** | Token passed in Authorization header as "Bearer {token}" |
+| **OAuth2 Client Credentials** | Flow exchanging client ID/secret for access token |
+| **JWT Service Account** | Authentication using signed JSON Web Tokens (common for Google APIs) |
+| **LDAP Bind** | Authentication to LDAP server using credentials |
+| **Domain-wide Delegation** | Google pattern allowing service account to impersonate domain users |
+
+## Publishing
+
+| Term | Definition |
+|------|------------|
+| **Release Manifest** | Metadata describing a connector version (org, name, version, assets) |
+| **Version State** | Lifecycle state: PENDING, UPLOADING, VALIDATING, PUBLISHED, YANKED, FAILED |
+| **Asset** | Platform-specific binary (e.g., darwin-amd64, linux-arm64) |
+| **Signing Key** | GPG or Cosign key used to sign connector releases |
+| **Yank** | Withdraw a published version (remains visible but marked deprecated) |
+
+## Configuration
+
+| Term | Definition |
+|------|------------|
+| **CEL** | Common Expression Language - used for data transformation in meta-connectors |
+| **Environment variable** | Configuration via BATON_* prefixed env vars |
+| **Base URL** | Configurable API endpoint for testing against mocks |
+| **Insecure flag** | Option to skip TLS verification for local testing |
+
+## Development
+
+| Term | Definition |
+|------|------------|
+| **golangci-lint** | Standard Go linter used for connector code quality |
+| **Makefile targets** | Standard: build, lint, test, update-deps |
+| **sync.Map** | Go's thread-safe map type used for connector caching |
+| **Hot reload** | Automatic rebuild on code changes during development |
+| **Mock server** | Local server mimicking target API for testing |
