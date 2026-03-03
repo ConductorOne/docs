@@ -1,0 +1,225 @@
+---
+title: Baton-runner configuration reference
+og:title: Baton-runner configuration reference - ConductorOne docs
+og:description: Configure baton-runner to run multiple Baton connectors from a single process, with support for multiple secret backends.
+description: Configure baton-runner to run multiple Baton connectors from a single process, with support for multiple secret backends.
+sidebarTitle: Baton-runner reference
+---
+
+{/* Editor Refresh: 2026-03-03 */}
+
+[Baton-runner](https://github.com/ConductorOne/baton-runner) runs multiple Baton connectors from a single process. Instead of managing each connector individually, you define all your connectors and their credentials in one `config.yaml` file and run them together.
+
+## Download
+
+Download baton-runner from [dist.conductorone.com/ConductorOne/baton-runner](https://dist.conductorone.com/ConductorOne/baton-runner). Builds are available for Windows (amd64), macOS (amd64 and arm64), and Linux (amd64 and arm64).
+
+For step-by-step setup instructions on Windows Server, see [Run multiple connectors as a Windows service](/baton/baton-runner-windows).
+
+## Configuration
+
+Baton-runner is configured with a single YAML file. By default it looks for `config.yaml` in the current directory. Use the `-c` flag to specify a different path:
+
+```bash
+baton-runner -c /path/to/config.yaml
+```
+
+A complete `config.yaml` has two top-level sections: `connectors` and `secrets`.
+
+```yaml
+connectors:
+  - name: github-org1
+    path: /usr/local/bin/baton-github
+    config:
+      envFrom:
+        secrets:
+          BATON_TOKEN: org1:BATON_TOKEN
+          BATON_CLIENT_ID: org1:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: org1:BATON_CLIENT_SECRET
+
+  - name: github-org2
+    path: /usr/local/bin/baton-github
+    config:
+      env:
+        BATON_ORGS: my-org
+      envFrom:
+        secrets:
+          BATON_TOKEN: org2:BATON_TOKEN
+          BATON_CLIENT_ID: org2:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: org2:BATON_CLIENT_SECRET
+
+secrets:
+  insecure:
+    secrets:
+      org1: org1.yaml
+      org2: org2.yaml
+```
+
+### Connector options
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `name` | Yes | A display name for the connector. Used in logs. |
+| `path` | Yes | Absolute path to the connector executable. |
+| `config.env` | No | Static environment variables passed to the connector as key-value pairs. |
+| `config.envFrom.secrets` | No | Environment variables populated from a secret backend. See [Secret reference format](#secret-reference-format). |
+
+### Secret reference format
+
+Values in `config.envFrom.secrets` use the format `secretname:FIELD`:
+
+- `secretname` — the name defined in the `secrets` section of `config.yaml`
+- `FIELD` — the key to retrieve from within that secret
+
+For example, `org1:BATON_TOKEN` reads the `BATON_TOKEN` field from the secret named `org1`.
+
+## Secret backends
+
+Baton-runner supports multiple backends for storing connector credentials. You can define one backend per `config.yaml`, and all connectors in that file share it.
+
+| Backend | Best for |
+| :--- | :--- |
+| [`wincred`](#windows-credential-manager-wincred) | Windows Server deployments |
+| [`insecure`](#insecure-yaml-files) | Local development and testing only |
+| [`awssecretmanager`](#aws-secrets-manager) | AWS-hosted environments |
+| [`vault`](#hashicorp-vault) | HashiCorp Vault environments |
+
+### Windows Credential Manager (wincred)
+
+Stores credentials in the Windows Credential Manager. Recommended for Windows Server deployments.
+
+The `secrets` map associates a connector secret name with its target name in Windows Credential Manager.
+
+```yaml
+secrets:
+  wincred:
+    secrets:
+      org1: org1
+      org2: org2
+```
+
+Use the `wincred set` command to load credentials into the store:
+
+```powershell
+baton-runner.exe wincred set org1 org1.yaml
+```
+
+Where `org1.yaml` is a YAML file containing the connector's environment variables. See [Run multiple connectors as a Windows service](/baton/baton-runner-windows) for a full walkthrough.
+
+### Insecure (YAML files)
+
+<Warning>
+The insecure backend stores credentials in plaintext YAML files on disk. Use it for local development and testing only — not in production.
+</Warning>
+
+The `secrets` map associates a connector secret name with the path to its YAML file.
+
+```yaml
+secrets:
+  insecure:
+    secrets:
+      org1: org1.yaml
+      org2: org2.yaml
+```
+
+Each YAML file contains the connector's environment variables as key-value pairs:
+
+```yaml
+# org1.yaml
+BATON_TOKEN: your-token
+BATON_CLIENT_ID: your-client-id
+BATON_CLIENT_SECRET: your-client-secret
+```
+
+### AWS Secrets Manager
+
+Reads credentials from AWS Secrets Manager. AWS credentials are loaded from the [default credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html) (environment variables, shared credentials file, IAM role, and so on) — no AWS credentials are configured in `config.yaml` itself.
+
+The `secrets` map associates a connector secret name with the path to a YAML pointer file:
+
+```yaml
+secrets:
+  awssecretmanager:
+    secrets:
+      org1: org1-aws.yaml
+```
+
+Each pointer file specifies the AWS secret name and region:
+
+```yaml
+# org1-aws.yaml
+secretname: my-conductorone-org1-secret
+region: us-east-1
+```
+
+The secret value stored in AWS Secrets Manager must be a JSON or YAML string containing the connector's environment variables as key-value pairs.
+
+### HashiCorp Vault
+
+Reads credentials from a HashiCorp Vault KV secrets engine. Both KV v1 and v2 are supported.
+
+```yaml
+secrets:
+  vault:
+    url: https://vault.example.com:8200
+    mount: secret
+    kvapi: 2
+    credsfile: vaultcreds.yaml
+    secrets:
+      org1: conductorone/org1
+      org2: conductorone/org2
+```
+
+The `secrets` map associates a connector secret name with the KV path in Vault.
+
+**Authentication** — specify credentials using one of these options (listed in priority order):
+
+| Option | How |
+| :--- | :--- |
+| Credential file | Set `credsfile` to the path of a YAML file containing `token`, or `username` and `password` |
+| Inline token | Set `token` directly in `config.yaml` |
+| Inline username/password | Set `username` and `password` directly in `config.yaml` |
+
+Credential file format:
+
+```yaml
+# vaultcreds.yaml — use either token or username/password
+token: your-vault-token
+```
+
+```yaml
+# vaultcreds.yaml
+username: your-username
+password: your-password
+```
+
+{/*
+### Delinea Secret Server
+
+Reads credentials from Delinea (formerly Thycotic) Secret Server. Supports both username/password and NTLM authentication.
+
+The `secrets` map associates a connector secret name with the integer Secret ID in Secret Server.
+
+```yaml
+secrets:
+  secretserver:
+    url: https://secretserver.example.com
+    username: service-account   # omit to use NTLM authentication
+    password: your-password
+    secrets:
+      org1: "12345"   # Secret Server secret ID
+      org2: "12346"
+```
+
+If `username` and `password` are omitted, baton-runner uses NTLM authentication.
+*/}
+
+## Log level
+
+Set the `BATON_LOG_LEVEL` environment variable to control log verbosity. Valid values: `debug`, `info`, `warn`, `error`, `panic`.
+
+```bash
+BATON_LOG_LEVEL=debug baton-runner -c config.yaml
+```
+
+The default log level is `info`.
