@@ -37,19 +37,100 @@ ConductorOne offers two Workday connectors: Workday and Workday Accounts (WQL). 
 Configuring the connector requires you to pass in credentials generated in Workday. Gather these credentials before you move on. 
 
 <Tip>
-To authenticate with Workday, you can use either an **API client** or a Report-as-a-service (RaaS) **custom report** in CSV or JSON format. 
+To authenticate with Workday, you can use either a Report-as-a-service (RaaS) **custom report** in CSV or JSON format or an **API client**. 
 
-**Which authentication method should I use?**
-The **API client option** pulls available data about Workday accounts, such as each account's manager and manager email, which can be used as [user attributes](/product/admin/attributes). The custom report method only pulls data that is explicitly named in the report into ConductorOne. 
+**Which authentication method should I use?** 
 
-The **RaaS custom report option** is often preferred by Workday Admins and HR teams, as it’s Workday’s preferred integration method. RaaS allows you fine-grained control over what data is sent to ConductorOne. Additionally, it allows you to transform the format of Workday attributes as needed before sending them to ConductorOne.
+The **RaaS custom report option** is the more popular option, and is often preferred by Workday Admins and HR teams, as it’s Workday’s preferred integration method. RaaS allows you fine-grained control over what data is sent to ConductorOne. Additionally, it allows you to transform the format of Workday attributes as needed before sending them to ConductorOne.
+
+The **API client option** pulls available data about Workday accounts, such as each account's manager and manager email, which can be used as [user attributes](/product/admin/attributes). The custom report method only pulls data that is explicitly named in the report into ConductorOne.
 
 Follow the relevant set of instructions below to generate your credentials.
 </Tip>
 
-### Option 1: Authenticate using API client credentials
+### Option 1: Authenticate using a custom report 
 
-Here's the reorganized documentation, with the ISU creation step added in the correct sequence, and the security group assignment moved to be with the ISU creation.
+<Warning>
+A user with the permission to create a custom report in Workday must perform this task.
+</Warning>
+
+#### Set up the custom report
+
+<Steps>
+<Step>
+In Workday, navigate to the **Tasks and Reports** menu and select **Create Custom Report**. 
+</Step>
+<Step>
+When setting report details, set the report type to **Advanced** and mark **Enable As Web Service**. 
+</Step>
+<Step>
+When setting data sources, disable the **Optimized for Performance** option and select **All Workers** as the data source. 
+</Step>
+</Steps>
+
+At this point, you can create the custom report in either JSON (recommended) or CSV format by following the relevant directions below. 
+
+### Expected custom report contents when using the JSON format
+
+When using the JSON format for custom reports, the connector expects a specific structure. Below is a table of the supported fields:
+
+**Suggested Data Source:** All Active and Terminated Workers
+
+| Column Heading Override XML Alias/Column Heading Override | Required | Description | Suggested Workday Object Field     |
+| :--- | :--- | :--- | :--- |
+| user_id                 | Yes      | Unique identifier for the user       | Worker: Employee ID                         |
+| email                   | No       | User's email address                 | Worker: Email - Primary Work                |
+| first_name              | Yes      | User's first name                    | Worker: First Name                          |
+| middle_name             | No       | User's middle name                   | Worker: Middle Name                         |
+| last_name               | Yes      | User's last name                     | Worker: Last Name                           |
+| active                  | Yes      | Boolean indicating if user is active | Worker: Active Status                       |
+| org_name                | No       | User's department or organization    | Worker: Supervisory Organization Name       |
+| business_title          | No       | User's job title                     | Worker: Business Title                      |
+| security_groups         | No       | User's security groups               | Worker: User-Based Security Groups for User |
+| roles                   | No       | User's roles                         | Worker: Organization Roles                  |
+| manager_name            | No       | Manager's name                       | Calculated Field - Lookup Related Value: Worker: Manager Level 01: Full Name            |
+| manager_email           | No       | Manager's email                      | Calculated Field - Lookup Related Value: Worker: Manager Level 01: Email - Primary Work |
+
+Notes:
+- The order of the fields does not matter.
+- The `Column Heading Override XML Alias` value MUST match `Column Heading Override`.
+- You may substitute the suggested Workday object fields with alternatives as long as they provide equivalent data.
+
+#### Expected custom report contents when using the CSV format
+
+Add the following fields to the custom report **in this order**: 
+
+   * Active Status
+   * User Name
+   * Employee ID
+   * Worker
+   * Security Group
+   * Role Name
+   * Organization
+   * Organization Type
+
+<Tip>
+   The fields needed in custom reports can vary depending on how your Workday installation is configured. Contact ConductorOne support if you need help figuring out which fields to include.   
+</Tip>
+
+5. Create the custom report. 
+
+#### Look up the custom report URL 
+
+<Steps>
+<Step>
+On the **Report Definition** page, click the **Related Actions** (three dots) button. 
+</Step>
+<Step>
+Navigate to **Actions** > **Web Service** > **View URLs**. 
+</Step>
+<Step>
+Right-click on the **JSON** or **CSV** (as relevant) URL, then carefully copy and save it. 
+</Step>
+</Steps>
+**That's it!** Next, move on to the connector configuration instructions.
+
+### Option 2: Authenticate using API client credentials
 
 ### Create Workday API Client Credentials
 
@@ -82,6 +163,7 @@ Click **OK**.
 Make note of the **User Name** you created, as you will need it later.
 </Step>
 </Steps>
+
 #### Create a new Security Group
 
 <Steps>
@@ -212,88 +294,6 @@ Carefully copy and save the new refresh token.
 </Step>
 </Steps>
 **That's it!** Next, move on to the connector configuration instructions. 
-
-### Option 2: Authenticate using a custom report 
-
-<Warning>
-A user with the permission to create a custom report in Workday must perform this task.
-</Warning>
-
-#### Set up the custom report
-
-<Steps>
-<Step>
-In Workday, navigate to the **Tasks and Reports** menu and select **Create Custom Report**. 
-</Step>
-<Step>
-When setting report details, set the report type to **Advanced** and mark **Enable As Web Service**. 
-</Step>
-<Step>
-When setting data sources, disable the **Optimized for Performance** option and select **All Workers** as the data source. 
-</Step>
-</Steps>
-
-At this point, you can create the custom report in either JSON (recommended) or CSV format by following the relevant directions below. 
-
-### Expected custom report contents when using the JSON format
-
-When using the JSON format for custom reports, the connector expects a specific structure. Below is a table of the supported fields:
-
-**Suggested Data Source:** All Active and Terminated Workers
-
-| Column Heading Override XML Alias/Column Heading Override | Required | Description | Suggested Workday Object Field     |
-| :--- | :--- | :--- | :--- |
-| user_id                 | Yes      | Unique identifier for the user       | Worker: Employee ID                         |
-| email                   | No       | User's email address                 | Worker: Email - Primary Work                |
-| first_name              | Yes      | User's first name                    | Worker: First Name                          |
-| middle_name             | No       | User's middle name                   | Worker: Middle Name                         |
-| last_name               | Yes      | User's last name                     | Worker: Last Name                           |
-| active                  | Yes      | Boolean indicating if user is active | Worker: Active Status                       |
-| org_name                | No       | User's department or organization    | Worker: Supervisory Organization Name       |
-| business_title          | No       | User's job title                     | Worker: Business Title                      |
-| security_groups         | No       | User's security groups               | Worker: User-Based Security Groups for User |
-| roles                   | No       | User's roles                         | Worker: Organization Roles                  |
-| manager_name            | No       | Manager's name                       | Calculated Field - Lookup Related Value: Worker: Manager Level 01: Full Name            |
-| manager_email           | No       | Manager's email                      | Calculated Field - Lookup Related Value: Worker: Manager Level 01: Email - Primary Work |
-
-Notes:
-- The order of the fields does not matter.
-- The `Column Heading Override XML Alias` value MUST match `Column Heading Override`.
-- You may substitute the suggested Workday object fields with alternatives as long as they provide equivalent data.
-
-#### Expected custom report contents when using the CSV format
-
-Add the following fields to the custom report **in this order**: 
-
-   * Active Status
-   * User Name
-   * Employee ID
-   * Worker
-   * Security Group
-   * Role Name
-   * Organization
-   * Organization Type
-
-<Tip>
-   The fields needed in custom reports can vary depending on how your Workday installation is configured. Contact ConductorOne support if you need help figuring out which fields to include.   
-</Tip>
-
-5. Create the custom report. 
-
-#### Look up the custom report URL 
-
-<Steps>
-<Step>
-On the **Report Definition** page, click the **Related Actions** (three dots) button. 
-</Step>
-<Step>
-Navigate to **Actions** > **Web Service** > **View URLs**. 
-</Step>
-<Step>
-Right-click on the **JSON** or **CSV** (as relevant) URL, then carefully copy and save it. 
-</Step>
-</Steps>
-**That's it!** Next, move on to the connector configuration instructions.
 
 ## Configure the Workday connector
 
