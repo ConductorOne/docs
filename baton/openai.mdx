@@ -30,6 +30,64 @@ Note that **custom roles** are not currently supported. The connector currently 
 
 <Icon icon="square-check" iconType="solid"  color="#65DE23"/> Supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning) <br/>
 
+## SCIM provisioning notes
+
+OpenAI supports SCIM-based directory sync for automating user provisioning and deprovisioning. However, there are important limitations to be aware of when planning your provisioning strategy.
+
+### Availability
+
+SCIM is only available on certain OpenAI plans:
+
+- **API Platform**: Custom or Unlimited billing plans
+- **ChatGPT**: Enterprise or EDU plans
+
+SCIM is not available on the Business plan. If you are on a plan that does not support SCIM, you must manage users manually or through the OpenAI Admin API.
+
+### Configuring SCIM
+
+SCIM is not configured through the OpenAI API. Instead, organization owners enable directory sync through the **Identity** settings in the OpenAI Platform dashboard. This opens a setup flow through the WorkOS portal, where you connect your identity provider (IdP).
+
+Supported identity providers include Okta, Entra ID (Azure AD), Google Workspace, PingFederate, OneLogin, and Rippling, among others.
+
+### Limitation: no SCIM Groups support on the API Platform
+
+OpenAI's SCIM integration on the API Platform does not currently support SCIM Groups. This means:
+
+- Users provisioned via SCIM are automatically invited to the **organization**, but they are **not assigned to any project**.
+- There is no way to use SCIM to automatically map IdP groups to OpenAI projects or roles.
+- Each user provisioned via SCIM must be separately assigned to projects after they join the organization.
+
+<Note>
+SCIM Groups are supported for ChatGPT Enterprise workspaces but not for the API Platform. If you use both products, be aware that group sync behavior differs between them.
+</Note>
+
+### Workaround: use the Admin API for project assignments
+
+Because SCIM cannot assign users to projects, you can use the OpenAI Admin API's [Project Users endpoints](https://platform.openai.com/docs/api-reference/project-users) to manage project membership after a user is provisioned via SCIM.
+
+The key endpoints are:
+
+- **Add user to project**: `POST /v1/organization/projects/{project_id}/users` — requires `user_id` and `role` (`member` or `owner`)
+- **Modify project user role**: `POST /v1/organization/projects/{project_id}/users/{user_id}` — update a user's project role
+- **Remove user from project**: `DELETE /v1/organization/projects/{project_id}/users/{user_id}`
+
+The ConductorOne OpenAI connector uses the Admin API to manage project memberships. When you configure ConductorOne to provision access to OpenAI projects, ConductorOne handles these API calls for you, filling the gap that SCIM leaves for project-level access.
+
+### What SCIM provides vs. what requires the Admin API
+
+| Capability | SCIM | Admin API (via ConductorOne) |
+| :--- | :--- | :--- |
+| Provision user into organization | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Deprovision user from organization | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Assign user to project | | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Assign project role | | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Assign organization role | | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Map IdP groups to projects | | |
+
+<Note>
+Neither SCIM nor the Admin API currently supports automatically mapping IdP groups to OpenAI projects. To assign users to projects, use ConductorOne's provisioning capabilities with the OpenAI connector, which calls the Admin API on your behalf.
+</Note>
+
 ## Gather OpenAI configuration information
 
 Configuring the connector requires you to pass in information from OpenAI. Gather these configuration details before you move on.
