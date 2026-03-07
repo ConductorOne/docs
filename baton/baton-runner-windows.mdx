@@ -1,0 +1,214 @@
+---
+title: Run multiple connectors as a Windows service
+og:title: Run multiple connectors as a Windows service - ConductorOne docs
+og:description: Install and configure baton-runner as a Windows service to run multiple Baton connectors from a single process on Windows Server.
+description: Install and configure baton-runner as a Windows service to run multiple Baton connectors from a single process on Windows Server.
+sidebarTitle: Run multiple connectors on Windows
+---
+
+{/* Editor Refresh: 2026-03-02 */}
+
+This guide walks through installing baton-runner as a Windows service and configuring it to sync two SQL Server connectors. For a full reference on configuration options and secret backends, see [Baton-runner configuration reference](/baton/baton-runner).
+
+## Before you begin
+
+You'll need:
+
+- A Windows Server with an account that has administrator rights to install Windows services and run administrative PowerShell sessions
+- Usernames and passwords for each SQL Server instance you want to sync
+- The [baton-sql-server](https://github.com/ConductorOne/baton-sql-server) executable downloaded
+- The baton-runner installer downloaded
+- A ConductorOne connector created for each SQL Server instance — see [Deploy self-hosted connectors](/baton/deploy)
+- A client ID and secret for each connector
+
+## Install baton-runner
+
+<Steps>
+<Step>
+Run the baton-runner installer. Right-click the installer and select **Run as administrator** if prompted.
+
+<Note>
+The installer completes silently — it does not display progress or require any configuration input.
+</Note>
+</Step>
+<Step>
+Confirm the service installed correctly. Open **Services** (search for "Services" in the Windows search bar) and look for **baton-runner** in the list.
+
+The startup type defaults to **Manual** — leave it as Manual for now.
+
+<Frame>
+  <img src="/images/product/assets/baton-runner-windows-1.png" alt="Services window showing baton-runner with Manual startup type" />
+</Frame>
+</Step>
+<Step>
+Open the baton-runner service properties and select the **Log On** tab. Set the service account to the user account you'll use to store credentials in Windows Credential Manager. This must be the same account you'll use in the wincred steps below.
+
+<Frame>
+  <img src="/images/product/assets/baton-runner-windows-2.png" alt="Service properties Log On tab with user account selected" />
+</Frame>
+</Step>
+</Steps>
+
+## Set up connector files
+
+<Steps>
+<Step>
+Create a directory for the baton-sql-server executable. The directory path must not contain spaces.
+</Step>
+<Step>
+Using File Explorer, navigate to `C:\ProgramData\ConductorOne\baton-runner`.
+</Step>
+<Step>
+Create a YAML file for each SQL Server instance you want to sync, plus a `config.yaml` file for baton-runner. Name each connector file in a way that identifies the server it connects to.
+
+For this example, we'll use `sql1.yaml` and `sql2.yaml` for two SQL Server instances.
+
+<Frame>
+  <img src="/images/product/assets/baton-runner-windows-3.png" alt="baton-runner directory containing sql1.yaml, sql2.yaml, and config.yaml" />
+</Frame>
+</Step>
+<Step>
+Open each connector YAML file in Notepad and add the following, replacing the values with the connection string and ConductorOne credentials for that instance:
+
+```yaml
+BATON_DSN: server=192.168.1.40;user id=sa;password=YOUR_PASSWORD;port=1434
+BATON_CLIENT_ID: YOUR_CLIENT_ID
+BATON_CLIENT_SECRET: YOUR_CLIENT_SECRET
+```
+</Step>
+</Steps>
+
+## Store credentials in Windows Credential Manager
+
+Baton-runner uses Windows Credential Manager (wincred) to store connector secrets securely on the server.
+
+<Steps>
+<Step>
+Open PowerShell as administrator. Right-click the Windows logo and select **Windows PowerShell (Admin)**.
+</Step>
+<Step>
+Change to the baton-runner directory:
+
+```powershell
+cd C:\ProgramData\ConductorOne\baton-runner\
+```
+</Step>
+<Step>
+Store the credentials for each connector using the `wincred set` command:
+
+```powershell
+& "C:\Program Files (x86)\ConductorOne\baton-runner\baton-runner.exe" wincred set sql1 sql1.yaml
+& "C:\Program Files (x86)\ConductorOne\baton-runner\baton-runner.exe" wincred set sql2 sql2.yaml
+```
+
+Each command should return `successfully set secret.`
+</Step>
+<Step>
+Verify the credentials are stored. Run:
+
+```powershell
+cmdkey /list
+```
+
+You should see an entry for each connector:
+
+```
+Currently stored credentials:
+
+    Target: LegacyGeneric:target=sql2
+    Type: Generic
+    Local machine persistence
+
+    Target: LegacyGeneric:target=sql1
+    Type: Generic
+    Local machine persistence
+```
+
+You can also verify a specific credential using baton-runner:
+
+```powershell
+& "C:\Program Files (x86)\ConductorOne\baton-runner\baton-runner.exe" wincred get sql1
+```
+</Step>
+</Steps>
+
+## Configure baton-runner
+
+<Steps>
+<Step>
+Open `config.yaml` in `C:\ProgramData\ConductorOne\baton-runner` and add the following configuration, updating the paths and names to match your setup:
+
+```yaml
+connectors:
+  - name: sql1
+    path: C:\baton-sql\baton-sql-server.exe
+    config:
+      envFrom:
+        secrets:
+          BATON_DSN: sql1:BATON_DSN
+          BATON_CLIENT_ID: sql1:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: sql1:BATON_CLIENT_SECRET
+  - name: sql2
+    path: C:\baton-sql\baton-sql-server.exe
+    config:
+      envFrom:
+        secrets:
+          BATON_DSN: sql2:BATON_DSN
+          BATON_CLIENT_ID: sql2:BATON_CLIENT_ID
+          BATON_CLIENT_SECRET: sql2:BATON_CLIENT_SECRET
+secrets:
+  wincred:
+    secrets:
+      sql1: sql1
+      sql2: sql2
+```
+</Step>
+<Step>
+Test the configuration by running baton-runner from PowerShell. Press **Ctrl+C** to stop it once you've confirmed it starts without errors:
+
+```powershell
+& "C:\Program Files (x86)\ConductorOne\baton-runner\baton-runner.exe" -c .\config.yaml
+```
+</Step>
+</Steps>
+
+## Start and validate the service
+
+<Steps>
+<Step>
+Reboot the server. This confirms that the wincred credentials persist across reboots and completes post-installation steps for the service.
+</Step>
+<Step>
+After rebooting, confirm your credentials are still present:
+
+```powershell
+cmdkey /list
+```
+</Step>
+<Step>
+Open **Services**, find baton-runner, and click **Start**. Confirm the status changes to **Running**.
+
+<Frame>
+  <img src="/images/product/assets/baton-runner-windows-4.png" alt="Services window showing baton-runner with Running status" />
+</Frame>
+</Step>
+<Step>
+Check the log for errors:
+
+```
+C:\ProgramData\ConductorOne\baton-runner\baton-runner.log
+```
+</Step>
+<Step>
+In ConductorOne, confirm the connectors are syncing. Navigate to each connector and verify data is appearing.
+</Step>
+<Step>
+Once syncing is confirmed, change the baton-runner service startup type to **Automatic**.
+</Step>
+<Step>
+Restart the server one final time to confirm the service starts automatically and all connectors sync successfully.
+</Step>
+<Step>
+After confirming baton-runner starts successfully and both connectors sync, delete or securely clear the connector YAML files (`sql1.yaml`, `sql2.yaml`) immediately. These files contain plaintext credentials and are no longer needed once secrets are stored in wincred.
+</Step>
+</Steps>
