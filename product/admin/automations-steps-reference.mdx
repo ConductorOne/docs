@@ -6,128 +6,297 @@ sidebarTitle: "Automation steps"
 
 An automation needs at least one step, and can have as many steps as you need. You can reorder steps using the arrow controls.
 
-### Send email
+Each step can access data from the trigger and from previous steps using CEL expressions and the `{{ }}` template syntax. On the **Advanced** tab of each step, you'll find the step's **Step ID**, which is how downstream steps reference its output (e.g., `ctx.my_step_name.field`). On the **Available data** tab, you can browse data from previous steps. See [workflow expressions](/product/admin/expressions-workflows) for full syntax.
+In the field tables below:
+- **Required** fields must be configured for the step to save.
+- **CEL** indicates the field accepts CEL expressions or `{{ }}` template syntax.
 
-Send an email notification to specified recipients. Use this step to alert stakeholders about important events, such as notifying IT admins when a new employee joins or when access needs to be reviewed.
+---
 
-**Required fields:** Recipient, Email title, Email subject, Email message
+## Send email
 
-**Example:** Send an email to three IT admins
+Alerts stakeholders about important events via email.
 
-### Send Slack message
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Recipient | Yes | Yes | User expression or email address. Supports `{{ ctx.trigger.user.email }}` |
+| Email title | Yes | Yes | Displayed as the sender name |
+| Email subject | Yes | Yes | |
+| Email message | Yes | Yes | Rich text. Supports template variables |
 
-Post a message to a designated Slack channel. Use this step to send real-time notifications to teams and keep relevant channels informed about workflow events, new access grants, or other important updates.
+**Error behavior:** If the recipient expression resolves to an empty value or invalid email, the step fails and the automation stops.
 
-**Required fields:** Slack channel name, Message
+---
 
-**Example:** Send a Slack message to the "new-employees" channel
+## Send Slack message
 
-### Wait for duration
+Posts notifications to a designated Slack channel for real-time team updates.
 
-Pause the automation workflow for a specified period before continuing to the next step. Use this to give users time to respond to notifications or allow time for manual review before automated actions are taken.
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Slack channel name | Yes | Yes | Must match an existing channel the ConductorOne Slack app can access |
+| Message | Yes | Yes | Plain text. Supports template variables |
 
-**Required fields:** Time to wait before proceeding
+**Error behavior:** Fails if the channel doesn't exist or the ConductorOne Slack app doesn't have access. Requires the [Slack application](/product/admin/slack-application) to be configured.
 
-**Example:** Wait 30 minutes
+---
 
-### Create campaign
+## Wait for duration
 
-Automatically create a new access review campaign based on a template. Use this step to ensure timely access reviews when significant events occur, such as when an employee departs or changes roles.
+Pauses the automation workflow for a specified period before continuing to the next step. Useful for giving users time to respond to notifications before taking automated action.
 
-**Required fields:** Access review template, User whose access will be reviewed
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Time to wait | Yes | No | Duration value (e.g., 30 minutes, 7 days) |
 
-**Example:** Create a new UAR campaign to review a departed user's access
+**Error behavior:** The step does not fail. The automation execution remains in a waiting state until the duration elapses, then proceeds to the next step.
 
-### Revoke entitlements
+<Tip>
+If a new version of the automation is published while an execution is waiting, the waiting execution completes using the version it started with.
+</Tip>
 
-Create revoke tasks to remove specified entitlements from a user's account. You can selectively revoke access while excluding certain entitlements that should be preserved. Use this step for offboarding workflows and managing access changes.
+---
 
-**Required fields:** Target user, Entitlements to revoke, Entitlements to exclude
+## Create campaign
 
-**Example:** Create revoke tasks for all AWS entitlements except app access
+Automatically initiates an access review campaign from a template.
 
-### Grant entitlements
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Access review template | Yes | No | Select from existing review templates |
+| User whose access will be reviewed | Yes | Yes | The subject of the review |
 
-Automatically grant specified entitlements to a user. Use this step during onboarding and role changes to ensure users receive the appropriate access permissions without manual intervention.
+**Error behavior:** Fails if the review template doesn't exist or the target user can't be resolved.
 
-**Required fields:** Target user, Entitlements to grant
+---
 
-**Example:** Grant access to the "Engineering team" role in Jira
+## Revoke entitlements
 
-### Modify delegate
+Removes specified access permissions from a user while optionally excluding certain entitlements.
 
-Update or remove delegation settings for a user. Use this step when managing temporary access delegation or when a user's responsibilities change and their delegated tasks need to be reassigned.
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Target user | Yes | Yes | The user whose access will be revoked |
+| Entitlements to revoke | Yes | No | Select specific entitlements, or "all" |
+| Entitlements to exclude | No | No | Entitlements to keep even when revoking "all" |
 
-**Required fields:** Target user
+**Exclusions:** When revoking "all" entitlements, use exclusions to preserve specific access (e.g., keep compliance-required archival access while revoking everything else).
 
-**Example:** Remove this user as a delegate
+**Error behavior:** If an entitlement doesn't exist or the user doesn't have it, the step skips that entitlement and continues. The step only fails if the target user can't be resolved.
 
-### Remove access profiles
+<Tip>
+Revoking an entitlement creates a revoke task. If the app's connector supports provisioning, the revocation is carried out automatically. Otherwise, it creates a manual task for an app owner.
+</Tip>
 
-Unenroll a user from specified access profiles. Use this step during offboarding or role transitions to ensure users no longer receive automatic access grants associated with profiles they should no longer be part of.
+---
 
-**Required fields:** Target user, Access profiles to unenroll from (or check the box to unenroll from all)
+## Grant entitlements
 
-**Example:** Unenroll the user from three key access profiles
+Automatically assigns specified entitlements to a user. Commonly used in onboarding workflows.
 
-### Modify user status
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Target user | Yes | Yes | The user receiving access |
+| Entitlements to grant | Yes | No | Select one or more entitlements |
 
-Change a user's status in ConductorOne (e.g., to Active, Disabled, or Inactive). Use this step to maintain accurate user records, such as disabling accounts when employees leave or take extended leave.
+**Error behavior:** Fails if the target user can't be resolved or the entitlement doesn't exist.
 
-**Required fields:** Target user, New user status
+<Tip>
+Granting an entitlement creates a grant task. If the app's connector supports provisioning, the grant is carried out automatically. Otherwise, it creates a manual task for an app owner.
+</Tip>
 
-**Example:** Change a user's status to Disabled in ConductorOne
+---
 
-### Run automation
+## Modify delegate
 
-Trigger another automation to run. Use this step to create modular workflows and chain automations together, letting you build complex multi-step processes while keeping individual automations focused and maintainable.
+Updates delegation settings for a user.
 
-**Required fields:** Automation name
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Target user | Yes | Yes | The user whose delegation settings will be modified |
 
-**Optional fields:** Context in JSON format
+---
 
-**Example:** Trigger a run of the "Secondary Offboarding Tasks" automation
+## Remove access profiles
 
-### Perform task action
+Unenrolls a user from one or more access profiles, stopping automatic access provisioning from those profiles.
 
-Take action on existing tasks, such as reassigning, completing, or canceling them. Use this step to manage task workflows when users change roles or leave, ensuring that pending tasks are properly handled.
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Target user | Yes | Yes | The user to unenroll |
+| Access profiles | Yes | No | Select specific profiles, or "all" |
 
-**Required fields:** Whose tasks to take action on, Task type, Action to take
+---
 
-**Example:** Assign all a user's open review tasks to the head of Security
+## Modify user status
 
-### Run webhook
+Changes a user's account status in ConductorOne.
 
-Execute a configured webhook to integrate with external systems. Use this step to trigger actions in other platforms and integrate ConductorOne with your broader technology ecosystem.
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Target user | Yes | Yes | The user whose status will change |
+| New user status | Yes | No | One of: Active, Disabled, Inactive |
 
-**Required fields:** Webhook name, Payload
+---
 
-**Example:** Trigger a webhook that creates a ticket to deprovision Figma access
+## Run automation
 
-### Perform connector action
+Triggers another automation, allowing you to chain workflows together.
 
-Execute custom capabilities configured on a connector. Connector actions extend automation functionality with app-specific operations that may not be available through standard steps. Contact Customer Success to learn more about setting up connector actions.
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Automation name | Yes | No | The target automation (must use an On Demand trigger) |
+| Context | No | Yes | JSON data to pass to the child automation |
 
-**Required fields:** Connector name, Action name, Additional fields as determined by the connector action's format
+### Passing context to child automations
 
-**Example:** Lock an Active Directory account
+The optional **Context** field lets you pass data from the current automation to the child. The context must be valid JSON. Use `{{ }}` template syntax to include dynamic values:
 
-### Create account
+```
+{
+  "user_email": "{{ ctx.trigger.user.email }}",
+  "department": "{{ ctx.trigger.newUser.department }}",
+  "source_automation": "offboarding-v2"
+}
+```
 
-Create a new account in a connected application. You can choose between two creation methods: **Custom** (which uses connector-specific schema as described in the [automatic account provisioning documentation](/product/admin/account-provisioning)) or **From ConductorOne user** (which uses existing user information from ConductorOne to populate the new account). Use this step to automate account provisioning during onboarding.
+In the child automation, access the passed context via `ctx.trigger`:
+```
+ctx.trigger.user_email
+ctx.trigger.department
+```
 
-**Required fields:** Connector name, Creation method, Additional values depending on method
+**Error behavior:** Fails if the target automation doesn't exist or isn't published. The parent automation does not wait for the child to complete; it proceeds to the next step immediately.
 
-**Example:** Create a new Greenhouse account
+<Tip>
+When debugging chained automations, check execution history on both the parent and child automations separately. The parent's log shows that the Run Automation step succeeded (meaning it triggered the child), but you need to check the child's execution history to see if the child's steps succeeded.
+</Tip>
 
-### Call function
+---
 
-<Warning>
-**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
-</Warning>
+## Perform task action
 
-Execute a custom function with specified input parameters. Functions let you extend automation capabilities with custom logic, data transformations, or complex operations that aren't available through standard automation steps. Functions can process data, perform calculations, make decisions based on custom business logic, and return values that you can use in subsequent automation steps.
+Manages existing ConductorOne tasks by taking actions like reassigning, completing, or canceling them.
 
-**Required fields:** Function name, Input parameters
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Whose tasks | Yes | Yes | The user whose tasks will be acted on |
+| Task type | Yes | No | Filter by task type (e.g., access review, grant, revoke) |
+| Action to take | Yes | No | The action to perform (e.g., reassign, complete, cancel) |
 
-**Example:** Call a function to calculate prorated access costs based on user start date
+---
+
+## Run webhook
+
+Sends an HTTP request to an external system. Use this to integrate with ticketing systems, notification platforms, or custom APIs.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Webhook name | Yes | No | Select from configured [outbound webhooks](/product/admin/webhooks-outbound) |
+| Payload | Yes | Yes | JSON body to send. Supports `{{ }}` template syntax |
+
+### Request format
+
+The webhook sends an HTTP POST to the configured URL with the JSON payload as the request body. Use template syntax to include dynamic data:
+
+```
+{
+  "ticket_type": "deprovision",
+  "user_email": "{{ ctx.trigger.user.email }}",
+  "apps_to_revoke": "{{ ctx.lookup_step.app_list }}",
+  "requested_by": "{{ ctx.trigger.user_id }}"
+}
+```
+
+**Error behavior:** Fails if the webhook returns a non-2xx HTTP status code or times out. The error details (status code, response body) are visible in the execution log.
+
+<Tip>
+**Output data.** The webhook response is available to downstream steps via `ctx.<step_name>.response`. This lets you act on data returned by external systems.
+</Tip>
+
+---
+
+## Perform connector action
+
+Executes app-specific operations through a connector. The available actions depend on what the connector supports.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Connector name | Yes | No | The target connector |
+| Action name | Yes | No | The operation to perform |
+| Additional fields | Varies | Varies | Depends on the connector and action |
+
+### Finding available actions
+
+The actions available for each connector depend on the connector's capabilities. When you select a connector, the action dropdown shows only the actions that connector supports. Check the [connector capabilities table](/baton/capabilities) for an overview.
+
+### Common connector actions by app
+
+| App Type | Common Actions |
+|---|---|
+| Active Directory | Lock account, unlock account, reset password, disable account |
+| Okta | Suspend user, unsuspend user, clear user sessions |
+| Google Workspace | Suspend user, unsuspend user |
+| AWS | Disable access keys, remove console access |
+
+The specific field requirements vary by action. After selecting an action, the step form displays the fields required for that action.
+
+**Error behavior:** Fails if the connector is offline, the action is not supported, or required fields are missing. Check the connector's sync status on the application page if this step fails.
+
+---
+
+## Create account
+
+Provisions a new account in a connected application.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Connector name | Yes | No | The target connector |
+| Creation method | Yes | No | "Custom" or "From ConductorOne user data" |
+| Additional values | Varies | Yes | Fields depend on the connector schema and creation method |
+
+### Creation methods
+
+- **From ConductorOne user data**: Automatically maps the ConductorOne user's profile fields (name, email, department, etc.) to the target app's account schema. Use this when the target app's fields align with standard user attributes.
+- **Custom**: Manually specify each field value. Use this when the target app requires fields that don't map directly from the user profile, or when you need to compute values (e.g., generating a username from the email prefix using CEL).
+
+**Error behavior:** Fails if the connector doesn't support account creation, required fields are missing, or an account already exists for the user in the target app (behavior depends on the connector).
+
+---
+
+## Call function
+
+Executes a [ConductorOne Function](/product/admin/functions) with specified input parameters, enabling custom logic and transformations within your automation.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Function name | Yes | No | Select from published Functions |
+| Input parameters | Varies | Yes | Defined by the Function's input schema. Supports CEL expressions |
+
+### Passing inputs
+
+Function input parameters are defined by the Function's code. Use CEL expressions to pass dynamic values:
+
+```
+ctx.trigger.user.email        // pass the trigger user's email
+ctx.trigger.form_fields.env   // pass a requestable automation form value
+ctx.prev_step.some_field      // pass output from a previous step
+```
+
+### Using function output
+
+The Function's return value is available to downstream steps via `ctx.<step_name>`. For example, if a Function named `risk_check` returns `{ "risk_score": 8, "should_review": true }`, downstream steps can reference:
+
+```
+ctx.risk_check.risk_score
+ctx.risk_check.should_review
+```
+
+Use these in step conditions to create conditional logic:
+```
+ctx.risk_check.should_review == true
+```
+
+For a full walkthrough of building Functions and using them in automations, see [using Functions in automations](/product/admin/functions-automations).
+
+**Error behavior:** Fails if the Function throws an unhandled error or exceeds its execution timeout. The error message from the Function is visible in the execution log. Debug Function errors in the Functions UI, which has its own invocation logs.
