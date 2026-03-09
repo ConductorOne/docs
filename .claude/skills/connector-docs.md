@@ -125,7 +125,7 @@ We recommend closely monitoring workflows that use this connector and contacting
 | Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
 
 **Additional functionality:**
-The [App Name] connector supports [automatic account provisioning](/docs/product/admin/account-provisioning).
+The [App Name] connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
 **Notes:**
 - [Important capability details]
