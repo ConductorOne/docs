@@ -1,0 +1,329 @@
+---
+title: "Automation examples"
+description: "End-to-end walkthroughs for common automation patterns including onboarding, offboarding, unused access cleanup, and more."
+sidebarTitle: "Automation examples"
+---
+
+{/* Editor Refresh: 2026-03-09 */}
+
+This page walks through common automation patterns end to end. Each example explains the use case, which trigger and steps to use, the CEL expressions involved, and how to test it.
+
+For reference details, see the [triggers reference](/product/admin/automations-triggers-reference) and [steps reference](/product/admin/automations-steps-reference). For CEL syntax in automations, see [workflow expressions](/product/admin/expressions-workflows).
+
+---
+
+## Employee onboarding
+
+**Use case:** When a new employee is synced from your directory, automatically provision their baseline access and notify their team.
+
+### What you'll build
+
+| Component | Configuration |
+|---|---|
+| Trigger | User Created |
+| Condition | `subject.employmentType == "FULL_TIME" && subject.status == "ENABLED"` |
+| Step 1 | Grant Entitlements -- baseline apps |
+| Step 2 | Create Account -- department-specific tool |
+| Step 3 | Send Slack Message -- notify #new-hires channel |
+| Step 4 | Send Email -- welcome email to the new user |
+
+### Setup
+
+1. Create a new automation and select the **User Created** trigger.
+
+2. Add a trigger condition to scope to full-time employees:
+```
+subject.employmentType == "FULL_TIME" && subject.status == "ENABLED"
+```
+   This prevents the automation from firing for contractors, service accounts, or users created in a disabled state.
+
+3. Add a **Grant Entitlements** step. Select the entitlements every new employee should receive (e.g., email, Slack, HRIS). Set the target user to the trigger's subject user.
+
+4. Add a **Create Account** step. Select the connector for a department-specific tool (e.g., Jira for Engineering, Salesforce for Sales). Use the "From ConductorOne user data" creation method to map the user's profile fields automatically.
+
+5. Add a **Send Slack Message** step. Set the channel to `#new-hires` and the message to:
+```
+Welcome {{ ctx.trigger.user.display_name }} to the {{ ctx.trigger.user.department }} team! Their manager is {{ ctx.trigger.user.profile.manager_name }}.
+```
+
+6. Add a **Send Email** step. Set the recipient to `{{ ctx.trigger.user.email }}`, the subject to `Welcome to the team`, and include links to IT self-service and onboarding resources in the body.
+
+### Why these choices
+
+- **User Created** (not Account Created) because you want to trigger on the person joining the organization, not on individual app accounts being provisioned. Account Created would fire separately for each app, which isn't what you want here.
+- The trigger condition filters to full-time and enabled users. Without it, the automation would also fire for contractors or staged users who aren't ready for access yet.
+- Grant Entitlements handles multiple apps in one step, so you don't need a separate step per app for baseline access.
+
+### Testing
+
+Create a copy of this automation with an **On Demand** trigger. Run it manually, selecting a test user, and verify that the entitlements are granted, the account is created, and the Slack and email messages are sent. Check execution history for step-by-step results.
+
+---
+
+## Employee offboarding
+
+**Use case:** When a user's status changes to disabled, revoke their access, update their ConductorOne status, and notify the security team.
+
+### What you'll build
+
+| Component | Configuration |
+|---|---|
+| Trigger | User Updated (attribute: status) |
+| Condition | `ctx.trigger.oldUser.status == "ENABLED" && ctx.trigger.newUser.status == "DISABLED"` |
+| Step 1 | Revoke Entitlements -- all except compliance-required access |
+| Step 2 | Modify User Status -- set to Disabled |
+| Step 3 | Create Campaign -- review any remaining access |
+| Step 4 | Send Email -- notify security team and manager |
+
+### Setup
+
+1. Create a new automation and select the **User Updated** trigger. Set the monitored attribute to **status**.
+
+2. Add a trigger condition that detects the transition from enabled to disabled:
+```
+ctx.trigger.oldUser.status == "ENABLED" && ctx.trigger.newUser.status == "DISABLED"
+```
+   This is important: checking only `newUser.status == "DISABLED"` would also fire if other attributes change on an already-disabled user. Using both oldUser and newUser ensures you only catch the actual status transition.
+
+3. Add a **Revoke Entitlements** step. Set it to revoke all entitlements for the subject user. Use the **Entitlements to exclude** field to preserve any compliance-required archival access (e.g., email archive, document retention).
+
+4. Add a **Modify User Status** step. Set the target user to the subject and the new status to **Disabled**.
+
+5. Add a **Create Campaign** step. Select an access review template that targets the subject user's remaining access. This creates a focused review for anything the exclusion list preserved.
+
+6. Add a **Send Email** step. Set the recipient to your security team distribution list. Use template syntax in the body:
+```
+{{ ctx.trigger.newUser.display_name }} ({{ ctx.trigger.newUser.email }}) has been disabled.
+Department: {{ ctx.trigger.newUser.department }}
+Manager: {{ ctx.trigger.newUser.profile.manager_name }}
+Access revocation has been initiated. A review campaign has been created for any remaining access.
+```
+
+### Why these choices
+
+- **User Updated with oldUser/newUser comparison** catches the exact moment of status change. This is more reliable than a scheduled check, which would introduce delay.
+- Revoking "all with exclusions" is safer than listing specific entitlements to revoke. New apps added after the automation is built are automatically covered.
+- The Create Campaign step provides a human checkpoint for any access that wasn't automatically revoked.
+
+### Testing
+
+Create a copy with an **On Demand** trigger to test the steps without needing a real status change. Verify the revocation tasks are created, the user status changes, the campaign launches, and the email sends. Check that the exclusions work correctly.
+
+---
+
+## Unused access cleanup
+
+**Use case:** Identify Salesforce accounts that haven't been used in 30 days, warn the user, wait 14 days, then revoke if still unused.
+
+### What you'll build
+
+| Component | Configuration |
+|---|---|
+| Trigger | Unused Access (app: Salesforce, 30 days, cold start: exclude) |
+| Step 1 | Send Email -- warn the user |
+| Step 2 | Wait for Duration -- 14 days |
+| Step 3 | Revoke Entitlements -- revoke Salesforce access |
+| Step 4 | Send Slack Message -- notify IT channel |
+
+### Setup
+
+1. Navigate to the Salesforce application page, go to the **Controls** tab, and find the **Unused access** section. Click **Add automation** and select **Create a custom usage-based automation from scratch**.
+
+   Alternatively, create a global automation with the **Unused Access** trigger and select Salesforce as the app.
+
+2. Configure the trigger:
+   - **App name**: Salesforce
+   - **Days since last login**: 30
+   - **Cold start behavior**: **Only newly unused**. This prevents the automation from immediately acting on all currently-inactive accounts when first published. Only accounts that cross the 30-day threshold after the automation goes live will trigger it.
+
+3. Add a **Send Email** step. Set the recipient to the subject user and the message to:
+```
+Your Salesforce access has been unused for 30 days. If you still need this access, please log in within the next 14 days. Otherwise, your access will be automatically revoked.
+```
+
+4. Add a **Wait for Duration** step. Set the duration to **14 days**. During this time, the automation execution pauses. If the user logs in during this window, the access is no longer "unused," but the automation execution still proceeds (the wait step does not re-check usage).
+
+5. Add a **Revoke Entitlements** step. Select the user's Salesforce entitlements.
+
+6. Add a **Send Slack Message** step. Set the channel to `#it-access` and the message to:
+```
+Salesforce access revoked for {{ ctx.trigger.user.display_name }} ({{ ctx.trigger.user.email }}) due to 30+ days of inactivity.
+```
+
+### Why these choices
+
+- **Cold start: "Only newly unused"** avoids a flood of revocations on day one. If you have 200 dormant Salesforce accounts, you probably don't want all 200 to get warning emails the moment you publish.
+- The **14-day wait** gives users a chance to log in before losing access. This reduces friction and support tickets.
+- Building this as an **app-scoped automation** keeps it visible on the Salesforce application page, which is where an app admin would look for it.
+
+<Warning>
+The Wait step does not re-check whether the user has logged in during the waiting period. If you need to cancel the revocation when a user logs back in, consider a different pattern: use a shorter wait, then a Function step that checks current login status before revoking.
+</Warning>
+
+### Prerequisites
+
+- The Salesforce connector must report last login data. Check the [connector capabilities table](/baton/capabilities) to verify.
+- If the connector doesn't report login data, the Unused Access trigger will treat all accounts as unused.
+
+### Testing
+
+Publish the automation and monitor the first few executions in the execution history. With "Only newly unused" cold start, you'll see executions only as accounts cross the 30-day threshold going forward.
+
+---
+
+## Requestable: infrastructure provisioning
+
+**Use case:** Engineers request a temporary cloud sandbox through the self-service catalog. The request requires manager approval, calls a Function to provision the environment, and auto-revokes after the requested duration.
+
+### What you'll build
+
+| Component | Configuration |
+|---|---|
+| Trigger | On Demand (requestable) |
+| Form fields | Environment type (dropdown), Justification (textarea), Duration (dropdown) |
+| Approval | Manager approval via request policy |
+| Step 1 | Call Function -- provision the environment |
+| Step 2 | Send Slack Message -- notify requester with environment details |
+| Step 3 | Wait for Duration -- requested duration |
+| Step 4 | Run Webhook -- call cleanup API |
+| Step 5 | Send Email -- confirm environment deprovisioned |
+
+### Prerequisites
+
+- A published [Function](/product/admin/functions) that provisions the cloud environment and returns the environment URL and ID.
+- An [outbound webhook](/product/admin/webhooks-outbound) configured to call the environment cleanup API.
+- Familiarity with [requestable automations](/product/admin/automation-actions).
+
+### Setup
+
+1. Create a new automation and select the **On Demand** trigger.
+
+2. Make the automation requestable by following the setup in [requestable automations](/product/admin/automation-actions). Configure the form with:
+   - **Environment type** (dropdown): Development, Staging, Production-mirror
+   - **Justification** (textarea): Why they need the environment
+   - **Duration** (dropdown): 1 day, 3 days, 7 days
+
+3. Set up a request policy requiring manager approval.
+
+4. Add a **Call Function** step. Select your provisioning function. Pass the form inputs as parameters:
+```
+environment_type: ctx.trigger.form_fields.environment_type
+requested_by: ctx.trigger.user.email
+```
+
+5. Add a **Send Slack Message** step. Notify the requester using the function's output:
+```
+Your {{ ctx.provision.environment_type }} environment is ready!
+URL: {{ ctx.provision.environment_url }}
+This environment will be automatically deprovisioned in {{ ctx.trigger.form_fields.duration }}.
+```
+
+6. Add a **Wait for Duration** step. The duration should match the value from the form. (Note: if the form offers fixed options like 1/3/7 days, you can set the wait duration to match the longest option and use step conditions, or create separate automations per duration.)
+
+7. Add a **Run Webhook** step. Select your cleanup webhook and pass the environment ID:
+```json
+{
+  "environment_id": "{{ ctx.provision.environment_id }}",
+  "action": "deprovision"
+}
+```
+
+8. Add a **Send Email** step confirming the environment has been deprovisioned.
+
+### Why these choices
+
+- **On Demand** is required for requestable automations. It ensures the workflow only runs when someone explicitly requests it.
+- **Form fields** capture structured input that flows into the automation as `ctx.trigger.form_fields`, making the provisioning step dynamic.
+- **Function step** handles the provisioning logic (API calls, resource creation) that built-in steps can't do.
+- **Wait + webhook** creates a time-boxed access pattern: provision, use, automatically clean up.
+
+### Testing
+
+Test the requestable automation as described in the [requestable automations](/product/admin/automation-actions) docs. Submit a test request, approve it, and verify the full flow: provisioning, notification, wait, cleanup.
+
+---
+
+## Scheduled compliance check
+
+**Use case:** Every week, check all contractors with access to a production AWS account. If any contractor has held access for 90+ days, create a review campaign and alert the compliance team.
+
+### What you'll build
+
+| Component | Configuration |
+|---|---|
+| Trigger | Schedule for App User (app: AWS Production, weekly) |
+| Condition | `subject.employmentType == "CONTRACTOR"` |
+| Step 1 | Call Function -- check access duration, return days_active and should_review |
+| Step 2 (conditional) | Create Campaign -- if should_review is true |
+| Step 3 (conditional) | Send Email -- if days_active > 90, alert compliance |
+
+### Prerequisites
+
+- A published [Function](/product/admin/functions) that looks up when the user's access was granted and returns `{ "days_active": <number>, "should_review": <boolean> }`.
+
+### Setup
+
+1. Create a new automation and select the **Schedule for App User** trigger. Set the app to your production AWS account and the frequency to **weekly**.
+
+2. Add a trigger condition to scope to contractors:
+```
+subject.employmentType == "CONTRACTOR"
+```
+   This ensures the automation only runs for contractor accounts, not all AWS users.
+
+3. Add a **Call Function** step (name it `access_check`). Select your function and pass the user and app context:
+```
+user_id: ctx.trigger.user_id
+app_id: ctx.trigger.app_id
+```
+
+4. Add a **Create Campaign** step. Select a review template targeting the contractor's AWS access. On the **Advanced** tab, add a step condition:
+```
+ctx.access_check.should_review == true
+```
+   This means the campaign is only created when the function determines a review is needed.
+
+5. Add a **Send Email** step. Set the recipient to your compliance team. On the **Advanced** tab, add a step condition:
+```
+ctx.access_check.days_active > 90
+```
+In the email body:
+```
+Contractor {{ ctx.trigger.user.display_name }} has held AWS production access for {{ ctx.access_check.days_active }} days. A review campaign has been created.
+```
+
+### Why these choices
+
+- **Schedule for App User** (not Schedule for User) because you specifically want users of the AWS production app, not all users in the directory.
+- The **trigger condition** filters to contractors before the automation runs any steps, avoiding unnecessary Function calls for full-time employees.
+- **Step conditions** on Create Campaign and Send Email mean the automation runs for every contractor each week, but only takes action when the access duration threshold is exceeded. Steps that don't meet their condition are silently skipped.
+- **Functions** handle the date math and business logic that CEL alone can't do easily (looking up grant dates, computing durations).
+
+<Tip>
+Scope your scheduled triggers narrowly. A weekly schedule across all users of a large app produces a high volume of executions. The trigger condition helps, but selecting a specific app and frequency keeps the volume manageable.
+</Tip>
+
+### Testing
+
+Create a copy with an **On Demand** trigger. Run it manually for a known contractor with long-standing AWS access to verify the Function returns the expected output, the campaign is created, and the email fires.
+
+---
+
+## Other automation patterns
+
+These patterns follow similar structures to the examples above. They are listed here as starting points rather than full walkthroughs.
+
+**Role transfer (department change)**
+Trigger: User Updated (department). Condition: `ctx.trigger.oldUser.department != ctx.trigger.newUser.department`. Steps: Revoke old department's entitlements, grant new department's baseline entitlements, notify the new manager.
+
+**Temporary elevated access**
+Trigger: On Demand (requestable). Steps: Grant elevated entitlements, wait for the approved duration, revoke elevated entitlements, send audit notification. Useful for break-glass or on-call scenarios.
+
+**License reclamation**
+Trigger: Unused Access (e.g., 60 days). Steps: Revoke the app entitlement, send notification to the user's manager, run webhook to notify procurement (for license tracking).
+
+**Vendor onboarding/offboarding**
+Trigger: User Created or User Updated (employment type). Condition: filter to contractors or vendors. Steps: Grant vendor-specific app access with time-limited entitlements, notify the vendor's sponsor.
+
+**Compliance evidence collection**
+Trigger: Schedule for User (monthly). Steps: Call Function to gather access data, run webhook to send a report to your GRC tool, send email summary to the compliance team.
