@@ -84,7 +84,7 @@ Follow this process when creating ConductorOne documentation:
 
 - **Voice**: Second person ("you"), active voice, direct language
 - **Tone**: Technical, precise, no marketing speak or promotional language
-- **Headings**: Sentence case only ("Getting started" not "Getting Started"); always include explanatory text after a heading before any subheadings
+- **Headings**: Sentence case only ("Getting started" not "Getting Started"); always include explanatory text after a heading before any subheadings; headings must be descriptive enough to make sense out of context — a reader should understand the section's scope without seeing the rest of the page. For example, "FAQ" is too vague; "Frequently asked questions about automations" is correct. "Related" is too vague; "Features related to automations" is correct.
 - **Procedures**: Numbered steps starting with action verbs
 - **Optional steps**: Start with **Optional.** (e.g., "**Optional.** Configure advanced settings...")
 - **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
@@ -211,6 +211,7 @@ When documenting features that are in early access, add a standardized warning c
 - Don't editorialize ("it's important to note")
 - Don't create duplicate content (update existing docs instead)
 - Don't use title case for headings
+- Don't use context-free headings like "FAQ" or "Related" — always include the subject ("Frequently asked questions about automations", "Features related to automations")
 - Don't use Latin abbreviations (i.e., e.g., etc.)—they're often misunderstood and don't localize well. Use plain English instead: "for example", "such as", "like", "that is", "in other words", "and so on"
 
 ## Reference Material
