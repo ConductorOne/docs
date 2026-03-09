@@ -3,14 +3,17 @@ title: "Automation triggers reference"
 description: "A comprehensive guide to all available automation triggers in ConductorOne, including event-based, scheduled, and on-demand options."
 sidebarTitle: "Automation triggers"
 ---
+This page describes the trigger types available for ConductorOne automations. Each trigger determines what event causes an automation to run.
 
-Each automation can be triggered by an event such as the creation of a new application account or a change in a user or account's status. You can also skip adding a trigger and run the automation manually instead.
+For CEL expression syntax in trigger conditions, see [workflow expressions](/product/admin/expressions-workflows). For the full `ctx.trigger` object schema, see the [expressions reference](/product/admin/expressions-reference).
 
 ### On demand (no trigger)
 
 Use this option to create an automation that only runs when you manually execute it. This is useful for ad-hoc tasks that you need to perform on demand rather than in response to specific events or on a schedule. You can run automations without triggers from the automations list, or trigger them programmatically from other automations using the "Run automation" step.
 
 **Required fields:** None (trigger is manual execution only)
+
+**Available data.** On demand triggers populate `ctx.trigger.user_id` for the subject user selected at execution time. If triggered via **Run automation** step, any JSON context passed by the parent automation is available in `ctx.trigger`. For requestable automations, form field values are available in `ctx.trigger.form_fields`. See [workflow expressions](/product/admin/expressions-workflows).
 
 **Example:** Create a manual cleanup automation that you can run as needed to review and remove stale access
 
@@ -22,6 +25,8 @@ Use this trigger to respond when a user attribute changes in ConductorOne. You c
 
 **Optional fields:** Conditional expression
 
+**Available data.** Populates `ctx.trigger.oldUser` (User object with previous values), `ctx.trigger.newUser` (User object with new values), and `ctx.trigger.user_id`. Use `ctx.trigger.oldUser` and `ctx.trigger.newUser` to detect state transitions, e.g.: `ctx.trigger.oldUser.department != ctx.trigger.newUser.department`
+
 **Example:** Trigger on a change to a user's employment status
 
 ### Account created
@@ -32,6 +37,8 @@ Use this trigger to respond when a new account is created in a specified applica
 
 **Optional fields:** Conditional expression
 
+**Available data.** Populates `ctx.trigger.newAccount` (AppUser object), `ctx.trigger.app_id`, and `ctx.trigger.user_id` (the owning user). See [workflow expressions](/product/admin/expressions-workflows).
+
 **Example:** Trigger on the creation of a new GitHub account
 
 ### Account updated
@@ -41,6 +48,8 @@ Use this trigger to respond when an account attribute changes in a connected app
 **Required fields:** App name, account attribute
 
 **Optional fields:** Conditional expression
+
+**Available data.** Populates `ctx.trigger.oldAccount` (AppUser object with previous values), `ctx.trigger.newAccount` (AppUser object with new values), `ctx.trigger.app_id`, and `ctx.trigger.user_id`. Use old/new to detect changes: `ctx.trigger.oldAccount.status.status != ctx.trigger.newAccount.status.status` See [workflow expressions](/product/admin/expressions-workflows).
 
 **Example:** Trigger on a change to the email address associated with an Okta account
 
@@ -64,6 +73,8 @@ Use this trigger to respond when a new user is created in ConductorOne, typicall
 
 **Optional fields:** Conditional expression
 
+**Available data.** Populates `ctx.trigger.user` (full User object) and `ctx.trigger.user_id`. See [workflow expressions](/product/admin/expressions-workflows) for field details.
+
 **Example:** Trigger when a new user is created
 
 ### Grant found
@@ -72,13 +83,29 @@ Use this trigger to respond when a new access grant is discovered in your enviro
 
 **Required fields:** Account type, entitlements or app name, grant source, grant type, grant origin
 
+**Available data.** Populates `ctx.trigger.entitlement`, `ctx.trigger.app_id`, and `ctx.trigger.user_id`. See [workflow expressions](/product/admin/expressions-workflows).
+
+### Configuration details
+
+- **Grant source**: Where the grant came from (e.g., a specific policy, manual assignment, or external system).
+- **Grant type**: Whether the grant is permanent or time-limited.
+- **Grant origin**: How the grant was created (e.g., discovered during sync, provisioned through ConductorOne, or found via an external connector).
+
+**Available data.** Populates `ctx.trigger.entitlement`, `ctx.trigger.app_id`, and `ctx.trigger.user_id`. See [workflow expressions](/product/admin/expressions-workflows).
+
 **Example:** Trigger when a user is granted access to the OpsGenie on-call rotation
+
+<Tip>
+**Grant found vs. Account created.** Account created fires when a new account appears in an app. Grant found fires when a new *permission* is discovered on an existing or new account. If you care about what access a user has (not just that they have an account), use Grant found.
+</Tip>
 
 ### Grant deleted
 
 Use this trigger to respond when an access grant is removed from a user's account. This helps you maintain access consistency across related systems, trigger cleanup tasks, or alert stakeholders about access removal. You can specify which types of grants to monitor based on entitlement, application, and how the grant was originally created.
 
 **Required fields:** Account type, entitlements or app name, grant source, grant type, grant origin
+
+**Available data.** Same fields as Grant found: `ctx.trigger.entitlement`, `ctx.trigger.app_id`, and `ctx.trigger.user_id`. See [workflow expressions](/product/admin/expressions-workflows).
 
 **Example:** Trigger when a user loses access to their Google Workspace account
 
@@ -98,6 +125,15 @@ Use this trigger to run the automation on a schedule for specified users. You ca
 
 **Required fields:** Schedule frequency, target users
 
+**Available data.** Each execution populates `ctx.trigger.user_id` and `ctx.trigger.user` for the specific user being processed. See [workflow expressions](/product/admin/expressions-workflows).
+
+### Configuration details
+
+**Frequency options**: Daily, weekly, or monthly.
+
+**Target users**: Define which users the automation runs for. You can select all users or filter by user attributes. The automation executes once per matching user, so a schedule targeting 500 users produces 500 separate executions.
+
+
 **Example:** Run a weekly access review automation for all contractors
 
 ### Schedule for app user
@@ -105,6 +141,15 @@ Use this trigger to run the automation on a schedule for specified users. You ca
 Use this trigger to run the automation on a schedule for users of a specific application. You can configure the frequency and select which app users (or filter by account properties) the automation should run for. This is useful for app-specific maintenance tasks, periodic access validations, or recurring compliance checks on application accounts.
 
 **Required fields:** Schedule frequency, app name, target app users
+
+**Available data.** Each execution populates `ctx.trigger.user_id`, `ctx.trigger.app_id`, and account data for the specific app user being processed. See [workflow expressions](/product/admin/expressions-workflows).
+
+### Configuration details
+
+**Frequency options**: Daily, weekly, or monthly.
+
+**Target app users**: Filter by account properties to narrow scope. The automation executes once per matching app user.
+
 
 **Example:** Run a monthly unused access check for all Salesforce accounts
 
@@ -115,3 +160,25 @@ Requestable automations use an **On demand** trigger, which means they only run 
 When you configure an automation as requestable, it can't have other trigger types (such as user updated, account created, or schedule triggers). The automation remains dormant until a user submits a request, at which point it proceeds through the configured approval workflow before executing its steps.
 
 For more information about configuring requestable automations, including how to set up request forms, approval policies, and audience scoping, see [Requestable automations](/product/admin/automation-actions).
+
+**Available data.** In addition to the standard On Demand context, requestable automations populate `ctx.trigger.form_fields` with the values submitted in the request form. For example, if the form has a "justification" text field, access it as `ctx.trigger.form_fields.justification`. See [workflow expressions](/product/admin/expressions-workflows).
+
+## Subject user by trigger type
+
+Every automation has a **subject user**: the person the automation is acting on. How the subject user is determined depends on the trigger:
+
+| Trigger | Subject User | How Determined |
+|---|---|---|
+| On demand | Selected at execution time | Manual selection in UI, or passed via API/Run Automation step |
+| User created | The newly created user | `ctx.trigger.user` |
+| User updated | The user whose attributes changed | `ctx.trigger.newUser` |
+| Account created | The user who owns the account | Resolved from account-to-user mapping |
+| Account updated | The user who owns the account | Resolved from account-to-user mapping |
+| Unused access | The user with the inactive account | Resolved from account-to-user mapping |
+| Grant found | The user who received the grant | Resolved from grant-to-user mapping |
+| Grant deleted | The user who lost the grant | Resolved from grant-to-user mapping |
+| Incoming webhook | Depends on automation configuration | Must be resolved from webhook payload data in a subsequent step |
+| Schedule for user | Each user matching the schedule criteria | Automation runs once per matching user |
+| Schedule for app user | Each app user matching the criteria | Automation runs once per matching app user |
+
+
