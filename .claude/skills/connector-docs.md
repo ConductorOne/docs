@@ -11,16 +11,18 @@ Write connector documentation for the `/baton/` directory following ConductorOne
 
 Use this skill when:
 - Creating new connector documentation
-- Updating existing connector docs in `/baton/`
+- Updating existing connector docs
 - Reviewing connector documentation for consistency
 - Converting connector information into proper doc format
 
 ## File Format
 
-**Location:** Save all connector docs as `.mdx` files in the `/baton/` directory.
+**Location:** Connector docs live in the connector's GitHub repository in the [ConductorOne organization](https://github.com/ConductorOne), not in this docs repo. Search for the connector repo by name (e.g., `baton-okta`, `baton-salesforce`) to find the right repo.
 
-**Naming:** Use lowercase, hyphenated names matching the GitHub repo name.
-- Example: `baton-boomi` repo → `/baton/boomi.mdx`
+**Naming:** The doc file should be named `docs.mdx` and placed in the root or a `docs/` directory of the connector repo, following the convention already established in that repo.
+
+**Naming convention:** Use lowercase, hyphenated names matching the GitHub repo name.
+- Example: `baton-boomi` repo → connector doc lives in `github.com/ConductorOne/baton-boomi`
 
 ## Information Checklist
 
@@ -125,7 +127,7 @@ We recommend closely monitoring workflows that use this connector and contacting
 | Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
 
 **Additional functionality:**
-The [App Name] connector supports [automatic account provisioning](/docs/product/admin/account-provisioning).
+The [App Name] connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
 **Notes:**
 - [Important capability details]
@@ -448,7 +450,7 @@ Replace these consistently throughout:
 - File names in comments: `# baton-connector-name-secrets.yaml`
 
 ### Links
-- Product docs: `/docs/product/admin/provisioning`
+- Product docs: `/product/admin/provisioning` (never include `/docs/` — that produces a `/docs/docs/` double-prefix that 404s)
 - GitHub repos: `https://github.com/ConductorOne/baton-[connector-name]`
 - Always use full URLs for external links
 
