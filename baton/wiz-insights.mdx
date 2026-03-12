@@ -1,0 +1,239 @@
+---
+title: "Set up a Wiz Insights connector"
+og:title: "Set up a Wiz Insights connector"
+description: "ConductorOne provides identity governance and security posture visibility for Wiz. Integrate your Wiz instance with ConductorOne to sync security insights related to user and service accounts, enabling identity-aware cloud security posture visibility."
+og:description: "ConductorOne provides identity governance and security posture visibility for Wiz. Integrate your Wiz instance with ConductorOne to sync security insights related to user and service accounts, enabling identity-aware cloud security posture visibility."
+sidebarTitle: "Wiz Insights"
+---
+
+## Capabilities
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Security Insights | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+**Notes:**
+- The Wiz Insights connector syncs security issues from Wiz that are related to `USER_ACCOUNT` and `SERVICE_ACCOUNT` entity types.
+- This connector does not support provisioning. It is a read-only connector that syncs security insights.
+- The connector supports incremental sync via an event feed that polls for issues with updated statuses.
+
+## Gather Wiz credentials
+
+<Warning>
+To configure the Wiz Insights connector, you need API access in Wiz with permission to read issues. You also need to know the GraphQL API URL and OAuth2 token endpoint for your Wiz region.
+</Warning>
+
+<Steps>
+  <Step>
+    Log in to Wiz and navigate to **Settings** > **Service Accounts**.
+  </Step>
+
+  <Step>
+    Create a new service account with OAuth2 credentials:
+
+    1. Click **Add Service Account**
+    2. Enter a name: `ConductorOne`
+    3. Select the following scope:
+       - `read:issues` - Allows syncing security issues as insights
+
+    4. Click **Create**
+    5. Copy and save the **Client ID** and **Client Secret** securely
+  </Step>
+
+  <Step>
+    Determine your Wiz API endpoints:
+
+    - **GraphQL API URL**: The regional API endpoint for your Wiz tenant (e.g., `https://api.us17.app.wiz.io/graphql`)
+    - **Auth Endpoint**: The OAuth2 token endpoint (e.g., `https://auth.app.wiz.io/oauth/token`)
+
+    You can find these in the Wiz documentation or your Wiz tenant settings.
+  </Step>
+</Steps>
+
+For more information, see [Wiz API documentation](https://docs.wiz.io/).
+
+## Configure the Wiz Insights connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Wiz Insights** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Wiz Insights connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that are not yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+{/* AUTO-GENERATED:START - config-params */}
+        Enter the required configuration:
+
+        - **Wiz API URL** (required): The Wiz GraphQL API endpoint for your region
+        - **Client ID** (required): OAuth2 client ID from your Wiz service account
+        - **Client Secret** (required): OAuth2 client secret from your Wiz service account
+        - **Auth Endpoint** (required): OAuth2 token endpoint for authentication
+{/* AUTO-GENERATED:END - config-params */}
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Wiz Insights connector is now pulling security insights into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Wiz Insights](https://github.com/ConductorOne/baton-wiz-insights) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+    ### Step 1: Set up a new Wiz Insights connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Wiz Insights connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that are not yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. They are used in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Wiz Insights connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-wiz-insights-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-wiz-insights-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # Wiz credentials
+      BATON_WIZ_API_URL: <Your Wiz GraphQL API endpoint>
+      BATON_WIZ_CLIENT_ID: <Your Wiz OAuth2 client ID>
+      BATON_WIZ_CLIENT_SECRET: <Your Wiz OAuth2 client secret>
+      BATON_WIZ_AUTH_ENDPOINT: <Your Wiz OAuth2 token endpoint>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-wiz-insights.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-wiz-insights
+      labels:
+        app: baton-wiz-insights
+    spec:
+      selector:
+        matchLabels:
+          app: baton-wiz-insights
+      template:
+        metadata:
+          labels:
+            app: baton-wiz-insights
+            baton: true
+            baton-app: wiz-insights
+        spec:
+          containers:
+          - name: baton-wiz-insights
+            image: ghcr.io/conductorone/baton-wiz-insights:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-wiz-insights
+            envFrom:
+            - secretRef:
+                name: baton-wiz-insights-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Wiz Insights connector to. Wiz security insights should be found on the application page.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Wiz Insights connector is now pulling security insights into ConductorOne.
+  </Tab>
+</Tabs>
