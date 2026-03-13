@@ -1,0 +1,213 @@
+---
+title: ConductorOne MCP server
+og:title: ConductorOne MCP server - ConductorOne
+sidebarTitle: "MCP server"
+description: "Use the ConductorOne MCP server to connect AI coding clients to thousands of APIs with built-in authentication and governance."
+---
+
+The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open standard that lets AI coding clients interact with external tools and data sources. ConductorOne provides an MCP server that turns HTTP APIs into tools your AI client can use directly, so you can query and manage services like Stripe, GitHub, Okta, Jira, and 2,600+ others through natural language.
+
+## How it works
+
+The ConductorOne MCP server reads a formal model of an API (endpoints, authentication, pagination, domain semantics) and generates MCP tools at runtime. Your AI client communicates with the server over stdio, and the server handles API calls, authentication, and response parsing behind the scenes.
+
+For each configured service, the server exposes:
+
+| Tool type | Description | Example |
+| :--- | :--- | :--- |
+| **List** | Retrieve collections of resources with pagination | `list_customers`, `list_incidents` |
+| **Get** | Fetch a single resource by ID | `get_customer`, `get_incident` |
+| **Query** | Filter resources using domain-specific rules | `query_active_subscription`, `query_triggered_incident` |
+| **Operations** | Create, update, or delete resources | `create_customer`, `cancel_subscription` |
+
+## Supported AI clients
+
+The MCP server integrates with the following AI coding clients:
+
+| Client | Notes |
+| :--- | :--- |
+| Claude Desktop | Restart required after install |
+| Claude Code | No restart needed |
+| Cursor | Restart required after install |
+| VS Code Copilot | Restart required after install |
+| Continue.dev | Restart required after install |
+| OpenCode | Restart required after install |
+
+## Prerequisites
+
+To use the MCP server in standalone mode, you need:
+
+- **macOS, Linux, or WSL** with Go 1.21+ installed
+- **An AI client** that supports MCP (see table above)
+- **API credentials** for the service you want to connect to
+
+## Getting started
+
+### Build the binary
+
+```bash
+git clone https://github.com/ductone/mcp-axiomatic.git
+cd mcp-axiomatic
+make build
+```
+
+This produces the `./bin/mcp-axiomatic` binary.
+
+### Install into your AI client
+
+The `install` command automatically writes the correct configuration for your AI client:
+
+```bash
+# Auto-detect all installed AI clients
+./bin/mcp-axiomatic install impls/<service> --token-env YOUR_TOKEN_VAR
+
+# Target a specific client
+./bin/mcp-axiomatic install impls/<service> --client claude-code --token-env YOUR_TOKEN_VAR
+```
+
+For example, to set up GitHub:
+
+```bash
+export GITHUB_TOKEN="ghp_..."
+./bin/mcp-axiomatic install impls/github --token-env GITHUB_TOKEN
+```
+
+<Tip>
+Use `--dry-run` to preview what configuration would be written without modifying any files:
+
+```bash
+./bin/mcp-axiomatic install impls/github --dry-run --token-env GITHUB_TOKEN
+```
+</Tip>
+
+### Start using it
+
+Once installed, open your AI client and ask questions in natural language:
+
+- "List my GitHub repositories"
+- "Show open pull requests on my project"
+- "What Stripe customers were created this month?"
+- "List active PagerDuty incidents"
+
+The AI client calls MCP tools behind the scenes. You just ask.
+
+## Available services
+
+The MCP server supports over 2,600 services across many domains:
+
+| Domain | Examples |
+| :--- | :--- |
+| Project management | Asana, GitHub, GitLab, Jira, Linear, Trello |
+| Cloud & infrastructure | AWS, Azure, Google Cloud, Cloudflare, DigitalOcean |
+| Identity & access | Auth0, Okta, Active Directory (Entra ID), JumpCloud |
+| CRM | HubSpot, Salesforce, Pipedrive |
+| Payments & billing | Stripe, Chargebee, Paddle, PayPal |
+| Communication | Slack, Discord, Microsoft Teams, Twilio |
+| Support & helpdesk | Zendesk, Freshdesk, Intercom, Front |
+| DevOps & monitoring | PagerDuty, Datadog, Sentry |
+| HR & recruiting | Greenhouse, BambooHR, Workday |
+
+To see the full list of available services:
+
+```bash
+ls impls/
+```
+
+To inspect what tools a specific service exposes:
+
+```bash
+./bin/mcp-axiomatic capabilities impls/<service>
+```
+
+## Authentication
+
+The MCP server supports multiple authentication methods depending on the service:
+
+| Auth type | Description | Example services |
+| :--- | :--- | :--- |
+| **Bearer token** | API key or access token in the `Authorization` header | GitHub, Slack, PagerDuty |
+| **Basic auth** | Username and password or API token | Zendesk, Jira |
+| **API key** | Key passed as a query parameter or header | Various |
+| **OAuth 2.0** | Client credentials flow with automatic token exchange | Google APIs, Salesforce |
+| **None** | No authentication required | Public APIs |
+
+Pass credentials via environment variables and reference them during install:
+
+```bash
+export STRIPE_API_KEY="sk_..."
+./bin/mcp-axiomatic install impls/stripe --token-env STRIPE_API_KEY
+```
+
+For OAuth 2.0 services like Google APIs, you can use client credentials:
+
+```bash
+./bin/mcp-axiomatic impls/googleapis_com_analyticsadmin \
+  --client-id "$CLIENT_ID" \
+  --client-secret "$CLIENT_SECRET"
+```
+
+<Note>
+If `gcloud` is installed, the MCP server can automatically acquire Google OAuth tokens during setup.
+</Note>
+
+## Running the server directly
+
+You can also run the MCP server as a standalone process without using the `install` command:
+
+```bash
+./bin/mcp-axiomatic impls/<service> --token "$API_TOKEN"
+```
+
+The server communicates over stdin/stdout using the MCP protocol. This is useful for testing or custom integrations.
+
+## Uninstalling
+
+Remove a server from your AI client configurations:
+
+```bash
+# Remove from all detected clients
+./bin/mcp-axiomatic uninstall <service-name>
+
+# Remove from a specific client
+./bin/mcp-axiomatic uninstall <service-name> --client claude-code
+```
+
+## Standalone vs. hosted mode
+
+| | Standalone | ConductorOne hosted |
+| :--- | :--- | :--- |
+| **Where it runs** | Your local machine | Centrally hosted |
+| **Credential management** | You manage API keys | Credentials vaulted and rotated automatically |
+| **Access control** | None | Request and approval workflows |
+| **Audit trail** | None | Full audit trail of every tool invocation |
+| **Setup** | Manual per-client configuration | Configuration pushed automatically |
+| **Best for** | Personal use, development, testing | Teams, compliance, enterprise |
+
+The standalone mode described in this guide is fully functional for individual use. If your organization uses ConductorOne, the hosted mode adds governance and eliminates credential management overhead while providing the same tools and capabilities.
+
+## Troubleshooting
+
+### Token expired
+
+Some API tokens (especially Google OAuth) expire after about an hour. Refresh your token and restart the MCP server by restarting your AI client.
+
+### Tools not appearing
+
+Claude Desktop and Cursor require a restart after running the `install` command. Claude Code picks up changes automatically.
+
+Verify the configuration was written:
+
+```bash
+# Claude Code
+claude mcp list
+
+# Claude Desktop (macOS)
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
+
+# Cursor
+cat ~/.cursor/mcp.json
+```
+
+### Permission denied from API
+
+Ensure your API credentials have the required scopes or permissions for the service you're accessing.
