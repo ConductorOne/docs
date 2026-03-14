@@ -1,0 +1,264 @@
+---
+title: "Set up a SAP GRC connector"
+og:title: "Set up a SAP GRC connector"
+description: "ConductorOne provides identity governance for SAP GRC. Integrate your SAP GRC instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "ConductorOne provides identity governance for SAP GRC. Integrate your SAP GRC instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "SAP GRC"
+---
+
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+
+**Notes:**
+- The SAP GRC connector does not support account provisioning or entitlement provisioning.
+- Running the connector binary directly requires Java 17 or later. Java is not required when running the connector as a Docker container.
+
+## Enable the SOAP API in SAP GRC
+
+The connector uses the SAP SOAP API to retrieve role assignment data. Before configuring the connector, you must enable the SOAP API and identify the base URL for your SAP GRC system.
+
+<Warning>
+You must have SAP Basis administrator access to complete these steps.
+</Warning>
+
+<Steps>
+  <Step>
+    In SAP GRC, run the **SOAMANAGER** transaction.
+  </Step>
+
+  <Step>
+    Navigate to **Service Administration** > **Web Service Configuration**.
+  </Step>
+
+  <Step>
+    Search for web services with the following criteria:
+
+    - **Object Type**: Service Definition
+    - **Object Name**: `GRAC*`
+
+    Then click **Search** (or press Enter).
+  </Step>
+
+  <Step>
+    In the search results, select **GRAC_USER_EXISTING_ASSGN_WS**.
+  </Step>
+
+  <Step>
+    On the **Configurations** tab, check whether a service and service binding already exist.
+
+    - If a service and binding are listed, skip to step 11.
+    - If no service or binding is listed, continue with the next step.
+  </Step>
+
+  <Step>
+    Click **Create Service**.
+  </Step>
+
+  <Step>
+    In the first step of the **Create Service** wizard:
+
+    1. Enter `GRAC_USER_EXISTING_ASSGN_WS` as the service name.
+    2. Enter `GRAC_USER_EXISTING_ASSGN_WS` as the service binding name.
+    3. Click **Next**.
+  </Step>
+
+  <Step>
+    In the second step of the wizard:
+
+    1. If you want the SOAP API to be accessible over TLS, change **Transport Level Security** to **SSL (https)**.
+    2. Under **Authentication Settings**, select **User ID/Password** under **Transport Channel Authentication**.
+    3. Click **Next**.
+  </Step>
+
+  <Step>
+    Accept the defaults on the next two pages by clicking **Next** on each, then click **Finish**.
+  </Step>
+
+  <Step>
+    You are returned to the service definition page. Confirm that the **State** of the new service is **Active**.
+  </Step>
+
+  <Step>
+    In the **Actions** field of the newly created service binding, click **Open Binding WSDL Generation**.
+
+    On the **WSDL Generation for Binding** screen, scroll down to the **WSDL Generation** section and click **Execute** next to the **WSDL URL for Binding** field.
+  </Step>
+
+  <Step>
+    Copy the value from the **WSDL URL for Binding** field.
+
+    <Tip>
+    If the URL's hostname is `www.sap.com`, you must replace it with the hostname and port of your SAP GRC system before opening it. For example:
+
+    - WSDL URL from dialog: `http://www.sap.com:80/sap/bc/srt/wsdl/.../grac_user_existing_assgn_ws?sap-client=100`
+    - Your SAP GRC system URL (from your browser's address bar): `https://your-company.com:44301/sap/bc/webdynpro/...`
+    - Corrected WSDL URL: `https://your-company.com:44301/sap/bc/srt/wsdl/.../grac_user_existing_assgn_ws?sap-client=100`
+    </Tip>
+  </Step>
+
+  <Step>
+    Open the corrected WSDL URL in your browser. When prompted, enter your SAP GRC username and password.
+  </Step>
+
+  <Step>
+    In the XML response, find the element `<wsoap12:address location="...">` and copy the value of the `location` attribute.
+
+    <Tip>
+    If the hostname in that URL is `www.sap.com`, replace it with the hostname and port of your SAP GRC system, as in the previous step.
+    </Tip>
+  </Step>
+
+  <Step>
+    Note the protocol, hostname, and port from the `location` URL. This is the **base URL** you will use to configure the connector.
+
+    For example, if the `location` URL is `https://your-company.com:8001/sap/bc/srt/rfc/sap/...`, the base URL is `https://your-company.com:8001`.
+  </Step>
+</Steps>
+
+## Configure the SAP GRC connector
+
+<Warning>
+To complete this task, you need the **Connector Administrator** or **Super Administrator** role in ConductorOne.
+</Warning>
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Cloud-hosted is not supported for the SAP GRC connector. Use the **Self-hosted** tab to set up this connector.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [SAP GRC](https://github.com/ConductorOne/baton-sap-grc) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+    ### Step 1: Set up a new SAP GRC connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new SAP GRC connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your SAP GRC connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-sap-grc-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-sap-grc-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # SAP GRC connection details
+      BATON_HOSTNAME: <SAP GRC hostname>
+      BATON_BASE_URL: <SOAP API base URL>
+      BATON_SYSTEM_NUMBER: <SAP system number>
+      BATON_CLIENT: <SAP client number>
+      BATON_USERNAME: <SAP username>
+      BATON_PASSWORD: <SAP password>
+
+      # Optional
+      # BATON_LANGUAGE: en
+      # BATON_JAVA_BINARY: java
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-sap-grc.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-sap-grc
+      labels:
+        app: baton-sap-grc
+    spec:
+      selector:
+        matchLabels:
+          app: baton-sap-grc
+      template:
+        metadata:
+          labels:
+            app: baton-sap-grc
+            baton: true
+            baton-app: sap-grc
+        spec:
+          containers:
+          - name: baton-sap-grc
+            image: ghcr.io/conductorone/baton-sap-grc:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-sap-grc
+            envFrom:
+            - secretRef:
+                name: baton-sap-grc-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the SAP GRC connector to. SAP GRC data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your SAP GRC connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
