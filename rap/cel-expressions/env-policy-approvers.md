@@ -8,6 +8,7 @@ Policy step expressions determine who approves a request. They evaluate to `User
 |----------|------|-------------|
 | `subject` | `User` | The user requesting access |
 | `appOwners` | `list<User>` | The owners of the application |
+| `campaignOwners` | `list<User>` | The owners of the access review campaign (campaign review tasks only) |
 | `entitlement` | `AppEntitlement` | The entitlement being requested |
 | `task` | `Task` | The access request task/ticket |
 
@@ -43,6 +44,27 @@ appOwners
 // First app owner
 [appOwners[0]]
 ```
+
+### Campaign Owner Approval
+
+For access review (campaign) tasks, the campaign owners are available as approvers. This allows a single reusable review policy instead of hardcoding reviewers per campaign.
+
+```cel
+// All campaign owners
+campaignOwners
+
+// First campaign owner
+[campaignOwners[0]]
+```
+
+**Safe pattern with fallback to app owners:**
+```cel
+size(campaignOwners) > 0
+  ? campaignOwners
+  : appOwners
+```
+
+> **Note:** `campaignOwners` is only populated for campaign review tasks. For non-campaign tasks, it will be an empty list, and the policy step will be skipped unless you provide a fallback.
 
 ### Specific Person
 
@@ -85,6 +107,7 @@ size(c1.user.v1.GetAppUserManagers(subject, entitlement.app_id)) > 0
 |----------|--------------|---------------|
 | `GetManagers` returns `[]` | Step is skipped | Add fallback approver |
 | `appOwners` is empty | Step is skipped | Ensure app has owners |
+| `campaignOwners` is empty | Step is skipped | Add fallback (e.g., `appOwners`); empty for non-campaign tasks |
 | `FindByEmail` user doesn't exist | Step fails | Verify email before deploying |
 | User leaves company | Step fails | Use entitlement-based approvers |
 | Accessing `[0]` on empty list | Index error | Check `size() > 0` first |

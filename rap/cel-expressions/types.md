@@ -117,7 +117,7 @@ A person in the ConductorOne directory.
 
 **Returned by:** `FindByEmail`, `GetByID`, `GetManagers`, `DirectReports`, `GetEntitlementMembers`
 
-**Available as:** `subject`, elements of `appOwners`, `ctx.trigger.oldUser`, `ctx.trigger.newUser`
+**Available as:** `subject`, elements of `appOwners`, elements of `campaignOwners`, `ctx.trigger.oldUser`, `ctx.trigger.newUser`
 
 | Field | Type | Description |
 |:------|:-----|:------------|
@@ -218,5 +218,6 @@ The entitlement being requested. Available as `entitlement` in policy expression
 | `task` | Task | Policies only | The current access request |
 | `entitlement` | Entitlement | Policies only | The entitlement being requested |
 | `appOwners` | list&lt;User&gt; | Policy step approvers only | Owners of the application |
+| `campaignOwners` | list&lt;User&gt; | Policy step approvers only | Owners of the access review campaign (campaign tasks only) |
 | `ctx` | Context | Automations only | Workflow context and trigger data |
 | `ip` | IP | Policies, Automations | Requestor's IP address (when available) |
