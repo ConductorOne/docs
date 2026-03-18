@@ -34,6 +34,7 @@ Documentation for ConductorOne service principals and workload federation. Reque
 | GitHub Actions | `platform-github.md` | oidc-token-action, CEL claims, examples |
 | GitLab CI | `platform-gitlab.md` | id_tokens, curl exchange, CEL claims |
 | HCP Terraform | `platform-terraform.md` | Workspace config, provider setup, CEL claims |
+| AWS IAM | `platform-aws.md` | Outbound identity federation, CEL claims, AWS setup |
 | Custom OIDC | `platform-custom.md` | Generic token exchange, provider requirements |
 
 ### Security
@@ -61,6 +62,7 @@ Documentation for ConductorOne service principals and workload federation. Reque
 - Set up GitHub Actions -> `platform-github.md`
 - Set up GitLab CI -> `platform-gitlab.md`
 - Set up HCP Terraform -> `platform-terraform.md`
+- Set up AWS IAM federation -> `platform-aws.md`
 - Use custom OIDC provider -> `platform-custom.md`
 - Create a service principal -> `auth-client-credentials.md`
 - Create a federation trust -> `federation-setup.md`
@@ -97,6 +99,9 @@ Retrieve: `platform-github.md`
 
 User: "Set up Terraform with ConductorOne"
 Retrieve: `auth-tools.md`, `platform-terraform.md`
+
+User: "How do I authenticate from AWS?"
+Retrieve: `platform-aws.md`
 
 User: "Rotate service principal credentials"
 Retrieve: `manage-credentials.md`

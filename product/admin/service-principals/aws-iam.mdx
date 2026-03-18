@@ -1,0 +1,188 @@
+---
+title: AWS IAM integration
+og:title: AWS IAM integration - ConductorOne docs
+og:description: Set up secretless authentication from AWS workloads to ConductorOne using IAM outbound identity federation.
+description: Set up secretless authentication from AWS workloads to ConductorOne using IAM outbound identity federation.
+sidebarTitle: AWS IAM
+---
+
+{/* Editor Refresh: 2026-03-18 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
+</Warning>
+
+AWS IAM outbound identity federation lets your AWS workloads (EC2 instances, Lambda functions, ECS tasks, and more) obtain signed JWTs that ConductorOne can trust directly. No long-lived API keys to store or rotate.
+
+## Prerequisites
+
+- A service principal with an AWS IAM federation trust. See [set up federation](/product/admin/service-principals/federation-setup) if you haven't created one yet. Use the **AWS IAM Outbound** preset.
+- The trust's **client ID** (for example `calm-wolf-40291@yourcompany.conductor.one/wfe`)
+- AWS IAM outbound identity federation enabled in your AWS account
+
+## Step 1: Enable outbound identity federation in AWS
+
+Before your workloads can request tokens, enable the feature in your AWS account. This generates a unique OIDC issuer URL for your account.
+
+<Tabs>
+  <Tab title="AWS CLI">
+    ```bash
+    aws iam enable-outbound-web-identity-federation
+
+    # Retrieve your account's issuer URL
+    aws iam get-outbound-web-identity-federation-info
+    ```
+
+    The `get-outbound-web-identity-federation-info` response includes your account-specific issuer URL, for example `https://abc123-def456.tokens.sts.global.api.aws`.
+  </Tab>
+  <Tab title="Terraform">
+    ```hcl
+    resource "aws_iam_outbound_web_identity_federation" "this" {}
+    ```
+
+    The resource outputs include the issuer URL. Requires AWS provider v6.26.0 or later.
+  </Tab>
+</Tabs>
+
+## Step 2: Configure IAM permissions
+
+Create an IAM policy that grants `sts:GetWebIdentityToken` with your ConductorOne tenant domain as the audience. Attach this policy to the IAM role used by your workload.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "sts:GetWebIdentityToken",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "sts:Audience": "yourcompany.conductor.one"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Step 3: Create a federation trust in ConductorOne
+
+When creating the provider in ConductorOne, select the **AWS IAM Outbound** preset and enter the issuer URL from Step 1. Then create a trust with a CEL expression to control which AWS principals can authenticate. See [set up federation](/product/admin/service-principals/federation-setup) for the full walkthrough.
+
+## Step 4: Request and exchange the token
+
+From your AWS workload, call `GetWebIdentityToken` to get a signed JWT, then exchange it for a ConductorOne access token:
+
+```bash
+# Request a JWT from AWS STS
+AWS_JWT=$(aws sts get-web-identity-token \
+  --audience yourcompany.conductor.one \
+  --query 'Token' --output text)
+
+# Exchange for a ConductorOne access token
+C1_ACCESS_TOKEN=$(curl -s -X POST \
+  "https://yourcompany.conductor.one/auth/v1/token" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+  -d "subject_token=$AWS_JWT" \
+  -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+  -d "client_id=calm-wolf-40291@yourcompany.conductor.one/wfe" \
+  | jq -r '.access_token')
+```
+
+Use the access token in an `Authorization: Bearer` header for ConductorOne API calls:
+
+```bash
+curl -s "https://yourcompany.conductor.one/api/v1/apps" \
+  -H "Authorization: Bearer $C1_ACCESS_TOKEN"
+```
+
+### Using with ConductorOne tools
+
+Set the environment variables and all ConductorOne tools pick them up automatically:
+
+```bash
+export CONDUCTORONE_OIDC_TOKEN=$AWS_JWT
+export CONDUCTORONE_CLIENT_ID=calm-wolf-40291@yourcompany.conductor.one/wfe
+
+# Tools handle the exchange internally
+cone whoami
+terraform apply
+```
+
+## CEL expression examples
+
+When creating the federation trust, the CEL expression controls which AWS principals can authenticate. The expression evaluates against the JWT's claims. AWS-specific claims are nested under the `https://sts.amazonaws.com/` namespace -- use bracket notation to access them.
+
+### Restrict to an AWS account
+
+```go
+claims["https://sts.amazonaws.com/"]["aws_account"] == "123456789012"
+```
+
+### Restrict to a specific IAM role
+
+```go
+claims.sub == "arn:aws:iam::123456789012:role/DeployRole"
+```
+
+### Restrict to an account and organization
+
+```go
+claims["https://sts.amazonaws.com/"]["aws_account"] == "123456789012" && claims["https://sts.amazonaws.com/"]["org_id"] == "o-abc1234567"
+```
+
+### Restrict using principal tags
+
+```go
+claims["https://sts.amazonaws.com/"]["principal_tags"]["environment"] == "production"
+```
+
+## Common AWS OIDC claims
+
+### Standard claims
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `sub` | `arn:aws:iam::123456789012:role/DeployRole` | ARN of the IAM principal that requested the token |
+| `iss` | `https://abc123-def456.tokens.sts.global.api.aws` | Account-specific issuer URL |
+| `aud` | `yourcompany.conductor.one` | Audience specified in the token request |
+| `exp` | `1700000900` | Token expiration time (Unix timestamp) |
+| `iat` | `1700000000` | Token issued-at time (Unix timestamp) |
+
+### AWS identity claims (under `https://sts.amazonaws.com/`)
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `aws_account` | `123456789012` | AWS account ID |
+| `source_region` | `us-east-1` | Region where the token was requested |
+| `org_id` | `o-abc1234567` | AWS Organizations ID |
+| `ou_path` | `o-a1b2c3d4e5/r-ab12/ou-ab12-11111111/` | Organizational unit path |
+| `principal_tags` | `{"environment": "production"}` | Tags on the IAM principal or role |
+
+### Session context claims (under `https://sts.amazonaws.com/`)
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `ec2_source_instance_arn` | `arn:aws:ec2:us-east-1:123456789012:instance/i-abc123` | EC2 instance ARN (when running on EC2) |
+| `lambda_source_function_arn` | `arn:aws:lambda:us-east-1:123456789012:function/my-func` | Lambda function ARN (when running in Lambda) |
+| `source_identity` | `admin-user` | Source identity set by the principal |
+
+### Request tags (under `https://sts.amazonaws.com/`)
+
+Custom claims passed via the `Tags` parameter of `GetWebIdentityToken` appear in the `request_tags` field:
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `request_tags` | `{"team": "platform", "cost-center": "ops"}` | Custom key-value pairs added to the token request |
+
+## Security best practices for AWS IAM
+
+<Warning>
+Always bind to a specific AWS account ID and IAM role ARN. A CEL expression that only checks one claim may be too permissive. For production workloads, use principal tags and organization constraints for defense-in-depth.
+</Warning>
+
+- **Bind to account and role**: Use both `aws_account` and `sub` to ensure only specific roles in specific accounts can authenticate.
+- **Use principal tags**: Tag IAM roles with metadata like `environment` or `team` and validate them in CEL for fine-grained control.
+- **Limit token lifetime**: Configure the IAM policy to enforce a short `DurationSeconds` on `GetWebIdentityToken` calls.
+- **Scope trust roles**: Use scoped roles on the federation trust to limit what the exchanged token can do. See [security controls](/product/admin/service-principals/security) for details.
