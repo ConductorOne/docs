@@ -1,0 +1,307 @@
+ ---
+title: "Set up a Google Kubernetes Engine connector"
+og:title: "Set up a Google Kubernetes Engine connector"
+description: "ConductorOne provides identity governance for Google Kubernetes Engine (GKE). Integrate your GKE cluster with ConductorOne to run user access reviews (UARs) and manage Kubernetes RBAC roles and the GCP IAM role bindings on the cluster's project."
+og:description: "ConductorOne provides identity governance for Google Kubernetes Engine (GKE). Integrate your GKE cluster with ConductorOne to run user access reviews (UARs) and manage Kubernetes RBAC roles and the GCP IAM role bindings on the cluster's project."
+sidebarTitle: "Google Kubernetes Engine"
+---
+
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+
+<Warning>
+**Important note on hosting:** To run in cloud-hosted mode, this connector requires network access to the Kubernetes API server of your GKE cluster. If this is not desirable or possible, you must run the connector in self-hosted mode.
+</Warning>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="circle-info" iconType="solid" color="#888888"/> | |
+| Groups | <Icon icon="circle-info" iconType="solid" color="#888888"/> | |
+| Service Accounts | <Icon icon="circle-info" iconType="solid" color="#888888"/> | |
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Cluster Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| GCP IAM Role Bindings | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+<Icon icon="circle-info" iconType="solid" color="#888888"/> This connector pulls account, group, and service account information from the GCP connector. You'll configure this relationship when setting up the connector.
+
+**Notes:**
+- **Cluster Roles** and **Roles** are Kubernetes RBAC resources scoped to the connected cluster.
+- **GCP IAM Role Bindings** are the IAM bindings from the GCP project where the cluster is located — only those assigned on that specific project, not all IAM roles across your organization.
+
+## Before you begin
+
+This connector requires a working **GCP connector** to source user and group identities. If you have not already done so, set up the [GCP connector](https://docs.conductorone.com/docs/baton/google-cloud-platform) before you proceed.
+
+## Gather GKE credentials
+
+To configure the GKE connector, you need a GCP service account. Follow the steps below to create one and obtain the required credentials.
+
+<Warning>
+The service account must have the following permissions at the project level where the cluster is located:
+
+- `container.clusterRoleBindings.get`
+- `container.clusterRoleBindings.list`
+- `container.clusterRoles.get`
+- `container.clusterRoles.list`
+- `container.clusters.get`
+- `container.namespaces.get`
+- `container.namespaces.list`
+- `container.roleBindings.get`
+- `container.roleBindings.list`
+- `container.roles.get`
+- `container.roles.list`
+- `container.serviceAccounts.get`
+- `container.serviceAccounts.list`
+- `resourcemanager.projects.getIamPolicy`
+</Warning>
+
+<Steps>
+  <Step>
+    In the Google Cloud console, open the navigation menu and go to **API & Services** > **Credentials**.
+
+    ![Navigate to API & Services > Credentials](1.png)
+  </Step>
+
+  <Step>
+    Click **+ Create credentials** > **Service account**.
+
+    ![Create credentials menu](2.png)
+  </Step>
+
+  <Step>
+    Enter a name and description for the service account, then click **Done**.
+
+    ![Service account creation form](3.png)
+  </Step>
+
+  <Step>
+    You are redirected to the credentials page. Find your new service account in the list. Copy its email address (you will need it later), then click on the service account to open it.
+
+    ![Service account list with email](4.png)
+  </Step>
+
+  <Step>
+    In the service account page, click the **Keys** tab.
+
+    ![Keys tab in service account](5.png)
+  </Step>
+
+  <Step>
+    Click **Add Key** > **Create new key**.
+
+    ![Add Key menu](6.png)
+  </Step>
+
+  <Step>
+    Select **JSON** as the key type and click **Create**. A JSON credentials file is downloaded to your computer. This is the file you provide to the connector.
+
+    ![JSON key type selection](7.png)
+  </Step>
+
+  <Step>
+    Grant the service account the required permissions by creating a custom IAM role with all the permissions listed above and assigning it to the service account at the project level.
+
+    ![Custom IAM role with required permissions](9.png)
+
+    ![Service account with role assigned](10.png)
+  </Step>
+
+  <Step>
+    In the **Kubernetes Engine** section of the Google Cloud console, locate your cluster in the list. Note the **name** and **location** (region or zone) — you will need both when configuring the connector.
+
+    ![Cluster name and location](cluster_and_location.png)
+  </Step>
+</Steps>
+
+## Configure the GKE connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Google Kubernetes Engine** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new GKE connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the required configuration:
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+        - **Service Account Credentials JSON** (required): Upload the GCP service account JSON key file
+        - **GKE Cluster Name** (required): The name of the GKE cluster to connect to
+        - **GKE Cluster Location** (required): The location (region or zone) of the GKE cluster
+
+{/* AUTO-GENERATED:END - config-params */}
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your GKE connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [GKE](https://github.com/ConductorOne/baton-gke) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+    ### Step 1: Set up a new GKE connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new GKE connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your GKE connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-gke-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-gke-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # GKE credentials
+      BATON_GKE_CREDENTIALS_JSON: <path to your service account JSON file>
+      BATON_GKE_CLUSTER_NAME: <your cluster name>
+      BATON_GKE_CLUSTER_LOCATION: <your cluster region or zone>
+    ```
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-gke.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-gke
+      labels:
+        app: baton-gke
+    spec:
+      selector:
+        matchLabels:
+          app: baton-gke
+      template:
+        metadata:
+          labels:
+            app: baton-gke
+            baton: true
+            baton-app: gke
+        spec:
+          containers:
+          - name: baton-gke
+            image: ghcr.io/conductorone/baton-gke:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-gke
+            envFrom:
+            - secretRef:
+                name: baton-gke-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the GKE connector to. GKE data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your GKE connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
