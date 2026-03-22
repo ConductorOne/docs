@@ -59,7 +59,7 @@ C1_ACCESS_TOKEN=$(curl -s -X POST \
   | jq -r '.access_token')
 ```
 
-Or set environment variables for automatic exchange:
+When using ConductorOne tools (`cone`, Terraform provider), you must set these environment variables. Do not skip this step — the tools require both to be set to handle the token exchange internally:
 
 ```bash
 export CONDUCTORONE_OIDC_TOKEN=$AWS_JWT
