@@ -272,15 +272,18 @@ Paste the client secret into the **Entra client secret** field.
 **Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
 </Step>
 <Step>
+**Optional.** If you enabled **Skip syncing Active Directory Server groups** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip syncing Active Directory Server groups** is disabled.
+</Step>
+<Step>
 **Optional** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
 </Step>
 <Step>
-**Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**. 
+**Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**.
 
-   The usage data feature requires a Microsoft Entra ID P1 or P2 license. Usage data collection is not supported on Microsoft Entra ID Free licenses. 
+   The usage data feature requires a Microsoft Entra ID P1 or P2 license. Usage data collection is not supported on Microsoft Entra ID Free licenses.
 </Step>
 <Step>
-**Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in ConductorOne.  
+**Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in ConductorOne.
 </Step>
 <Step>
 **Optional.** Click to **Disable resource changed event feed**. These logs are enabled by default.
@@ -338,15 +341,18 @@ Select **OAuth**.
 Specify the ID of the Entra tenant you're integrating in the **Entra tenant ID** field. 
 </Step>
 <Step>
-**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**. 
+**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
+</Step>
+<Step>
+**Optional.** If you enabled **Skip syncing Active Directory Server groups** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip syncing Active Directory Server groups** is disabled.
 </Step>
 <Step>
 **Optional** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
 </Step>
 <Step>
-**Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**. 
+**Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**.
 
-   The usage data feature requires a Microsoft Entra ID P1 or P2 license. Usage data collection is not supported on Microsoft Entra ID Free licenses. 
+   The usage data feature requires a Microsoft Entra ID P1 or P2 license. Usage data collection is not supported on Microsoft Entra ID Free licenses.
 </Step>
 <Step>
 **Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in ConductorOne.
@@ -477,6 +483,10 @@ stringData:
   # Optional: include if you want to skip syncing Active Directory Server groups
   # BATON_SKIP_AD_GROUPS: "true"
 
+  # Optional: include if you want on-premises synced users to appear as members of
+  # cloud groups when BATON_SKIP_AD_GROUPS is enabled. Has no effect without it.
+  # BATON_INCLUDE_ON_PREM_GROUP_MEMBERS: "true"
+
   # Optional: include if you want to connect to a domain other than graph.microsoft.com
   # BATON_GRAPH_DOMAIN: <Microsoft Graph API domain>
 
@@ -540,6 +550,31 @@ Check that the connector data uploaded correctly. In ConductorOne, click **Apps*
 **That's it!** Your Entra ID connector is now pulling access data into ConductorOne.
 </Tab>
 </Tabs>
+
+## Hybrid AD configuration
+
+Organizations that use Microsoft Entra Connect to sync on-premises Active Directory with Entra ID have a mix of cloud-native and on-premises synced objects. The connector provides two settings to control how these are handled:
+
+### Skip Active Directory Server groups (`--skip-ad-groups` / `BATON_SKIP_AD_GROUPS`)
+
+When enabled, the connector excludes groups that originate from on-premises Active Directory (where `onPremisesSyncEnabled` is `true`). Only cloud-native Entra groups are synced.
+
+By default, this also filters out on-premises synced users from the membership lists of cloud groups. This means that if a cloud group contains both cloud-native and on-premises synced users, only the cloud-native members will appear as grants.
+
+All users (both cloud-native and on-premises synced) are always synced to ConductorOne regardless of this setting. This setting only affects groups and group memberships.
+
+### Include on-premises users in cloud group memberships (`--include-on-prem-group-members` / `BATON_INCLUDE_ON_PREM_GROUP_MEMBERS`)
+
+This setting modifies the behavior of **Skip Active Directory Server groups**. When both settings are enabled:
+
+- On-premises AD **groups** are still skipped (not synced)
+- On-premises synced **users** who are members of cloud groups are included in those groups' membership grants
+
+This is useful in hybrid environments where cloud-native Entra groups contain a mix of cloud and on-premises synced users, and you want full visibility into who has access to what through those cloud groups.
+
+<Warning>
+This setting has no effect unless **Skip Active Directory Server groups** is also enabled. When **Skip Active Directory Server groups** is disabled, all groups and all their members are synced regardless of this setting.
+</Warning>
 
 ### What's next?
 
