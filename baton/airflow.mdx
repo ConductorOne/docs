@@ -1,0 +1,227 @@
+---
+title: "Set up an Airflow connector"
+og:title: "Set up an Airflow connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Apache Airflow. Integrate your Airflow instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision role assignments."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Apache Airflow. Integrate your Airflow instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision role assignments."
+sidebarTitle: "Airflow"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Airflow connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> Grant, Revoke |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather Airflow credentials
+
+<Warning>
+To configure the Airflow connector, you need **Admin** role access in your Airflow instance. The connector requires permissions to read users, roles, and to update user role assignments for provisioning.
+</Warning>
+
+The connector uses username/password credentials to authenticate with Airflow's `/auth/token` endpoint, which returns a JWT token used for all API requests.
+
+<Steps>
+  <Step>
+    Ensure you have an Airflow user with the **Admin** role.
+  </Step>
+
+  <Step>
+    Note down the username, password, and the base URL of your Airflow instance (e.g., `https://airflow.example.com`).
+  </Step>
+</Steps>
+
+<Info>
+Airflow uses the FAB (Flask-AppBuilder) auth manager. The connector exchanges username/password for a short-lived JWT token (default: 24h expiration) at the start of each sync. SSO/OAuth2 (Google, Okta, Azure Entra ID, etc.) is supported for the web UI but not for API access.
+</Info>
+
+## Configure the Airflow connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Airflow** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Airflow connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Airflow Base URL**: The base URL of your Airflow instance (e.g., `https://airflow.example.com`)
+        - **Username**: Airflow admin username
+        - **Password**: Airflow admin password
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Airflow connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Airflow](https://github.com/ConductorOne/baton-airflow) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Airflow connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Airflow connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Airflow connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-airflow-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-airflow-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # Airflow credentials
+      BATON_AIRFLOW_BASE_URL: https://airflow.example.com
+      BATON_AIRFLOW_USERNAME: <Airflow admin username>
+      BATON_AIRFLOW_PASSWORD: <Airflow admin password>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-airflow.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-airflow
+      labels:
+        app: baton-airflow
+    spec:
+      selector:
+        matchLabels:
+          app: baton-airflow
+      template:
+        metadata:
+          labels:
+            app: baton-airflow
+            baton: "true"
+            baton-app: airflow
+        spec:
+          containers:
+          - name: baton-airflow
+            image: public.ecr.aws/conductorone/baton-airflow:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-airflow
+            envFrom:
+            - secretRef:
+                name: baton-airflow-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Airflow connector to. Airflow data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Airflow connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-airflow).
+</Tip>

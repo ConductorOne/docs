@@ -1,0 +1,230 @@
+---
+title: "Set up a Ninjio connector"
+og:title: "Set up a Ninjio connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Ninjio. Integrate your Ninjio instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Ninjio. Integrate your Ninjio instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Ninjio"
+---
+
+```mdx
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+```
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Ninjio connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Employees | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Campaigns | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Simulations | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather Ninjio credentials
+
+<Warning>
+To configure the Ninjio connector, you need administrator permissions in Ninjio.
+</Warning>
+
+<Steps>
+  <Step>
+    Log in to the NINJIO admin portal at [admin.goninjio.com](https://admin.goninjio.com).
+  </Step>
+
+  <Step>
+    Navigate to your account or API settings and generate an API key.
+  </Step>
+
+  <Step>
+    Copy the API key and save it securely. You will need it to configure the connector.
+  </Step>
+</Steps>
+
+## Configure the Ninjio connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Ninjio** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Ninjio connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **API Key**: Your Ninjio API key
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Ninjio connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Ninjio](https://github.com/ConductorOne/baton-ninjio) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Ninjio connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Ninjio connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Ninjio connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-ninjio-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-ninjio-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # Ninjio credentials
+      BATON_NINJIO_API_KEY: <your NINJIO API key>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-ninjio.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-ninjio
+      labels:
+        app: baton-ninjio
+    spec:
+      selector:
+        matchLabels:
+          app: baton-ninjio
+      template:
+        metadata:
+          labels:
+            app: baton-ninjio
+            baton: "true"
+            baton-app: ninjio
+        spec:
+          containers:
+          - name: baton-ninjio
+            image: public.ecr.aws/conductorone/baton-ninjio:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-ninjio
+            envFrom:
+            - secretRef:
+                name: baton-ninjio-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Ninjio connector to. Ninjio data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Ninjio connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-ninjio).
+</Tip>

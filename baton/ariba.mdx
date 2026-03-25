@@ -1,0 +1,250 @@
+---
+title: "Set up an SAP Ariba connector"
+og:title: "Set up an SAP Ariba connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for SAP Ariba. Integrate your SAP Ariba instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for SAP Ariba. Integrate your SAP Ariba instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "SAP Ariba"
+---
+
+```mdx
+<Warning>
+**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
+
+We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+```
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Ariba connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+Provisioning support includes:
+- **Account provisioning**: create and delete user accounts
+- **Group membership**: add and remove users from groups
+- **Account actions**: enable and disable user accounts
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather Ariba credentials
+
+<Warning>
+To configure the Ariba connector, you need administrator permissions in SAP Ariba and access to the SAP Ariba developer portal (API Center).
+</Warning>
+
+The connector authenticates using **OAuth 2.0 client credentials** against the SAP Ariba API. You'll need to create an OAuth application in the SAP Ariba developer portal.
+
+<Steps>
+  <Step>
+    Sign in to the [SAP Ariba developer portal](https://developer.ariba.com) and navigate to **Manage** > **Applications**.
+  </Step>
+
+  <Step>
+    Create a new application for ConductorOne:
+
+    1. Click **Create application** and name it `ConductorOne`
+    2. Select **Production** environment
+    3. Add the following API access:
+       - **SAP Ariba SCIM API** — required for reading and provisioning users and groups
+    4. Note your **Application (client) ID** and generate a **Client Secret**; save both securely
+  </Step>
+
+  <Step>
+    Note your **realm** (site name) — visible in the URL of your Ariba tenant, e.g. `https://<realm>.ariba.com`.
+  </Step>
+</Steps>
+
+## Configure the Ariba connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Ariba** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Ariba connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Runtime URL** (`BATON_RUNTIME_URL`): SAP Ariba SCIM API base URL (e.g. `https://openapi.ariba.com/api/scim/v2`)
+        - **Ariba Client ID** (`BATON_ARIBA_CLIENT_ID`): OAuth2 client ID for SAP Ariba API access
+        - **Ariba Client Secret** (`BATON_ARIBA_CLIENT_SECRET`): OAuth2 client secret for SAP Ariba API access
+        - **Realm** (`BATON_REALM`): SAP Ariba realm (site) name
+        - **Password Adapter** (`BATON_PASSWORD_ADAPTER`): *(optional)* Filter users by authentication type (e.g. `UniversalID`)
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Ariba connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Ariba](https://github.com/ConductorOne/baton-ariba) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Ariba connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Ariba connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Ariba connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-ariba-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-ariba-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # Ariba credentials
+      BATON_RUNTIME_URL: <SAP Ariba SCIM API base URL>
+      BATON_ARIBA_CLIENT_ID: <OAuth2 client ID>
+      BATON_ARIBA_CLIENT_SECRET: <OAuth2 client secret>
+      BATON_REALM: <SAP Ariba realm name>
+      # BATON_PASSWORD_ADAPTER: <optional — filter users by auth type>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-ariba.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-ariba
+      labels:
+        app: baton-ariba
+    spec:
+      selector:
+        matchLabels:
+          app: baton-ariba
+      template:
+        metadata:
+          labels:
+            app: baton-ariba
+            baton: "true"
+            baton-app: ariba
+        spec:
+          containers:
+          - name: baton-ariba
+            image: public.ecr.aws/conductorone/baton-ariba:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-ariba
+            envFrom:
+            - secretRef:
+                name: baton-ariba-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Ariba connector to. Ariba data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Ariba connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-ariba).
+</Tip>

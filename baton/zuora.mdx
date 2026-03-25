@@ -1,0 +1,199 @@
+---
+title: "Set up a Zuora connector"
+description: "Integrate your Zuora instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+og:title: "Set up a Zuora connector"
+og:description: "Integrate your Zuora instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Zuora"
+---
+
+## Capabilities
+
+| Resource | Sync                                                         | Provision                                                    |
+| :------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| Users    | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Groups   | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+The Zuora connector syncs users and security groups via the SCIM 2.0 API.
+
+This connector supports the following provisioning operations:
+
+- **User account provisioning**: Create new SSO users (federated identity) via SCIM POST
+- **Enable/Disable user lifecycle**: Enable or disable user accounts via SCIM PATCH
+- **Group membership**: Add and remove users from security groups via SCIM PATCH (grant/revoke)
+
+## Requirements
+
+- An **OAuth 2.0 Client** (client_id + client_secret) with admin scope
+
+## Gather Zuora credentials
+
+### Create an OAuth 2.0 Client
+
+<Steps>
+  <Step>Log in to Zuora as an administrator.</Step>
+  <Step>Navigate to **Platform** → **API** → **OAuth Clients**.</Step>
+  <Step>Click **Create OAuth Client**.</Step>
+  <Step>Select **Client Credentials** as the grant type.</Step>
+  <Step>Grant the client **admin** scope.</Step>
+  <Step>Copy the **Client ID** and **Client Secret** immediately.</Step>
+</Steps>
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Zuora connector
+
+<Warning>
+**To complete this task, you'll need:**
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Your Zuora domain and the OAuth 2.0 client credentials generated above
+  </Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **Zuora** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new Zuora connector:
+
+    - Add the connector to a currently unmanaged app
+    - Add the connector to a managed app
+    - Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector and click **Next**.
+    </Step>
+    <Step>
+    Find the **Settings** area of the page and click **Edit**.
+    </Step>
+    <Step>
+    Enter your Zuora domain in the **Zuora Domain** field (for example, `https://one.zuora.com`).
+    </Step>
+    <Step>
+    Paste the OAuth 2.0 **Client ID** and **Client Secret**.
+    </Step>
+    <Step>
+    Click **Save**.
+    </Step>
+    <Step>
+    The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+    </Step>
+
+</Steps>
+
+**That's it!** Your Zuora connector is now pulling access data into ConductorOne.
+
+</Tab>
+<Tab title="Self-hosted">
+**Follow these instructions to use the Zuora connector, hosted and run in your own environment.**
+
+### Resources
+
+- [GitHub repository](https://github.com/ConductorOne/baton-zuora): Access the source code, report issues, or contribute to the project.
+
+### Step 1: Set up a new Zuora connector
+
+<Steps>
+    <Step>
+    In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+    </Step>
+    <Step>
+    Search for **Baton** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new Zuora connector.
+    </Step>
+    <Step>
+    Set the owner for this connector and click **Next**.
+    </Step>
+    <Step>
+    In the **Settings** area, click **Edit** then **Rotate** to generate a new Client ID and Secret.
+    </Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-zuora-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-zuora-secrets
+type: Opaque
+stringData:
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  BATON_ZUORA_DOMAIN: <Zuora domain, e.g. https://one.zuora.com>
+  BATON_ZUORA_CLIENT_ID: <Zuora OAuth Client ID>
+  BATON_ZUORA_CLIENT_SECRET: <Zuora OAuth Client Secret>
+  BATON_PROVISIONING: "true"
+```
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-zuora.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-zuora
+  labels:
+    app: baton-zuora
+spec:
+  selector:
+    matchLabels:
+      app: baton-zuora
+  template:
+    metadata:
+      labels:
+        app: baton-zuora
+            baton: "true"
+        baton-app: zuora
+    spec:
+      containers:
+        - name: baton-zuora
+            image: public.ecr.aws/conductorone/baton-zuora:latest
+            imagePullPolicy: IfNotPresent
+          env:
+            - name: BATON_HOST_ID
+              value: baton-zuora
+          envFrom:
+            - secretRef:
+                name: baton-zuora-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+  <Step>
+    Create a namespace in which to run ConductorOne connectors (if desired),
+    then apply the secret config and deployment config files.
+  </Step>
+  <Step>
+    Check that the connector data uploaded correctly. In ConductorOne, click
+    **Applications**. On the **Managed apps** tab, locate and click the name of
+    the application you added the Zuora connector to. Zuora data should be found
+    on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
+
+**That's it!** Your Zuora connector is now pulling access data into ConductorOne.
+
+</Tab>
+</Tabs>
+
+---
+
+<Tip>
+  All versions of this connector are available at
+  [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-zuora).
+</Tip>

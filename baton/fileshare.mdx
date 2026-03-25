@@ -1,0 +1,171 @@
+---
+title: Set up a Windows File Share connector
+og:title: Set up a Windows File Share connector - ConductorOne docs
+og:description: Integrate your Windows file share NTFS permissions with ConductorOne to run access reviews and govern shared folder access.
+description: ConductorOne provides identity governance for Windows file shares. Integrate your file share NTFS permissions with ConductorOne to run user access reviews (UARs) and gain visibility into shared folder access.
+sidebarTitle: Microsoft Windows File Share
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Folders  | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>   |           |
+
+## How it works
+
+### Entitlements
+
+The connector does **not** create an entitlement for each individual NTFS ACL entry. Instead, it examines all ACL entries (ACEs) on each folder and classifies each one into a generalized permission category:
+
+- **Read Write** — The ACE grants any write-level permission (write data, append data, delete, write DAC, write attributes, etc.)
+- **Read Only** — The ACE grants read-level permissions beyond basic directory listing (read attributes, read extended attributes, read control, generic read)
+
+Every synced folder gets exactly two entitlements: `Read Only` and `Read Write`. ACEs that only grant "List folder contents" (i.e., `CONTAINER_INHERIT_ACE` without `OBJECT_INHERIT_ACE`) are excluded entirely since they don't apply to files within the folder.
+
+### Grants
+
+Grants connect AD groups to folder entitlements. The connector reads each folder's DACL and creates one grant per group-folder-permission combination. Several important behaviors to note:
+
+- **Groups only** — Only ACEs for Active Directory domain groups (`SidTypeGroup`) produce grants. **Individual user ACEs are ignored**, even if a user has direct access to a folder. User-to-folder access is only visible when it flows through an AD group.
+- **External matching** — Groups are matched to the `baton-active-directory` connector via `ExternalResourceMatch` using the `downlevel_logon_name` key (i.e., the `DOMAIN\GroupName` format). The AD connector must be configured as a shared identity source.
+- **Grant expansion** — Each folder grant includes a `GrantExpandable` annotation pointing to the matched group's `member` entitlement. This allows ConductorOne to expand group membership to see which individual users have access to each folder.
+- **Built-in group filtering** — Common built-in and administrative groups are automatically excluded (e.g., Administrators, Backup Operators, Guests, Users, Print Operators, and others). Groups from the `BUILTIN\` and `NT AUTHORITY\` domains are also excluded.
+- **Inheritance handling** — When `skip-inherited` is enabled (the default), the connector skips grants where the ACE is flagged as inherited or is a duplicate of a parent folder's ACE. This reduces noise by only showing grants where permissions were explicitly assigned. The root folder is exempt from inheritance filtering.
+- **Deduplication** — When a group appears in multiple ACEs on the same folder, the connector keeps the highest-privilege entry (`Read Write` over `Read Only`) and prefers directly-assigned over inherited.
+- **NULL DACLs** — Folders with a NULL DACL (which grants full access to everyone) are skipped and produce no grants.
+
+### Folder discovery
+
+The connector traverses the folder hierarchy starting from the configured `share-path`. With `skip-inherited` enabled (default), folders that have only inherited ACEs are skipped entirely — they won't appear as resources. The `max-folder-depth` setting can limit traversal depth for large file shares.
+
+## Prerequisites
+
+Unlike most connectors, `baton-fileshare` does not require API tokens or credentials. Instead, it reads the local filesystem directly to discover folders and their NTFS ACL permissions.
+
+Before setting up this connector, ensure:
+
+- **`baton-active-directory` is configured as a shared identity source** in ConductorOne. The file share connector discovers Active Directory groups in folder ACLs, and relies on the AD connector to match those groups and their members to ConductorOne identities.
+- **A Windows account with file share access** is available. The account running the connector must have:
+  - Read access to the target file share path
+  - Permission to read NTFS ACLs (security descriptors) on the folders within it
+
+<Warning>
+The `baton-active-directory` connector must be set up and configured as a shared identity source before setting up this connector. Without it, groups discovered in file share ACLs cannot be matched to users.
+</Warning>
+
+## Configure the Windows File Share connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- A Windows account with read access to the file share and NTFS ACLs
+- The `baton-active-directory` connector already configured as a shared identity source
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+*Cloud-hosted connector not currently available.*
+
+</Tab>
+<Tab title="Self-hosted">
+**Follow these instructions to use the Windows File Share connector, hosted and run in your own environment.**
+
+When running as a Windows service, the self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Resources
+
+* [GitHub repository](https://github.com/ConductorOne/baton-fileshare): Access the source code, report issues, or contribute to the project.
+
+### Step 1: Configure the File Share connector in ConductorOne
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new File Share connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+   Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+
+### Step 2: Set up the Windows service
+
+Since `baton-fileshare` must run on a Windows machine with access to the file share, it is deployed as a Windows service rather than a Kubernetes container.
+
+<Steps>
+<Step>
+Download the latest `baton-fileshare.exe` release from [GitHub Releases](https://github.com/ConductorOne/baton-fileshare/releases) and place it in a suitable directory (e.g., `C:\Program Files\ConductorOne\baton-fileshare\`).
+</Step>
+<Step>
+Create a configuration file at `%PROGRAMDATA%\ConductorOne\baton-fileshare\config.yaml` with the following content:
+
+```yaml
+# ConductorOne credentials (from Step 1)
+client-id: "<ConductorOne client ID>"
+client-secret: "<ConductorOne client secret>"
+
+# File share configuration (required)
+share-path: "C:\\Shares\\Data"
+
+# Optional settings
+# path-prefix: "V:\\HR"
+# skip-inherited: true
+# max-folder-depth: 5
+# exclude-groups:
+#   - "DOMAIN\\Backup Operators"
+#   - "DOMAIN\\Domain Admins"
+```
+
+See the connector's [README](https://github.com/ConductorOne/baton-fileshare) or run `--help` to see all available configuration flags.
+</Step>
+<Step>
+Install and start the Windows service:
+
+```console
+.\baton-fileshare.exe service install --config-file "%PROGRAMDATA%\ConductorOne\baton-fileshare\config.yaml"
+.\baton-fileshare.exe service start
+```
+</Step>
+</Steps>
+
+### Step 3: Verify the sync
+
+<Steps>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the File Share connector to. File share data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+<Step>
+Verify that folders appear with their `Read Only` and `Read Write` entitlements, and that Active Directory groups are correctly associated with folder grants.
+</Step>
+</Steps>
+**That's it!** Your Windows File Share connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>
