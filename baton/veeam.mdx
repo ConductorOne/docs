@@ -1,0 +1,230 @@
+---
+title: "Set up a Veeam connector"
+og:title: "Set up a Veeam connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Veeam. Integrate your Veeam instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Veeam. Integrate your Veeam instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Veeam"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Veeam connector syncs the following resources from **Veeam Backup Enterprise Manager** (REST API on port 9398):
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+- **Accounts**: Users and groups in Enterprise Manager. Provisioning: create accounts, delete accounts.
+- **Roles**: Security roles (Portal Administrator, Portal User, VM/File/Exchange/Oracle/SQL Restore Operator). Provisioning: grant and revoke role assignments to accounts.
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather Veeam credentials
+
+<Warning>
+To configure the Veeam connector, you need an account with the **Portal Administrator** role in Veeam Backup Enterprise Manager.
+</Warning>
+
+<Steps>
+  <Step>
+    Ensure **Veeam Backup Enterprise Manager** is installed and the REST API service is running (default port 9398).
+  </Step>
+
+  <Step>
+    Obtain credentials for ConductorOne:
+
+    1. **Veeam URL**: The base URL of your Enterprise Manager instance (e.g., `https://veeam-server:9398`).
+    2. **Username**: A Windows domain or local account that has been added to Enterprise Manager (e.g., `DOMAIN\Administrator` or `hostname\username`).
+    3. **Password**: The password for that account.
+    4. The account must have the **Portal Administrator** role in Enterprise Manager (required for both sync and provisioning).
+    5. Save the URL, username, and password securely for use in the connector configuration.
+  </Step>
+</Steps>
+
+## Configure the Veeam connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Veeam** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Veeam connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Veeam URL**: Base URL of your Veeam Backup Enterprise Manager instance (e.g., `https://veeam-server:9398`).
+        - **Veeam Username**: Username for authentication (e.g., `DOMAIN\Administrator`).
+        - **Veeam Password**: Password for that account.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Veeam connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Veeam](https://github.com/ConductorOne/baton-veeam) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Veeam connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Veeam connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Veeam connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-veeam-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-veeam-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # Veeam Backup Enterprise Manager credentials
+      VEEAM_URL: <Veeam Enterprise Manager base URL, e.g. https://veeam-server:9398>
+      VEEAM_USERNAME: <Username, e.g. DOMAIN\Administrator>
+      VEEAM_PASSWORD: <Password>
+    ```
+
+    See the connector's README or run `./baton-veeam --help` to confirm environment variable names (they may be derived from the config schema).
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-veeam.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-veeam
+      labels:
+        app: baton-veeam
+    spec:
+      selector:
+        matchLabels:
+          app: baton-veeam
+      template:
+        metadata:
+          labels:
+            app: baton-veeam
+            baton: "true"
+            baton-app: veeam
+        spec:
+          containers:
+          - name: baton-veeam
+            image: public.ecr.aws/conductorone/baton-veeam:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-veeam
+            envFrom:
+            - secretRef:
+                name: baton-veeam-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Veeam connector to. Veeam data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Veeam connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-veeam).
+</Tip>
