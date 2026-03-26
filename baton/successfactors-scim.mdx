@@ -141,8 +141,8 @@ Find the **Settings** area of the page and click **Edit**.
 Fill in the following fields:
   - **Company ID**: Your SAP SuccessFactors company ID
   - **SAML API Key**: The API key from your registered OAuth application
-  - **Certificate**: Your X.509 certificate (without header/footer)
-  - **Private Key**: The private key corresponding to your X.509 certificate
+  - **Certificate**: Upload your PEM-encoded X.509 certificate file
+  - **Private Key**: Upload your PEM-encoded RSA private key file
   - **Instance URL**: Your SAP SuccessFactors API server URL
   - **Issuer URL**: Your SAML issuer domain
   - **Admin user ID**: The ID of the admin user configured with SCIM permissions
@@ -222,11 +222,22 @@ stringData:
   # SAP SuccessFactors credentials
   BATON_COMPANY_ID: <SAP SuccessFactors company ID>
   BATON_SAML_API_KEY: <SAML API key>
-  BATON_CERTIFICATE: <X.509 certificate>
-  BATON_PRIVATE_KEY: <X.509 private key>
   BATON_INSTANCE_URL: <SAP SuccessFactors API server URL>
   BATON_ISSUER_URL: <SAML issuer URL>
   BATON_ADMIN_ID: <Admin user ID>
+
+---
+# baton-successfactors-scim-pem-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-successfactors-scim-pem-secrets
+type: Opaque
+stringData:
+  certificate.pem: |
+    <PEM-encoded X.509 certificate>
+  private_key.pem: |
+    <PEM-encoded RSA private key>
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -259,9 +270,21 @@ spec:
         env:
         - name: BATON_HOST_ID
           value: baton-successfactors-scim
+        - name: BATON_CERTIFICATE
+          value: /etc/baton/certs/certificate.pem
+        - name: BATON_PRIVATE_KEY
+          value: /etc/baton/certs/private_key.pem
         envFrom:
         - secretRef:
             name: baton-successfactors-scim-secrets
+        volumeMounts:
+        - name: pem-certs
+          mountPath: /etc/baton/certs
+          readOnly: true
+      volumes:
+      - name: pem-certs
+        secret:
+          secretName: baton-successfactors-scim-pem-secrets
 ```
 
 ### Step 3: Deploy the connector
