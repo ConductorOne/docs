@@ -122,9 +122,9 @@ We recommend closely monitoring workflows that use this connector and contacting
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
-| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
-| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
 
 **Additional functionality:**
 The [App Name] connector supports [automatic account provisioning](/product/admin/account-provisioning).
@@ -135,7 +135,7 @@ The [App Name] connector supports [automatic account provisioning](/product/admi
 ```
 
 **Icon reference:**
-- Checkmark: `<Icon icon="square-check" iconType="solid" color="#65DE23"/>`
+- Checkmark: `<Icon icon="square-check" iconType="solid" color="#c937ae"/>`
 - Empty cell: Leave blank (no icon)
 
 ### Connector Actions Section (if applicable)
