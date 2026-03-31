@@ -301,3 +301,50 @@ ctx.risk_check.should_review == true
 For a full walkthrough of building Functions and using them in automations, see [using Functions in automations](/product/admin/functions-automations).
 
 **Error behavior:** Fails if the Function throws an unhandled error or exceeds its execution timeout. The error message from the Function is visible in the execution log. Debug Function errors in the Functions UI, which has its own invocation logs.
+
+---
+## Generate password
+
+Generate a random password using either a preset 32-character random password or a custom policy.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Password type | Yes | No | **Random 32-character password**: generates a random 32-character password with no additional configuration. **Custom password policy**: exposes the fields below. |
+| Length | Yes (Custom) | No | Minimum and/or maximum character length for the generated password. |
+| Character requirements | Yes (Custom) | No | Which character types must be included: uppercase, lowercase, numbers, special characters. |
+| Character rules | No (Custom) | No | Additional constraints on special characters: define a custom set of allowed special characters, or specify characters to exclude from the generated password. |
+| Step name | Yes | No | Used to reference this step's output in subsequent steps via `ctx.{step_name}`. |
+| Skip condition | No | Yes | If the expression evaluates to true, this step is skipped. |
+
+---
+
+## Set credential
+
+Apply a credential to a user's account in a connected application.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Connector | Yes | No | Only connectors that support credential actions appear in the picker. |
+| Target account | Yes | Yes | The account to set the credential on. Accepts `ctx.trigger.app_user_id` or a CEL expression resolving to a C1 app user ID. For new accounts, pass the output of the Create account step. |
+| Credential | Yes | No | Reference to the Generate password step output: `ctx.{generate_step_name}.credential_ref`. |
+| Skip condition | No | Yes | If the expression evaluates to true, this step is skipped. |
+
+---
+
+## Store credential
+
+Store a generated credential in a ConductorOne vault and optionally deliver it to a recipient.
+
+| Field | Required | CEL | Notes |
+|---|---|---|---|
+| Credential | Yes | No | Reference to the Generate password step output: `ctx.{generate_step_name}.credential_ref`. |
+| Vault type | Yes | No | **Paper Vault**: one-time secret link, self-destructs after N views or a time window. **App Vault**: persistent, entitlement-bound storage accessible via VaultOpenerService. |
+| Recipient | Yes | Yes | C1 user ID or CEL expression. Use `ctx.trigger.user.manager_id` to deliver to the subject user's manager. |
+| Auth type | Yes (Paper Vault) | No | How the recipient authenticates to retrieve the secret. Options: SSO Internal, Email verified. |
+| Expiry | No (Paper Vault) | No | How long the secret is available before auto-expiration. Default: 72 hours. |
+| Max views | No (Paper Vault) | No | Number of times the secret can be viewed before it self-destructs. Default: 1. |
+| App | Yes (App Vault) | No | The application this credential belongs to. |
+| Entitlement | Yes (App Vault) | No | The entitlement that controls access. Users with this grant can retrieve the credential. |
+| Expiry | Yes (Paper Vault) | No | Auto-expire the credential after this duration. Expired credentials are tombstoned for audit. |
+| Skip condition | No | Yes | If the expression evaluates to true, this step is skipped. |
+
