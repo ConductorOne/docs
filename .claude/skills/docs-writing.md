@@ -184,13 +184,13 @@ When documenting features that are in early access, add a standardized warning c
 
 ```mdx
 <Warning>
-**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 ```
 
 **Key points:**
 - Always use `<Warning>` (not `<Info>` or `<Note>`)
-- Always use "the ConductorOne Support team" (not "our Support team" or "your account team")
+- Always use "the C1 Support team" (not "our Support team" or "your account team")
 - Don't name the specific feature (use "This feature")
 - Include the explanation of what early access means
 - Use "share feedback" (not "have any feedback")

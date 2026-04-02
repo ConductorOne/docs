@@ -21,7 +21,7 @@ In Baton terms, a connector is a program that can:
 
 ## Sync vs Provision
 
-**Sync** (read): Pull access data into ConductorOne
+**Sync** (read): Pull access data into C1
 - Who exists? What groups? What roles?
 - What permissions are available?
 - Who has what access right now?

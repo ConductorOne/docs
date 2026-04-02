@@ -106,14 +106,14 @@ Used in `ctx.trigger.oldAccount.status.status` and `ctx.trigger.newAccount.statu
 ### User vs AppUser
 
 These are different types:
-- **User** = A person in the ConductorOne directory (synced from identity provider)
+- **User** = A person in the C1 directory (synced from identity provider)
 - **AppUser** = That person's account in a specific app (GitHub account, Okta account, etc.)
 
 One User can have many AppUsers across different connected applications.
 
 ### User
 
-A person in the ConductorOne directory.
+A person in the C1 directory.
 
 **Returned by:** `FindByEmail`, `GetByID`, `GetManagers`, `DirectReports`, `GetEntitlementMembers`
 

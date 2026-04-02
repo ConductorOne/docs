@@ -61,7 +61,7 @@ ConductorOne runs the connector for you:
 - Automatic updates
 - Credentials stored in C1
 
-Check if your connector is available as hosted in the ConductorOne console.
+Check if your connector is available as hosted in the C1 console.
 
 ## Provisioning Flag
 

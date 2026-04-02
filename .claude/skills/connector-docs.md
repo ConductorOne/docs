@@ -287,7 +287,7 @@ For more information, see [link to vendor docs].
   <Tab title="Self-hosted">
     Follow these instructions to use the [App Name](https://github.com/conductorone/baton-[connector-name]) connector, hosted and run in your own environment.
 
-    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
 
     ### Step 1: Set up a new [App Name] connector
 

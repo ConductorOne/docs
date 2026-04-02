@@ -1,6 +1,6 @@
 # CEL in Terraform
 
-CEL expressions in the ConductorOne Terraform provider.
+CEL expressions in the C1 Terraform provider.
 
 ## Resources Supporting CEL
 
