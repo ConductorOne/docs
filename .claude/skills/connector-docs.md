@@ -232,7 +232,7 @@ For more information, see [link to vendor docs].
 
 <Tabs>
   <Tab title="Cloud-hosted">
-    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
 
     <Steps>
       <Step>
@@ -246,15 +246,15 @@ For more information, see [link to vendor docs].
       <Step>
         Choose how to set up the new [App Name] connector:
 
-        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
         - Add the connector to a managed app (select from the list of existing managed apps)
         - Create a new managed app
       </Step>
 
       <Step>
-        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
       </Step>
 
       <Step>
@@ -287,7 +287,7 @@ For more information, see [link to vendor docs].
   <Tab title="Self-hosted">
     Follow these instructions to use the [App Name](https://github.com/ConductorOne/baton-[connector-name]) connector, hosted and run in your own environment.
 
-    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
 
     ### Step 1: Set up a new [App Name] connector
 
@@ -303,15 +303,15 @@ For more information, see [link to vendor docs].
       <Step>
         Choose how to set up the new [App Name] connector:
 
-        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
         - Add the connector to a managed app (select from the list of existing managed apps)
         - Create a new managed app
       </Step>
 
       <Step>
-        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-        If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
       </Step>
 
       <Step>
@@ -343,9 +343,9 @@ For more information, see [link to vendor docs].
       name: baton-[connector-name]-secrets
     type: Opaque
     stringData:
-      # ConductorOne credentials
-      BATON_CLIENT_ID: <ConductorOne client ID>
-      BATON_CLIENT_SECRET: <ConductorOne client secret>
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
 
       # [App Name] credentials
       BATON_[APP]_[CREDENTIAL_1]: <Your [credential 1]>
@@ -394,11 +394,11 @@ For more information, see [link to vendor docs].
 
     <Steps>
       <Step>
-        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
       </Step>
 
       <Step>
-        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the [App Name] connector to. [App Name] data should be found on the **Entitlements** and **Accounts** tabs.
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the [App Name] connector to. [App Name] data should be found on the **Entitlements** and **Accounts** tabs.
       </Step>
     </Steps>
 
