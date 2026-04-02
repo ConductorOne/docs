@@ -29,7 +29,7 @@ Use this skill when:
 
 ## File and Folder Structure
 
-ConductorOne docs use Mintlify, where **file path = URL**. Structure decisions are permanent without redirects, so be intentional.
+C1 docs use Mintlify, where **file path = URL**. Structure decisions are permanent without redirects, so be intentional.
 
 ### Folder rules
 

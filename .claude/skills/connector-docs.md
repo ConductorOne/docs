@@ -69,7 +69,7 @@ Gather this information before writing:
 ---
 title: "Set up a [Connector Name] connector"
 og:title: "Set up a [Connector Name] connector"
-description: "ConductorOne provides identity governance and just-in-time provisioning for [App Name]. Integrate your [App Name] instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+description: "C1 provides identity governance and just-in-time provisioning for [App Name]. Integrate your [App Name] instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 og:description: "[Same as description]"
 sidebarTitle: "[Connector Name]"
 ---
@@ -236,7 +236,7 @@ For more information, see [link to vendor docs].
 
     <Steps>
       <Step>
-        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
       </Step>
 
       <Step>
@@ -281,7 +281,7 @@ For more information, see [link to vendor docs].
       </Step>
     </Steps>
 
-    **That's it!** Your [App Name] connector is now pulling access data into ConductorOne.
+    **That's it!** Your [App Name] connector is now pulling access data into C1.
   </Tab>
 
   <Tab title="Self-hosted">
@@ -293,7 +293,7 @@ For more information, see [link to vendor docs].
 
     <Steps>
       <Step>
-        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
       </Step>
 
       <Step>
@@ -402,7 +402,7 @@ For more information, see [link to vendor docs].
       </Step>
     </Steps>
 
-    **That's it!** Your [App Name] connector is now pulling access data into ConductorOne.
+    **That's it!** Your [App Name] connector is now pulling access data into C1.
   </Tab>
 </Tabs>
 ```
@@ -471,7 +471,7 @@ The **write::org** scope is used by ConductorOne when automatically provisioning
 Always end both tabs with:
 
 ```mdx
-**That's it!** Your [App Name] connector is now pulling access data into ConductorOne.
+**That's it!** Your [App Name] connector is now pulling access data into C1.
 ```
 
 ### Multiple Authentication Options
