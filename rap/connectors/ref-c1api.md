@@ -1,6 +1,6 @@
 # ref-c1api
 
-How connectors communicate with ConductorOne platform. SDK handles this; understanding helps debugging.
+How connectors communicate with C1 platform. SDK handles this; understanding helps debugging.
 
 ---
 

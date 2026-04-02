@@ -1,6 +1,6 @@
 # CEL Type Definitions
 
-This document covers all types used in ConductorOne CEL expressions: primitives, time types, collections, enums, and object types.
+This document covers all types used in C1 CEL expressions: primitives, time types, collections, enums, and object types.
 
 ## Primitive Types
 
@@ -74,7 +74,7 @@ Always use the full enum name (e.g., `UserStatus.ENABLED`, not just `ENABLED`).
 
 | Value | Meaning |
 |:------|:--------|
-| `TaskOrigin.WEBAPP` | Created in ConductorOne web interface |
+| `TaskOrigin.WEBAPP` | Created in C1 web interface |
 | `TaskOrigin.SLACK` | Created via Slack integration |
 | `TaskOrigin.API` | Created via API |
 | `TaskOrigin.JIRA` | Created via Jira integration |

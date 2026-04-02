@@ -5,7 +5,7 @@ Secretless authentication using OIDC tokens from CI/CD platforms.
 ## How It Works
 
 1. CI/CD platform issues signed JWT for current workflow run
-2. Workflow sends JWT to ConductorOne token exchange endpoint
+2. Workflow sends JWT to C1 token exchange endpoint
 3. ConductorOne validates: issuer, signature, audience, freshness, CEL conditions
 4. ConductorOne issues short-lived access token scoped to service principal's roles
 

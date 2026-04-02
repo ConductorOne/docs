@@ -97,7 +97,7 @@ Documentation for ConductorOne service principals and workload federation. Reque
 User: "How do I authenticate from GitHub Actions?"
 Retrieve: `platform-github.md`
 
-User: "Set up Terraform with ConductorOne"
+User: "Set up Terraform with C1"
 Retrieve: `auth-tools.md`, `platform-terraform.md`
 
 User: "How do I authenticate from AWS?"

@@ -17,7 +17,7 @@ aws iam enable-outbound-web-identity-federation
 aws iam get-outbound-web-identity-federation-info
 ```
 
-Returns account-specific issuer URL (e.g., `https://abc123-def456.tokens.sts.global.api.aws`). Use this as the provider issuer URL in ConductorOne.
+Returns account-specific issuer URL (e.g., `https://abc123-def456.tokens.sts.global.api.aws`). Use this as the provider issuer URL in C1.
 
 ### IAM permissions
 

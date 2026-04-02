@@ -39,13 +39,13 @@ size(managers) > 0 ? managers : appOwners
 
 ## What's C1's vs Google's
 
-| Layer | Google's CEL | ConductorOne's Extensions |
+| Layer | Google's CEL | C1's Extensions |
 |-------|--------------|---------------------------|
 | Syntax | All operators, macros (`has()`, `size()`) | Nothing added |
 | Types | Primitives, lists, maps, timestamps | `User`, `Task`, `AppEntitlement` |
 | Functions | String methods, math | `c1.directory.*`, `c1.user.*` |
 
-**Rule of thumb:** If it starts with `c1.`, it's ConductorOne's extension.
+**Rule of thumb:** If it starts with `c1.`, it's C1's extension.
 
 ## How Expressions are Evaluated
 

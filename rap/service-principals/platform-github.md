@@ -12,7 +12,7 @@ Use `conductorone/oidc-token-action` for one-step secretless authentication.
 Requires `id-token: write` permission:
 
 ```yaml
-name: Deploy with ConductorOne
+name: Deploy with C1
 
 permissions:
   id-token: write
