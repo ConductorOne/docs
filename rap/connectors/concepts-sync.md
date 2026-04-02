@@ -81,4 +81,4 @@ flowchart LR
 5. **Uplift** - Raw records become domain objects
 
 **You control:** Steps 1-3
-**ConductorOne controls:** Steps 4-5
+**C1 controls:** Steps 4-5

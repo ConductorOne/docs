@@ -164,7 +164,7 @@ A user's account within a specific connected application.
 
 ### Group
 
-A ConductorOne group (entitlement in the builtin Groups app).
+A C1 group (entitlement in the builtin Groups app).
 
 **Returned by:** `FindByName`
 
