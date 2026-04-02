@@ -10,7 +10,7 @@ Getting help and contributing to the Baton connector ecosystem.
 
 | Repository | Use For |
 |------------|---------|
-| [baton-sdk](https://github.com/ConductorOne/baton-sdk/discussions) | SDK questions, general development |
+| [baton-sdk](https://github.com/conductorone/baton-sdk/discussions) | SDK questions, general development |
 | Specific connector repos | Issues with that connector |
 
 Before asking:

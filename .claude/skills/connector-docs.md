@@ -22,7 +22,7 @@ Use this skill when:
 **Naming:** The doc file should be named `docs.mdx` and placed in the root or a `docs/` directory of the connector repo, following the convention already established in that repo.
 
 **Naming convention:** Use lowercase, hyphenated names matching the GitHub repo name.
-- Example: `baton-boomi` repo → connector doc lives in `github.com/ConductorOne/baton-boomi`
+- Example: `baton-boomi` repo → connector doc lives in `github.com/conductorone/baton-boomi`
 
 ## Information Checklist
 
@@ -212,7 +212,7 @@ To configure the [App Name] connector, you need [specific permission level] perm
        - `scope:name` - [What this enables]
 
     <Warning>
-    The **scope:name** scope is used by ConductorOne when automatically provisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
+    The **scope:name** scope is used by C1 when automatically provisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
     </Warning>
 
     5. Click **[Generate/Create]**
@@ -285,7 +285,7 @@ For more information, see [link to vendor docs].
   </Tab>
 
   <Tab title="Self-hosted">
-    Follow these instructions to use the [App Name](https://github.com/ConductorOne/baton-[connector-name]) connector, hosted and run in your own environment.
+    Follow these instructions to use the [App Name](https://github.com/conductorone/baton-[connector-name]) connector, hosted and run in your own environment.
 
     When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
 
@@ -451,7 +451,7 @@ Replace these consistently throughout:
 
 ### Links
 - Product docs: `/product/admin/provisioning` (never include `/docs/` — that produces a `/docs/docs/` double-prefix that 404s)
-- GitHub repos: `https://github.com/ConductorOne/baton-[connector-name]`
+- GitHub repos: `https://github.com/conductorone/baton-[connector-name]`
 - Always use full URLs for external links
 
 ---
@@ -462,7 +462,7 @@ Replace these consistently throughout:
 
 ```mdx
 <Warning>
-The **write::org** scope is used by ConductorOne when automatically provisioning and deprovisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
+The **write::org** scope is used by C1 when automatically provisioning and deprovisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
 </Warning>
 ```
 

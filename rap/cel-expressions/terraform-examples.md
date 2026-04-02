@@ -155,6 +155,6 @@ EOT
 
 ## Tips
 
-1. **Validate in UI first** - Test expressions in the ConductorOne UI before deploying via Terraform
+1. **Validate in UI first** - Test expressions in the C1 UI before deploying via Terraform
 2. **Use heredoc for readability** - Complex expressions are easier to read with heredoc syntax
 3. **Check return types** - Conditions return `bool`, approvers return `User`/`list<User>`

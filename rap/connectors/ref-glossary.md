@@ -59,7 +59,7 @@ Term definitions for Baton connector development.
 |------|------------|
 | **One-shot** | Run once, produce c1z file, exit |
 | **Daemon** | Long-running, polls ConductorOne for tasks |
-| **Hosted** | Run by ConductorOne infrastructure |
+| **Hosted** | Run by C1 infrastructure |
 
 ## Meta-Connector Terms
 

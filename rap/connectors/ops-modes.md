@@ -10,7 +10,7 @@ One-shot vs daemon vs hosted mode.
 |------|---------|----------|
 | **One-shot** | No `--client-id` | Run once, produce .c1z file, exit |
 | **Daemon** | `--client-id` provided | Connect to C1, poll for tasks, run continuously |
-| **Hosted** | ConductorOne infrastructure | Managed by ConductorOne, no local deployment |
+| **Hosted** | ConductorOne infrastructure | Managed by C1, no local deployment |
 
 ## One-Shot Mode
 
