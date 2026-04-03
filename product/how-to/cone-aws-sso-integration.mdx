@@ -4,7 +4,7 @@ og:title: How to use Cone with AWS SSO - ConductorOne docs
 og:description: Configure Cone to integrate with AWS IAM Identity Center (SSO) so you can request and use AWS access directly from the AWS CLI.
 description: Configure Cone to integrate with AWS IAM Identity Center (SSO) so you can request and use AWS access directly from the AWS CLI.
 ---
-{/* Editor Refresh: 2026-03-30 */}
+{/* Editor Refresh: 2026-04-03 */}
 
 Cone integrates with AWS IAM Identity Center (SSO) to provide just-in-time access to AWS accounts through ConductorOne. Instead of managing long-lived credentials or navigating the AWS SSO portal, you use your normal AWS CLI workflow and Cone handles access requests and credential fetching behind the scenes.
 
@@ -12,10 +12,10 @@ Cone integrates with AWS IAM Identity Center (SSO) to provide just-in-time acces
 
 When you run an AWS CLI command with a Cone-managed profile, the following happens automatically:
 
-1. The AWS CLI calls `cone aws credentials` to get temporary credentials.
-2. Cone checks ConductorOne for an active grant on that permission set.
+1. The AWS CLI calls `cone aws credentials` via the profile's `credential_process`.
+2. Cone checks ConductorOne for an active grant on the permission set using the entitlement and app IDs stored in the profile.
 3. If you have access, Cone fetches temporary credentials from AWS SSO and returns them to the AWS CLI.
-4. If you don't have access, Cone submits an access request on your behalf, polls for auto-approval, and returns credentials if approved.
+4. If you don't have access, Cone automatically submits an access request, monitors the policy step, and returns credentials if the request is auto-approved.
 
 This means a command like `aws s3 ls --profile production-admin` triggers the entire access request and credential flow transparently.
 
@@ -33,7 +33,7 @@ If you haven't authenticated Cone yet, run `cone login <your-tenant>` first. See
 
 ## Set up Cone for AWS SSO
 
-Run `cone aws setup` to configure your SSO settings and generate AWS CLI profiles for every permission set available to you in ConductorOne.
+Run `cone aws setup` to configure your SSO settings and generate AWS CLI profiles for every AWS permission set available to you in ConductorOne.
 
 ### Step 1: Run the setup command
 
@@ -70,7 +70,7 @@ cone aws setup \
 | `--sso-region` | AWS region where IAM Identity Center is configured. Default: `us-east-1`. |
 | `--region` | Default AWS region for generated CLI profiles. Default: `us-east-1`. |
 
-This command saves your settings to `~/.conductorone/config.yaml`, queries ConductorOne for all AWS permission set entitlements you can see, and creates a profile in `~/.aws/config` for each one.
+This command saves your settings to `~/.conductorone/config.yaml`, queries ConductorOne for all AWS permission set entitlements you can see, and creates a profile in `~/.aws/config` for each one. Each profile stores the ConductorOne app and entitlement IDs so that credential lookups work without any additional configuration.
 </Step>
 </Steps>
 
@@ -111,29 +111,52 @@ If you have an active grant for the permission set in ConductorOne, Cone fetches
 
 If your SSO session has expired, Cone automatically opens a browser for you to re-authenticate (the same flow as `aws sso login`).
 
+If the grant was just approved and AWS hasn't finished provisioning the permission yet, Cone retries automatically for up to 60 seconds until the credentials become available.
+
 ### What happens when you don't have access
 
-If you don't have an active grant, Cone automatically submits an access request in ConductorOne and polls for up to 90 seconds for approval.
+If you don't have an active grant, Cone checks whether the entitlement requires a request form. If it does, Cone directs you to request access interactively:
+
+```text
+No active grant for "production-admin". This entitlement requires a request form — request access with:
+  cone get --app-id <app-id> --entitlement-id <entitlement-id>
+```
+
+If no form is required, Cone automatically submits an access request and monitors the policy step to give you accurate feedback.
 
 **If the request is auto-approved**, credentials are returned immediately:
 
 ```text
 No active grant for "production-admin" — submitting access request...
-Access request submitted (task: abc123). Checking for auto-approval...
-......
+Access request submitted (task: 1234)
+..
 Access granted!
 ```
 
-**If the request requires manual approval**, Cone tells you the request is pending:
+**If the request requires manual approval**, Cone tells you right away instead of waiting:
 
 ```text
 No active grant for "production-admin" — submitting access request...
-Access request submitted (task: abc123). Checking for auto-approval...
-..............
-Request is pending approval. Retry the command after it's approved.
+Access request submitted (task: 1234)
+.
+Request submitted for "production-admin" but requires approval.
+Check status: cone task get 1234
+Once approved, retry the command.
 ```
 
-Once a reviewer approves the request in ConductorOne, run the AWS CLI command again and credentials will be fetched.
+**If a request was already submitted previously**, Cone detects the duplicate and shows the existing task:
+
+```text
+A pending request already exists for "production-admin".
+Check status: cone task get 1234
+Once resolved, retry the command.
+```
+
+**If the request is denied:**
+
+```text
+Access request for "production-admin" was denied
+```
 
 ## Profile naming
 
@@ -157,7 +180,7 @@ You can also use `cone aws credentials` outside of the AWS CLI to fetch temporar
 cone aws credentials production-admin
 ```
 
-This is useful for scripting or piping credentials into other tools.
+This is useful for scripting or piping credentials into other tools. The same access check and auto-request behavior applies.
 
 <Tip>
 See the [Cone command reference](/product/cli/commands#aws) for the full list of flags and options for `cone aws` commands.
@@ -183,13 +206,17 @@ If the SSO region is wrong, re-run setup with the correct value:
 cone aws setup --sso-region us-east-1
 ```
 
-### "No entitlement found matching profile"
+### "Missing cone_app_id or cone_entitlement_id"
 
-The profile name didn't match any entitlement alias in ConductorOne. Make sure you've run `cone aws setup` and that the entitlement exists. Check available entitlements with:
+The AWS profile was created by an older version of Cone that didn't store entitlement IDs. Delete the profile from `~/.aws/config` and re-run `cone aws setup` to recreate it.
 
-```bash
-cone search
-```
+### "This entitlement requires a request form"
+
+The entitlement has custom form fields that must be filled out when requesting access. Cone can't do this non-interactively. Use the `cone get` command shown in the error message to request access with the form.
+
+### "A pending request already exists"
+
+A previous access request for this permission set is still open. Use `cone task get <task-id>` to check its status, or complete it in the ConductorOne web UI.
 
 ### "The AWS CLI is required but was not found on PATH"
 
