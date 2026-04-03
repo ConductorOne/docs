@@ -77,7 +77,7 @@ flowchart LR
 1. **Fetch** - Your connector calls external API
 2. **Transform** - Create Resource/Entitlement/Grant objects
 3. **Output** - SDK writes to .c1z file (gzip SQLite)
-4. **Ingest** - ConductorOne reads the file
+4. **Ingest** - C1 reads the file
 5. **Uplift** - Raw records become domain objects
 
 **You control:** Steps 1-3

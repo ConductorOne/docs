@@ -39,7 +39,7 @@ Configuring the connector requires you to pass in credentials generated in AWS. 
 
 A user with the **Connector Administrator** or **Super Administrator** role in C1 and the **ability to create an IAM Role** in AWS must perform this task.
 
-ConductorOne uses an IAM Trust relationship between your AWS Account and C1's Service AWS Account. This is the [AWS recommended method of sharing access to AWS Accounts](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html). ConductorOne has a specially created and isolated AWS Account dedicated to the AWS integration. For advanced configurations, the only trusted entity should be the following ARN: `arn:aws:iam::765656841499:role/ConductorOneService`
+C1 uses an IAM Trust relationship between your AWS Account and C1's Service AWS Account. This is the [AWS recommended method of sharing access to AWS Accounts](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html). C1 has a specially created and isolated AWS Account dedicated to the AWS integration. For advanced configurations, the only trusted entity should be the following ARN: `arn:aws:iam::765656841499:role/ConductorOneService`
 </Warning>
 
 Follow the relevant set of instructions below to set up the AWS connector for IAM or SSO, as your configuration dictates.
@@ -48,7 +48,7 @@ Follow the relevant set of instructions below to set up the AWS connector for IA
 <Tab title="IAM setup">
 ### IAM setup: Gather credentials that support syncing child account data
 
-To sync IAM data (like users, roles, and groups) from multiple AWS child accounts, ConductorOne uses a secure, read-only mechanism called **cross-account access**. This setup works by allowing a central role in your root account to temporarily assume a specific role in each child account. This method ensures that the connector can gather the necessary data without storing credentials or requiring permanent access.
+To sync IAM data (like users, roles, and groups) from multiple AWS child accounts, C1 uses a secure, read-only mechanism called **cross-account access**. This setup works by allowing a central role in your root account to temporarily assume a specific role in each child account. This method ensures that the connector can gather the necessary data without storing credentials or requiring permanent access.
 
 If you're using this setup, make sure to click **Enable support for AWS Organizations** when setting up the connector in the C1 web UI, and DO NOT click **Enable support for AWS IAM Identity Center** or **Enable usage of the AWS IAM Identity Center SCIM API**.
 
@@ -124,8 +124,8 @@ This custom role acts as a bridge, allowing C1 to securely access your child acc
 
 	**Notes on the Trust Policy:**
 	**"Action": "sts:AssumeRole"**: This is the core permission. It's the only action allowed by this policy, and it specifically allows the C1 role in your root account to temporarily assume this role in the child account. Think of it like a temporary key that only the main account can use.
-	**"Principal": "arn:aws:iam::`{ROOT\_ID}`:role/ConductorOneService"**: This is the trusted entity. It specifies that only the C1 role in your main root account is allowed to assume this role. This ensures that no other account can use this trust policy.
-	**"Condition": "sts:ExternalId"**: The External ID acts as a shared identifier between you and ConductorOne, confirming which trust relationship is being used. This helps prevent the "confused deputy" problem by ensuring the request is coming from the expected context. Learn more about [granting access using External IDs](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html).
+	**"Principal": "arn:aws:iam::`{ROOT\_ID}`:role/C1Service"**: This is the trusted entity. It specifies that only the C1 role in your main root account is allowed to assume this role. This ensures that no other account can use this trust policy.
+	**"Condition": "sts:ExternalId"**: The External ID acts as a shared identifier between you and C1, confirming which trust relationship is being used. This helps prevent the "confused deputy" problem by ensuring the request is coming from the expected context. Learn more about [granting access using External IDs](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html).
     </Step>
     <Step>
     Click **Next**.
@@ -134,7 +134,7 @@ This custom role acts as a bridge, allowing C1 to securely access your child acc
     *Skip* **Add permissions** and click **Next**.
     </Step>
     <Step>
-    Give the role a name, such as **ConductorOneIntegration**.
+    Give the role a name, such as **C1Integration**.
         <Frame>
         ![](/images/product/assets/AWS-3.png)
         </Frame>
@@ -214,7 +214,7 @@ Next, you will create an inline policy to define the specific data this role can
 
     * iam:ListAccessKeys and iam:GetAccessKeyLastUsed: These allow C1 to gather data on the status of your IAM access keys, such as when they were last used. This is useful for identifying unused or stale credentials.
 
-       Note that ConductorOne only retrieves metadata for auditing; it does not store or access the secret access keys themselves.
+       Note that C1 only retrieves metadata for auditing; it does not store or access the secret access keys themselves.
 
     **Optional: AWS Organizations Support** Include these permissions if you enable the "Enable support for AWS Organizations" checkbox in the C1 UI.
 
@@ -229,7 +229,7 @@ Next, you will create an inline policy to define the specific data this role can
         Click **Review Policy**.
     </Step>
     <Step>
-        Give the policy a name, such as **ConductorOnePermissions** and click **Create Policy**.
+        Give the policy a name, such as **C1Permissions** and click **Create Policy**.
         <Frame>
         ![](/images/product/assets/AWS-7.png)
         </Frame>
@@ -326,7 +326,7 @@ The permissions policy below is broken into several sections to align with these
     *Skip* **Add permissions** and click **Next**.
     </Step>
     <Step>
-    Give the role a name, such as **ConductorOneIntegration**.
+    Give the role a name, such as **C1Integration**.
         <Frame>
         ![](/images/product/assets/AWS-3.png)
         </Frame>
@@ -455,7 +455,7 @@ The permissions policy below is broken into several sections to align with these
 	}
 	```
 	**Notes about permissions:**
-	**Section 1: Read-only access (“ConductorOneReadAccess”)**
+	**Section 1: Read-only access (“C1ReadAccess”)**
 	This group of permissions is the minimum required for C1 to discover and sync your SSO users, groups, and permission sets. These are strictly read-only permissions.
 	- `iam:CreateUser`: This permission is required to provision IAM user accounts.
 	- `iam:List..., iam:GetGroup`: These are standard IAM permissions for listing users, groups, and roles. They are necessary to identify resources within your AWS account. iam:GetGroup provides the members of a group.
@@ -463,7 +463,7 @@ The permissions policy below is broken into several sections to align with these
 	- `organizations:ListAccounts`: This permission is required to list all the accounts within your AWS Organization, enabling C1 to understand your account structure.
 	- `sso:List..., sso:Describe...`: These permissions allow C1 to list your permission sets and see how they are assigned to accounts and users.
 	- `iam:GetUser, and various iam:List... permissions`: These permissions are necessary for C1 to first retrieve all associated credentials and metadata for an IAM user before a complete deletion can be performed.
-	**Section 2: Provisioning access (“ConductorOneProvisionAccess”)**
+	**Section 2: Provisioning access (“C1ProvisionAccess”)**
 	This group of permissions is only required if you want to provision (create or delete) user assignments in AWS, including managing IAM users directly. For example, if you plan to use C1 to add a user to a group, assign a permission set to a user, create an IAM user, or fully delete an IAM user, you will need to include these permissions.
 	- `iam:AddUserToGroup, iam:RemoveUserFromGroup`: These permissions are used to manage IAM group memberships directly.
 	- `sso:CreateAccountAssignment, sso:DeleteAccountAssignment`: These are the core permissions for provisioning. They allow C1 to add or remove assignments of permission sets to users within your organization.
@@ -472,10 +472,10 @@ The permissions policy below is broken into several sections to align with these
 	- `iam:TagUser`: This permission is required to add tags to a newly created IAM user.
 	**Section 3: Access to SSO-provisioned roles (“AccessToSSOProvisionedRoles”)**
 	This group of permissions allows C1 to inspect and manage the AWS-managed roles created by IAM Identity Center in your accounts. This is crucial for understanding how permission sets are being applied.
-	- `iam:AttachRolePolicy, iam:DeleteRole, iam:GetRole, etc.`: These are permissions to manage IAM roles. The key detail is the Resource constraint: `arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*`. This ensures that ConductorOne can only interact with roles created and managed by the AWS SSO service itself, preventing it from modifying other roles in your account.
+	- `iam:AttachRolePolicy, iam:DeleteRole, iam:GetRole, etc.`: These are permissions to manage IAM roles. The key detail is the Resource constraint: `arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*`. This ensures that C1 can only interact with roles created and managed by the AWS SSO service itself, preventing it from modifying other roles in your account.
 	**Section 4: Other permissions**
 	These are supporting permissions that enable specific features or functionality. Some of the permissions listed here can be omitted if your particular use case doesn’t require the data they pull in to C1.
-	- `IAMListPermissions`: This section allows C1 to sync data on access keys. ConductorOne does not store or access the access keys. If you do not want to sync access key data, you can omit this section.
+	- `IAMListPermissions`: This section allows C1 to sync data on access keys. C1 does not store or access the access keys. If you do not want to sync access key data, you can omit this section.
 	- `sts:AssumeRole`: **This permission is only needed for requesting child accounts when Identity Center is not configured, and can be omitted otherwise.** This permission allows C1 to assume the `OrganizationAccountAccessRole` in your child accounts, which allows C1 to discover and sync resources across your AWS Organization.
 	- `iam:GetSAMLProvider`: This is a necessary permission to read the configuration of the SAML provider that AWS SSO uses for single sign-on.
 	- The permissions listed in the `"Sid": "IAMListPermissions"` and `"Sid": "AccessToSSOProvisiondRoles"` sections are required only if you want to use C1 to create assignments in the AWS Organization’s management account. In certain cases, you may also need to add `iam:UpdateSAMLProvider` to these sections.
@@ -485,7 +485,7 @@ The permissions policy below is broken into several sections to align with these
     Click **Review Policy**.
     </Step>
     <Step>
-    Give the policy a name, such as **ConductorOnePermissions** and click **Create Policy**.
+    Give the policy a name, such as **C1Permissions** and click **Create Policy**.
     <Frame>
     ![](/images/product/assets/AWS-7.png)
     </Frame>
@@ -688,7 +688,7 @@ spec:
 
 <Steps>
     <Step>
-    Log into [ConductorOne](https://accounts.conductor.one/accounts).
+    Log into [C1](https://accounts.conductor.one/accounts).
     </Step>
     <Step>
     Click **Connectors** > **AWS Connector**.

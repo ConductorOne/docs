@@ -120,7 +120,7 @@ RAP files target LLM agents, not humans. Write differently than human-facing doc
 
 **Example contrast:**
 
-Human docs: "The Baton connector framework solves this elegantly: you write one integration, and ConductorOne handles the rest."
+Human docs: "The Baton connector framework solves this elegantly: you write one integration, and C1 handles the rest."
 
 RAP docs: "A connector translates access data from any system into C1's common format."
 

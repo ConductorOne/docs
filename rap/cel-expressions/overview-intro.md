@@ -1,6 +1,6 @@
 # CEL Overview
 
-CEL (Common Expression Language) is Google's expression language for policy evaluation. ConductorOne uses CEL to let you encode access logic that would be impossible with dropdown menus.
+CEL (Common Expression Language) is Google's expression language for policy evaluation. C1 uses CEL to let you encode access logic that would be impossible with dropdown menus.
 
 ## Why CEL for Authorization
 

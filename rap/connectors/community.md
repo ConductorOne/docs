@@ -39,7 +39,7 @@ Good: "Sync fails with 'unauthorized' when listing users. Using baton-okta v0.5.
 |---------|----------|---------|
 | GitHub Issues | Days | Bugs, features |
 | GitHub Discussions | Days | Questions |
-| ConductorOne Support | Hours | Production (customers) |
+| C1 Support | Hours | Production (customers) |
 
 ---
 

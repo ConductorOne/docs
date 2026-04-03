@@ -32,7 +32,7 @@ jobs:
 
 The action:
 1. Requests GitHub OIDC token with tenant as audience
-2. Exchanges for ConductorOne access token
+2. Exchanges for C1 access token
 3. Exports `CONDUCTORONE_ACCESS_TOKEN` and `CONDUCTORONE_CLIENT_ID`
 4. Masks token in logs
 5. Cleans up when job finishes

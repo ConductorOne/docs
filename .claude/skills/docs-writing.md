@@ -1,16 +1,16 @@
 ---
 name: c1-docs-writer
-description: Write documentation for ConductorOne's website following established voice, tone, and style guidelines. Use when creating new documentation pages, updating existing docs, writing how-to guides, or any content for conductorone.com/docs. Ensures consistency with ConductorOne's direct, action-oriented documentation style.
+description: Write documentation for C1's website following established voice, tone, and style guidelines. Use when creating new documentation pages, updating existing docs, writing how-to guides, or any content for conductorone.com/docs. Ensures consistency with C1's direct, action-oriented documentation style.
 ---
 
-# ConductorOne Documentation Writer
+# C1 Documentation Writer
 
-Write ConductorOne documentation that matches the established voice, tone, and style of the existing docs site.
+Write C1 documentation that matches the established voice, tone, and style of the existing docs site.
 
 ## When to Use This Skill
 
 Use this skill when:
-- Creating new documentation pages for ConductorOne
+- Creating new documentation pages for C1
 - Writing or updating how-to guides
 - Drafting admin guides or end-user documentation
 - Creating quickstart guides
@@ -18,7 +18,7 @@ Use this skill when:
 
 ## File Format
 
-**Always use .mdx format** for ConductorOne documentation files. MDX (Markdown with JSX) is the required format for the docs site. When creating new documentation, save files with the `.mdx` extension.
+**Always use .mdx format** for C1 documentation files. MDX (Markdown with JSX) is the required format for the docs site. When creating new documentation, save files with the `.mdx` extension.
 
 ### Content Structure
 
@@ -49,7 +49,7 @@ Sidebar grouping in `docs.json` is independent of folder structure. You can visu
 
 ## Writing Process
 
-Follow this process when creating ConductorOne documentation:
+Follow this process when creating C1 documentation:
 
 1. **Read the style guide first**: Always start by reading `references/style-guide.md` to refresh on the voice, tone, and formatting conventions.
 
@@ -64,7 +64,7 @@ Follow this process when creating ConductorOne documentation:
    - Break procedures into numbered steps
    - Include a "What's [feature name]?" section if conceptual explanation is needed
 
-4. **Write in ConductorOne's voice**:
+4. **Write in C1's voice**:
    - Direct and helpful, like a knowledgeable colleague
    - Action-oriented, focused on what users need to do
    - Use "you" and "your" to address readers
