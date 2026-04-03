@@ -27,8 +27,10 @@ cone [command]
 
 | Command      | Subcommand                                 | Description                                                             |
 | :--- | :--- | :--- |
+| `aws`        | `setup` `credentials`                      | AWS SSO integration: configure profiles and get credentials.            |
 | `completion` | `bash` `fish` `powershell` `zsh`           | Generate the autocompletion script for the specified shell.             |
 | `drop`       |                                            | Create a revoke access ticket for an entitlement by alias.              |
+| `generate-alias` |                                       | Generate aliases for entitlements in ConductorOne.                      |
 | `get`        |                                            | Create an access request for an entitlement by alias.                   |
 | `get-user`   |                                            | Get a user by ID.                                                       |
 | `has` |   | Check if the current user has a specific entitlement for an app. | 
@@ -36,6 +38,7 @@ cone [command]
 | `login`      |                                            | Authenticate to ConductorOne, creating config.yaml if it doesn't exist. |
 | `search`     |                                            |                                                                         |
 | `task`       | `approve`  `comment` `deny` `escalate` `get` `search` | Interact with tasks directly.                                           |
+| `virtual-entitlements` | `create`                        | Create virtual (manually-managed) entitlements on an app.               |
 | `whoami`     |                                            | Show information about the current user.                                |
 
 ## Global flags
@@ -52,6 +55,88 @@ cone [command]
 <Tip>
 To see Cone's current version number, run `cone --version` or `cone -v`.
 </Tip>
+
+## AWS
+
+AWS SSO integration commands. Cone can configure AWS CLI profiles backed by ConductorOne access controls and fetch temporary credentials via AWS SSO.
+
+For a full walkthrough, see [Using Cone with AWS SSO](/product/how-to/cone-aws-sso-integration).
+
+**Usage:**
+
+```bash
+cone aws [command]
+```
+
+| Subcommand    | Description                                                          |
+| :--- | :--- |
+| `setup`       | Configure AWS SSO and create profiles for available permission sets. |
+| `credentials` | Get temporary AWS credentials for a profile.                        |
+
+### `setup`
+
+Scans ConductorOne for all AWS permission set entitlements available to you and creates corresponding profiles in `~/.aws/config`. Each profile uses `credential_process` to call `cone aws credentials` when the AWS CLI needs credentials.
+
+On first run, provide your SSO start URL and regions. These are saved to `~/.conductorone/config.yaml` for future runs.
+
+**Usage:**
+
+```bash
+cone aws setup [flags]
+```
+
+| Flag                    | Description                                                                           |
+| :--- | :--- |
+| `-h`, `--help`          | Help for setup.                                                                       |
+| `--region string`       | Default AWS region for CLI profiles, such as `us-west-2`. (Default: `us-east-1`.)     |
+| `--sso-region string`   | AWS region where SSO Identity Center is configured. (Default: `us-east-1`.)            |
+| `--sso-url string`      | AWS SSO start URL. (Required on first run.)                                            |
+
+**Example:**
+
+```bash
+# First-time setup
+cone aws setup --sso-url https://myorg.awsapps.com/start --sso-region us-east-1 --region us-west-2
+
+# Refresh profiles (reuses saved config)
+cone aws setup
+```
+
+#### `setup show`
+
+Display current AWS SSO configuration (SSO URL, SSO region, default region).
+
+```bash
+cone aws setup show
+```
+
+### `credentials`
+
+Retrieve temporary AWS credentials for an AWS SSO profile managed by Cone.
+
+This command checks ConductorOne for an active grant. If you don't have access, it automatically submits an access request, polls for up to 90 seconds for auto-approval, and returns credentials if approved. If the request requires manual approval, it tells you the request is pending.
+
+Can be used directly or as an AWS `credential_process`.
+
+**Usage:**
+
+```bash
+cone aws credentials <profile-name> [flags]
+```
+
+| Flag           | Description            |
+| :--- | :--- |
+| `-h`, `--help` | Help for credentials.  |
+
+**Example:**
+
+```bash
+# Use directly
+cone aws credentials myaccount-admin
+
+# Or let AWS CLI call it via credential_process (configured by setup)
+aws s3 ls --profile myaccount-admin
+```
 
 ## Completion
 
@@ -188,6 +273,55 @@ Create a revoke access ticket for an entitlement by alias.
 | `-j`, `--justification string`  | The justification for the request. (Default: `Made with cone`.)                              |
 | `-q`, `--query string`          | The query to filter by.                                                                      |
 | `-w`, `--wait`                  | Wait for the task to be approved and provisioned.                                            |
+
+## Generate-alias
+
+Generate aliases for entitlements in ConductorOne. This command scans entitlements, generates aliases based on a configurable schema, and updates them via the ConductorOne API.
+
+**Usage:**
+
+```bash
+cone generate-alias [flags]
+```
+
+| Flag                         | Description                                                                                      |
+| :--- | :--- |
+| `--dry-run`                  | Preview changes without making them.                                                             |
+| `--entitlement-id strings`   | Process only these entitlements.                                                                 |
+| `--force`                    | Override ALL existing aliases (including AWS permission sets).                                    |
+| `--force-non-aws`            | Override existing aliases for non-AWS entitlements.                                               |
+| `--format string`            | Custom format string (only used with `schema=custom`). (Default: `%r-%e`.)                        |
+| `-h`, `--help`               | Help for generate-alias.                                                                         |
+| `--resource-type strings`    | Only process entitlements with these resource types.                                              |
+| `--schema string`            | Alias schema: `resource-entitlement`, `app-entitlement`, `app-resource-entitlement`, `resource-type-entitlement`, `custom`. (Default: `resource-entitlement`.) |
+| `--separator string`         | Separator between components. (Default: `-`.)                                                     |
+| `--skip-aws`                 | Skip AWS permission sets entirely.                                                                |
+
+**Schemas:**
+
+| Schema | Format | Example |
+| :--- | :--- | :--- |
+| `resource-entitlement` | resource + entitlement | `my-group-admin` |
+| `app-entitlement` | app + entitlement | `github-admin` |
+| `app-resource-entitlement` | app + resource + entitlement | `github-my-group-admin` |
+| `resource-type-entitlement` | resource type + entitlement | `group-admin` |
+| `custom` | Use `--format` with `%a` (app), `%r` (resource), `%t` (resource type), `%e` (entitlement) | `%a-%r-%e` |
+
+**Examples:**
+
+```bash
+# Preview aliases without making changes
+cone generate-alias --dry-run
+
+# Generate with default schema
+cone generate-alias
+
+# Use app-based schema
+cone generate-alias --schema app-entitlement
+
+# Custom format
+cone generate-alias --schema custom --format "%a-%r-%e"
+```
 
 ## Get
 
@@ -441,6 +575,57 @@ cone task search [flags]
 | `--state string`                  | Filter tasks by their state (open, closed).                                      |
 | `--task-type string` | Filter tasks by their task type (grant, revoke, certify). |
 | `--user-subject-ids strings`      | Filter tasks by user subject IDs (C1 user target of the task).                   |
+
+## Virtual-entitlements
+
+Create virtual (manually-managed) resource types, resources, and entitlements on a ConductorOne app.
+
+**Usage:**
+
+```bash
+cone virtual-entitlements [command]
+```
+
+| Subcommand | Description                                                          |
+| :--- | :--- |
+| `create`   | Create virtual resource types, resources, and entitlements on an app. |
+
+### `create`
+
+Create virtual entitlements on an app. You can specify resources and entitlements via CLI flags or a YAML file.
+
+**Usage:**
+
+```bash
+cone virtual-entitlements create --app <app-id-or-name> --resource "My Group" --type GROUP --entitlements "Member" --entitlements "Admin"
+cone virtual-entitlements create --app <app-id-or-name> --from-file entitlements.yaml
+```
+
+| Flag                     | Description                                                                                     |
+| :--- | :--- |
+| `--app string`           | App ID or display name. (Required.)                                                             |
+| `--entitlements strings` | Entitlement names. (Repeatable.)                                                                |
+| `-f`, `--from-file string` | YAML file with resource/entitlement definitions.                                              |
+| `-h`, `--help`           | Help for create.                                                                                |
+| `--resource string`      | Resource display name.                                                                          |
+| `-t`, `--type string`    | Resource type: `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`, `CUSTOM`, `VAULT`, `PROFILE_TYPE`. (Default: `CUSTOM`.) |
+
+**YAML file format:**
+
+```yaml
+resources:
+  - name: "My Group"
+    type: GROUP
+    description: "optional"
+    entitlements:
+      - "Member"
+      - "Admin"
+  - name: "Another Resource"
+    type: ROLE
+    entitlements:
+      - "Viewer"
+      - "Editor"
+```
 
 ## Whoami
 
