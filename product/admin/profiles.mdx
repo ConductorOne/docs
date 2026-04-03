@@ -181,26 +181,29 @@ Any users who have been granted the full access profile but do not currently hav
 
 ## Grant duration and expiration in access profiles
 
-Access profiles have two settings that control how long access lasts and what happens when it ends:
+Access profiles don't have their own grant duration. When a user enrolls in a profile, ConductorOne creates individual grants for each entitlement in the profile — and each grant follows the duration configured on that entitlement, not a shared profile-level clock. If different entitlements in the same profile have different durations configured, their grants will expire at different times.
+
+This also means that **unenrolling a user from a profile doesn't revoke their underlying grants.** The grants ConductorOne created at enrollment time continue to exist independently unless they expire or are revoked separately.
+
+### Profile expiration settings
+
+Access profiles have two settings that control enrollment duration and what happens when it ends:
 
 - **Maximum enrollment duration** — the longest enrollment period a user can request. If a user requests a duration longer than the maximum, it's capped. If they don't specify a duration, the maximum is used as the default.
-- **When enrollment expires** — what ConductorOne does to the underlying entitlement grants when the enrollment period ends. The options are leave access as-is, revoke all access, or revoke access that isn't otherwise justified.
+- **When enrollment expires** — what ConductorOne does to a user's entitlement grants when their profile enrollment period ends. There are three options:
+  - **Leave as-is** — grants are not touched when enrollment expires. Access continues until grants expire on their own schedule or are revoked manually.
+  - **Revoke all** — all grants created by this enrollment are revoked when enrollment expires, regardless of any other access the user holds.
+  - **Revoke if unjustified** — grants are revoked when enrollment expires, unless the user is still enrolled in another active profile that includes the same entitlement. A direct grant to the same entitlement does not count as justification.
 
-### Interaction with direct grants
+### When a user has both a profile enrollment and a direct grant
 
-A user may hold the same entitlement via two sources simultaneously: an access profile enrollment and a direct grant. When that happens, the duration of each grant and the profile's expiration behavior setting together determine what the user can access and for how long.
+A user may hold the same entitlement from two sources at once: a profile enrollment and a direct grant. In that case, both the individual grant durations and the profile's **When enrollment expires** setting affect what happens to access over time.
 
-The table below describes the outcomes for each scenario.
-
-| Scenario | When enrollment expires setting | Result |
+| When does access end? | When enrollment expires setting | What happens |
 |---|---|---|
-| Direct grant expires before profile enrollment | — | Access is revoked when the direct grant expires, even though the profile enrollment is still active |
-| Profile expires before direct grant | Leave as-is | No changes are made to access. The direct grant remains active. |
-| Profile expires before direct grant | Revoke all | Access is revoked regardless of the direct grant |
-| Profile expires before direct grant | Revoke if unjustified | Access is revoked. A direct grant does not count as justification — only enrollment in another active profile that includes the same entitlement protects access |
-| Direct grant expires; profile has no expiration | — | Access is revoked when the direct grant expires, even though the profile enrollment has no expiration |
-| Profile expires; direct grant has no expiration | Leave as-is | No changes are made to access. The direct grant remains active. |
-| Profile expires; direct grant has no expiration | Revoke all | Access is revoked regardless of the direct grant |
-| Profile expires; direct grant has no expiration | Revoke if unjustified | Access is revoked. A direct grant does not count as justification — only enrollment in another active profile that includes the same entitlement protects access |
+| The direct grant expires before the profile enrollment | Any | Access is revoked when the direct grant expires, even though the enrollment is still active |
+| The profile enrollment expires; the direct grant is still active | Leave as-is | Access continues. The direct grant remains active. |
+| The profile enrollment expires; the direct grant is still active | Revoke all | Access is revoked, regardless of the direct grant |
+| The profile enrollment expires; the direct grant is still active | Revoke if unjustified | Access is revoked. A direct grant does not count as justification. |
 
 
