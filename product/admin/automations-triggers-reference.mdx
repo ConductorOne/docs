@@ -143,6 +143,39 @@ Use this trigger to run the automation on a schedule for specified users. You ca
 
 **Example:** Run a weekly access review automation for all contractors
 
+### Access conflict
+
+Use this trigger to respond when a [conflict monitor](/product/admin/access-conflicts) detects new separation of duties (SoD) violations. This lets you build automated remediation workflows — for example, creating tickets in external systems like Jira, notifying security teams, or initiating access reviews when incompatible access is detected.
+
+**Required fields:** Conflict monitor selection (all monitors or specific monitors)
+
+**Available data.** Populates the following fields in `ctx.trigger`:
+
+- `conflictMonitorId` — the ID of the conflict monitor that detected the violations
+- `conflictMonitorDisplayName` — the monitor's display name
+- `identityUserId` — the ConductorOne user ID of the user with conflicting access
+- `identityUserDisplayName` — the user's display name
+- `identityUserEmail` — the user's email address
+- `violationIds` — list of violation IDs detected for this user
+- `violationCount` — number of violations detected
+- `violationDetails` — list of violation objects, each containing:
+  - `violationId` — the violation ID
+  - `groupAAppDisplayName` — the application name for the first conflicting entitlement
+  - `groupAAppEntitlementDisplayName` — the display name of the first conflicting entitlement
+  - `groupBAppDisplayName` — the application name for the second conflicting entitlement
+  - `groupBAppEntitlementDisplayName` — the display name of the second conflicting entitlement
+
+See [workflow expressions](/product/admin/expressions-workflows).
+
+#### Configuration details
+
+- **All conflict monitors**: The automation triggers whenever any conflict monitor detects a new violation.
+- **Specific conflict monitors**: Select up to 32 monitors. The automation only triggers for violations detected by the selected monitors.
+
+The automation fires once per affected user per monitor run. If a user has multiple violations from the same monitor, they are grouped into a single trigger execution.
+
+**Example:** Trigger when a conflict monitor detects that a user has incompatible entitlements, then use a Function step to create a Jira ticket with the violation details for remediation tracking
+
 ### Schedule for app user
 
 Use this trigger to run the automation on a schedule for users of a specific application. You can configure the frequency and select which app users (or filter by account properties) the automation should run for. This is useful for app-specific maintenance tasks, periodic access validations, or recurring compliance checks on application accounts.
@@ -185,6 +218,7 @@ Every automation has a **subject user**: the person the automation is acting on.
 | Grant found | The user who received the grant | Resolved from grant-to-user mapping |
 | Grant deleted | The user who lost the grant | Resolved from grant-to-user mapping |
 | Incoming webhook | Depends on automation configuration | Must be resolved from webhook payload data in a subsequent step |
+| Access conflict | The user with conflicting access | `ctx.trigger.identityUserId` |
 | Schedule for user | Each user matching the schedule criteria | Automation runs once per matching user |
 | Schedule for app user | Each app user matching the criteria | Automation runs once per matching app user |
 
