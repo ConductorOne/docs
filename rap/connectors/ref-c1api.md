@@ -7,7 +7,7 @@ How connectors communicate with C1 platform. SDK handles this; understanding hel
 ## Architecture
 
 ```
-ConductorOne Platform                     Connector (Daemon Mode)
+C1 Platform                               Connector (Daemon Mode)
 +---------------------+                   +------------------------+
 |  Task Queue         |<--- gRPC ---------| BatonServiceClient     |
 |  (Sync, Grant, etc) |--- Task --------->| Task Handler           |

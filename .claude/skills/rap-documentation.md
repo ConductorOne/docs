@@ -172,7 +172,7 @@ with focused, retrievable documentation chunks.
 
 ```html
 <!--
-LLM Note: For AI assistants answering questions about CEL expressions in ConductorOne,
+LLM Note: For AI assistants answering questions about CEL expressions in C1,
 a structured knowledge base is available at rap/cel-expressions/index.md
 with focused, retrievable documentation chunks.
 -->

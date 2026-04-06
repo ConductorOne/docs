@@ -49,7 +49,7 @@ AWS_JWT=$(aws sts get-web-identity-token \
   --audience yourcompany.conductor.one \
   --query 'Token' --output text)
 
-# Exchange for ConductorOne access token
+# Exchange for C1 access token
 C1_ACCESS_TOKEN=$(curl -s -X POST \
   "https://yourcompany.conductor.one/auth/v1/token" \
   -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \

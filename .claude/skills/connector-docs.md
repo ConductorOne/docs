@@ -145,7 +145,7 @@ Some connectors support custom actions that can be used in C1 automations. Add t
 ```mdx
 ### Connector actions
 
-Connector actions are custom capabilities that extend ConductorOne automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
@@ -206,13 +206,13 @@ To configure the [App Name] connector, you need [specific permission level] perm
 
     1. Navigate to [location]
     2. Click **[Button]**
-    3. Enter a name: `ConductorOne`
+    3. Enter a name: `C1`
     4. Select the following scopes:
        - `scope:name` - [What this enables]
        - `scope:name` - [What this enables]
 
     <Warning>
-    The **scope:name** scope is used by C1 when automatically provisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
+    The **scope:name** scope is used by C1 when automatically provisioning access. **If you do not want C1 to perform these tasks, do not grant this scope.**
     </Warning>
 
     5. Click **[Generate/Create]**
@@ -462,7 +462,7 @@ Replace these consistently throughout:
 
 ```mdx
 <Warning>
-The **write::org** scope is used by C1 when automatically provisioning and deprovisioning access. **If you do not want ConductorOne to perform these tasks, do not grant this scope.**
+The **write::org** scope is used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, do not grant this scope.**
 </Warning>
 ```
 
