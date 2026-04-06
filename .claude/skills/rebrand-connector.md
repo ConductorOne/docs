@@ -41,7 +41,7 @@ If the file doesn't exist, report that and stop — this repo doesn't have a con
 The script lives in the docs repo. Use its absolute path:
 
 ```bash
-python3 /tmp/c1-docs-fresh/scripts/rebrand-connector.py $WORKDIR/docs/connector.mdx
+python3 /Users/melindamoreland/Documents/GitHub/docs/scripts/rebrand-connector.py $WORKDIR/docs/connector.mdx
 ```
 
 If the script prints "No changes.", the file is already up to date. Report this and stop — no PR needed.
