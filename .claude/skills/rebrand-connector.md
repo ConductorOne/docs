@@ -62,13 +62,14 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 git push origin docs/c1-rebrand
 ```
 
-### 6. Open a PR
+### 6. Open a PR and request review
 
 ```bash
-gh pr create \
+PR_URL=$(gh pr create \
   --repo ConductorOne/$REPO \
   --head docs/c1-rebrand \
   --base main \
+  --reviewer dslick \
   --title "docs: apply C1 rebrand to connector.mdx" \
   --body "Updates \`docs/connector.mdx\` with the C1 rebrand:
 
@@ -76,12 +77,23 @@ gh pr create \
 - Updates brand color \`#65DE23\` → \`#c937ae\`
 - Lowercases GitHub org name in the repository resource link
 
-URLs that are case-sensitive or functional (distro site, tenant URLs, email addresses, file paths) are unchanged."
+URLs that are case-sensitive or functional (distro site, tenant URLs, email addresses, file paths) are unchanged.")
+echo $PR_URL
 ```
 
-### 7. Report
+### 7. Enable auto-merge
 
-Print the PR URL and confirm completion. Clean up the temp directory:
+Try squash merge first (most common across the fleet). If the repo isn't configured for squash merges, fall back to a standard merge commit:
+
+```bash
+if ! gh pr merge "$PR_URL" --auto --squash 2>/dev/null; then
+  gh pr merge "$PR_URL" --auto --merge
+fi
+```
+
+### 8. Report
+
+Print the PR URL and auto-merge status, then clean up the temp directory:
 
 ```bash
 rm -rf $WORKDIR
