@@ -1,18 +1,18 @@
 ---
 title: AWS IAM integration
-og:title: AWS IAM integration - ConductorOne docs
-og:description: Set up secretless authentication from AWS workloads to ConductorOne using IAM outbound identity federation.
-description: Set up secretless authentication from AWS workloads to ConductorOne using IAM outbound identity federation.
+og:title: AWS IAM integration - C1 docs
+og:description: Set up secretless authentication from AWS workloads to C1 using IAM outbound identity federation.
+description: Set up secretless authentication from AWS workloads to C1 using IAM outbound identity federation.
 sidebarTitle: AWS IAM
 ---
 
 {/* Editor Refresh: 2026-03-18 */}
 
 <Warning>
-**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-AWS IAM outbound identity federation lets your AWS workloads (EC2 instances, Lambda functions, ECS tasks, and more) obtain signed JWTs that ConductorOne can trust directly. No long-lived API keys to store or rotate.
+AWS IAM outbound identity federation lets your AWS workloads (EC2 instances, Lambda functions, ECS tasks, and more) obtain signed JWTs that C1 can trust directly. No long-lived API keys to store or rotate.
 
 ## Prerequisites
 
@@ -46,7 +46,7 @@ Before your workloads can request tokens, enable the feature in your AWS account
 
 ## Step 2: Configure IAM permissions
 
-Create an IAM policy that grants `sts:GetWebIdentityToken` with your ConductorOne tenant domain as the audience. Attach this policy to the IAM role used by your workload.
+Create an IAM policy that grants `sts:GetWebIdentityToken` with your C1 tenant domain as the audience. Attach this policy to the IAM role used by your workload.
 
 ```json
 {
@@ -66,13 +66,13 @@ Create an IAM policy that grants `sts:GetWebIdentityToken` with your ConductorOn
 }
 ```
 
-## Step 3: Create a federation trust in ConductorOne
+## Step 3: Create a federation trust in C1
 
-When creating the provider in ConductorOne, select the **AWS IAM Outbound** preset and enter the issuer URL from Step 1. Then create a trust with a CEL expression to control which AWS principals can authenticate. See [set up federation](/product/admin/service-principals/federation-setup) for the full walkthrough.
+When creating the provider in C1, select the **AWS IAM Outbound** preset and enter the issuer URL from Step 1. Then create a trust with a CEL expression to control which AWS principals can authenticate. See [set up federation](/product/admin/service-principals/federation-setup) for the full walkthrough.
 
 ## Step 4: Request and exchange the token
 
-From your AWS workload, call `GetWebIdentityToken` to get a signed JWT, then exchange it for a ConductorOne access token:
+From your AWS workload, call `GetWebIdentityToken` to get a signed JWT, then exchange it for a C1 access token:
 
 ```bash
 # Request a JWT from AWS STS
@@ -80,7 +80,7 @@ AWS_JWT=$(aws sts get-web-identity-token \
   --audience yourcompany.conductor.one \
   --query 'Token' --output text)
 
-# Exchange for a ConductorOne access token
+# Exchange for a C1 access token
 C1_ACCESS_TOKEN=$(curl -s -X POST \
   "https://yourcompany.conductor.one/auth/v1/token" \
   -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
@@ -90,16 +90,16 @@ C1_ACCESS_TOKEN=$(curl -s -X POST \
   | jq -r '.access_token')
 ```
 
-Use the access token in an `Authorization: Bearer` header for ConductorOne API calls:
+Use the access token in an `Authorization: Bearer` header for C1 API calls:
 
 ```bash
 curl -s "https://yourcompany.conductor.one/api/v1/apps" \
   -H "Authorization: Bearer $C1_ACCESS_TOKEN"
 ```
 
-### Using with ConductorOne tools
+### Using with C1 tools
 
-When using ConductorOne tools (`cone`, Terraform provider), you must set both of these environment variables. The tools require them to handle the token exchange internally:
+When using C1 tools (`cone`, Terraform provider), you must set both of these environment variables. The tools require them to handle the token exchange internally:
 
 ```bash
 export CONDUCTORONE_OIDC_TOKEN=$AWS_JWT

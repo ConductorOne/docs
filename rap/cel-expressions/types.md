@@ -1,6 +1,6 @@
 # CEL Type Definitions
 
-This document covers all types used in ConductorOne CEL expressions: primitives, time types, collections, enums, and object types.
+This document covers all types used in C1 CEL expressions: primitives, time types, collections, enums, and object types.
 
 ## Primitive Types
 
@@ -74,7 +74,7 @@ Always use the full enum name (e.g., `UserStatus.ENABLED`, not just `ENABLED`).
 
 | Value | Meaning |
 |:------|:--------|
-| `TaskOrigin.WEBAPP` | Created in ConductorOne web interface |
+| `TaskOrigin.WEBAPP` | Created in C1 web interface |
 | `TaskOrigin.SLACK` | Created via Slack integration |
 | `TaskOrigin.API` | Created via API |
 | `TaskOrigin.JIRA` | Created via Jira integration |
@@ -106,14 +106,14 @@ Used in `ctx.trigger.oldAccount.status.status` and `ctx.trigger.newAccount.statu
 ### User vs AppUser
 
 These are different types:
-- **User** = A person in the ConductorOne directory (synced from identity provider)
+- **User** = A person in the C1 directory (synced from identity provider)
 - **AppUser** = That person's account in a specific app (GitHub account, Okta account, etc.)
 
 One User can have many AppUsers across different connected applications.
 
 ### User
 
-A person in the ConductorOne directory.
+A person in the C1 directory.
 
 **Returned by:** `FindByEmail`, `GetByID`, `GetManagers`, `DirectReports`, `GetEntitlementMembers`
 
@@ -164,7 +164,7 @@ A user's account within a specific connected application.
 
 ### Group
 
-A ConductorOne group (entitlement in the builtin Groups app).
+A C1 group (entitlement in the builtin Groups app).
 
 **Returned by:** `FindByName`
 

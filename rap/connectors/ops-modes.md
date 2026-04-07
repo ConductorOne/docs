@@ -10,7 +10,7 @@ One-shot vs daemon vs hosted mode.
 |------|---------|----------|
 | **One-shot** | No `--client-id` | Run once, produce .c1z file, exit |
 | **Daemon** | `--client-id` provided | Connect to C1, poll for tasks, run continuously |
-| **Hosted** | ConductorOne infrastructure | Managed by ConductorOne, no local deployment |
+| **Hosted** | C1 infrastructure | Managed by C1, no local deployment |
 
 ## One-Shot Mode
 
@@ -34,7 +34,7 @@ Use for:
 
 ## Daemon Mode
 
-Connect to ConductorOne and process tasks continuously:
+Connect to C1 and process tasks continuously:
 
 ```bash
 ./baton-myservice \
@@ -44,7 +44,7 @@ Connect to ConductorOne and process tasks continuously:
 ```
 
 The connector:
-1. Authenticates to ConductorOne
+1. Authenticates to C1
 2. Polls for sync/provisioning tasks
 3. Executes tasks and reports results
 4. Repeats until stopped
@@ -56,12 +56,12 @@ Use for:
 
 ## Hosted Mode
 
-ConductorOne runs the connector for you:
+C1 runs the connector for you:
 - No infrastructure to manage
 - Automatic updates
-- Credentials stored in ConductorOne
+- Credentials stored in C1
 
-Check if your connector is available as hosted in the ConductorOne console.
+Check if your connector is available as hosted in the C1 console.
 
 ## Provisioning Flag
 

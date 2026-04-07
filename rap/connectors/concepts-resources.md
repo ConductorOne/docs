@@ -35,7 +35,7 @@ Each resource has a **resource type** with optional **traits**.
 
 ## Traits
 
-Traits tell ConductorOne how to interpret a resource:
+Traits tell C1 how to interpret a resource:
 
 | Trait | Use For |
 |-------|---------|

@@ -10,7 +10,7 @@ Getting help and contributing to the Baton connector ecosystem.
 
 | Repository | Use For |
 |------------|---------|
-| [baton-sdk](https://github.com/ConductorOne/baton-sdk/discussions) | SDK questions, general development |
+| [baton-sdk](https://github.com/conductorone/baton-sdk/discussions) | SDK questions, general development |
 | Specific connector repos | Issues with that connector |
 
 Before asking:
@@ -39,7 +39,7 @@ Good: "Sync fails with 'unauthorized' when listing users. Using baton-okta v0.5.
 |---------|----------|---------|
 | GitHub Issues | Days | Bugs, features |
 | GitHub Discussions | Days | Questions |
-| ConductorOne Support | Hours | Production (customers) |
+| C1 Support | Hours | Production (customers) |
 
 ---
 

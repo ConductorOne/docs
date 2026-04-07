@@ -1,6 +1,6 @@
 # Baton Connector Documentation Index
 
-Documentation for building ConductorOne Baton connectors. Request relevant sections based on user's question.
+Documentation for building C1 Baton connectors. Request relevant sections based on user's question.
 
 ## How to Use
 

@@ -8,7 +8,7 @@ What connectors do, sync vs provision, the reconciliation loop.
 
 A **connector** answers: *who has access to what?*
 
-ConductorOne needs visibility into users, groups, roles, and permissions across all systems. Every system stores this differently - Okta has users and groups, AWS has IAM roles and policies, Salesforce has profiles and permission sets.
+C1 needs visibility into users, groups, roles, and permissions across all systems. Every system stores this differently - Okta has users and groups, AWS has IAM roles and policies, Salesforce has profiles and permission sets.
 
 A connector translates access data from any system into a common format. Once connected, you get unified visibility across your infrastructure.
 
@@ -21,7 +21,7 @@ In Baton terms, a connector is a program that can:
 
 ## Sync vs Provision
 
-**Sync** (read): Pull access data into ConductorOne
+**Sync** (read): Pull access data into C1
 - Who exists? What groups? What roles?
 - What permissions are available?
 - Who has what access right now?
@@ -36,7 +36,7 @@ In Baton terms, a connector is a program that can:
 
 Together, sync and provision create a reconciliation loop:
 
-1. ConductorOne sees what access exists (sync)
+1. C1 sees what access exists (sync)
 2. Compares to what access *should* exist (policy)
 3. Corrects any drift (provision)
 

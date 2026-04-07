@@ -1,6 +1,6 @@
 # Workflow Execution Expressions
 
-Dynamic data access within ConductorOne workflow automations. Supports template interpolation and step-to-step data flow.
+Dynamic data access within C1 workflow automations. Supports template interpolation and step-to-step data flow.
 
 ## When to Use
 
