@@ -10,7 +10,7 @@ Getting help and contributing to the Baton connector ecosystem.
 
 | Repository | Use For |
 |------------|---------|
-| [baton-sdk](https://github.com/ConductorOne/baton-sdk/discussions) | SDK questions, general development |
+| [baton-sdk](https://github.com/conductorone/baton-sdk/discussions) | SDK questions, general development |
 | Specific connector repos | Issues with that connector |
 
 Before asking:
@@ -39,7 +39,7 @@ Good: "Sync fails with 'unauthorized' when listing users. Using baton-okta v0.5.
 |---------|----------|---------|
 | GitHub Issues | Days | Bugs, features |
 | GitHub Discussions | Days | Questions |
-| ConductorOne Support | Hours | Production (customers) |
+| C1 Support | Hours | Production (customers) |
 
 ---
 
@@ -72,7 +72,7 @@ Not: "Add custom attribute support"
 
 DO NOT file publicly.
 
-Report to: security@conductorone.com
+Report to: security@c1.ai
 
 ---
 
@@ -136,4 +136,4 @@ git push origin v1.2.3
 
 Follows Contributor Covenant.
 
-Report violations to: open-source@conductorone.com
+Report violations to: open-source@c1.ai

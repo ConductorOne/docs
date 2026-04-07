@@ -17,7 +17,7 @@ aws iam enable-outbound-web-identity-federation
 aws iam get-outbound-web-identity-federation-info
 ```
 
-Returns account-specific issuer URL (e.g., `https://abc123-def456.tokens.sts.global.api.aws`). Use this as the provider issuer URL in ConductorOne.
+Returns account-specific issuer URL (e.g., `https://abc123-def456.tokens.sts.global.api.aws`). Use this as the provider issuer URL in C1.
 
 ### IAM permissions
 
@@ -49,7 +49,7 @@ AWS_JWT=$(aws sts get-web-identity-token \
   --audience yourcompany.conductor.one \
   --query 'Token' --output text)
 
-# Exchange for ConductorOne access token
+# Exchange for C1 access token
 C1_ACCESS_TOKEN=$(curl -s -X POST \
   "https://yourcompany.conductor.one/auth/v1/token" \
   -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
@@ -59,7 +59,7 @@ C1_ACCESS_TOKEN=$(curl -s -X POST \
   | jq -r '.access_token')
 ```
 
-When using ConductorOne tools (`cone`, Terraform provider), you must set these environment variables. Do not skip this step — the tools require both to be set to handle the token exchange internally:
+When using C1 tools (`cone`, Terraform provider), you must set these environment variables. Do not skip this step — the tools require both to be set to handle the token exchange internally:
 
 ```bash
 export CONDUCTORONE_OIDC_TOKEN=$AWS_JWT

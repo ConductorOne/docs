@@ -1,6 +1,6 @@
-# ConductorOne documentation
+# C1 documentation
 
-Welcome to the official repository for [ConductorOne Documentation](https://www.conductorone.com/docs)! 
+Welcome to the official repository for [C1 documentation](https://www.conductorone.com/docs)! 
 
 We believe that great documentation is a community effort. This repository contains the source files for our docs site, and we’re excited to open it up for public contributions. Whether you've found a typo, a broken link, or have a suggestion for a new guide, we welcome your input.
 
@@ -20,9 +20,9 @@ If you have larger changes or want to work locally:
 
 ## 📝 Review process
 
-Every contribution, no matter how small, helps improve the experience for all ConductorOne users. So thank you! 
+Every contribution, no matter how small, helps improve the experience for all C1 users. So thank you! 
 
-Once you submit a Pull Request, the **ConductorOne Documentation Team** will review your suggestions. We may ask for clarification or make minor adjustments to ensure consistency with our style guide. Once approved, we’ll merge your changes and they’ll be live on the site shortly after!
+Once you submit a pull request, the **C1 documentation team** will review your suggestions. We may ask for clarification or make minor adjustments to ensure consistency with our style guide. Once approved, we’ll merge your changes and they’ll be live on the site shortly after!
 
 ## 🤖 Writing with Claude
 

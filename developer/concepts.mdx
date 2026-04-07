@@ -6,13 +6,13 @@ description: "Build a correct mental model of the resource/entitlement/grant gra
 
 Every target system has its own vocabulary (teams vs groups, roles vs permission sets, projects vs workspaces). This diversity is a strength - each system evolved for its specific purpose. But it creates a challenge: how do you get unified visibility across all of them?
 
-Baton solves this by normalizing every system into a consistent shape so ConductorOne can ask one question across all systems: who has access to what? Without this normalization, each system would be an island - auditors would see chaos, and access reviews would require expert knowledge of every platform.
+Baton solves this by normalizing every system into a consistent shape so C1 can ask one question across all systems: who has access to what? Without this normalization, each system would be an island - auditors would see chaos, and access reviews would require expert knowledge of every platform.
 
 The minimal "connector surface area" is expressed through the SDK's `ResourceSyncer` interface: list resources, list entitlements, list grants.
 
 ## The access graph
 
-Your connector produces an access graph that powers access reviews, certification campaigns, provisioning workflows, and compliance reporting. This single data structure drives everything ConductorOne does. The graph has three main node/edge types:
+Your connector produces an access graph that powers access reviews, certification campaigns, provisioning workflows, and compliance reporting. This single data structure drives everything C1 does. The graph has three main node/edge types:
 
 ```mermaid
 flowchart LR
@@ -41,7 +41,7 @@ This is not a theoretical model: these are concrete protobuf types and services 
 
 Most access management systems flatten everything into a single list. Baton takes a different approach: resources can have parent-child relationships. This preserves the natural structure of your target systems.
 
-Consider GitHub: organizations contain repositories, repositories have branches. Or AWS: accounts contain services, services have resources. When your connector models these hierarchies, ConductorOne can:
+Consider GitHub: organizations contain repositories, repositories have branches. Or AWS: accounts contain services, services have resources. When your connector models these hierarchies, C1 can:
 
 - Show access in context (this role applies to *this* project, not globally)
 - Enable scoped access reviews (review all access within a single org unit)
@@ -51,7 +51,7 @@ You express hierarchy through the `parentResourceID` parameter in your `List()` 
 
 ## Resource types and traits
 
-Every resource has a **resource type** (string id) and can declare **traits** that tell ConductorOne how to interpret it. Traits let ConductorOne understand *what kind of thing* a resource is, even when different systems call it different names.
+Every resource has a **resource type** (string id) and can declare **traits** that tell C1 how to interpret it. Traits let C1 understand *what kind of thing* a resource is, even when different systems call it different names.
 
 ```go
 var userResourceType = &v2.ResourceType{
@@ -69,7 +69,7 @@ The trait enum includes:
 - `TRAIT_SECRET`
 - `TRAIT_ROLE_SCOPE`
 
-Traits are optional for custom resource types, but they unlock powerful features. When you mark a resource with `TRAIT_USER`, ConductorOne knows it can correlate that resource with users from other systems, display it in user-centric views, and apply user-specific policies.
+Traits are optional for custom resource types, but they unlock powerful features. When you mark a resource with `TRAIT_USER`, C1 knows it can correlate that resource with users from other systems, display it in user-centric views, and apply user-specific policies.
 
 | Trait | Use for |
 |-------|---------|
@@ -97,7 +97,7 @@ One resource can offer multiple entitlements. A GitHub repository might offer: r
 
 #### Entitlement purpose
 
-Entitlements have a `purpose` field that tells ConductorOne how to interpret them:
+Entitlements have a `purpose` field that tells C1 how to interpret them:
 
 | Purpose | Use For | Example |
 |---------|---------|---------|
@@ -154,7 +154,7 @@ Stage 4: Grants()
 
 ### The sync pipeline
 
-When a connector runs, data flows through several stages. The clean separation between what you control and what ConductorOne controls makes the system reliable and testable:
+When a connector runs, data flows through several stages. The clean separation between what you control and what C1 controls makes the system reliable and testable:
 
 ```mermaid
 flowchart LR
@@ -168,16 +168,16 @@ flowchart LR
 1. **Fetch** - Your connector calls the external API
 2. **Transform** - Your connector creates Resource/Entitlement/Grant objects
 3. **Output** - SDK writes objects to a .c1z file (gzip-compressed SQLite)
-4. **Ingest** - ConductorOne's sync service reads the .c1z file
+4. **Ingest** - C1's sync service reads the .c1z file
 5. **Uplift** - Raw connector records become domain objects (Apps, Resources, Grants)
 
 **What you control:** Steps 1-3. Your connector fetches, transforms, and outputs.
 
-**What ConductorOne controls:** Steps 4-5. The sync service and uplift process.
+**What C1 controls:** Steps 4-5. The sync service and uplift process.
 
 ### ID correlation
 
-ConductorOne needs to know whether a resource in this sync is the same resource from a previous sync. This is where the `RawId` annotation matters.
+C1 needs to know whether a resource in this sync is the same resource from a previous sync. This is where the `RawId` annotation matters.
 
 When you build a resource, include its external system ID:
 
@@ -197,7 +197,7 @@ The `RawId` annotation carries the external system's identifier through the pipe
 - **Sync storage**: Stored as `external_id` on the connector record
 - **Domain objects**: Tracked in `source_connector_ids` map
 
-This enables ConductorOne to:
+This enables C1 to:
 - Correlate resources across syncs (same ID = same resource)
 - Track which connector discovered which resource
 - Support pre-sync reservation patterns
@@ -206,7 +206,7 @@ This enables ConductorOne to:
 
 ### ID vocabulary
 
-These terms appear throughout ConductorOne when discussing identity correlation:
+These terms appear throughout C1 when discussing identity correlation:
 
 | Term | Where it appears | Purpose |
 |------|-----------------|---------|
@@ -220,7 +220,7 @@ The flow is: `RawId` (connector) -> `external_id` (sync) -> `source_connector_id
 
 ## Modeling decisions
 
-Your modeling choices expand or constrain what your organization can do with access control. Two connectors can both be "correct" and still produce very different experiences in ConductorOne:
+Your modeling choices expand or constrain what your organization can do with access control. Two connectors can both be "correct" and still produce very different experiences in C1:
 
 - **Entitlement granularity**
   - Fine-grained (read/write/admin): more precision in reviews and provisioning, more total grants and API calls.

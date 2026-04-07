@@ -1,6 +1,6 @@
 # Service Principals Overview
 
-Machine identities for ConductorOne API automation.
+Machine identities for C1 API automation.
 
 ## What Service Principals Are
 
@@ -8,7 +8,7 @@ A service principal is a non-human identity for scripts, CI/CD pipelines, Terraf
 
 Each service principal has:
 - Display name and unique ID
-- Assigned ConductorOne roles (same as human users)
+- Assigned C1 roles (same as human users)
 - One or more owners who manage it
 - Multiple credentials or federation trusts
 
@@ -27,7 +27,7 @@ Each service principal has:
 
 | Aspect | Client Credentials | Workload Federation |
 |--------|-------------------|---------------------|
-| How | Client ID + secret to token endpoint | External OIDC token exchanged for ConductorOne token |
+| How | Client ID + secret to token endpoint | External OIDC token exchanged for C1 token |
 | Secrets | Must store and rotate client secret | No secrets - uses CI/CD platform's OIDC |
 | Best for | Local dev, scripts, cron jobs | GitHub Actions, GitLab CI, HCP Terraform |
 | Lifetime | Max 180 days, must rotate | No credentials to manage |
@@ -44,7 +44,7 @@ A single service principal can use both methods simultaneously.
 
 ## Requirements
 
-- Feature must be enabled (contact ConductorOne account team during early access)
+- Feature must be enabled (contact C1 account team during early access)
 - Super Admin role required to create service principals
 
 ## Limits

@@ -36,6 +36,6 @@ Once created, Super Admin can assign owners who then manage independently.
 
 ## Assigning Roles
 
-Service principals are assigned ConductorOne roles like human users. Role assignment controlled by Super Admins.
+Service principals are assigned C1 roles like human users. Role assignment controlled by Super Admins.
 
 Credentials and trusts can further restrict effective permissions via scoped roles (intersection of assigned roles and scoped roles).

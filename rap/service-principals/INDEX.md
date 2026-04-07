@@ -1,6 +1,6 @@
 # Service Principals Documentation Index
 
-Documentation for ConductorOne service principals and workload federation. Request relevant sections based on user's question.
+Documentation for C1 service principals and workload federation. Request relevant sections based on user's question.
 
 ## How to Use
 
@@ -97,7 +97,7 @@ Documentation for ConductorOne service principals and workload federation. Reque
 User: "How do I authenticate from GitHub Actions?"
 Retrieve: `platform-github.md`
 
-User: "Set up Terraform with ConductorOne"
+User: "Set up Terraform with C1"
 Retrieve: `auth-tools.md`, `platform-terraform.md`
 
 User: "How do I authenticate from AWS?"
@@ -109,7 +109,7 @@ Retrieve: `manage-credentials.md`
 User: "CEL expression for specific repository"
 Retrieve: `security-cel.md`, `platform-github.md`
 
-User: "What environment variables does ConductorOne use?"
+User: "What environment variables does C1 use?"
 Retrieve: `concepts-env-vars.md`
 
 User: "Difference between client credentials and workload federation"
