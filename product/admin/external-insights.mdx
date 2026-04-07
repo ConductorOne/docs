@@ -61,7 +61,7 @@ Approvers can see an identity's current risk score and risk factors in a request
 
 ## Use external insights in CEL policy conditions
 
-Beyond surfacing risk data in the UI, you can reference external insights directly in [CEL policy conditions](/product/admin/policies/cel-conditions) to automate access decisions based on a user's security posture.
+Beyond surfacing risk data in the UI, you can reference external insights directly in [CEL policy conditions](/product/admin/expressions) to automate access decisions based on a user's security posture.
 
 External insights expose two data types through CEL, each from a different connector:
 
@@ -90,20 +90,20 @@ Issue insights represent discrete security findings synced from Wiz. Each insigh
 
 Deny access when critical Wiz findings exist:
 
-```cel
+```go
 c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
 ```
 
 Block privileged access on HIGH or CRITICAL Wiz issues:
 
-```cel
+```go
 c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
   || c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "HIGH")
 ```
 
 Auto-approve when no Wiz issues exist:
 
-```cel
+```go
 c1.app_user.v1.GetSecurityInsights(account, "Wiz Insights").size() == 0
 ```
 
@@ -126,26 +126,26 @@ You can access scores in two ways:
 
 Block access when the CrowdStrike score exceeds a threshold:
 
-```cel
+```go
 c1.app_user.v1.GetRiskScore(account, "CrowdStrike").normalized_score > 70
 ```
 
 Require extra approval for elevated risk:
 
-```cel
+```go
 c1.app_user.v1.HasRiskScore(account)
   && c1.app_user.v1.GetRiskScore(account, "CrowdStrike").normalized_score > 50
 ```
 
 Auto-approve when CrowdStrike reports low risk:
 
-```cel
+```go
 "CrowdStrike" in account.risk_score && account.risk_score["CrowdStrike"] <= 20
 ```
 
 Deny access if no CrowdStrike score exists (device may be unmanaged):
 
-```cel
+```go
 !("CrowdStrike" in account.risk_score)
 ```
 
@@ -155,14 +155,14 @@ You can combine Wiz issue insights and CrowdStrike risk scores in a single condi
 
 Escalate when CrowdStrike risk is elevated and Wiz has critical findings:
 
-```cel
+```go
 ("CrowdStrike" in account.risk_score && account.risk_score["CrowdStrike"] > 50)
   && c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
 ```
 
 Require a clean posture from both sources for sensitive access:
 
-```cel
+```go
 ("CrowdStrike" in account.risk_score && account.risk_score["CrowdStrike"] <= 30)
   && !c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "HIGH")
   && !c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
@@ -179,10 +179,10 @@ Require a clean posture from both sources for sensitive access:
 
 <Columns cols={2}>
   <Card title="CrowdStrike Falcon Identity Protection" icon="shield-check" href="/baton/crowdstrike">
-    Ingest Falcon identity risk scores into ConductorOne. 
+    Ingest Falcon identity risk scores into C1. 
   </Card>
   <Card title="Wiz Insights" icon="shield-check" href="/baton/wiz-insights">
-    Ingest Wiz identity risk scores into ConductorOne. 
+    Ingest Wiz identity risk scores into C1. 
   </Card>
 </Columns>
 
