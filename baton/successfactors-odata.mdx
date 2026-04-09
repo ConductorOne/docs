@@ -1,0 +1,275 @@
+---
+title: "Set up a SAP SuccessFactors connector"
+og:title: "Set up a SAP SuccessFactors connector"
+description: "C1 provides identity governance for SAP SuccessFactors. Integrate your SAP SuccessFactors instance with C1 to run user access reviews (UARs) and gain visibility into your workforce identities."
+og:description: "C1 provides identity governance for SAP SuccessFactors. Integrate your SAP SuccessFactors instance with C1 to run user access reviews (UARs) and gain visibility into your workforce identities."
+sidebarTitle: "SAP SuccessFactors OData"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The SAP SuccessFactors connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather SAP SuccessFactors credentials
+
+<Warning>
+To configure the SAP SuccessFactors connector, you need administrator access to your SAP SuccessFactors instance.
+</Warning>
+
+The connector authenticates using **OAuth 2.0 with SAML 2.0 bearer assertions**. You will need to create an OAuth client application in SAP SuccessFactors and generate a certificate/private key pair to sign the assertions.
+
+### Step 1: Find your Company ID
+
+Your Company ID appears in the URL when you log in to SAP SuccessFactors:
+`https://<datacenter>.successfactors.com/sf/start#/...?company=<YOUR_COMPANY_ID>`
+
+It is also visible in **Admin Center** > **Company System and Logo Settings**.
+
+### Step 2: Create an OAuth client application
+
+<Steps>
+  <Step>
+    In SAP SuccessFactors, navigate to **Admin Center** > **OAuth 2.0 Client Applications** (search for "OAuth" in the admin search bar).
+  </Step>
+
+  <Step>
+    Click **Register Client Application**.
+  </Step>
+
+  <Step>
+    Fill in the required fields:
+    - **Application Name**: `C1`
+    - **Description**: `C1 identity sync`
+    - **Application URL**: your C1 tenant URL
+  </Step>
+
+  <Step>
+    Note the **API Key** generated for this client — this is your `app-api-key`.
+  </Step>
+</Steps>
+
+### Step 3: Generate a certificate and private key
+
+Generate a self-signed certificate and RSA private key pair (PEM format). You can use OpenSSL:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout private-key.pem -out certificate.pem \
+  -days 365 -nodes -subj "/CN=C1"
+```
+
+### Step 4: Register the certificate with the OAuth client
+
+<Steps>
+  <Step>
+    In the OAuth client application you created, click **Add Certificate**.
+  </Step>
+
+  <Step>
+    Upload or paste the contents of `certificate.pem` and save.
+  </Step>
+</Steps>
+
+### Step 5: Identify the admin username
+
+Provide the SAP SuccessFactors username of the admin account that will be used to authenticate API requests. This user must have API access permissions.
+
+---
+
+## Configure the SAP SuccessFactors connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **SAP SuccessFactors** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new SAP SuccessFactors connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Company ID**: Your SAP SuccessFactors company identifier
+        - **LMS Instance URL**: Your SAP SuccessFactors API base URL, for example `https://api10.sapsf.com`
+        - **SAML Issuer URL**: The issuer URL for your SAML assertion, for example `https://yourcompany.com`
+        - **Admin Username**: The SAP SuccessFactors username of the admin account used for API access
+        - **SAML API Key**: The API key from the OAuth client application you registered
+        - **Certificate**: The PEM-encoded X.509 certificate registered with the OAuth client
+        - **Private Key**: The PEM-encoded RSA private key corresponding to the certificate
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your SAP SuccessFactors connector is now pulling user data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [SAP SuccessFactors](https://github.com/ConductorOne/baton-successfactors-odata) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new SAP SuccessFactors connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new SAP SuccessFactors connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your SAP SuccessFactors connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-successfactors-odata-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-successfactors-odata-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # SAP SuccessFactors credentials
+      BATON_COMPANY_ID: <your company ID>
+      BATON_INSTANCE_URL: <e.g. https://api10.sapsf.com>
+      BATON_ISSUER_URL: <e.g. https://yourcompany.com>
+      BATON_ADMIN_USERNAME: <admin username>
+      BATON_APP_API_KEY: <SAML API key>
+      BATON_CERTIFICATE: <PEM-encoded certificate (single line or base64)>
+      BATON_PRIVATE_KEY: <PEM-encoded private key (single line or base64)>
+    ```
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-successfactors-odata.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-successfactors-odata
+      labels:
+        app: baton-successfactors-odata
+    spec:
+      selector:
+        matchLabels:
+          app: baton-successfactors-odata
+      template:
+        metadata:
+          labels:
+            app: baton-successfactors-odata
+            baton: "true"
+            baton-app: successfactors-odata
+        spec:
+          containers:
+          - name: baton-successfactors-odata
+            image: public.ecr.aws/conductorone/baton-successfactors-odata:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-successfactors-odata
+            envFrom:
+            - secretRef:
+                name: baton-successfactors-odata-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the SAP SuccessFactors connector to. User data should be visible on the **Accounts** tab.
+      </Step>
+    </Steps>
+
+    **That's it!** Your SAP SuccessFactors connector is now pulling user data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-successfactors-odata).
+</Tip>
