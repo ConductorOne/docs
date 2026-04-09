@@ -17,26 +17,64 @@ sidebarTitle: "Oracle Identity Cloud Service"
 | Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Applications | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>** |
-| Application roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>** | 
+| Application roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>** |
 
 The Oracle IDCS connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
-*You must opt into syncing application and application role data; these are not synced by default. 
+The connector also supports **account lifecycle actions** (enable and disable account) and **attribute push** to update user profile fields directly from C1.
+
+*You must opt into syncing application and application role data; these are not synced by default.
 
 **Application access and application roles that are inherited via group membership cannot be deprovisioned using C1.
+
+## Actions
+
+The Oracle IDCS connector supports account lifecycle actions and attribute push.
+
+<Warning>
+The OAuth2 confidential application in Oracle IDCS must have the **Identity Domain Administrator** role to perform any of the actions described in this section.
+</Warning>
+
+### Account lifecycle actions
+
+Use the **Automation** tab on the Oracle IDCS connector page in C1 to enable or disable user accounts:
+
+| Action | Description |
+| :--- | :--- |
+| Enable account | Activates a deactivated Oracle IDCS user account |
+| Disable account | Deactivates an active Oracle IDCS user account |
+
+Both actions use SCIM PATCH to toggle the `active` field on the target user.
+
+### Attribute push
+
+The connector supports pushing updates to the following user profile fields directly from a user's profile page in C1:
+
+- First Name
+- Last Name
+- Display Name
+- Email
+
+To push an attribute, navigate to an Oracle IDCS user's profile in C1 and use the **Push Attribute** option. Updates are applied via SCIM PATCH.
+
+<Note>
+Email updates append the new address as a work email rather than replacing the existing emails array.
+</Note>
 
 ## Performance considerations
 
 1. **API Latency for Grant Operations**: The Oracle IDCS API has inherent latency when creating grants (assigning access to applications or application roles). Due to this latency, we recommend avoiding performing rapid grant and revoke operations in quick succession, as this may result in failures or inconsistent states. Allow sufficient time between operations to ensure the API has completed processing the previous request before initiating the next one.
 
-2. **Rate Limiting**: The connector implements rate limiting to respect Oracle IDCS API limits. If you encounter rate limiting errors, the connector will automatically retry with appropriate backoff strategies.  
+2. **Rate Limiting**: The connector implements rate limiting to respect Oracle IDCS API limits. If you encounter rate limiting errors, the connector will automatically retry with appropriate backoff strategies.
 
-## Gather Oracle IDCS credentials 
+## Gather Oracle IDCS credentials
 
-Configuring the connector requires you to pass in credentials generated in Oracle IDCS. Gather these credentials before you move on. 
+Configuring the connector requires you to pass in credentials generated in Oracle IDCS. Gather these credentials before you move on.
 
 <Warning>
 A user with the **Identity Domain Administrator** or **Application Administrator** in Oracle IDCS must perform this task.
+
+To use account lifecycle actions or attribute push, the confidential application must be assigned the **Identity Domain Administrator** role (not just Identity Domain Auditor).
 </Warning>
 
 ### Create a confidential application
@@ -69,7 +107,7 @@ Scroll down to the **Token issuance policy** section and click **+ Add app role*
 <Step>
 Select a role that has permission you want to give to the integration (see below), then click **Add**.
 
-   To enable syncing (read-only), a role with read-only access to users and groups, like **Identity Domain Auditor**, is sufficient. To enable provisioning (read-write), the application needs a role with write permissions for users and groups, such as **Identity Domain Administrator**, which includes the Users - Manage and Groups - Manage permissions.
+   To enable syncing (read-only), a role with read-only access to users and groups, like **Identity Domain Auditor**, is sufficient. To enable provisioning (read-write) or to use account lifecycle actions and attribute push, the application needs a role with write permissions for users and groups, such as **Identity Domain Administrator**, which includes the Users - Manage and Groups - Manage permissions.
 </Step>
 <Step>
 Click **Submit**.
@@ -80,9 +118,9 @@ The **OAuth Configuration** page will display the **Client ID** (`api-access-id`
 <Step>
 Activate the application using the **Actions** button in the top right, then click **Activate**.
 </Step>
-</Steps> 
+</Steps>
 
-**That's it!** Next, move on to the connector configuration instructions. 
+**That's it!** Next, move on to the connector configuration instructions.
 
 ## Configure the Oracle IDCS connector
 
@@ -151,7 +189,7 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 
 When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
 
-### Resources 
+### Resources
 
 [Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
 
@@ -189,7 +227,7 @@ Click **Rotate** to generate a new Client ID and Secret.
 
    Carefully copy and save these credentials. We'll use them in Step 2.
 </Step>
-</Steps> 
+</Steps>
 
 ### Step 2: Create Kubernetes configuration files
 
@@ -270,6 +308,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **That's it!** Your Oracle IDCS connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
-

@@ -49,36 +49,37 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 Configuring the connector requires you to pass in credentials generated in Salesforce. Gather these credentials before you move on. 
 
 <Warning>
-The owner of a Salesforce user account with a profile that includes the **API Enabled** and **View Setup and Configuration** permissions must perform this task.
+The connector user must have the **API Enabled** and **Manage Users** system permissions. If syncing connected apps, also add **Customize Application**. If using provisioning, also add **Manage Roles and Role Hierarchy** and **Manage Groups**.
 </Warning>
 
-### Enable API access for your Salesforce user
+### Enable API access and permissions for your Salesforce user
 
-Before you begin, make sure that the Salesforce user who will set up the integration with C1 has a profile that includes the **API Enabled** and **View Setup and Configuration** permissions. 
-
-To edit a profile so that it includes the **API Enabled** and **View Setup and Configuration** permissions: 
+Before you begin, make sure that the Salesforce user who will set up the integration with C1 has the required system permissions. The recommended approach is to create a Permission Set and assign it to the connector user.
 
 <Steps>
 <Step>
-Log into Salesforce as an Administrator. 
+Log into Salesforce as an Administrator. Click the gear icon and select **Setup**. 
 </Step>
 <Step>
-Click the gear icon and select **Setup**. 
+Search for "permission sets" and select **Permission Sets**.
 </Step>
 <Step>
-Search for "profiles" and select **Profiles** from the search results. 
+Click **New** to create a permission set (for example, "ConductorOne Connector Access").
 </Step>
 <Step>
-In the **User Profiles** list, locate the user profile you want to add the permission to and click **Edit**. 
+In the permission set, click **System Permissions**, then click **Edit**.
 </Step>
 <Step>
-Find the **Administrative Permissions** section of the page and click to select **API Enabled** and **View Setup and Configuration**. 
+Enable **API Enabled** and **Manage Users**. If syncing connected apps, also enable **Customize Application**. If using provisioning, also enable **Manage Roles and Role Hierarchy** and **Manage Groups**.
 </Step>
 <Step>
-Click **Save**. 
+Click **Save**.
+</Step>
+<Step>
+Click **Manage Assignments**, then **Add Assignment** to assign the permission set to the connector user.
 </Step>
 </Steps>
-Your user's profile can now access Salesforce APIs. 
+Your connector user now has the required permissions to sync Salesforce data. 
 
 ### Locate your Salesforce domain
 
@@ -202,7 +203,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 * [Official download center](https://dist.conductorone.com/ConductorOne/baton-salesforce): For stable binaries (Windows/Linux/macOS) and container images.
 
-* [GitHub repository](https://github.com/ConductorOne/baton-salesforce): Access the source code, report issues, or contribute to the project.
+* [GitHub repository](https://github.com/conductorone/baton-salesforce): Access the source code, report issues, or contribute to the project.
 
 ### Step 1: Set up a new Salesforce connector
 
@@ -342,4 +343,31 @@ Salesforce returns this error if the user who is logging in with OAuth does not 
 {"code":2, "message":"error getting info from connectorClient: [simpleforce] Error. http code: 403 Error Message:  This feature is not currently enabled for this user. Error Code: FUNCTIONALITY_NOT_ENABLED"}
 ```
 
-If you see this message, follow the instructions to [Enable API access for your Salesforce user](/baton/salesforce#enable-api-access-for-your-salesforce-user) and then try logging in again. 
+If you see this message, follow the instructions to [Enable API access and permissions for your Salesforce user](/baton/salesforce#enable-api-access-and-permissions-for-your-salesforce-user) and then try logging in again.
+
+### When I try to sync, I see an "insufficient access rights on cross-reference id" error
+
+Salesforce returns this error if the connector user does not have sufficient permissions:
+
+```bash
+{"error": "error: listing resources failed: rpc error: code = InvalidArgument desc = 400 Bad Request\n[simpleforce] Error. http code: 400 Error Message:  insufficient access rights on cross-reference id Error Code: INSUFFICIENT_ACCESS"}
+```
+
+Create a Permission Set with the following system permissions and assign it to the connector user:
+
+**Required system permissions for sync:**
+
+| Permission | Purpose |
+| :--- | :--- |
+| API Enabled | Access Salesforce APIs |
+| Manage Users | Read users and setup objects |
+| Customize Application | Required only if syncing connected apps |
+
+**Additional permissions required for provisioning:**
+
+| Permission | Purpose |
+| :--- | :--- |
+| Manage Roles and Role Hierarchy | Assign and revoke role assignments |
+| Manage Groups | Add and remove users from public groups |
+
+To fix this error, follow the instructions to [Enable API access and permissions for your Salesforce user](/baton/salesforce#enable-api-access-and-permissions-for-your-salesforce-user) to create a Permission Set with the required permissions and assign it to the connector user. 
