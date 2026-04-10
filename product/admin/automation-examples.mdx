@@ -4,7 +4,7 @@ description: "End-to-end walkthroughs for common automation patterns including o
 sidebarTitle: "Automation examples"
 ---
 
-{/* Editor Refresh: 2026-03-09 */}
+{/* Editor Refresh: 2026-04-10 */}
 
 This page walks through common automation patterns end to end. Each example explains the use case, which trigger and steps to use, the CEL expressions involved, and how to test it.
 
@@ -306,6 +306,58 @@ Scope your scheduled triggers narrowly. A weekly schedule across all users of a 
 ### Testing
 
 Create a copy with an **On Demand** trigger. Run it manually for a known contractor with long-standing AWS access to verify the Function returns the expected output, the campaign is created, and the email fires.
+
+---
+
+## New account provisioning with initial password
+
+**Use case:** When a new employee account is created in a self-hosted application, automatically generate a password, set it on the account, and deliver it securely to the user's manager via a one-time secret link.
+
+<Note>
+The **Set credential** step used in this example is only supported for self-hosted connectors.
+</Note>
+
+### What you'll build
+
+| Component | Configuration |
+|---|---|
+| Trigger | Account Created |
+| Condition | Filter to the target application |
+| Step 1 | Generate password -- custom policy |
+| Step 2 | Set credential -- apply to the new account |
+| Step 3 | Store credential -- Paper Vault, deliver to manager |
+
+### Setup
+
+1. Create a new automation and select the **Account Created** trigger. Set the app to the self-hosted application where accounts are created.
+
+2. Add a **Generate password** step (name it `initial_password`). Select **Custom password policy** and configure length and character requirements to match the application's password rules.
+
+3. Add a **Set credential** step. Select the self-hosted connector for your application. Set the target account to:
+```
+ctx.trigger.app_user_id
+```
+Set the credential to the output of the previous step:
+```
+ctx.initial_password.credential_ref
+```
+
+4. Add a **Store credential** step. Set the credential to `ctx.initial_password.credential_ref`. Select **Paper Vault** as the vault type and set the recipient to the new user's manager:
+```
+ctx.trigger.user.manager_id
+```
+Set auth type to **SSO Internal** so the manager must authenticate before retrieving the secret. Leave max views at **1** so the link self-destructs after the manager retrieves it.
+
+### Why these choices
+
+- **Account Created** fires after the connector syncs the new account, so the account exists and can receive a credential by the time the Set credential step runs.
+- **Custom policy** on Generate password lets you match the target application's password complexity requirements. Use **Random 32-character** only if the application accepts any password format.
+- **Paper Vault with max views: 1** ensures the password is delivered once and then destroyed. The manager can share it with the employee directly, rather than the automation sending credentials over an unsecured channel.
+- **Delivering to the manager** (not the user directly) follows a common security pattern: a second person handles the credential handoff, creating an implicit acknowledgment step.
+
+### Testing
+
+Create a copy with an **On Demand** trigger. Run it manually, selecting a test account in the target application. Verify that the password is set on the account, and that the manager receives a Paper Vault link that works once and then expires.
 
 ---
 
