@@ -1,10 +1,10 @@
 # CEL Expression Knowledge Base
 
-This directory contains focused documentation chunks for CEL (Common Expression Language) in ConductorOne. Each file is self-contained and designed for selective retrieval.
+This directory contains focused documentation chunks for CEL (Common Expression Language) in C1. Each file is self-contained and designed for selective retrieval.
 
 ## How to Use This Index
 
-When answering questions about CEL expressions in ConductorOne:
+When answering questions about CEL expressions in C1:
 
 1. Identify the question type from the tables below
 2. Retrieve 1-3 relevant files from this directory

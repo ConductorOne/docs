@@ -1,12 +1,12 @@
 # concepts-ids
 
-RawId annotation, external_id, and how ConductorOne matches resources across syncs.
+RawId annotation, external_id, and how C1 matches resources across syncs.
 
 ---
 
 ## Why ID Correlation Matters
 
-ConductorOne needs to know if a resource in this sync is the same resource from a previous sync. This enables:
+C1 needs to know if a resource in this sync is the same resource from a previous sync. This enables:
 - Tracking changes over time
 - Correlating resources across connectors
 - Supporting pre-sync reservation patterns
@@ -60,8 +60,8 @@ Use the external system's native, stable identifier:
 
 **Using composite keys:** If you construct `org/repo`, changes to either part break correlation.
 
-**Omitting RawId:** Without it, ConductorOne can't correlate resources across syncs.
+**Omitting RawId:** Without it, C1 can't correlate resources across syncs.
 
 ## Pre-sync Reservation
 
-The `match_baton_id` field (in Terraform/API) allows creating ConductorOne objects before the connector discovers them. When the connector syncs, resources are matched by this ID.
+The `match_baton_id` field (in Terraform/API) allows creating C1 objects before the connector discovers them. When the connector syncs, resources are matched by this ID.

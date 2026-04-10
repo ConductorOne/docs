@@ -1,4 +1,4 @@
-# ConductorOne RAP Documentation
+# C1 RAP Documentation
 
 Retrieval Augmented Prompt (RAP) documentation for AI agents. Each subdirectory contains focused, self-contained documentation chunks optimized for selective retrieval.
 

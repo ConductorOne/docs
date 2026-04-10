@@ -1,6 +1,6 @@
 # Environment Variables
 
-All ConductorOne client tools recognize these environment variables.
+All C1 client tools recognize these environment variables.
 
 ## Variables
 

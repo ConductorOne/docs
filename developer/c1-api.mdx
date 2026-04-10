@@ -1,10 +1,10 @@
 ---
 title: "C1 API integration reference"
 sidebarTitle: "C1 API"
-description: "How connectors communicate with the ConductorOne platform in daemon mode."
+description: "How connectors communicate with the C1 platform in daemon mode."
 ---
 
-When running in daemon mode, connectors communicate with ConductorOne via gRPC. The SDK handles all API communication - connector developers implement interfaces, the SDK calls your code when tasks arrive.
+When running in daemon mode, connectors communicate with C1 via gRPC. The SDK handles all API communication - connector developers implement interfaces, the SDK calls your code when tasks arrive.
 
 This document describes the C1 APIs that connectors use internally. You don't call these APIs directly; the SDK manages them.
 
@@ -12,12 +12,12 @@ This document describes the C1 APIs that connectors use internally. You don't ca
 
 ```mermaid
 flowchart LR
-    subgraph C1["ConductorOne Platform"]
+    subgraph C1["C1 platform"]
         TQ[Task Queue<br>Sync, Grant, etc]
         US[Upload Service]
         HB[Heartbeat]
     end
-    subgraph Conn["Connector - Daemon Mode"]
+    subgraph Conn["Connector - Daemon mode"]
         BSC[BatonServiceClient]
         TH[Task Handler<br>SyncTaskHandler]
         CB[ConnectorBuilderV2]
@@ -78,7 +78,7 @@ type SyncTask struct {
 }
 ```
 
-**Connector produces:** c1z file uploaded to ConductorOne
+**Connector produces:** c1z file uploaded to C1
 
 ### Grant task
 
@@ -112,7 +112,7 @@ type CreateAccountTask struct {
 }
 ```
 
-**Returns to ConductorOne:** Created account, credentials (encrypted by SDK)
+**Returns to C1:** Created account, credentials (encrypted by SDK)
 
 ### DeleteResource task
 
@@ -132,14 +132,14 @@ type RotateCredentialTask struct {
 }
 ```
 
-**Returns to ConductorOne:** New credentials (encrypted by SDK)
+**Returns to C1:** New credentials (encrypted by SDK)
 
 ## Task lifecycle
 
 ### Polling loop
 
 ```
-Connector                                ConductorOne
+Connector                                   C1
     |                                        |
     |--- Hello (identify connector) -------->|
     |<-- HelloResponse (config) -------------|
@@ -169,7 +169,7 @@ var (
 )
 ```
 
-ConductorOne can adjust heartbeat interval per-task. If heartbeats stop, the task may be reassigned to another connector instance.
+C1 can adjust heartbeat interval per-task. If heartbeats stop, the task may be reassigned to another connector instance.
 
 ### Task completion
 
@@ -233,13 +233,13 @@ Connectors authenticate using OAuth2 client credentials:
 ```
 
 The SDK handles:
-- Token acquisition from ConductorOne's OAuth endpoint
+- Token acquisition from C1's OAuth endpoint
 - Token refresh before expiration
 - Token injection into request metadata
 
 ### Host identification
 
-Connectors identify themselves to ConductorOne:
+Connectors identify themselves to C1:
 
 ```go
 hostId := os.Getenv("BATON_HOST_ID")
@@ -248,7 +248,7 @@ if hostId == "" {
 }
 ```
 
-This helps ConductorOne track which host is running which connector instance.
+This helps C1 track which host is running which connector instance.
 
 ## Error handling
 
@@ -266,12 +266,12 @@ taskMaximumHeartbeatFailures = 10
 
 ### Error flow
 
-| Connector Error | SDK Handling | ConductorOne Action |
+| Connector Error | SDK Handling | C1 Action |
 |-----------------|--------------|---------------------|
 | Temporary failure | Retry with backoff | Task stays queued |
 | Permanent failure | FinishTask(FAILED) | Task marked failed |
 | Heartbeat timeout | Task abandoned | Reassign to other instance |
-| Cancelled by ConductorOne | Stop processing | Task cancelled |
+| Cancelled by C1 | Stop processing | Task cancelled |
 
 ### Annotations for error context
 
@@ -318,7 +318,7 @@ Debug output includes:
 |---------|--------------|----------|
 | `authentication error` | Invalid client credentials | Verify client-id/secret |
 | `task heartbeat failed` | Processing too slow | Optimize or add heartbeats |
-| `connection refused` | Network/firewall issue | Check connectivity to ConductorOne |
+| `connection refused` | Network/firewall issue | Check connectivity to C1 |
 | `task cancelled` | Task timeout or user cancel | Check task duration |
 | `upload failed` | Large c1z or network issue | Check file size, retry |
 

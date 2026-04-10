@@ -40,7 +40,7 @@ Term definitions for Baton connector development.
 | Term | Definition |
 |------|------------|
 | **Sync** | Reading access data from a system |
-| **Uplift** | ConductorOne process transforming raw records to domain objects |
+| **Uplift** | C1 process transforming raw records to domain objects |
 | **ID Correlation** | Matching resources across syncs using RawId |
 
 ## Provisioning
@@ -58,8 +58,8 @@ Term definitions for Baton connector development.
 | Term | Definition |
 |------|------------|
 | **One-shot** | Run once, produce c1z file, exit |
-| **Daemon** | Long-running, polls ConductorOne for tasks |
-| **Hosted** | Run by ConductorOne infrastructure |
+| **Daemon** | Long-running, polls C1 for tasks |
+| **Hosted** | Run by C1 infrastructure |
 
 ## Meta-Connector Terms
 

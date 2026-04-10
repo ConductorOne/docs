@@ -1,8 +1,8 @@
 ---
 title: "Set up an Oracle IDCS connector"
 og:title: "Set up an Oracle IDCS connector"
-description: "ConductorOne provides identity governance for Oracle Identity Cloud Service (IDCS). Integrate your Oracle IDCS instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
-og:description: "ConductorOne provides identity governance for Oracle Identity Cloud Service (IDCS). Integrate your Oracle IDCS instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+description: "C1 provides identity governance for Oracle Identity Cloud Service (IDCS). Integrate your Oracle IDCS instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "C1 provides identity governance for Oracle Identity Cloud Service (IDCS). Integrate your Oracle IDCS instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
 sidebarTitle: "Oracle Identity Cloud Service"
 ---
 
@@ -14,29 +14,67 @@ sidebarTitle: "Oracle Identity Cloud Service"
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
-| Groups | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
-| Applications | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>* | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>** |
-| Application roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>* | <Icon icon="square-check" iconType="solid"  color="#65DE23"/>** | 
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Applications | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>** |
+| Application roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>** |
 
 The Oracle IDCS connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
-*You must opt into syncing application and application role data; these are not synced by default. 
+The connector also supports **account lifecycle actions** (enable and disable account) and **attribute push** to update user profile fields directly from C1.
 
-**Application access and application roles that are inherited via group membership cannot be deprovisioned using ConductorOne.
+*You must opt into syncing application and application role data; these are not synced by default.
+
+**Application access and application roles that are inherited via group membership cannot be deprovisioned using C1.
+
+## Actions
+
+The Oracle IDCS connector supports account lifecycle actions and attribute push.
+
+<Warning>
+The OAuth2 confidential application in Oracle IDCS must have the **Identity Domain Administrator** role to perform any of the actions described in this section.
+</Warning>
+
+### Account lifecycle actions
+
+Use the **Automation** tab on the Oracle IDCS connector page in C1 to enable or disable user accounts:
+
+| Action | Description |
+| :--- | :--- |
+| Enable account | Activates a deactivated Oracle IDCS user account |
+| Disable account | Deactivates an active Oracle IDCS user account |
+
+Both actions use SCIM PATCH to toggle the `active` field on the target user.
+
+### Attribute push
+
+The connector supports pushing updates to the following user profile fields directly from a user's profile page in C1:
+
+- First Name
+- Last Name
+- Display Name
+- Email
+
+To push an attribute, navigate to an Oracle IDCS user's profile in C1 and use the **Push Attribute** option. Updates are applied via SCIM PATCH.
+
+<Note>
+Email updates append the new address as a work email rather than replacing the existing emails array.
+</Note>
 
 ## Performance considerations
 
 1. **API Latency for Grant Operations**: The Oracle IDCS API has inherent latency when creating grants (assigning access to applications or application roles). Due to this latency, we recommend avoiding performing rapid grant and revoke operations in quick succession, as this may result in failures or inconsistent states. Allow sufficient time between operations to ensure the API has completed processing the previous request before initiating the next one.
 
-2. **Rate Limiting**: The connector implements rate limiting to respect Oracle IDCS API limits. If you encounter rate limiting errors, the connector will automatically retry with appropriate backoff strategies.  
+2. **Rate Limiting**: The connector implements rate limiting to respect Oracle IDCS API limits. If you encounter rate limiting errors, the connector will automatically retry with appropriate backoff strategies.
 
-## Gather Oracle IDCS credentials 
+## Gather Oracle IDCS credentials
 
-Configuring the connector requires you to pass in credentials generated in Oracle IDCS. Gather these credentials before you move on. 
+Configuring the connector requires you to pass in credentials generated in Oracle IDCS. Gather these credentials before you move on.
 
 <Warning>
 A user with the **Identity Domain Administrator** or **Application Administrator** in Oracle IDCS must perform this task.
+
+To use account lifecycle actions or attribute push, the confidential application must be assigned the **Identity Domain Administrator** role (not just Identity Domain Auditor).
 </Warning>
 
 ### Create a confidential application
@@ -55,7 +93,7 @@ In the domain's navigation menu, click **Integrated applications**.
 Click **Add application**, select **Confidential application**, and then click **Launch workflow**.
 </Step>
 <Step>
-Enter a name for the application, such as "ConductorOne", then click **Next**.
+Enter a name for the application, such as "C1", then click **Next**.
 </Step>
 <Step>
 On the **OAuth Configuration** page, click **Edit OAuth configuration** and select **Configure this application as a client**.
@@ -69,7 +107,7 @@ Scroll down to the **Token issuance policy** section and click **+ Add app role*
 <Step>
 Select a role that has permission you want to give to the integration (see below), then click **Add**.
 
-   To enable syncing (read-only), a role with read-only access to users and groups, like **Identity Domain Auditor**, is sufficient. To enable provisioning (read-write), the application needs a role with write permissions for users and groups, such as **Identity Domain Administrator**, which includes the Users - Manage and Groups - Manage permissions.
+   To enable syncing (read-only), a role with read-only access to users and groups, like **Identity Domain Auditor**, is sufficient. To enable provisioning (read-write) or to use account lifecycle actions and attribute push, the application needs a role with write permissions for users and groups, such as **Identity Domain Administrator**, which includes the Users - Manage and Groups - Manage permissions.
 </Step>
 <Step>
 Click **Submit**.
@@ -80,26 +118,26 @@ The **OAuth Configuration** page will display the **Client ID** (`api-access-id`
 <Step>
 Activate the application using the **Actions** button in the top right, then click **Activate**.
 </Step>
-</Steps> 
+</Steps>
 
-**That's it!** Next, move on to the connector configuration instructions. 
+**That's it!** Next, move on to the connector configuration instructions.
 
 ## Configure the Oracle IDCS connector
 
 <Warning>
 To complete this task, you'll need:
 
-- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- The **Connector Administrator** or **Super Administrator** role in C1
 - Access to the set of Oracle IDCS credentials generated by following the instructions above
 </Warning>
 
 <Tabs>
 <Tab title="Cloud-hosted">
-**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+**Follow these instructions to use a built-in, no-code connector hosted by C1.**
 
 <Steps>
 <Step>
-In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
 </Step>
 <Step>
 Search for **Oracle IDCS** and click **Add**.
@@ -107,16 +145,16 @@ Search for **Oracle IDCS** and click **Add**.
 <Step>
 Choose how to set up the new Oracle IDCS connector:
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
 
    - Add the connector to a managed app (select from the list of existing managed apps)
 
    - Create a new managed app
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
 </Step>
 <Step>
 Click **Next**.
@@ -143,23 +181,23 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 </Step>
 </Steps>
 
-**That's it!** Your Oracle IDCS connector is now pulling access data into ConductorOne.
+**That's it!** Your Oracle IDCS connector is now pulling access data into C1.
 </Tab>
 
 <Tab title="Self-hosted">
 **Follow these instructions to use the Oracle IDCS connector, hosted and run in your own environment.**
 
-When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
 
-### Resources 
+### Resources
 
-[Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector.
+[Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
 
 ### Step 1: Set up a new Oracle IDCS connector
 
 <Steps>
 <Step>
-In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -167,16 +205,16 @@ Search for **Baton** and click **Add**.
 <Step>
 Choose how to set up the new Oracle IDCS connector:
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
 
    - Add the connector to a managed app (select from the list of existing managed apps)
 
    - Create a new managed app
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
 </Step>
 <Step>
 Click **Next**.
@@ -189,7 +227,7 @@ Click **Rotate** to generate a new Client ID and Secret.
 
    Carefully copy and save these credentials. We'll use them in Step 2.
 </Step>
-</Steps> 
+</Steps>
 
 ### Step 2: Create Kubernetes configuration files
 
@@ -205,19 +243,19 @@ metadata:
   name: baton-oracle-idcs-secrets
 type: Opaque
 stringData:
-  # ConductorOne credentials
-  BATON_CLIENT_ID: <ConductorOne client ID>
-  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  # C1 credentials
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
   
   # Oracle IDCS credentials
   BATON_API_ACCESS_ID: <Oracle IDCS app client ID>
   BATON_API_ACCESS_SECRET: <Oracle IDCS app client secret>
   BATON_API_BASE_DOMAIN: <Oracle IDCS API base domain>
 
-  # Optional: include if you want ConductorOne to provision access using this connector
+  # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
 
-  # Optional: include if you want ConductorOne to sync application and application role data
+  # Optional: include if you want C1 to sync application and application role data
   BATON_SYNC_APPS_AND_ROLES: true
 ```
 
@@ -260,16 +298,13 @@ spec:
 
 <Steps>
 <Step>
-Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
 </Step>
 <Step>
-Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Oracle IDCS connector to. Oracle IDCS data should be found on the **Entitlements** and **Accounts** tabs.
+Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Oracle IDCS connector to. Oracle IDCS data should be found on the **Entitlements** and **Accounts** tabs.
 </Step>
 </Steps>
 
-**That's it!** Your Oracle IDCS connector is now pulling access data into ConductorOne.
+**That's it!** Your Oracle IDCS connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
-

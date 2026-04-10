@@ -1,6 +1,6 @@
 # Terraform and Cone CLI
 
-Configure ConductorOne tools with service principal credentials.
+Configure C1 tools with service principal credentials.
 
 ## Terraform Provider
 

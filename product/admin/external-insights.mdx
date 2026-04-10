@@ -1,34 +1,34 @@
 ---
 title: "External insights"
-description: "Bring identity risk scores from your security tools into ConductorOne to inform access reviews and approval decisions."
+description: "Bring identity risk scores from your security tools into C1 to inform access reviews and approval decisions."
 og:title: "External insights"
-og:description: "Bring identity risk scores from your security tools into ConductorOne to inform access reviews and approval decisions."
+og:description: "Bring identity risk scores from your security tools into C1 to inform access reviews and approval decisions."
 sidebarTitle: "Gain context from identity risk scores"
 ---
 
 {/* Editor Refresh: 2026-03-03 */}
 
 <Warning>
-**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the ConductorOne Support team if you'd like to try it out or share feedback.
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-External insights brings identity risk data from your security tools into ConductorOne, where it appears alongside the identities it describes. Reviewers and approvers see risk scores in context, such as during access reviews and at the moment of approval, so they can make more informed decisions without switching tools.
+External insights brings identity risk data from your security tools into C1, where it appears alongside the identities it describes. Reviewers and approvers see risk scores in context, such as during access reviews and at the moment of approval, so they can make more informed decisions without switching tools.
 
 ## How external insights work
 
-When you configure an external insights source, ConductorOne syncs risk data from that tool through its connector. ConductorOne matches each risk score to an identity in your directory by email address and attaches it to that identity's profile and any accounts they hold in other connected apps.
+When you configure an external insights source, C1 syncs risk data from that tool through its connector. C1 matches each risk score to an identity in your directory by email address and attaches it to that identity's profile and any accounts they hold in other connected apps.
 
-Once synced, risk scores appear in the ConductorOne UI wherever that identity appears in an access decision.
+Once synced, risk scores appear in the C1 UI wherever that identity appears in an access decision.
 
 ## Enable or disable external insights
 
 <Warning>
-This task requires the **Super Administrator** or **Connector Administrator** role in ConductorOne.
+This task requires the **Super Administrator** or **Connector Administrator** role in C1.
 </Warning>
 
 External insights are enabled automatically when a connector that is a supported external insight source is configured and syncing. No additional setup is required.
 
-If needed, you can manually turn risk score syncing on or off from the connector's settings page in ConductorOne:
+If needed, you can manually turn risk score syncing on or off from the connector's settings page in C1:
 
 <Steps>
 <Step>
@@ -59,14 +59,130 @@ The task log includes an **Insights** column. Hovering over the insights indicat
 
 Approvers can see an identity's current risk score and risk factors in a request task before submitting their decision.
 
+## Use external insights in CEL policy conditions
+
+Beyond surfacing risk data in the UI, you can reference external insights directly in [CEL policy conditions](/product/admin/expressions-reference#external-insights-functions) to automate access decisions based on a user's security posture.
+
+External insights expose two data types through CEL, each from a different connector:
+
+| Data type | Connector | CEL path | Description |
+|-----------|-----------|----------|-------------|
+| Issue insights | Wiz Insights | `account.security_insights` | Discrete security findings such as critical CVEs, misconfigurations, and exposed secrets |
+| Risk scores | CrowdStrike | `account.risk_score` / `account.risk_scores` | Normalized identity risk scores (0–100, higher = more risk) |
+
+<Note>
+All CEL functions that accept a source app name use the **display name** of the connector app in your tenant. The defaults are `"Wiz Insights"` and `"CrowdStrike"`. If you've renamed a connector app, use the renamed name instead. The match is **exact and case-sensitive**.
+</Note>
+
+### Issue insights (Wiz)
+
+Issue insights represent discrete security findings synced from Wiz. Each insight has three fields: `source` (the connector app name), `value` (a description like `"3 Critical CVEs"`), and `severity` (`"CRITICAL"`, `"HIGH"`, `"MEDIUM"`, `"LOW"`, or `"INFORMATIONAL"`).
+
+**Helper functions**
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `c1.app_user.v1.HasSecurityInsight(account)` | `bool` | `true` if the account has any issue insights from any source |
+| `c1.app_user.v1.GetSecurityInsights(account, source)` | `list` | All issue insights from the named source |
+| `c1.app_user.v1.HasSecurityInsightWithSeverity(account, source, severity)` | `bool` | `true` if the account has at least one issue from the named source at the given severity (case-insensitive) |
+
+**Examples**
+
+Deny access when critical Wiz findings exist:
+
+```go
+c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
+```
+
+Block privileged access on HIGH or CRITICAL Wiz issues:
+
+```go
+c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
+  || c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "HIGH")
+```
+
+Auto-approve when no Wiz issues exist:
+
+```go
+c1.app_user.v1.GetSecurityInsights(account, "Wiz Insights").size() == 0
+```
+
+### Risk scores (CrowdStrike)
+
+Risk scores are normalized values from 0 (no risk) to 100 (highest risk). Each score has two fields: `source` (the connector app name) and `normalized_score` (the integer score).
+
+You can access scores in two ways:
+- **Map** — `account.risk_score` is keyed by source display name and returns the score as an integer.
+- **List** — `account.risk_scores` returns a list of score objects, useful for cross-source queries.
+
+**Helper functions**
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `c1.app_user.v1.HasRiskScore(account)` | `bool` | `true` if the account has risk scores from any source |
+| `c1.app_user.v1.GetRiskScore(account, source)` | `c1.risk_score.v1` | The risk score object for the named source (returns `normalized_score` of `0` if missing) |
+
+**Examples**
+
+Block access when the CrowdStrike score exceeds a threshold:
+
+```go
+c1.app_user.v1.GetRiskScore(account, "CrowdStrike").normalized_score > 70
+```
+
+Require extra approval for elevated risk:
+
+```go
+c1.app_user.v1.HasRiskScore(account)
+  && c1.app_user.v1.GetRiskScore(account, "CrowdStrike").normalized_score > 50
+```
+
+Auto-approve when CrowdStrike reports low risk:
+
+```go
+"CrowdStrike" in account.risk_score && account.risk_score["CrowdStrike"] <= 20
+```
+
+Deny access if no CrowdStrike score exists (device may be unmanaged):
+
+```go
+!("CrowdStrike" in account.risk_score)
+```
+
+### Combining sources
+
+You can combine Wiz issue insights and CrowdStrike risk scores in a single condition.
+
+Escalate when CrowdStrike risk is elevated and Wiz has critical findings:
+
+```go
+("CrowdStrike" in account.risk_score && account.risk_score["CrowdStrike"] > 50)
+  && c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
+```
+
+Require a clean posture from both sources for sensitive access:
+
+```go
+("CrowdStrike" in account.risk_score && account.risk_score["CrowdStrike"] <= 30)
+  && !c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "HIGH")
+  && !c1.app_user.v1.HasSecurityInsightWithSeverity(account, "Wiz Insights", "CRITICAL")
+```
+
+### CEL best practices for external insights
+
+- **Put cheap checks first.** Place simple attribute comparisons (like `subject.department`) before insight or risk-score lookups, which trigger lazy data loads.
+- **Guard with existence checks.** Use `HasRiskScore` or `"CrowdStrike" in account.risk_score` before reading scores to avoid zero-default edge cases. Use `HasSecurityInsight` before iterating insights.
+- **Use the correct source name.** The source name must exactly match the app display name in your tenant.
+- **Prefer helper functions for severity checks.** `HasSecurityInsightWithSeverity` compares severity case-insensitively, but direct field comparisons like `i.severity == "CRITICAL"` are case-sensitive.
+
 ## Supported external insights sources
 
 <Columns cols={2}>
   <Card title="CrowdStrike Falcon Identity Protection" icon="shield-check" href="/baton/crowdstrike">
-    Ingest Falcon identity risk scores into ConductorOne. 
+    Ingest Falcon identity risk scores into C1. 
   </Card>
   <Card title="Wiz Insights" icon="shield-check" href="/baton/wiz-insights">
-    Ingest Wiz identity risk scores into ConductorOne. 
+    Ingest Wiz identity risk scores into C1. 
   </Card>
 </Columns>
 

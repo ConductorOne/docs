@@ -1,6 +1,6 @@
 # Setting Up Federation
 
-Create a provider and trust using the ConductorOne wizard.
+Create a provider and trust using the C1 wizard.
 
 ## Prerequisites
 

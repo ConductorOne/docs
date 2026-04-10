@@ -1,59 +1,91 @@
 ---
 title: "Set up an Oracle Fusion Cloud HCM connector"
 og:title: "Set up an Oracle Fusion Cloud HCM connector"
-description: "ConductorOne provides identity governance for Oracle Fusion Cloud HCM. Integrate your Oracle Fusion Cloud HCM instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
-og:description: "ConductorOne provides identity governance for Oracle Fusion Cloud HCM. Integrate your Oracle Fusion Cloud HCM instance with ConductorOne to run user access reviews (UARs) and enable just-in-time access requests."
+description: "C1 provides identity governance for Oracle Fusion Cloud HCM. Integrate your Oracle Fusion Cloud HCM instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "C1 provides identity governance for Oracle Fusion Cloud HCM. Integrate your Oracle Fusion Cloud HCM instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
 sidebarTitle: "Oracle Fusion Cloud HCM"
 ---
-
-<Warning>
-**This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
-
-We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
-</Warning>
 
 ## Capabilities
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
-| Roles | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  | 
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+
+### Account actions
+
+| Action | Description |
+| :--- | :--- |
+| Suspend Account | Disable a user’s login without affecting their HR employment status |
+| Unsuspend Account | Restore a suspended user’s login access |
+| Set Work Email | Set or update the work email address on a user account |
 
 ## Gather Oracle Fusion Cloud HCM credentials 
 
 Configuring the connector requires you to pass in credentials generated in Oracle Fusion Cloud HCM. Gather these credentials before you move on. 
 
-To set up the Oracle Fusion Cloud HCM connector, you'll need: 
+To set up the Oracle Fusion Cloud HCM connector, you’ll need: 
 
 - **Base URL**: The complete base URL for your Oracle Fusion Cloud HCM instance REST API, which is formed like `https://your-instance.oraclecloud.com`.
 
-- **Username and password**: The username and password for an Oracle Fusion Cloud HCM account with access to the Oracle Fusion Cloud HCM REST API. This account must have access to the userAccounts (Get,Describe) resource. These permissions are available in the any of the following roles:
+- **Username and password**: The username and password for an Oracle Fusion Cloud HCM account with access to the Oracle Fusion Cloud HCM REST API.
 
-   - Use REST Service - User Accounts as Worker (ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_AS_WORKER)
-   - Use REST Service - User Accounts (ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS)
-   - Use REST Service - User Accounts as Manager or HR (ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_AS_MGR_OR_HR)
-   - Human Capital Management Integration Specialist (ORA_HRC_HUMAN_CAPITAL_MANAGEMENT_INTEGRATION_SPECIALIST_JOB)
+### Permissions for sync (read-only)
 
-  Additionally, the account must have permissions to read all users' data. A Data Security role with View All users scope for Person and Public Person must be set, either on the user or the user’s role. If the account used to connect does not have this capability, the connector will sync an empty or incomplete list of accounts. 
+The service account must have access to the userAccounts resource. Read access is available via any of the following roles:
 
-**That's it!** Next, move on to the connector configuration instructions. 
+   - Use REST Service - User Accounts (`ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS`)
+   - Use REST Service - User Accounts as Worker (`ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_AS_WORKER`)
+   - Use REST Service - User Accounts as Manager or HR (`ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_AS_MGR_OR_HR`)
+   - Human Capital Management Integration Specialist (`ORA_HRC_HUMAN_CAPITAL_MANAGEMENT_INTEGRATION_SPECIALIST_JOB`) — includes the read-only aggregate privilege `ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_RO` (Get, Describe only)
+
+Additionally, the account must have permissions to read all users’ data. A **Data Role** with a security profile scoped to View All People for Person and Public Person must be assigned, either directly to the user or via the user’s role. If the account used to connect does not have this capability, the connector will sync an empty or incomplete list of accounts.
+
+### Permissions for provisioning
+
+Provisioning features (role assignment, account creation, and account actions) require additional privileges beyond sync. Oracle’s recommended approach is to create a custom job role that combines the necessary privileges:
+
+#### Required roles
+
+| Role | Code | Purpose |
+| :--- | :--- | :--- |
+| Use REST Service - User Accounts | `ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS` | Grants the `PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_PRIV` function privilege, which covers Get, Post, Patch, Describe, and Delete on the `/userAccounts` endpoint. Required for account creation. |
+| IT Security Manager | `ORA_FND_IT_SECURITY_MANAGER_JOB` | Grants `ASE_REST_SERVICE_ACCESS_IDENTITY_INTEGRATION_PRIV` for SCIM API access (role grant/revoke, suspend/unsuspend, email updates) and `PER_REST_SERVICE_ACCESS_USERS_AND_ROLES_LOVS_PRIV` for role list-of-values lookups. |
+
+#### Recommended setup
+
+Oracle’s [authorization tutorial](https://www.oracle.com/webfolder/technetwork/tutorials/obe/fusionapps/HCM/UserAccountsAPI_OBE/html/auth/index.html) for the User Accounts REST API recommends:
+
+1. Copy the **Human Capital Management Integration Specialist** (`ORA_HRC_HUMAN_CAPITAL_MANAGEMENT_INTEGRATION_SPECIALIST_JOB`) job role
+2. Add the following roles to its role hierarchy:
+   - `ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS` (full read/write access to userAccounts)
+   - `ORA_FND_IT_SECURITY_MANAGER_JOB` (SCIM access and role LOV lookups)
+3. Create a **Data Role** wrapping the custom job role with appropriate HCM security profiles (View All People, View All Organizations)
+4. Assign the Data Role to the integration service account
+
+<Warning>
+The **Human Capital Management Integration Specialist** role on its own only includes the read-only aggregate privilege (`ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS_RO`), which covers Get and Describe only. It is **not sufficient** for provisioning operations (Post, Patch, Delete). You must add the full `ORA_PER_REST_SERVICE_ACCESS_USER_ACCOUNTS` role to enable account creation.
+</Warning>
+
+**That’s it!** Next, move on to the connector configuration instructions. 
 
 ## Configure the Oracle Fusion Cloud HCM connector
 
 <Warning>
 To complete this task, you'll need:
 
-- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- The **Connector Administrator** or **Super Administrator** role in C1
 - Access to the set of Oracle Fusion Cloud HCM credentials generated by following the instructions above
 </Warning>
 
 <Tabs>
 <Tab title="Cloud-hosted">
-**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+**Follow these instructions to use a built-in, no-code connector hosted by C1.**
 
 <Steps>
 <Step>
-In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
 </Step>
 <Step>
 Search for **Oracle Fusion Cloud HCM** and click **Add**.
@@ -61,16 +93,16 @@ Search for **Oracle Fusion Cloud HCM** and click **Add**.
 <Step>
 Choose how to set up the new Oracle Fusion Cloud HCM connector:
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
 
    - Add the connector to a managed app (select from the list of existing managed apps)
 
    - Create a new managed app
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
 </Step>
 <Step>
 Click **Next**.
@@ -89,23 +121,23 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 </Step>
 </Steps>
 
-**That's it!** Your Oracle Fusion Cloud HCM connector is now pulling access data into ConductorOne.
+**That's it!** Your Oracle Fusion Cloud HCM connector is now pulling access data into C1.
 </Tab>
 
 <Tab title="Self-hosted">
 **Follow these instructions to use the Oracle Fusion Cloud HCM connector, hosted and run in your own environment.**
 
-When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
 
 ### Resources 
 
-[Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector.
+[Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
 
 ### Step 1: Set up a new Oracle Fusion Cloud HCM connector
 
 <Steps>
 <Step>
-In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -113,16 +145,16 @@ Search for **Baton** and click **Add**.
 <Step>
 Choose how to set up the new Oracle Fusion Cloud HCM connector:
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
 
    - Add the connector to a managed app (select from the list of existing managed apps)
 
    - Create a new managed app
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
 </Step>
 <Step>
 Click **Next**.
@@ -151,14 +183,14 @@ metadata:
   name: baton-oracle-fusion-cloud-hcm-secrets
 type: Opaque
 stringData:
-  # ConductorOne credentials
-  BATON_CLIENT_ID: <ConductorOne client ID>
-  BATON_CLIENT_SECRET: <ConductorOne client secret>
+  # C1 credentials
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
   
   # Oracle Fusion Cloud HCM credentials
   BATON_BASE_URL: <Oracle Fusion Cloud HCM REST API base URL>
-  BATON_PASSWORD: <Oracle Fusion Cloud HCM account username>
-  BATON_USERNAME: <Oracle Fusion Cloud HCM account password>
+  BATON_PASSWORD: <Oracle Fusion Cloud HCM account password>
+  BATON_USERNAME: <Oracle Fusion Cloud HCM account username>
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -200,14 +232,14 @@ spec:
 
 <Steps>
 <Step>
-Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
 </Step>
 <Step>
-Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Oracle Fusion Cloud HCM connector to. Oracle Fusion Cloud HCM data should be found on the **Entitlements** and **Accounts** tabs.
+Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Oracle Fusion Cloud HCM connector to. Oracle Fusion Cloud HCM data should be found on the **Entitlements** and **Accounts** tabs.
 </Step>
 </Steps>
 
-**That's it!** Your Oracle Fusion Cloud HCM connector is now pulling access data into ConductorOne.
+**That's it!** Your Oracle Fusion Cloud HCM connector is now pulling access data into C1.
 </Tab>
 </Tabs>
 

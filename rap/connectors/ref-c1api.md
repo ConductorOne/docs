@@ -1,13 +1,13 @@
 # ref-c1api
 
-How connectors communicate with ConductorOne platform. SDK handles this; understanding helps debugging.
+How connectors communicate with C1 platform. SDK handles this; understanding helps debugging.
 
 ---
 
 ## Architecture
 
 ```
-ConductorOne Platform                     Connector (Daemon Mode)
+C1 Platform                               Connector (Daemon Mode)
 +---------------------+                   +------------------------+
 |  Task Queue         |<--- gRPC ---------| BatonServiceClient     |
 |  (Sync, Grant, etc) |--- Task --------->| Task Handler           |
