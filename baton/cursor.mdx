@@ -16,16 +16,14 @@ The Cursor connector syncs the following resources:
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Account | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Account | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Create and delete via SCIM |
 | Role | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
 
 **Notes:**
 - The connector syncs team members and their assigned roles (Owner, Member, Free Owner).
-- Provisioning is not currently supported. The connector provides read-only visibility into Cursor team membership and role assignments.
-
-**Additional functionality:**
-
-_None._
+- Account provisioning (create and delete) is supported when SCIM is configured. New users are created in the identity provider and appear in Cursor after their first login. Deleting an account removes the user from the identity provider via SCIM, which triggers Cursor to deactivate the member on its next sync.
+- Delete only works for SCIM-managed users. Members added directly in the Cursor dashboard (not through an IdP) cannot be removed by this connector.
+- Role assignment provisioning is not supported. Cursor does not expose an API for changing user roles.
 
 ## Prerequisites
 
@@ -33,10 +31,7 @@ Before setting up the Cursor connector, confirm the following:
 
 - Your Cursor team is on the **Enterprise** plan. The Admin API is not available on Business or other plans.
 - You have the **administrator** role in your Cursor team. Only administrators can create API keys.
-
-<Tip>
-If your organization uses Cursor on the Enterprise plan with SSO enabled, you can also configure [SCIM provisioning](https://cursor.com/docs/account/teams/scim) directly in Cursor to manage user lifecycle through your identity provider. The C1 connector complements SCIM by providing access visibility and review capabilities.
-</Tip>
+- **(Optional, for account provisioning)** SSO is enabled and SCIM is configured in your Cursor team. See the [Cursor SCIM documentation](https://cursor.com/docs/account/teams/scim) for setup guidance.
 
 ## Gather Cursor credentials
 
@@ -60,6 +55,21 @@ To configure the Cursor connector, you need **administrator** permissions in you
 </Steps>
 
 For more information, see the [Cursor Admin API documentation](https://cursor.com/docs/account/teams/admin-api).
+
+### SCIM credentials (optional, for account provisioning)
+
+If you want to enable account provisioning (create and delete users), you also need SCIM credentials:
+
+<Steps>
+  <Step>
+  In the Cursor dashboard, navigate to **Settings** > **Advanced** > **SCIM**.
+  </Step>
+  <Step>
+  Copy the **SCIM endpoint URL** and **SCIM bearer token**. You need both to configure account provisioning in the connector.
+  </Step>
+</Steps>
+
+For more information, see the [Cursor SCIM documentation](https://cursor.com/docs/account/teams/scim).
 
 ## Configure the Cursor connector
 
@@ -173,6 +183,10 @@ stringData:
 
   # Cursor config
   BATON_CURSOR_API_KEY: <Cursor API key>
+
+  # Optional: SCIM config (for account provisioning)
+  # BATON_CURSOR_SCIM_ENDPOINT: <Cursor SCIM endpoint URL>
+  # BATON_CURSOR_SCIM_TOKEN: <Cursor SCIM bearer token>
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -229,6 +243,6 @@ spec:
 ## Known limitations
 
 - **Enterprise plan required.** The Cursor Admin API is only available on Enterprise plans. Teams on the Business plan cannot use this connector.
-- **No provisioning.** The connector provides read-only access. It cannot invite users, remove members, or modify role assignments through the Cursor API.
 - **No role management API.** Cursor does not expose an API for changing user roles. Role assignments are synced for visibility only.
-- **SCIM requires Enterprise and SSO.** SCIM-based user provisioning in Cursor is only available on Enterprise plans with SSO enabled. SCIM is configured directly in Cursor, not through this connector. See the [Cursor SCIM documentation](https://cursor.com/docs/account/teams/scim) for setup guidance.
+- **SCIM requires Enterprise and SSO.** Account provisioning (create and delete) requires SCIM, which is only available on Enterprise plans with SSO enabled. Without SCIM credentials, the connector operates in sync-only mode.
+- **Delete is SCIM-only.** Account deletion removes users from the identity provider via SCIM. Members added directly in the Cursor dashboard (not through an IdP) cannot be removed by this connector.
