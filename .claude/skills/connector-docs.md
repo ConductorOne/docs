@@ -69,11 +69,25 @@ Gather this information before writing:
 ---
 title: "Set up a [Connector Name] connector"
 og:title: "Set up a [Connector Name] connector"
-description: "C1 provides identity governance and just-in-time provisioning for [App Name]. Integrate your [App Name] instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+description: "[See variants below]"
 og:description: "[Same as description]"
 sidebarTitle: "[Connector Name]"
 ---
 ```
+
+**`description` and `og:description` must always match.** Choose the correct variant based on whether the connector supports provisioning — check the Provision column of the capabilities table.
+
+**If the connector supports provisioning** (at least one resource has a checkmark in the Provision column):
+```
+"C1 provides identity governance and just-in-time provisioning for [App Name]. Integrate your [App Name] instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+```
+
+**If the connector does not support provisioning** (no resources have a Provision checkmark):
+```
+"C1 provides identity governance for [App Name]. Integrate your [App Name] instance with C1 for unified visibility and governance over user access."
+```
+
+Use the connector's short product name (e.g., "Looker", not "Google Looker") in the description, even if the `sidebarTitle` uses the full parent-company-qualified name.
 
 ### Section Order
 
@@ -517,6 +531,8 @@ Always end both tabs with:
 Before finalizing, verify:
 
 - [ ] Frontmatter is complete and properly formatted
+- [ ] `description` and `og:description` match each other
+- [ ] Description uses the provisioning variant only if at least one capability table row has a Provision checkmark; otherwise use the no-provisioning variant
 - [ ] All sections are in the correct order
 - [ ] Connector actions section included if `CAPABILITY_ACTIONS` is present in baton repo
 - [ ] Each `<Step>` contains only one primary action
