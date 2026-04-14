@@ -143,7 +143,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 * [Official download center](https://dist.conductorone.com/ConductorOne/baton-tableau): For stable binaries (Windows/Linux/macOS) and container images.
 
-* [GitHub repository](https://github.com/ConductorOne/baton-tableau): Access the source code, report issues, or contribute to the project.
+* [GitHub repository](https://github.com/conductorone/baton-tableau): Access the source code, report issues, or contribute to the project.
 
 ### Step 1: Set up a new Tableau connector
 
@@ -204,6 +204,10 @@ stringData:
   BATON_SERVER_PATH: <Base URL for your Tableau server>
   BATON_SITE_ID: <Tableau site ID>
 
+  # Optional: override the Tableau API version (default: 3.27)
+  # Only set this if your Tableau Server requires a specific API version.
+  # BATON_API_VERSION: "3.27"
+
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
 ```
@@ -258,5 +262,27 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 </Tab>
 </Tabs>
 
+## Configure IDP-based account provisioning
 
+When provisioning Tableau accounts (Licenses resource type), the connector supports two optional fields in the provisioning mapping that control how new accounts are authenticated:
 
+| Field | Description |
+| --- | --- |
+| **IDP Configuration Name** | Name of an IDP configuration defined on your Tableau site (e.g., a SAML provider). When set, new accounts are created using that IDP. Requires Tableau API version ≥ 3.22. |
+| **With MFA** | When set to `true`, new accounts are created using Tableau's built-in MFA authentication. Takes precedence over **IDP Configuration Name** if both are set. |
+
+These fields appear in the **provisioning mapping** for the Licenses entitlement in C1 and are not part of the connector's base configuration.
+
+### Behavior reference
+
+| Configuration | Result |
+| --- | --- |
+| Neither field set | Account created with Tableau site default authentication |
+| **IDP Configuration Name** set, IDP found | Account created with the named IDP |
+| **IDP Configuration Name** set, IDP not found | Provisioning fails with an explicit error naming the missing IDP |
+| **IDP Configuration Name** set, API version < 3.22 | Provisioning fails with an explicit error — upgrade your Tableau Server or remove the field |
+| **With MFA** = `true` | Account created with Tableau MFA — **IDP Configuration Name** is ignored regardless of API version |
+
+<Note>
+If your Tableau Server uses an API version older than 3.22 and you do not set **IDP Configuration Name**, account provisioning uses the site default authentication without error. The IDP endpoint is only required when you explicitly configure an IDP name.
+</Note>
