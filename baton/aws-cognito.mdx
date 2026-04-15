@@ -1,0 +1,299 @@
+---
+title: "Set up an AWS Cognito connector"
+og:title: "Set up an AWS Cognito connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for AWS Cognito. Integrate your AWS Cognito User Pools with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for AWS Cognito. Integrate your AWS Cognito User Pools with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "AWS Cognito"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The AWS Cognito connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Cognito Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Cognito Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather AWS Cognito credentials
+
+<Warning>
+To configure the AWS Cognito connector, your IAM identity must have permission to call the following Cognito API actions on the target User Pool(s). For read-only sync, the first five permissions are sufficient. For full provisioning, all permissions are required.
+
+**Sync permissions (required for all deployments):**
+- `cognito-idp:ListUsers`
+- `cognito-idp:AdminGetUser`
+- `cognito-idp:ListGroups`
+- `cognito-idp:ListUsersInGroup`
+- `cognito-idp:AdminListGroupsForUser`
+
+**Provisioning permissions (required for group membership and account management):**
+- `cognito-idp:DescribeUserPool`
+- `cognito-idp:AdminAddUserToGroup`
+- `cognito-idp:AdminRemoveUserFromGroup`
+- `cognito-idp:AdminCreateUser`
+- `cognito-idp:AdminDeleteUser`
+- `cognito-idp:AdminEnableUser`
+- `cognito-idp:AdminDisableUser`
+</Warning>
+
+<Steps>
+  <Step>
+    Sign in to the [AWS Console](https://console.aws.amazon.com/) and navigate to **Cognito** > **User pools**.
+  </Step>
+
+  <Step>
+    Locate the User Pool(s) you want to connect. Copy the **User pool ID** from each pool's overview page (for example, `us-east-1_T5HyXiR7I`). Note the AWS region as well. You can connect multiple pools in a single connector instance.
+  </Step>
+
+  <Step>
+    Create or identify an IAM user with the required permissions listed above. ConductorOne recommends scoping the policy to the specific User Pool ARN(s):
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "cognito-idp:ListUsers",
+            "cognito-idp:AdminGetUser",
+            "cognito-idp:ListGroups",
+            "cognito-idp:ListUsersInGroup",
+            "cognito-idp:AdminListGroupsForUser",
+            "cognito-idp:DescribeUserPool",
+            "cognito-idp:AdminAddUserToGroup",
+            "cognito-idp:AdminRemoveUserFromGroup",
+            "cognito-idp:AdminCreateUser",
+            "cognito-idp:AdminDeleteUser",
+            "cognito-idp:AdminEnableUser",
+            "cognito-idp:AdminDisableUser"
+          ],
+          "Resource": "arn:aws:cognito-idp:<region>:<account-id>:userpool/<user-pool-id>"
+        }
+      ]
+    }
+    ```
+  </Step>
+
+  <Step>
+    In **IAM** > **Users** > **Security credentials** > **Create access key**, generate an access key for the IAM user. Save the **Access key ID** and **Secret access key** — you will need both to configure the connector.
+  </Step>
+</Steps>
+
+## Known limitations
+
+- **Last login date not available on Essentials tier.** The Cognito `UserLastAuthenticationDate` field is only populated on User Pools using the **Plus** feature plan. If your pool is on the Essentials plan, last login data will not appear in ConductorOne.
+- **Cognito is rate-limited.** The `ListUsers` API is rate-limited to approximately 5 requests per second. For large User Pools (tens of thousands of users), syncs will be slow. This is expected behavior and not a connector defect.
+- **Resource IDs are pool-scoped.** When syncing multiple pools, resource IDs are namespaced as `poolID|resourceID` to prevent collisions across pools.
+- **Group names are immutable.** Cognito does not allow renaming groups after creation. Group names are used as stable resource IDs. If a group is deleted and re-created with the same name, ConductorOne will treat it as the same group.
+- **Invite email is optional and defaults to off.** When provisioning a new user, you can choose whether Cognito sends a temporary password to the user's email via the **Send Invite Email** field. The default is `false` (no email sent). To send the invite, add an explicit mapping for `sendInviteEmail` set to `true` in the provisioning flow. ConductorOne never handles the credential directly.
+- **Additional required attributes must use exact Cognito attribute names.** If your User Pool requires attributes beyond `given_name` and `family_name` (for example `nickname`, `preferred_username`, or a custom attribute like `custom:department`), add them as optional mappings in the provisioning flow using the exact Cognito attribute name as the destination key. The connector forwards any unrecognized profile fields directly to Cognito.
+
+## Actions
+
+The AWS Cognito connector supports the following account lifecycle actions, which can be triggered manually or via ConductorOne automations:
+
+| Action | Description |
+| :--- | :--- |
+| **Enable User** | Re-enables a disabled Cognito user account (`AdminEnableUser`). The user can sign in again immediately. |
+| **Disable User** | Disables an active Cognito user account (`AdminDisableUser`). The user cannot sign in but their account and group memberships are preserved. |
+
+### Using actions in automations
+
+To trigger an enable or disable action automatically:
+
+1. In ConductorOne, navigate to **Automations** and create or edit an automation.
+2. Add an action step and select **Enable User** or **Disable User** from the AWS Cognito connector.
+3. ConductorOne will pass the user's resource ID automatically — no manual input required.
+
+You can also trigger actions manually from a user's profile page under **Actions**.
+
+## Configure the AWS Cognito connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **AWS Cognito** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new AWS Cognito connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **User Pool IDs** (`user-pool-ids`): One or more Cognito User Pool IDs, comma-separated (e.g. `us-east-1_T5HyXiR7I` or `us-east-1_PoolA,us-east-1_PoolB`)
+        - **Region** (`region`): The AWS region of the User Pool(s), e.g. `us-east-1`
+        - **AWS Access Key ID** (`aws-access-key-id`): IAM access key ID
+        - **AWS Secret Access Key** (`aws-secret-access-key`): IAM secret access key
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your AWS Cognito connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [AWS Cognito](https://github.com/ConductorOne/baton-aws-cognito) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new AWS Cognito connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new AWS Cognito connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your AWS Cognito connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-aws-cognito-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-aws-cognito-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # AWS Cognito — required
+      BATON_USER_POOL_IDS: <user-pool-id>        # comma-separate multiple pools: id1,id2
+      BATON_REGION: <aws-region>
+      BATON_AWS_ACCESS_KEY_ID: <access-key-id>
+      BATON_AWS_SECRET_ACCESS_KEY: <secret-access-key>
+    ```
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-aws-cognito.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-aws-cognito
+      labels:
+        app: baton-aws-cognito
+    spec:
+      selector:
+        matchLabels:
+          app: baton-aws-cognito
+      template:
+        metadata:
+          labels:
+            app: baton-aws-cognito
+            baton: "true"
+            baton-app: aws-cognito
+        spec:
+          containers:
+          - name: baton-aws-cognito
+            image: public.ecr.aws/conductorone/baton-aws-cognito:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-aws-cognito
+            envFrom:
+            - secretRef:
+                name: baton-aws-cognito-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the AWS Cognito connector to. AWS Cognito data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your AWS Cognito connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-aws-cognito).
+</Tip>
