@@ -1,345 +1,547 @@
 ---
 title: "Set up an Active Directory connector"
 og:title: "Set up an Active Directory connector"
-description: "C1 provides identity governance and just-in-time provisioning for Active Directory. Integrate your on-prem Active Directory server with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
-og:description: "C1 provides identity governance and just-in-time provisioning for Active Directory. Integrate your on-prem Active Directory server with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+description: "C1 provides identity governance and just-in-time provisioning for Active Directory. Integrate your on-prem Active Directory domains with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Active Directory. Integrate your on-prem Active Directory domains with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 sidebarTitle: "Microsoft Active Directory"
 ---
-
-## Availability
-
-The Active Directory connector supports Windows and Linux.
 
 ## Capabilities
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Group Managed Service Accounts (gMSAs) | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
 
-The Active Directory connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
+The Active Directory connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). When a new account is created by C1, the account's password is sent to a [vault](/product/admin/vaults).
 
-When a new account is created by C1, the account's password will be sent to a [vault](/product/admin/vaults).
+**Notes:**
+
+- The connector syncs each user's primary group membership (for example, Domain Users) via the `primaryGroupID` attribute. AD does not include primary groups in `memberOf`, so the connector resolves these automatically.
+- The connector supports syncing across multiple AD domains and forests in a single run via `additional-domains` configuration.
+- gMSA sync is opt-in and requires the `enable-gmsa-sync` flag. gMSA provisioning modifies the `msDS-GroupMSAMembership` security descriptor ACL.
+- The connector supports two connection modes: **LDAP** (default on Linux) and **WinLDAP** (default on Windows, uses `wldap32.dll` for Kerberos/GSSAPI).
+- Account provisioning (create/delete) requires LDAPS (`ldaps: true`).
+- When `sync-scope` is set to `GlobalCatalog`, provisioning is not supported and some profile fields may be unavailable.
+
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+**Global actions** (connector-level):
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `enable_user` | `resource_id` (resource ID, required) | Enable a disabled AD account (clears ACCOUNTDISABLE flag) |
+| `disable_user` | `resource_id` (resource ID, required) | Disable an active AD account (sets ACCOUNTDISABLE flag) |
+| `lock_account` | `resource_id` (resource ID, required) | Lock an AD account — alias for `disable_user`, sets the `ACCOUNTDISABLE` UAC flag. AD has no separate lock state. |
+| `unlock_account` | `resource_id` (resource ID, required) | Unlock an AD account — alias for `enable_user`, clears the `ACCOUNTDISABLE` UAC flag. |
+| `update_user_attrs` | `resource_type` (string, required), `resource_id` (string, required), `attrs` (map, required), `attrs_update_mask` (string list, required) | Update user attributes. Known names (for example, `first_name`) are mapped to AD attributes; unknown names are passed through as raw AD attribute names. Empty values clear the attribute. Uses `StringField` for `resource_id` (not `ResourceIdField`) because it is invoked by the SDK profile push pipeline. |
+| `lookup_user` | At least one of: `upn` (string), `sam_account_name` (string), `employee_id` (string) | Look up a user by UPN, SAM Account Name, or Employee ID and return their DN, SAM Account Name, UPN, display name, employee ID, and objectGUID |
+| `set_manager` | `resource_id` (resource ID, required), plus exactly one of: `manager_resource_id` (resource ID) or `clear_manager` (bool) | Set or clear the manager attribute on a user. The handler returns the resulting `manager_dn` as an output for observability; `manager_dn` is not an input. |
+
+**Resource actions** (on user resources):
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `update_profile` | `user_id` (resource ID, required), plus optional string fields (see [Profile push attributes](#profile-push-attributes) below), and `custom_attributes` (map of raw AD attribute names to values) | Update a user's profile attributes. Empty values clear the attribute in AD. |
+| `move_ou` | `user_id` (resource ID, required), `target_ou` (string, required) | Move a user to a different Organizational Unit. Automatically handles CN collisions by appending a numeric suffix. |
+
+**Resource actions** (on group resources):
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `create` | `name` (string, required), `organizationalUnit` (string, required), plus optional: `sAMAccountName`, `description`, `groupScope` (`global`/`domain_local`/`universal`), `groupType` (`security`/`distribution`), `managedByUser` (resource ID), `managedByGroup` (resource ID), `mailEnabled` (bool), `primaryEmailAddress`, `emailAliases` (string list), `hideFromGAL` (bool), `gidNumber` (int), `userMembers` (resource ID list), `groupMembers` (resource ID list) | Create a new AD group with optional initial members, mail settings, and POSIX attributes |
+
+**Custom PowerShell actions:**
+
+You can define additional actions backed by PowerShell scripts in the config file. See [Custom PowerShell Actions](#custom-powershell-actions) below.
 
 ### Resources
 
-* [Official download center](https://dist.conductorone.com/ConductorOne/baton-active-directory): For stable binaries (Windows/Linux/macOS) and container images.
+* [Official download center](https://dist.conductorone.com/ConductorOne/baton-active-directory): For stable binaries (Windows/Linux) and container images.
 
-## Integrate your Active Directory domain
+* [GitHub repository](https://github.com/ConductorOne/baton-active-directory): Access the source code, report issues, or contribute to the project.
 
-This process uses the Active Directory connector, hosted and run in your own environment. [Contact C1's support team](/baton/active-directory/) to download the latest version of the connector.
+## Gather Active Directory credentials
 
-Once `baton-active-directory` is installed and the integration is set up, Baton runs as a service in your environment. The service maintains contact with C1, syncs and uploads data at regular intervals, and passes that data to the C1 UI, where you and your colleagues can use it to run access reviews and manage access requests for the application.
+<Warning>
+To configure the Active Directory connector, you need an Active Directory service account with appropriate permissions. The specific permissions depend on your intended use:
 
-### Requirements
+- **Sync only**: Read access to AD objects
+- **Entitlement provisioning**: Delegated rights to modify group membership
+- **Account provisioning**: Delegated rights to create, delete, and manage user accounts, plus LDAPS enabled
+- **gMSA provisioning**: Permission to modify `msDS-GroupMSAMembership` on gMSA objects
 
-- A Windows server to host `baton-active-directory` This server needs minimum requirements to run in most environment. It doesn't need a dedicated server
-	- Two to four core vCPU
-	- Four to eight gigabytes of RAM
-	- Windows minimum required storage
-- Outbound network connectivity to port `443` to your C1 tenant
-- An Active Directory service account
-	- For syncing only, the AD account needs read access only
-	- For entitlement provisioning, the account needs permissions to modify group membership. See [Entitlement provisioning permissions](#entitlement-provisioning-permissions) below.
-	- For account provisioning, the account needs delegated rights to create, delete, and manage user accounts. See [Account provisioning permissions](#account-provisioning-permissions) below.
-	- **Log on as a service** permission. You may need to grant this via local or domain group policy, depending on your environment.
-	- `Modify` access to the `C:\ProgramData\ConductorOne` directory so the service can write to the log file
-- The **Connector Administrator** or **Super Administrator** role in C1
+The service account also needs **Log on as a service** permission and **Modify** access to `C:\ProgramData\ConductorOne`.
+</Warning>
+
+### Create a service account
 
 <Steps>
-<Step>
-In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
-</Step>
-<Step>
-Search for **Baton** and click **Add**.
-</Step>
-<Step>
-Choose how to set up the new Baton connector:
-	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-	- Add the connector to a managed app (select from the list of existing managed apps)
-	- Create a new managed app
-</Step>
-<Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-	If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
-</Step>
-<Step>
-Click **Next**.
-</Step>
-<Step>
-Find the **Settings** section of the page and click **Edit**.
-</Step>
-<Step>
-Click on Rotate to generate a new `client-id` and a `client-secret` for the connector. Make sure you copy both as the `client-secret` will not be visible once you click Ok.
-</Step>
-<Step>
-Click Ok
-</Step>
-<Step>
-Next to the `Not Connected` label, click on the word **Baton**. This will take you to the application page.
-	- Click on pencil icon next at the top of the page to update the application name and type `Active Directory`
-	- This will update the application name and the connector name, and the application icon will also resemble Active Directory once connected.
-</Step>
+  <Step>
+    Create a dedicated AD service account for the connector (for example, `svc-baton`). A standard domain user account with read access is sufficient for sync-only operation.
+  </Step>
+
+  <Step>
+    Grant the service account **Log on as a service** permission via local or domain Group Policy, depending on your environment.
+  </Step>
 </Steps>
 
-## Configure the `baton-active-directory`
+### Entitlement provisioning permissions
 
-### Step 1: Create an Active Directory service account
-
-The Active Directory Connector needs a service accounts to connect to Active Directory. The account needs read permissions to AD and Logon As a Service rights. The latter can be configured via GPO, or if using a privileged account to setup the connector, that step will happen automatically.
-
-#### Entitlement provisioning permissions
-
-For entitlement provisioning support, the service account needs to have delegated rights on your AD forest to manage groups membership
+For entitlement provisioning support, the service account needs delegated rights to manage group membership.
 
 <Steps>
-	<Step>
-	Open ADUC or run the command `dsa.msc` from the command line
-	</Step>
-	<Step>
-	Right click on your forest root, or if you only want to provision into groups in a particular OU right click on that OU
-	</Step>
-	<Step>
-	Select Delegate Control
-	</Step>
-	<Step>
-	Add the service account running the `baton-active-directory` service
-	</Step>
-	<Step>
-	From the Task to Delegate check the box for `Modify the membership of a group`
-	</Step>
-	<Step>
-	Click Next, then Finish
-	</Step>
+  <Step>
+    Open Active Directory Users and Computers (ADUC) or run `dsa.msc` from the command line.
+  </Step>
+
+  <Step>
+    Right-click on your forest root (or a specific OU if you only want to provision into groups in that OU) and select **Delegate Control**.
+  </Step>
+
+  <Step>
+    Add the service account running the `baton-active-directory` service.
+  </Step>
+
+  <Step>
+    From the tasks to delegate, check the box for **Modify the membership of a group**.
+  </Step>
+
+  <Step>
+    Click **Next**, then **Finish**.
+  </Step>
 </Steps>
 
-This delegation will grant the service account the ability to provision and deprovision access from Active Directory groups, but it excludes special built-in groups like:
+This delegation grants the service account the ability to provision and deprovision access from Active Directory groups, but it excludes special built-in groups like Administrators, Domain Admins, Enterprise Admins, and Schema Admins.
 
-- Administrators
-- Domain Admins
-- Enterprise Admins
-- Schema Admins
-
-If you wish to manage those, you must perform the following operation:
+To manage those protected groups, you must grant explicit **Write Members** permission on each group and update AdminSDHolder to prevent the permission from being removed:
 
 <Steps>
-<Step>
-For each group you want the service account to Control:
-	<Steps>
-		<Step>
-		Right Click on the group
-		</Step>
-		<Step>
-		Click on the Security tab
-		</Step>
-		<Step>
-		Click Advanced
-		</Step>
-		<Step>
-		Click Add
-		</Step>
-		<Step>
-		Click on Select a principal, and choose the `baton-active-directory` service account
-		</Step>
-		<Step>
-		Grant the account `Write Members` permissions
-		</Step>
-	</Steps>
-</Step>
-<Step>
-Run the following powershell script **from a domain controller with a domain admin credential** to ensure AdminSDHolder doesn't remove the permission after 60 minutes:
+  <Step>
+    For each protected group: right-click the group, click the **Security** tab, click **Advanced**, click **Add**, select the service account as the principal, and grant **Write Members** permission.
+  </Step>
 
-```powershell
-$domain = "REPLACE_WITH_YOUR_DOMAIN"
-$samAccountName = "REPLACE_WITH_YOUR_SERVICE_ACCOUNT"
-$adminSDHolderPath = "CN=AdminSDHolder,CN=System," + (Get-ADDomain).DistinguishedName
+  <Step>
+    Run the following PowerShell script **from a domain controller with domain admin credentials** to ensure AdminSDHolder does not remove the permission after 60 minutes:
 
-$acl = Get-Acl "AD:\$adminSDHolderPath"
-$identity = New-Object System.Security.Principal.NTAccount("$domain\$samAccountName")
+    ```powershell
+    $domain = "REPLACE_WITH_YOUR_DOMAIN"
+    $samAccountName = "REPLACE_WITH_YOUR_SERVICE_ACCOUNT"
+    $adminSDHolderPath = "CN=AdminSDHolder,CN=System," + (Get-ADDomain).DistinguishedName
 
-$rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
-    $identity,
-    [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
-    [System.Security.AccessControl.AccessControlType]::Allow,
-    [Guid]"bf967a9c-0de6-11d0-a285-00aa003049e2",  # GUID for 'member' attribute, don't change
-    [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None
-)
+    $acl = Get-Acl "AD:\$adminSDHolderPath"
+    $identity = New-Object System.Security.Principal.NTAccount("$domain\$samAccountName")
 
-$acl.AddAccessRule($rule)
-Set-Acl -Path "AD:\$adminSDHolderPath" -AclObject $acl
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+        $identity,
+        [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+        [System.Security.AccessControl.AccessControlType]::Allow,
+        [Guid]"bf967a9c-0de6-11d0-a285-00aa003049e2",  # GUID for 'member' attribute
+        [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None
+    )
 
-Write-Host "Successfully granted '$identity' permission to modify group memberships in AdminSDHolder." -ForegroundColor Green
-```
-</Step>
+    $acl.AddAccessRule($rule)
+    Set-Acl -Path "AD:\$adminSDHolderPath" -AclObject $acl
+    ```
+  </Step>
 </Steps>
 
-#### Account provisioning permissions
+### Account provisioning permissions
 
 <Warning>
 User account provisioning requires `ldaps: true` in your config.
 </Warning>
 
 <Steps>
-	<Step>
-		Open ADUC or run the command `dsa.msc` from the command line
-		</Step>
-		<Step>
-		Right click on your forest root, or if you only want to provision accounts in a particular OU right click on that OU
-		</Step>
-		<Step>
-		Select Delegate Control
-		</Step>
-		<Step>
-		Add the service account running the `baton-active-directory` service
-		</Step>
-		<Step>
-		From the Task to Delegate check the box for `Create, delete, and manager user accounts`
-		</Step>
-		<Step>
-		Click Next, then Finish
-	</Step>
+  <Step>
+    Open ADUC or run `dsa.msc` from the command line.
+  </Step>
+
+  <Step>
+    Right-click on your forest root (or a specific OU) and select **Delegate Control**.
+  </Step>
+
+  <Step>
+    Add the service account running the `baton-active-directory` service.
+  </Step>
+
+  <Step>
+    From the tasks to delegate, check the box for **Create, delete, and manage user accounts**.
+  </Step>
+
+  <Step>
+    Click **Next**, then **Finish**.
+  </Step>
 </Steps>
 
+**That's it!** Next, move on to the connector configuration instructions.
 
-### Step 2: Install `baton-active-directory`
-
-#### Connector modes
-
-The Active Directory connector can be run in either LDAP mode (default) or WinLDAP mode.
-
-Both modes can sync and provision the same resources, but WinLDAP mode supports additional authentication methods. LDAP mode uses a Golang LDAP library to connect to the Active Directory server. WinLDAP mode uses Windows system calls. If LDAP mode does not connect (usually because your AD server requires more secure authentication methods), then try running the connector with `--mode=winldap`.
-
-<Steps>
-<Step>
-[Contact C1's support team](/baton/active-directory/) to download the latest version of the connector.
-</Step>
-<Step>
-On the host designated to run the connector, create a folder in `C:\Program Files` called `ConductorOne`
-</Step>
-<Step>
-Extract the `baton-active-directory.exe` from the zip archive, and copy it to the `ConductorOne` folder
-</Step>
-<Step>
-Install and set up the connector by running:
-
-	```console
-	baton-active-directory.exe setup
-	```
-
-	<Warning>
-	**To use C1 to provision Accounts and into Active Directory groups:** 
-	
-	Be sure to edit the YAML config by adding `provisioning: true` property to the config file. The setup command will not prompt you for it.
-	</Warning>
-</Step>
-</Steps>
-
-You'll be prompted to provide:
-
-```console
-domain (string)                    required: The fully-qualified Windows domain to connect with. Example: "baton.example.com"
-sitename (string)                  Optional: The sitename to connect to, if not set conects to all DCs. Example: "US-DC-01"
-base-dn (string)                   required: The base DN to search from. Example: "DC=baton,DC=example,DC=com"
-ldaps-port (int)                   Optional: If you are using LDAPS, this is the port for the server to connect to. By default we try to connect to '636'. (default 636)
-ldaps (boolean)                    Optional: Indicates if you are using LDAPS. Required for user account provisioning.
-mode (string)                      Optional: The connection mode to talk to the domain. Must be ldap or winldap. (default "winldap")
-user-search-dn (string)            Optional: The DN to search for users. Example: "OU=Users,DC=baton,DC=example,DC=com". Defaults to the Base DN. ($BATON_USER_SEARCH_DN)
-user-search-filter (string)        Optional: The filter to search for users. Example: "(&(objectCategory=person)(objectClass=user))"  (default "(&(objectCategory=person)(objectClass=user))")
-group-search-dn (string)           Optional: The DN to search for groups. Example: "OU=Groups,DC=baton,DC=example,DC=com. Defaults to the Base DN."
-group-search-filter (string)       Optional: The filter to search for groups. Example: "(objectCategory=group)" (default "(objectCategory=group)")
-skip-ous (strings)                 Optional: A list of DNs for OUs to skip when searching for users and groups. Example: "OU=Test Groups,OU=baton-dev,DC=baton-dev,DC=d2,DC=ductone,DC=com"
-only-ous (strings)                 Optional: A list of DNs for OUs to sync when searching for users and groups. Example: "OU=Test Groups,OU=baton-dev,DC=baton-dev,DC=d2,DC=ductone,DC=com"
-custom-user-attributes (strings)   Optional: A list of custom LDAP attribute names to include in the user profile. Example: "githubUserName,customField1"
-```
-
-Run `baton-active-directory --help` to see the list of flags to be used when passing your credentials to the connector.
-
-#### Custom user attributes
-
-By default, the connector syncs a standard set of AD user attributes (department, company, email, UPN, SAM account name, etc.). If you need additional attributes — for example, to correlate AD users with accounts in another system — use the `custom-user-attributes` flag.
-
-Each attribute name you specify will be fetched from AD and added to the user profile in C1, where it can be used as a profile attribute for account correlation.
-
-**Example:** To pull a custom `githubUserName` field from AD so C1 can link GitHub accounts to AD users:
-
-```yaml
-custom-user-attributes:
-  - githubUserName
-```
-
-Once synced, `githubUserName` will appear as a profile attribute on the user in C1 and can be configured as an additional username for account correlation with GitHub.
-
-The config file is written to `C:\ProgramData\ConductorOne\baton-active-directory\config.yaml`, and is formed like the following:
+## Configure the Active Directory connector
 
 <Warning>
-If you make changes to the config file then a service restart is required for the changes to take effect
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in C1
+- An Active Directory service account with the appropriate permissions (see above)
 </Warning>
 
-```yaml
-base-dn: dc=baton-dev,dc=d2,dc=ductone,dc=com
-domain: baton-dev.d2.ductone.com
-mode: winldap
-client-id: clean-ogre-26349@insulator.conductor.one/ccc
-client-secret: secret-token:conductorone.com:v1:...
-# Include this line if you want to use this connector to provision into groups and account creation
-provisioning: true
-```
+<Tabs>
+  <Tab title="Cloud-hosted">
+    The Active Directory connector is self-hosted only. It runs on a Windows or Linux server in your environment with direct network access to your domain controllers.
 
-The log file is written to `C:\ProgramData\ConductorOne\baton-active-directory\baton.log`.
+    To get started, follow the **Self-hosted** tab instructions.
+  </Tab>
 
-<Steps>
-<Step>
-Grant the service account `Modify` folder permissions to `C:\ProgramData\ConductorOne` so it can write to the `baton.log` file
-	- **failing to do step 5 will result in a service start error**
-</Step>
-<Step>
-Launch the Services console and locate the service named `baton-active-directory`
-	<Steps>
-		<Step>
-		Double click to open properties
-		</Step>
-		<Step>
-		Change the Startup type to `Automatic`
-		</Step>
-		<Step>
-		Navigate to the `Log On` tab and click on `This account`
-		</Step>
-		<Step>
-		Click `Browse` and type your service account name (samAccountName) in the input field
-		</Step>
-		<Step>
-		Click `Check Names`, and ensure it validated the right account. If you're presented with an account selection screen, carefully choose the account you created in the previous steps
-		</Step>
-		<Step>
-		Enter the service account's password and confirm it.
-		</Step>
-		<Step>
-		Click Apply
-		</Step>
-		<Step>
-		Navigate back to the `General` Tab, and click `Start` to start the `baton-active-directory` service
-		</Step>
-	</Steps>
-</Step>
-</Steps>
+  <Tab title="Self-hosted">
+    **Follow these instructions to use the Active Directory connector, hosted and run in your own environment.**
 
-### Step 3: Manage the `baton-active-directory` Windows service
+    Once installed and configured, Baton runs as a Windows service (or Linux daemon). The service maintains contact with C1, syncs and uploads data at regular intervals, and passes that data to the C1 UI for access reviews and access requests.
 
-<Steps>
-<Step>
-Once you have provided this information, a new Windows service named `baton-active-directory` will be created in the Stopped state. You can now use the `.\baton-active-directory` command to manage the service.
-	- To start the service, run `.\baton-active-directory start`.
-	- To stop the service, run `.\baton-active-directory stop`.
-	- To check the status of the service, run `.\baton-active-directory status`.
-	- To remove the service, run `.\baton-active-directory remove`.
+    ### Requirements
 
-</Step>
-<Step>
-The connector syncs current data, uploads it to C1, and prints a `Task complete!` message when finished.
-</Step>
-<Step>
-Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Active Directory connector to. Active Directory data should be found on the **Entitlements** and **Accounts** tabs.
-</Step>
-</Steps>
+    - A Windows or Linux server to host `baton-active-directory` (minimum: 2-4 vCPU, 4-8 GB RAM)
+    - Outbound network connectivity to port `443` to your C1 tenant
+    - An Active Directory service account with appropriate permissions (see above)
+    - The **Connector Administrator** or **Super Administrator** role in C1
 
+    ### Step 1: Set up a new Active Directory connector in C1
 
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Active Directory connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. You will need them when configuring the connector.
+      </Step>
+
+      <Step>
+        Next to the **Not Connected** label, click on the word **Baton** to navigate to the application page. Click the pencil icon at the top of the page and rename the application to **Active Directory**. This updates the application name, connector name, and icon.
+      </Step>
+    </Steps>
+
+    ### Step 2: Install and configure `baton-active-directory`
+
+    #### Option 1: Windows installer (recommended)
+
+    <Steps>
+      <Step>
+        Download the latest `baton-ad-setup-*.exe` installer from C1.
+      </Step>
+
+      <Step>
+        Run the installer on the host designated to run the connector. The installer prompts for your AD domain, C1 credentials, and connection settings.
+      </Step>
+
+      <Step>
+        The installer writes a YAML config file (with optional DPAPI encryption for secrets), registers a Windows service with auto-restart recovery, and creates Start Menu shortcuts for the GUI Configuration Editor and uninstall.
+      </Step>
+    </Steps>
+
+    #### Option 2: Manual setup
+
+    <Steps>
+      <Step>
+        On the host designated to run the connector, create a folder: `C:\Program Files\ConductorOne`.
+      </Step>
+
+      <Step>
+        Copy `baton-active-directory.exe` to the `ConductorOne` folder.
+      </Step>
+
+      <Step>
+        Install and set up the connector by running (from an elevated command prompt):
+
+        ```console
+        baton-active-directory.exe setup
+        ```
+
+        The setup process checks for a config file, opens the GUI config editor if none exists, offers to copy the binary to Program Files, optionally configures a service account, and registers the Windows service with auto-start and recovery.
+
+        For non-interactive setup, use: `baton-active-directory.exe setup -y`
+      </Step>
+
+      <Step>
+        Grant the service account **Modify** folder permissions to `C:\ProgramData\ConductorOne` so it can write to the log file.
+
+        <Warning>
+        Failing to grant this permission results in a service start error.
+        </Warning>
+      </Step>
+
+      <Step>
+        Launch the Services console, locate the service named **baton-active-directory**, and configure it:
+
+        1. Double-click to open properties
+        2. Change the **Startup type** to **Automatic**
+        3. Navigate to the **Log On** tab and click **This account**
+        4. Click **Browse**, enter your service account name, and click **Check Names**
+        5. Enter the service account password and confirm it
+        6. Click **Apply**
+        7. Navigate back to the **General** tab and click **Start**
+      </Step>
+    </Steps>
+
+    The config file is written to `C:\ProgramData\ConductorOne\baton-active-directory\config.yaml`:
+
+    ```yaml
+    base-dn: DC=example,DC=com
+    domain: example.com
+    mode: winldap
+    ldaps: true
+    client-id: <C1 client ID>
+    client-secret: <C1 client secret>
+    # Include this line to enable provisioning
+    provisioning: true
+    ```
+
+    <Warning>
+    If you make changes to the config file, a service restart is required for the changes to take effect.
+    </Warning>
+
+    The log file is written to `C:\ProgramData\ConductorOne\baton-active-directory\baton.log`.
+
+    #### Connector modes
+
+    The connector supports two connection modes:
+
+    - **LDAP mode** (default on Linux): Uses a Go LDAP library. Supports both External Bind (Kerberos/GSSAPI) and Simple Bind authentication.
+    - **WinLDAP mode** (default on Windows): Uses Windows `wldap32.dll` system calls with GSSAPI authentication. Simple Bind is not supported in this mode.
+
+    If LDAP mode does not connect (usually because your AD server requires more secure authentication methods), try `mode: winldap` in your config.
+
+    #### Multi-domain / cross-forest sync
+
+    The connector can sync across multiple AD domains and forests in a single run. Add additional trusted domains to your config using native YAML syntax:
+
+    ```yaml expandable
+    additional-domains:
+      - domain: remote-forest.example.com
+        base-dn: DC=remote-forest,DC=example,DC=com
+      - domain: child.example.com
+        base-dn: DC=child,DC=example,DC=com
+        bind-type: simple
+        bind-user: "CN=svc-baton,OU=ServiceAccounts,DC=child,DC=example,DC=com"
+        bind-password: "secret"
+        ldaps: true
+    ```
+
+    Each additional domain supports independent connection settings (bind type, credentials, LDAPS, search filters, OU restrictions, read-only mode). Cross-domain group memberships are resolved automatically via Foreign Security Principals.
+
+    <Note>
+    The `additional-domains` field is YAML-only -- it cannot be set via CLI flags or environment variables.
+    </Note>
+
+    For detailed setup instructions including trust requirements, DNS, LDAPS certificates, and Kerberos configuration, see the [multi-domain setup guide](https://github.com/ConductorOne/baton-active-directory/blob/main/docs/multi-domain-setup.md).
+
+    #### gMSA sync
+
+    To sync Group Managed Service Accounts, enable the flag in your config:
+
+    ```yaml
+    enable-gmsa-sync: true
+    # Optional: restrict gMSA search scope
+    gmsa-search-dn: "OU=gMSA,DC=example,DC=com"
+    ```
+
+    Each gMSA exposes a `password_retrieval` entitlement representing which principals are authorized to retrieve the managed password. Grant and Revoke operations modify the gMSA's `msDS-GroupMSAMembership` security descriptor ACL.
+
+    #### OU filtering
+
+    You can restrict which Organizational Units the connector syncs by using `skip-ous` or `only-ous` (mutually exclusive):
+
+    ```yaml
+    # Exclude specific OUs
+    skip-ous:
+      - "OU=Test,DC=example,DC=com"
+      - "OU=Disabled,DC=example,DC=com"
+
+    # Or include only specific OUs
+    only-ous:
+      - "OU=Engineering,DC=example,DC=com"
+      - "OU=Sales,DC=example,DC=com"
+    ```
+
+    #### Custom user attributes
+
+    By default, the connector syncs a standard set of AD user attributes. Use `custom-user-attributes` to include additional AD attributes in the user profile for account correlation:
+
+    ```yaml
+    custom-user-attributes:
+      - githubUserName
+      - extensionAttribute1
+      - whenCreated
+      - pwdLastSet
+    ```
+
+    Once synced, the specified attributes appear as profile fields on the user in C1 and can be configured as additional usernames for account correlation.
+
+    #### Custom PowerShell actions
+
+    You can define additional connector actions backed by PowerShell scripts:
+
+    ```yaml expandable
+    powershell-actions:
+      reset-password:
+        path: "C:\\Scripts\\Reset-Password.ps1"
+        args:
+          resource_id:
+            type: string
+            is_required: true
+          new_password:
+            type: string
+            is_required: true
+    ```
+
+    Each custom action appears alongside the built-in connector actions and can be used in C1 automations. Argument types can be `string`, `int`, or `bool`.
+
+    #### Profile push attributes
+
+    The `update_profile` resource action declares the following 23 named string fields in its schema. The platform's schema-driven UI shows a dedicated input for each. Attributes outside this list (including `extensionAttribute1` through `extensionAttribute15`) must be set via the `custom_attributes` map field on `update_profile`, or via the `update_user_attrs` global action.
+
+    | Field name | AD attribute | Category |
+    |---|---|---|
+    | `first_name` | `givenName` | Identity |
+    | `middle_name` | `middleName` | Identity |
+    | `last_name` | `sn` | Identity |
+    | `display_name` | `displayName` | Identity |
+    | `sam_account_name` | `sAMAccountName` | Identity |
+    | `user_principal_name` | `userPrincipalName` | Identity |
+    | `email` | `mail` | Contact |
+    | `phone_number` | `telephoneNumber` | Contact |
+    | `mobile_phone` | `mobile` | Contact |
+    | `job_title` | `title` | Organization |
+    | `department` | `department` | Organization |
+    | `division` | `division` | Organization |
+    | `company` | `company` | Organization |
+    | `description` | `description` | Organization |
+    | `employee_id` | `employeeID` | Organization |
+    | `employee_number` | `employeeNumber` | Organization |
+    | `employment_type` | `employeeType` | Organization |
+    | `city` | `l` | Address |
+    | `state` | `st` | Address |
+    | `street_address` | `streetAddress` | Address |
+    | `postal_code` | `postalCode` | Address |
+    | `country` | `c` | Address |
+    | `physical_delivery_office_name` | `physicalDeliveryOfficeName` | Address |
+
+    <Warning>
+    AD enforces schema constraints on attribute values. For example, the `c` (country) attribute has a maximum length of 3 characters and expects ISO 3166-1 alpha-2 codes (for example, `US`, not `United States`). Constraint violations are logged with each attribute name and value length to aid debugging.
+    </Warning>
+
+    The `update_user_attrs` global action recognizes the 23 named fields above plus 15 additional aliases (`extension_attribute_1` through `extension_attribute_15` mapping to `extensionAttribute1`–`extensionAttribute15`). Any attribute name not in the combined list is passed through as a raw AD attribute name, allowing direct access to any writable AD attribute.
+
+    #### LDAPS configuration
+
+    To enable LDAPS, add the following to your config:
+
+    ```yaml
+    ldaps: true
+    ldaps-port: 636       # default; use 3269 for Global Catalog over LDAPS
+    ldaps-skip-verify: true  # default; set to false to enforce certificate validation (go-ldap mode only)
+    ```
+
+    <Note>
+    The `ldaps-skip-verify` flag only affects go-ldap mode. WinLDAP mode uses the Windows certificate store for certificate validation and is not affected by this setting.
+    </Note>
+
+    To diagnose LDAPS connectivity issues, use the built-in diagnostic command:
+
+    ```console
+    baton-active-directory.exe test-ldaps
+    ```
+
+    This tests DC resolution, TLS handshake, certificate validation, and LDAP bind for all configured domains with detailed error reporting.
+
+    #### DPAPI secrets encryption
+
+    On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, and `bind-password`) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup. The installer encrypts by default; you can also encrypt an existing config manually:
+
+    ```console
+    baton-active-directory.exe encrypt-config
+    ```
+
+    #### GUI Configuration Editor
+
+    The connector includes a native Windows GUI for managing configuration without editing YAML files manually:
+
+    ```console
+    baton-active-directory.exe config-editor
+    ```
+
+    If installed via the Windows installer, a **Configuration Editor** shortcut is available in the Start Menu.
+
+    #### Authentication
+
+    The connector supports two authentication methods, configured via `bind-type`:
+
+    - **`external`** (default): Uses Kerberos/GSSAPI. The connector authenticates as the service account running the Windows service. No `bind-user` or `bind-password` needed.
+    - **`simple`**: Uses username/password bind. Requires `bind-user` (the full DN) and `bind-password`.
+
+    ```yaml
+    bind-type: simple
+    bind-user: "CN=svc-baton,OU=ServiceAccounts,DC=example,DC=com"
+    bind-password: "secret"
+    ```
+
+    Run `baton-active-directory --help` to see the full list of configuration flags and environment variables.
+
+    ### Step 3: Manage the Windows service
+
+    <Steps>
+      <Step>
+        Use the following commands to manage the service (all require administrator privileges):
+
+        - To start the service: `baton-active-directory.exe start`
+        - To stop the service: `baton-active-directory.exe stop`
+        - To check the status: `baton-active-directory.exe status`
+        - To remove the service: `baton-active-directory.exe remove` (config and binary are preserved)
+      </Step>
+
+      <Step>
+        The connector syncs current data, uploads it to C1, and prints a **Task complete!** message when finished.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Active Directory connector to. Active Directory data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Active Directory connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+### What's next?
+
+Once your Active Directory connector is synced, you can use C1 to run user access reviews on AD group memberships, enable just-in-time access requests for AD groups and gMSAs, and automate provisioning workflows using connector actions.
