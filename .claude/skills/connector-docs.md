@@ -5,6 +5,8 @@ description: Write connector documentation for C1 following the established temp
 
 # C1 Connector Documentation
 
+> **Heads up:** A copy of this skill also lives in [`ConductorOne/baton-admin`](https://github.com/ConductorOne/baton-admin/blob/main/.claude/skills/connector-docs.md). If you update this file, copy the changes there too.
+
 Write connector documentation for the `/baton/` directory following C1's standardized template.
 
 ## When to Use This Skill
