@@ -5,7 +5,7 @@ description: Write connector documentation for C1 following the established temp
 
 # C1 Connector Documentation
 
-> **Heads up:** A copy of this skill also lives in [`ConductorOne/baton-admin`](https://github.com/ConductorOne/baton-admin/blob/main/.claude/skills/connector-docs.md). If you update this file, copy the changes there too.
+> **Heads up:** A copy of this skill also lives in [`ConductorOne/baton-admin`](https://github.com/ConductorOne/baton-admin/blob/main/pkg/files/.claude/skills/connector/build-connector-docs.md). If you update this file, copy the changes there too.
 
 Write connector documentation for the `/baton/` directory following C1's standardized template.
 
@@ -297,7 +297,7 @@ For more information, see [link to vendor docs].
       </Step>
     </Steps>
 
-    **That's it!** Your [App Name] connector is now pulling access data into C1.
+    **Done.** Your [App Name] connector is now pulling access data into C1.
   </Tab>
 
   <Tab title="Self-hosted">
@@ -418,7 +418,7 @@ For more information, see [link to vendor docs].
       </Step>
     </Steps>
 
-    **That's it!** Your [App Name] connector is now pulling access data into C1.
+    **Done.** Your [App Name] connector is now pulling access data into C1.
   </Tab>
 </Tabs>
 ```
@@ -487,7 +487,7 @@ The **write::org** scope is used by C1 when automatically provisioning and depro
 Always end both tabs with:
 
 ```mdx
-**That's it!** Your [App Name] connector is now pulling access data into C1.
+**Done.** Your [App Name] connector is now pulling access data into C1.
 ```
 
 ### Multiple Authentication Options
