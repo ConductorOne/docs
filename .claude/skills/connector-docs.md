@@ -297,7 +297,7 @@ For more information, see [link to vendor docs].
       </Step>
     </Steps>
 
-    **That's it!** Your [App Name] connector is now pulling access data into C1.
+    **Done.** Your [App Name] connector is now pulling access data into C1.
   </Tab>
 
   <Tab title="Self-hosted">
@@ -418,7 +418,7 @@ For more information, see [link to vendor docs].
       </Step>
     </Steps>
 
-    **That's it!** Your [App Name] connector is now pulling access data into C1.
+    **Done.** Your [App Name] connector is now pulling access data into C1.
   </Tab>
 </Tabs>
 ```
@@ -487,7 +487,7 @@ The **write::org** scope is used by C1 when automatically provisioning and depro
 Always end both tabs with:
 
 ```mdx
-**That's it!** Your [App Name] connector is now pulling access data into C1.
+**Done.** Your [App Name] connector is now pulling access data into C1.
 ```
 
 ### Multiple Authentication Options
