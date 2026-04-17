@@ -1,0 +1,389 @@
+---
+title: "Set up a Microsoft Dynamics 365 Business Central connector"
+og:title: "Set up a Microsoft Dynamics 365 Business Central connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Dynamics 365 Business Central. Integrate your Business Central instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision permission set assignments."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Microsoft Dynamics 365 Business Central. Integrate your Business Central instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision permission set assignments."
+sidebarTitle: "Microsoft Dynamics 365 Business Central"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Companies | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |  |
+| Permission Sets | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> | <Icon icon="square-check" iconType="solid"  color="#65DE23"/> |
+
+Business Central users are automatically linked to Microsoft Entra ID users via their User Principal Name (UPN), enabling unified identity management across your Microsoft environment.
+
+## Gather Business Central credentials
+
+Configuring the connector requires credentials from both Microsoft Entra ID and Business Central. Gather these credentials before you move on.
+
+<Warning>
+A user who is a **Global Administrator** (or **Application Administrator**) in Microsoft Entra ID and has administrative access to Business Central must perform this task.
+</Warning>
+
+### Create a new Entra application
+
+<Steps>
+<Step>
+In the [Azure Portal](https://portal.azure.com), navigate to **Microsoft Entra ID** > **App registrations**.
+</Step>
+<Step>
+Click **+ New registration**.
+</Step>
+<Step>
+Give the application a name, such as "ConductorOne Business Central", and select **Accounts in this organizational directory only**. You do not need to set a redirect URL.
+</Step>
+<Step>
+Click **Register**.
+</Step>
+<Step>
+The new app is created. Carefully copy and save the **Application (client) ID** and the **Directory (tenant) ID** shown on the application summary page.
+</Step>
+</Steps>
+
+### Create a client secret
+
+<Steps>
+<Step>
+In your app registration, click **Certificates & secrets**.
+</Step>
+<Step>
+Click **+ New client secret**.
+</Step>
+<Step>
+Give the client secret a description (e.g., "ConductorOne connector") and set its expiration.
+</Step>
+<Step>
+Click **Add**.
+</Step>
+<Step>
+The client secret is shown in the **Value** field. Carefully copy and save this value immediately—it will not be shown again.
+
+<Warning>
+Copy the **Value**, not the **Secret ID**. These are different fields.
+</Warning>
+</Step>
+</Steps>
+
+### Add API permissions
+
+<Steps>
+<Step>
+In your app registration, click **API permissions**.
+</Step>
+<Step>
+Click **+ Add a permission**.
+</Step>
+<Step>
+Select **Dynamics 365 Business Central**.
+</Step>
+<Step>
+Click **Application permissions**.
+</Step>
+<Step>
+Select **Automation.ReadWrite.All**. This permission allows the connector to access the Business Central Automation API for reading users, companies, and permission sets, as well as provisioning permission set assignments.
+</Step>
+<Step>
+Click **Add permissions**.
+</Step>
+<Step>
+Click **Grant admin consent for [Your Organization]** and confirm your action.
+</Step>
+</Steps>
+
+<Note>
+If you only need read-only sync (no Grant/Revoke provisioning), **Automation.Read.All** may be sufficient. However, most organizations use **Automation.ReadWrite.All** for flexibility.
+</Note>
+
+### Register the application in Business Central
+
+You must also register the Azure AD application inside Business Central and assign it permission sets.
+
+<Steps>
+<Step>
+Sign in to [Business Central](https://businesscentral.dynamics.com).
+</Step>
+<Step>
+Use the search bar (Alt+Q) and search for **Azure Active Directory Applications**.
+</Step>
+<Step>
+Click **+ New** to add a new AAD Application.
+</Step>
+<Step>
+Fill in the fields:
+   - **Client ID**: Paste the Application (client) ID you copied from Microsoft Entra ID
+   - **Description**: `ConductorOne Connector` (or your preferred description)
+   - **State**: Set to **Enabled**
+</Step>
+<Step>
+In the **User Permission Sets** section, click **+ New** and add the required permission sets:
+
+**For full sync and provisioning (recommended):**
+
+| Permission Set | Purpose |
+|----------------|---------|
+| `D365 AUTOMATION` | Required for Automation API access |
+| `SUPER` | Required for write operations (granting/revoking permission sets) |
+
+**For read-only sync (no provisioning):**
+
+| Permission Set | Purpose |
+|----------------|---------|
+| `D365 AUTOMATION` | Required for Automation API access |
+| `D365 READ` | Sufficient for read-only sync |
+</Step>
+<Step>
+Click **Grant Consent** if prompted. This authorizes the application to act on behalf of the permission sets assigned.
+</Step>
+</Steps>
+
+<Note>
+The `SUPER` permission set grants extensive access. If your organization requires least-privilege access, work with your Business Central administrator to create a custom permission set that includes only the specific permissions needed for the Automation API.
+</Note>
+
+### Find your environment name
+
+The connector needs the name of your Business Central environment.
+
+<Steps>
+<Step>
+Go to the [Business Central Admin Center](https://admin.businesscentral.dynamics.com).
+</Step>
+<Step>
+Click **Environments** in the left sidebar.
+</Step>
+<Step>
+Your environments are listed with their names (e.g., `Production`, `Sandbox`).
+</Step>
+<Step>
+Copy the environment name exactly as shown (case-sensitive, typically lowercase like `production`).
+</Step>
+</Steps>
+
+**Common environment names:**
+
+| Environment Type | Typical Name |
+|-----------------|--------------|
+| Production | `production` |
+| Sandbox | `sandbox` |
+| Custom | The name you specified when creating it |
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Business Central connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the set of credentials generated by following the instructions above:
+  - Tenant ID
+  - Client ID
+  - Client Secret
+  - Environment name
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **Microsoft Dynamics 365 Business Central** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Business Central connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Enter your credentials into the relevant fields:
+
+   * **Tenant ID**: Your Azure AD tenant ID (GUID)
+   * **Client ID**: The Application (client) ID from your Entra app registration
+   * **Client Secret**: The client secret value you created
+   * **Environment**: Your Business Central environment name (e.g., `production`)
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your Business Central connector is now pulling access data into ConductorOne.
+</Tab>
+
+<Tab title="Self-hosted">
+**Follow these instructions to use the Business Central connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+### Resources
+
+[Contact ConductorOne's support team](mailto:support@conductorone.com) to download the latest version of the connector.
+
+### Step 1: Set up a new Business Central connector
+
+<Steps>
+<Step>
+In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new Business Central connector:
+
+   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+
+   * Add the connector to a managed app (select from the list of existing managed apps)
+
+   * Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+   If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+   Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your Business Central connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-business-central-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-business-central-secrets
+type: Opaque
+stringData:
+  # ConductorOne credentials
+  BATON_CLIENT_ID: <ConductorOne client ID>
+  BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+  # Business Central credentials
+  BATON_TENANT_ID: <Azure AD tenant ID>
+  BATON_BC_CLIENT_ID: <Client ID of the Entra app>
+  BATON_BC_CLIENT_SECRET: <Client secret of the Entra app>
+  BATON_ENVIRONMENT: <Business Central environment name, e.g., production>
+
+  # Optional: include if you want ConductorOne to provision access using this connector
+  BATON_PROVISIONING: "true"
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-business-central.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-business-central
+  labels:
+    app: baton-business-central
+spec:
+  selector:
+    matchLabels:
+      app: baton-business-central
+  template:
+    metadata:
+      labels:
+        app: baton-business-central
+        baton: true
+        baton-app: business-central
+    spec:
+      containers:
+      - name: baton-business-central
+        image: ghcr.io/conductorone/baton-business-central:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-business-central
+        envFrom:
+        - secretRef:
+            name: baton-business-central-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In ConductorOne, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Business Central connector to. Business Central data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your Business Central connector is now pulling access data into ConductorOne.
+</Tab>
+</Tabs>
+
+## Troubleshooting
+
+### Authentication errors
+
+**401 Unauthorized**
+- Verify your client secret is correct and not expired
+- Check that the Azure AD app has the `Automation.ReadWrite.All` permission
+- Ensure admin consent has been granted for the permissions
+
+**403 Forbidden**
+- The AAD Application may not be registered in Business Central
+- Check that the app has appropriate permission sets assigned in Business Central (D365 AUTOMATION, SUPER)
+- Verify the Grant Consent step was completed in Business Central
+
+### No data returned
+
+**Empty user list**
+- Verify the environment name is correct and case-sensitive
+- Check that users exist in the Business Central environment
+- Ensure the app has permission to read users
+
+**Empty permission sets**
+- Permission sets are fetched per company
+- Verify at least one company exists and is accessible
+
+### Rate limiting
+
+The connector handles rate limiting automatically with exponential backoff. If you see frequent 429 errors, consider reducing sync frequency or contacting Microsoft support for higher rate limits.
