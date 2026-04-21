@@ -1,4 +1,4 @@
----
+ ---
 title: "Set up a Google Kubernetes Engine connector"
 og:title: "Set up a Google Kubernetes Engine connector"
 description: "C1 provides identity governance for Google Kubernetes Engine (GKE). Integrate your GKE cluster with C1 to run user access reviews (UARs) and manage Kubernetes RBAC roles and the GCP IAM role bindings on the cluster's project."
@@ -10,6 +10,10 @@ sidebarTitle: "Google Kubernetes Engine"
 **This connector is in beta.** This means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve stability. Beta connectors are generally stable, but they may have limited feature support, incomplete error handling, or occasional issues.
 
 We recommend closely monitoring workflows that use this connector and contacting our Support team with any issues or feedback.
+</Warning>
+
+<Warning>
+**Important note on hosting:** To run in cloud-hosted mode, this connector requires network access to the Kubernetes API server of your GKE cluster. If this is not desirable or possible, you must run the connector in self-hosted mode.
 </Warning>
 
 ## Capabilities
@@ -25,9 +29,9 @@ We recommend closely monitoring workflows that use this connector and contacting
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Cluster Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| GCP IAM Role Bindings | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Cluster Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| GCP IAM Role Bindings | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 
 {/* AUTO-GENERATED:END - capabilities */}
 
@@ -39,14 +43,14 @@ We recommend closely monitoring workflows that use this connector and contacting
 
 ## Before you begin
 
-This connector requires a working **GCP connector** to source user and group identities. If you have not already done so, set up the [GCP connector](/baton/google-cloud-platform) before you proceed.
+This connector requires a working **GCP connector** to source user and group identities. If you have not already done so, set up the [GCP connector](https://docs.conductorone.com/docs/baton/google-cloud-platform) before you proceed.
 
 ## Gather GKE credentials
 
 To configure the GKE connector, you need a GCP service account. Follow the steps below to create one and obtain the required credentials.
 
 <Warning>
-The service account must have the following permissions at the project level where the cluster is located:
+**For sync only**, the service account must have the following permissions at the project level where the cluster is located:
 
 - `container.clusterRoleBindings.get`
 - `container.clusterRoleBindings.list`
@@ -62,43 +66,93 @@ The service account must have the following permissions at the project level whe
 - `container.serviceAccounts.get`
 - `container.serviceAccounts.list`
 - `resourcemanager.projects.getIamPolicy`
+
+**For provisioning (Grant/Revoke)**, the following additional permissions are required:
+
+- `container.clusterRoleBindings.create`
+- `container.clusterRoleBindings.update`
+- `container.clusterRoleBindings.delete`
+- `container.roleBindings.create`
+- `container.roleBindings.update`
+- `container.roleBindings.delete`
+- `resourcemanager.projects.setIamPolicy`
+
+In addition, provisioning Kubernetes RBAC roles (ClusterRoles and Roles) requires the service account to have **Kubernetes cluster-admin** privileges inside the cluster. This is because Kubernetes prevents granting permissions that the caller does not already hold. See the setup steps below for how to configure this.
 </Warning>
 
 <Steps>
   <Step>
     In the Google Cloud console, open the navigation menu and go to **API & Services** > **Credentials**.
+
+    ![Navigate to API & Services > Credentials](1.png)
   </Step>
 
   <Step>
     Click **+ Create credentials** > **Service account**.
+
+    ![Create credentials menu](2.png)
   </Step>
 
   <Step>
     Enter a name and description for the service account, then click **Done**.
+
+    ![Service account creation form](3.png)
   </Step>
 
   <Step>
     You are redirected to the credentials page. Find your new service account in the list. Copy its email address (you will need it later), then click on the service account to open it.
+
+    ![Service account list with email](4.png)
   </Step>
 
   <Step>
     In the service account page, click the **Keys** tab.
+
+    ![Keys tab in service account](5.png)
   </Step>
 
   <Step>
     Click **Add Key** > **Create new key**.
+
+    ![Add Key menu](6.png)
   </Step>
 
   <Step>
     Select **JSON** as the key type and click **Create**. A JSON credentials file is downloaded to your computer. This is the file you provide to the connector.
+
+    ![JSON key type selection](7.png)
   </Step>
 
   <Step>
-    Grant the service account the required permissions by creating a custom IAM role with all the permissions listed above and assigning it to the service account at the project level.
+    Grant the service account the required permissions by creating a custom IAM role with the sync permissions listed above and assigning it to the service account at the project level.
+
+    If you also want to use provisioning (Grant/Revoke), extend the custom role with the additional provisioning permissions listed above.
+
+    ![Custom IAM role with required permissions](9.png)
+
+    ![Service account with role assigned](10.png)
   </Step>
 
   <Step>
     In the **Kubernetes Engine** section of the Google Cloud console, locate your cluster in the list. Note the **name** and **location** (region or zone) — you will need both when configuring the connector.
+
+    ![Cluster name and location](cluster_and_location.png)
+  </Step>
+
+  <Step>
+    **For provisioning only:** Grant the service account cluster-admin privileges inside the Kubernetes cluster. Kubernetes prevents granting permissions the caller does not already hold, so the service account must have cluster-admin access to manage RBAC bindings.
+
+    Connect to your cluster and run:
+
+    ```bash
+    kubectl create clusterrolebinding baton-gke-cluster-admin \
+      --clusterrole=cluster-admin \
+      --user=<service-account-numeric-id>
+    ```
+
+    Replace `<service-account-numeric-id>` with the **numeric ID** of the GCP service account (found in the `client_id` field of the service account JSON key file).
+
+    If you are only using the connector for sync (read-only), you can skip this step.
   </Step>
 </Steps>
 
@@ -108,8 +162,60 @@ The service account must have the following permissions at the project level whe
   <Tab title="Cloud-hosted">
     Follow these instructions to use a built-in, no-code connector hosted by C1.
 
-    *Cloud-hosted connector not currently available.*
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
 
+      <Step>
+        Search for **Google Kubernetes Engine** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new GKE connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the required configuration:
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+        - **Service Account Credentials JSON** (required): Upload the GCP service account JSON key file
+        - **GKE Cluster Name** (required): The name of the GKE cluster to connect to
+        - **GKE Cluster Location** (required): The location (region or zone) of the GKE cluster
+
+{/* AUTO-GENERATED:END - config-params */}
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your GKE connector is now pulling access data into C1.
   </Tab>
 
   <Tab title="Self-hosted">
@@ -226,6 +332,6 @@ The service account must have the following permissions at the project level whe
       </Step>
     </Steps>
 
-    **Done.** Your GKE connector is now pulling access data into C1.
+    **That's it!** Your GKE connector is now pulling access data into C1.
   </Tab>
 </Tabs>
