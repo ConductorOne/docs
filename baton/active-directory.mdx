@@ -545,3 +545,96 @@ To complete this task, you'll need:
 ### What's next?
 
 Once your Active Directory connector is synced, you can use C1 to run user access reviews on AD group memberships, enable just-in-time access requests for AD groups and gMSAs, and automate provisioning workflows using connector actions.
+
+## Set up account provisioning
+
+The Active Directory connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). When C1 creates a new AD user account, the generated password is automatically sent to a [vault](/product/admin/vaults).
+
+Before you begin, confirm:
+
+- The connector config has `ldaps: true` and `provisioning: true`
+- A vault is configured in C1 to receive the generated password
+- The service account has delegated rights to create, delete, and manage user accounts (see [Account provisioning permissions](#account-provisioning-permissions) above)
+
+### Configure provisioning mappings
+
+<Steps>
+  <Step>
+    In C1, navigate to **Apps** > **Managed apps** and click the name of your Active Directory application.
+  </Step>
+  <Step>
+    Under **Accounts management**, click **Edit** next to **Provisioning**.
+  </Step>
+  <Step>
+    From the **Connector** dropdown, select your Active Directory connector.
+
+    The mapping fields defined by the connector's schema appear below the dropdown.
+  </Step>
+  <Step>
+    Enter a CEL expression for each field. See [Provisioning field reference](#provisioning-field-reference) below for guidance.
+
+    Click **Test** next to any field to validate the expression against an existing C1 user.
+  </Step>
+  <Step>
+    Under **Password storage**, select the vault where generated passwords should be stored.
+  </Step>
+  <Step>
+    Click **Save**.
+  </Step>
+</Steps>
+
+### Provisioning field reference
+
+The fields below are defined by the AD connector's account creation schema. CEL expressions reference profile attributes accumulated from connected directory and HR apps using the pattern `subject.attributes.<attribute_name>`. To see which attributes are available for a given user, navigate to that user's profile page in C1.
+
+The DN of the new account is assembled by the connector as: `CN=<commonName>,<organizationalUnit>,<domain>`
+
+#### Required fields
+
+| UI field | Description | Example expression |
+|---|---|---|
+| **Common Name** | The `CN` component of the user's Distinguished Name. Typically the user's full name or display name. | `subject.attributes.display_name` |
+| **Organizational Unit** | The OU path where the account will be created, without DC components. The OU must already exist in AD. | `"OU=Users,OU=Corp"` |
+| **Domain** | The domain as DC components. Must match an existing domain in your AD forest. | `"DC=example,DC=com"` |
+| **Object Class(es)** | One or more LDAP object classes for the new user object. | `["user"]` |
+
+<Note>
+**Organizational Unit** and **Domain** are almost always static strings — they don't vary per user. Enter them as quoted literals unless your organization places users in different OUs based on a profile attribute such as department.
+</Note>
+
+#### Optional fields
+
+| UI field | Description | Example expression |
+|---|---|---|
+| **Sam Account Name** | The pre-Windows 2000 login name, used for `DOMAIN\username` authentication. Maximum 20 characters. | `subject.attributes.sam_account_name` |
+| **User Principal Name** | The UPN login name in `user@domain.com` format, used for modern authentication. | `subject.attributes.user_principal_name` |
+| **Enabled** | Whether to enable the account immediately at creation. Defaults to `false`. | `false` |
+| **Additional Attributes** | A map of any other LDAP attributes to set at creation time. | See below. |
+
+#### Additional attributes
+
+The **Additional Attributes** field accepts a map of raw LDAP attribute names to CEL expressions. Use this to set user attributes beyond what the named fields cover. Common examples:
+
+| LDAP attribute | Description | Example |
+|---|---|---|
+| `givenName` | First name | `subject.attributes.first_name` |
+| `sn` | Last name (surname) | `subject.attributes.last_name` |
+| `displayName` | Display name | `subject.attributes.display_name` |
+| `mail` | Email address | `subject.attributes.email` |
+| `department` | Department | `subject.attributes.department` |
+| `title` | Job title | `subject.attributes.job_title` |
+| `company` | Company name | `subject.attributes.company` |
+| `manager` | Manager (must be full DN) | *(see note below)* |
+
+<Note>
+The `manager` attribute must be the full Distinguished Name of the manager's AD account — for example, `CN=Jane Doe,OU=Users,DC=example,DC=com`. If your source directory exposes the manager's DN directly, you can map it here. Otherwise, omit it at creation time and set it later using the `set_manager` [connector action](#connector-actions).
+</Note>
+
+### Tips and gotchas
+
+- **`sAMAccountName` has a 20-character limit** and cannot contain these characters: `/ \ [ ] : ; | = , + * ? < > @`. If your naming convention could produce values longer than 20 characters, truncate or use an alternative expression.
+- **`userPrincipalName` must be unique** across the entire AD forest. A duplicate UPN causes provisioning to fail with an LDAP constraint violation error.
+- **Accounts are created disabled by default.** Setting `Enabled` to `false` is intentional — C1 sets the account password in a separate LDAP operation after creation. If you set `Enabled` to `true`, the account will be enabled at creation but will still have a system-generated password sent to your vault.
+- **The target OU must already exist.** C1 will not create missing OUs. If the OU specified in **Organizational Unit** doesn't exist when provisioning runs, the request will fail.
+- **`objectClass` order matters in LDAP.** For standard AD users, `["user"]` is sufficient. If your schema requires additional classes, list them in structural hierarchy order (for example, `["top", "person", "organizationalPerson", "user"]`).
+- **Global Catalog scope disables provisioning.** If the connector's `sync-scope` is set to `GlobalCatalog`, account provisioning is not supported. Use the default scope instead.
