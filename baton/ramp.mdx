@@ -14,8 +14,24 @@ sidebarTitle: Ramp
 
 | Resource     | Sync | Provision |
 | :----------- | :--- | :-------- |
-| Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |       
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |       
 | Roles        | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   |
+| Vendors      | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |
+
+<Note>
+**Vendor owner is single-assignee.** Each Ramp vendor can have only one owner at a time. Granting the vendor owner entitlement to a new user overwrites the previous owner in Ramp — the prior owner is silently removed. Revoking the entitlement clears the owner only when the principal being revoked is the current owner.
+</Note>
+
+The Ramp connector supports [automatic account provisioning](/product/admin/account-provisioning).
+
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| disable_user | `user_id` (string, required) | Deactivate a Ramp user. The user will no longer be able to log in, spend on cards, or receive notifications. |
+| enable_user | `user_id` (string, required) | Reactivate a Ramp user. The user can log in to Ramp again, spend on their previously issued cards, and resume receiving notifications. |
 
 ## Configure the Ramp connector
 
@@ -121,9 +137,20 @@ Carefully copy and save these credentials. We'll use them in Step 2.
 
 ### Step 2: Create Kubernetes configuration files
 
-Create two Kubernetes manifest files for your Ramp connector deployment:
+Create two Kubernetes manifest files for your Ramp connector deployment.
+
+The Ramp connector supports two authentication methods — pick one when populating the secret:
+
+- **Access Token** — a long-lived Ramp API access token.
+- **OAuth 2.0 Client Credentials** — a Ramp OAuth client ID and secret (the connector exchanges them for a short-lived access token automatically, via `https://api.ramp.com/developer/v1/token`).
+
+See the [Ramp authorization docs](https://docs.ramp.com/developer-api/v1/authorization) for how to create an OAuth app with the `Client Credentials` grant type and `users:read` / `users:write` scopes.
+
+The connector points at `https://api.ramp.com` by default. Set `BATON_RAMP_BASE_URL` to `https://demo-api.ramp.com` (or another Ramp environment) to override.
 
 #### Secrets configuration
+
+**Option A — Access Token:**
 
 ```yaml
 # baton-ramp-secrets.yaml
@@ -136,9 +163,28 @@ stringData:
   # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-  
+
   # Ramp credentials
   BATON_TOKEN: <Ramp API token>
+```
+
+**Option B — OAuth 2.0 Client Credentials:**
+
+```yaml
+# baton-ramp-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-ramp-secrets
+type: Opaque
+stringData:
+  # C1 credentials
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
+
+  # Ramp OAuth credentials
+  BATON_RAMP_CLIENT_ID: <Ramp OAuth client ID>
+  BATON_RAMP_CLIENT_SECRET: <Ramp OAuth client secret>
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
