@@ -20,7 +20,48 @@ sidebarTitle: "MongoDB Atlas"
 
 The MongoDB Atlas connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
-When a new account is created by C1, the account's password will be sent to a [vault](/product/admin/vaults).
+When a new account is created using the default `SCRAM-SHA` authentication type, the account's password is sent to a [vault](/product/admin/vaults).
+
+## Account provisioning
+
+When C1 provisions a new account through the MongoDB Atlas connector, the connector creates a **database user** in the specified MongoDB Atlas project. By default, the connector also sends an **organization invitation** to the user's email address, granting them access to the MongoDB Atlas console. You can disable this behavior by turning off the **Create invite** setting on the connector.
+
+### Provisioning fields
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| Email | Yes (unless **Create invite** is disabled) | The email address for the organization invitation. |
+| Username | Yes | The username for the new database user. The required format depends on the authentication type. |
+| Organization ID | Yes | The ID of the MongoDB Atlas organization. |
+| Group ID | Yes | The 24-character hex string that identifies the MongoDB Atlas project. |
+| Roles | No | Organization-level roles to assign to the invited user (for example, `ORG_MEMBER`). |
+| Team IDs | No | IDs of organization teams to add the invited user to. |
+| Authentication Type | No | The authentication method for the database user. Defaults to `SCRAM-SHA`. |
+
+### Database user authentication types
+
+The **Authentication Type** field determines how the provisioned database user authenticates to MongoDB databases. If not specified, this defaults to `SCRAM-SHA`.
+
+| Authentication type | Description | Username format |
+| :--- | :--- | :--- |
+| `SCRAM-SHA` | Password-based authentication (default). A random password is generated and stored in a C1 [vault](/product/admin/vaults). | Any string |
+| `AWS_IAM_USER` | AWS IAM user authentication. | AWS user ARN |
+| `X509_CUSTOMER` | Customer-managed X.509 certificate authentication. | RFC 2253 Distinguished Name |
+| `X509_MANAGED` | MongoDB Atlas-managed X.509 certificate authentication. | RFC 2253 Distinguished Name |
+| `LDAP_USER` | LDAP user authentication. | RFC 2253 Distinguished Name |
+| `OIDC_WORKLOAD` | OIDC workload identity authentication. | `<Atlas OIDC IdP ID>/<IdP user identifier>` |
+
+<Tip>
+When using `SCRAM-SHA`, the provisioned user retrieves their database password from the C1 [vault](/product/admin/vaults). For all other authentication types, no password is generated. Instead, the database user is created in the `$external` database, and the user authenticates using their external identity provider.
+</Tip>
+
+### How provisioning works
+
+When account provisioning runs, the connector performs these steps:
+
+1. **Organization invitation** (optional): If **Create invite** is enabled and an email address is provided, the connector invites the user to the MongoDB Atlas organization. If the user already exists in the organization, this step is skipped.
+
+2. **Database user creation**: The connector creates a database user in the specified project with the chosen authentication type. The new database user is assigned a default `read` role on the `admin` database. You can grant additional database roles (such as `readWrite` or `dbAdmin`) through C1 entitlements after the account is provisioned.
 
 ## Gather MongoDB Atlas credentials 
 
