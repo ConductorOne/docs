@@ -1,0 +1,195 @@
+---
+title: List task audit events
+og:title: List task audit events - C1 API
+og:description: Use the TaskAudit.List endpoint to retrieve the audit trail for a task, including comments, state changes, and provisioning outcomes.
+description: Use the TaskAudit.List endpoint to retrieve the audit trail for a task, including comments, state changes, and provisioning outcomes.
+---
+
+The `POST /api/v1/task/audits` endpoint returns the audit trail for a given task. Each audit event records an action that occurred during the task lifecycle, such as comments added by reviewers, state transitions, approval decisions, and provisioning outcomes.
+
+This endpoint is useful when building automations that need to inspect what has happened on a task before taking action. For example, an automation can read comments left by reviewers to decide how to proceed with provisioning.
+
+## Authentication and authorization
+
+This endpoint requires an API key with at least **Viewer** (`VIEWER`) role permissions. See [How to authenticate requests](/conductorone-api/authenticate) for details on obtaining an access token.
+
+## Request
+
+```
+POST https://{your-tenant}.conductor.one/api/v1/task/audits
+```
+
+### Request body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `taskId` | string | Yes | The ID of the task to retrieve audit events for. Must be a 27-character alphanumeric string. |
+| `pageSize` | integer | No | Maximum number of audit events to return per page. Accepts a value between 0 and 100. See [Pagination](/conductorone-api/pagination). |
+| `pageToken` | string | No | A pagination token from a previous response. Omit on the first request. |
+
+### Example request
+
+```bash
+curl --request POST \
+  --url 'https://example.conductor.one/api/v1/task/audits' \
+  --header 'Authorization: Bearer ${ACCESS_TOKEN}' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "taskId": "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+    "pageSize": 25
+  }'
+```
+
+## Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `list` | array | An array of audit event objects. |
+| `nextPageToken` | string | A token to retrieve the next page of results. Empty when there are no more results. |
+
+Each object in the `list` array is a **TaskAuditView** with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique identifier for the audit event. |
+| `userId` | string | The ID of the user who triggered the event. |
+| `currentState` | string | The task state at the time of the event (`TASK_STATE_OPEN` or `TASK_STATE_CLOSED`). |
+| `workflowStep` | integer | The workflow step number the task was on when the event occurred. |
+| `created` | string | Timestamp of when the event was created (RFC 3339 format). |
+| `metadata` | object | Contains a `user` object with details about the user who triggered the event. |
+| `eventType` | string | The event severity: `TASK_AUDIT_EVENT_TYPE_NEUTRAL` or `TASK_AUDIT_EVENT_TYPE_ERROR`. |
+| `source` | string | Where the event originated: `SOURCE_C1`, `SOURCE_JIRA`, `SOURCE_SLACK`, or `SOURCE_COPILOT_AGENTS`. |
+| `ticketId` | string | The task ID. |
+
+### Audit event types
+
+Each audit event includes exactly one type-specific field that describes what happened. Common event types include:
+
+| Field | Description |
+|-------|-------------|
+| `comment` | A comment was added to the task. Contains `comment` (the text), `updatedBy` (user ID), and `updatedAt` (timestamp). |
+| `stateChange` | The task state changed. Contains `previousState`. |
+| `taskCreated` | The task was created. |
+| `approvalInstanceChange` | An approval step changed (approved, denied, reassigned). |
+| `actionSubmitted` | An action was submitted on the task. |
+| `grantOutcome` | A grant action completed. |
+| `revokeOutcome` | A revoke action completed. |
+| `certifyOutcome` | A certification decision was made. |
+| `connectorActionsStart` | Connector provisioning actions started. |
+| `connectorActionsEnd` | Connector provisioning actions finished. |
+| `actionResult` | The result of a connector action (success, error, or cancelled). |
+| `approvalReassigned` | The approval step was reassigned to different reviewers. |
+| `provisionError` | A provisioning step encountered an error. |
+| `webhookTriggered` | A webhook step was triggered. |
+| `policyEvaluationStep` | A policy evaluation step was recorded. |
+
+### Example response
+
+```json
+{
+  "list": [
+    {
+      "id": "2bXgHk8VFldDp2GUAdFhL2s9ABC",
+      "userId": "2aWfEo3VFldDp2GUAdFhL2s9XYZ",
+      "currentState": "TASK_STATE_OPEN",
+      "workflowStep": 1,
+      "created": "2026-01-15T10:30:00Z",
+      "metadata": {
+        "user": {
+          "id": "2aWfEo3VFldDp2GUAdFhL2s9XYZ",
+          "displayName": "Jane Smith",
+          "email": "jane@example.com"
+        }
+      },
+      "eventType": "TASK_AUDIT_EVENT_TYPE_NEUTRAL",
+      "source": "SOURCE_C1",
+      "ticketId": "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+      "comment": {
+        "comment": "Approved after verifying the user needs this access for the Q1 project.",
+        "updatedBy": "2aWfEo3VFldDp2GUAdFhL2s9XYZ",
+        "updatedAt": "2026-01-15T10:30:00Z"
+      }
+    },
+    {
+      "id": "2bXgJm9WGmeEq3HVBeGiM3t0DEF",
+      "userId": "",
+      "currentState": "TASK_STATE_OPEN",
+      "workflowStep": 1,
+      "created": "2026-01-15T10:00:00Z",
+      "metadata": {},
+      "eventType": "TASK_AUDIT_EVENT_TYPE_NEUTRAL",
+      "source": "SOURCE_C1",
+      "ticketId": "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+      "taskCreated": {}
+    }
+  ],
+  "nextPageToken": ""
+}
+```
+
+## Pagination
+
+This endpoint follows the standard C1 [pagination pattern](/conductorone-api/pagination). Include `pageSize` and `pageToken` in the request body to page through results.
+
+```bash
+curl --request POST \
+  --url 'https://example.conductor.one/api/v1/task/audits' \
+  --header 'Authorization: Bearer ${ACCESS_TOKEN}' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "taskId": "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+    "pageSize": 10,
+    "pageToken": "your_next_page_token_here"
+  }'
+```
+
+## Example: Reading comments from a task
+
+A common use case is reading comments left by reviewers before an automation takes action. The following example shows how to filter audit events to find comments:
+
+```bash
+curl --request POST \
+  --url 'https://example.conductor.one/api/v1/task/audits' \
+  --header 'Authorization: Bearer ${ACCESS_TOKEN}' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "taskId": "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+    "pageSize": 100
+  }'
+```
+
+In the response, look for audit events that contain the `comment` field:
+
+```json
+{
+  "comment": {
+    "comment": "Approved after verifying the user needs this access for the Q1 project.",
+    "updatedBy": "2aWfEo3VFldDp2GUAdFhL2s9XYZ",
+    "updatedAt": "2026-01-15T10:30:00Z"
+  }
+}
+```
+
+<Tip>
+The `comment` field is one of many possible event types. Each audit event contains exactly one event type field. To find comments programmatically, check whether the `comment` key is present in each audit event object.
+</Tip>
+
+## SDK usage
+
+This endpoint is available in both the Go and TypeScript SDKs.
+
+**Go:**
+```go
+resp, err := client.TaskAudit.List(ctx, &taskv1.TaskAuditListRequest{
+    TaskId:   "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+    PageSize: 25,
+})
+```
+
+**TypeScript:**
+```typescript
+const resp = await client.taskAudit.list({
+    taskId: "2bXfEo3VFldDp2GUAdFhL2s9GXo",
+    pageSize: 25,
+});
+```
