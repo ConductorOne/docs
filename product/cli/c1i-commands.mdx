@@ -1,0 +1,468 @@
+---
+title: c1i command reference
+og:title: c1i command reference | Docs - C1
+og:description: A comprehensive reference for all c1i commands, subcommands, and flags.
+description: A comprehensive reference for all c1i commands, subcommands, and flags.
+sidebarTitle: "c1i commands"
+---
+
+{/* Editor Refresh: 2026-04-24 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+<Tip>
+**Key commands:**
+
+Run `c1i help` in your terminal to show all available commands.
+
+Run `c1i <command> --help` or `c1i <command> -h` for help with a specific command.
+</Tip>
+
+## Overview
+
+c1i interacts with the C1 API to manage users, apps, accounts, entitlements, tasks, and access requests.
+
+**Usage:**
+
+```bash
+c1i [command]
+```
+
+| Command | Subcommands | Description |
+| :--- | :--- | :--- |
+| `docs` | `search` `page` `endpoints` `endpoint` `openapi` `skill` | Explore API documentation (no auth required). |
+| `auth` | `login` `status` | Manage authentication. |
+| `users` | `list` | Search and list C1 users. |
+| `apps` | `list` | List applications. |
+| `accounts` | `list` `set-owner` | Manage application accounts. |
+| `entitlements` | `list` | Search and list application entitlements. |
+| `tasks` | `list` `approve` `deny` `comment` | Manage access request tasks. |
+| `requests` | `create grant` `create revoke` | Create access requests. |
+| `connectors` | `list` | List connectors. |
+| `api` | | Make raw C1 API requests. |
+
+## Global flags
+
+| Flag | Description |
+| :--- | :--- |
+| `--url string` | C1 tenant URL. |
+| `-h`, `--help` | Help for any command. |
+
+## Docs
+
+Explore C1 API documentation and schemas. These commands do **not** require authentication.
+
+**Usage:**
+
+```bash
+c1i docs [command]
+```
+
+| Subcommand | Description |
+| :--- | :--- |
+| `search` | Search C1 documentation by keyword. |
+| `page` | Fetch a full documentation page. |
+| `endpoints` | List all API endpoints. |
+| `endpoint` | Show the full request/response schema for an endpoint. |
+| `openapi` | Dump the raw OpenAPI spec (YAML). |
+| `skill` | Export documentation for AI agents (SKILL.md format). |
+
+### `search`
+
+Search C1 documentation by keyword.
+
+**Usage:**
+
+```bash
+c1i docs search <query>
+```
+
+### `page`
+
+Fetch a full documentation page by path.
+
+**Usage:**
+
+```bash
+c1i docs page <path>
+```
+
+### `endpoints`
+
+List all available API endpoints. Optionally filter by a pattern.
+
+**Usage:**
+
+```bash
+c1i docs endpoints [--filter <pattern>]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--filter string` | Filter endpoints by pattern. |
+
+### `endpoint`
+
+Show the full request and response schema for a specific API endpoint.
+
+**Usage:**
+
+```bash
+c1i docs endpoint <path>
+```
+
+### `openapi`
+
+Dump the raw OpenAPI spec in YAML format.
+
+**Usage:**
+
+```bash
+c1i docs openapi
+```
+
+### `skill`
+
+Export C1 documentation in a format optimized for AI agents.
+
+**Usage:**
+
+```bash
+c1i docs skill
+```
+
+## Auth
+
+Manage authentication credentials.
+
+**Usage:**
+
+```bash
+c1i auth [command]
+```
+
+| Subcommand | Description |
+| :--- | :--- |
+| `login` | Authenticate via browser or API credentials. |
+| `status` | Check if valid credentials are stored. |
+
+### `login`
+
+Authenticate to C1. Opens a browser for OAuth device flow authorization, or accepts credentials directly.
+
+**Usage:**
+
+```bash
+c1i auth login [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--url string` | C1 tenant URL. |
+| `--client-id string` | Client ID (for non-interactive auth). |
+| `--client-secret string` | Client secret (for non-interactive auth). |
+
+**Examples:**
+
+```bash
+# Browser-based login
+c1i auth login --url example.conductor.one
+
+# Credential-based login
+c1i auth login --client-id <id> --client-secret <secret>
+```
+
+### `status`
+
+Check whether valid C1 credentials are stored and working.
+
+**Usage:**
+
+```bash
+c1i auth status
+```
+
+## Users
+
+Manage C1 users.
+
+### `list`
+
+Search and list C1 users. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i users list [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--query string` | Search query. |
+| `--email string` | Filter by email address. |
+| `--status string` | Filter by status: `enabled`, `disabled`, or `deleted`. |
+| `--page-size int` | Number of results per page. |
+| `--page-token string` | Pagination token for manual pagination. |
+
+**Example:**
+
+```bash
+c1i users list --email user@example.com
+```
+
+## Apps
+
+Manage applications.
+
+### `list`
+
+List applications. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i apps list [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--page-size int` | Number of results per page. |
+| `--page-token string` | Pagination token for manual pagination. |
+
+## Accounts
+
+Manage application accounts (app users).
+
+### `list`
+
+Search and list accounts for an application. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i accounts list --app-id <app-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--status string` | Filter by status. |
+| `--type string` | Filter by type: `user`, `service_account`, or `system_account`. |
+| `--unmapped-only` | Only show unmapped accounts. |
+| `--query string` | Search query. |
+| `--page-size int` | Number of results per page. |
+| `--page-token string` | Pagination token for manual pagination. |
+
+### `set-owner`
+
+Set the owner of an application account.
+
+**Usage:**
+
+```bash
+c1i accounts set-owner --app-id <app-id> --app-user-id <app-user-id> --user-id <user-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--app-user-id string` | App user ID. (Required.) |
+| `--user-id string` | C1 user ID to set as owner. (Required.) |
+
+## Entitlements
+
+Manage application entitlements.
+
+### `list`
+
+Search and list application entitlements. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i entitlements list [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Filter by application ID. |
+| `--query string` | Search query. |
+| `--page-size int` | Number of results per page. |
+| `--page-token string` | Pagination token for manual pagination. |
+
+## Tasks
+
+Manage access request tasks.
+
+**Usage:**
+
+```bash
+c1i tasks [command]
+```
+
+| Subcommand | Description |
+| :--- | :--- |
+| `list` | Search and list tasks. |
+| `approve` | Approve a task. |
+| `deny` | Deny a task. |
+| `comment` | Add a comment to a task. |
+
+### `list`
+
+Search and list access request tasks. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i tasks list [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--state string` | Filter by state: `open` or `closed`. |
+| `--query string` | Search query. |
+| `--assigned-to-me` | Only show tasks assigned to the current user. |
+| `--page-size int` | Number of results per page. |
+| `--page-token string` | Pagination token for manual pagination. |
+
+### `approve`
+
+Approve an access request task.
+
+**Usage:**
+
+```bash
+c1i tasks approve --task-id <task-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--task-id string` | Task ID. (Required.) |
+| `--comment string` | Comment to include with the approval. |
+
+### `deny`
+
+Deny an access request task.
+
+**Usage:**
+
+```bash
+c1i tasks deny --task-id <task-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--task-id string` | Task ID. (Required.) |
+| `--comment string` | Comment to include with the denial. |
+
+### `comment`
+
+Add a comment to a task.
+
+**Usage:**
+
+```bash
+c1i tasks comment --task-id <task-id> --comment <comment>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--task-id string` | Task ID. (Required.) |
+| `--comment string` | Comment text. (Required.) |
+
+## Requests
+
+Create access requests.
+
+**Usage:**
+
+```bash
+c1i requests create [command]
+```
+
+### `create grant`
+
+Create a grant access request.
+
+**Usage:**
+
+```bash
+c1i requests create grant --app-id <app-id> --entitlement-id <entitlement-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--entitlement-id string` | Entitlement ID. (Required.) |
+| `--user-id string` | User ID (defaults to current user). |
+| `--duration string` | Requested access duration. |
+| `--description string` | Justification for the request. |
+| `--emergency` | Request emergency access. |
+
+### `create revoke`
+
+Create a revoke access request.
+
+**Usage:**
+
+```bash
+c1i requests create revoke --app-id <app-id> --entitlement-id <entitlement-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--entitlement-id string` | Entitlement ID. (Required.) |
+| `--user-id string` | User ID (defaults to current user). |
+| `--description string` | Justification for the request. |
+
+## Connectors
+
+Manage connectors.
+
+### `list`
+
+List connectors. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i connectors list [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--page-size int` | Number of results per page. |
+| `--page-token string` | Pagination token for manual pagination. |
+
+## API
+
+Make raw C1 API requests. This is an escape hatch for accessing any API endpoint not covered by the built-in commands.
+
+**Usage:**
+
+```bash
+c1i api --path <path> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--path string` | API endpoint path. (Required.) |
+| `--method string` | HTTP method: `GET`, `POST`, `PUT`, or `DELETE`. (Default: `GET`.) |
+| `--body string` | Request body (JSON). |
+| `--paginate` | Auto-paginate and output results as NDJSON. |
+
+**Examples:**
+
+```bash
+# Get a single resource
+c1i api --path /api/v1/apps
+
+# POST with a body
+c1i api --path /api/v1/tasks/search --method POST --body '{"state":"open"}'
+
+# Paginate through results as NDJSON
+c1i api --path /api/v1/apps --paginate
+```
