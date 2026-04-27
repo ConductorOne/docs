@@ -1,0 +1,227 @@
+---
+title: "Set up a ChartHop connector"
+og:title: "Set up a ChartHop connector"
+description: "C1 provides identity governance and just-in-time provisioning for ChartHop. Integrate your ChartHop instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for ChartHop. Integrate your ChartHop instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "ChartHop"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The ChartHop connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Persons | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+The **Persons** resource represents ChartHop Persons (HR employees) sourced from `/v2/org/{orgId}/person`. The **Groups** resource represents ChartHop groups (departments, teams, locations, and other group-type classifications). Group membership is sourced directly from ChartHop's calculated `groupIds` on the person record via `/v2/org/{orgId}/person/{personId}?fields=groupIds`.
+
+This connector intentionally does not emit ChartHop platform login users, roles, or "who can administer the HR system" data. That is IGA data about the HR application itself and is out of scope; if needed, it belongs in a separate connector focused on HR-system administration.
+
+## Gather ChartHop credentials
+
+<Warning>
+To configure the ChartHop connector, you need administrator permissions in ChartHop.
+</Warning>
+
+<Steps>
+  <Step>
+    Navigate to the ChartHop admin console or API settings.
+  </Step>
+
+  <Step>
+    Create API credentials for C1:
+
+    1. Create a new API key or token named `C1`
+    2. Grant the required scopes or permissions
+    3. Copy the credentials and save them securely
+  </Step>
+</Steps>
+
+## Configure the ChartHop connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **ChartHop** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new ChartHop connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **API Token**: Your ChartHop API token
+        - **Organization ID**: Your ChartHop organization ID
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your ChartHop connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [ChartHop](https://github.com/conductorone/baton-charthop) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new ChartHop connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new ChartHop connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your ChartHop connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-charthop-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-charthop-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # ChartHop credentials
+      BATON_API_TOKEN: <ChartHop API token>
+      BATON_ORG_ID: <ChartHop organization ID>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-charthop.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-charthop
+      labels:
+        app: baton-charthop
+    spec:
+      selector:
+        matchLabels:
+          app: baton-charthop
+      template:
+        metadata:
+          labels:
+            app: baton-charthop
+            baton: "true"
+            baton-app: charthop
+        spec:
+          containers:
+          - name: baton-charthop
+            image: public.ecr.aws/conductorone/baton-charthop:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-charthop
+            envFrom:
+            - secretRef:
+                name: baton-charthop-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the ChartHop connector to. ChartHop data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your ChartHop connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-charthop).
+</Tip>
