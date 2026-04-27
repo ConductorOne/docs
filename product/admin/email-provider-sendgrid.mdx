@@ -1,0 +1,172 @@
+---
+title: Send C1 notifications from SendGrid
+og:title: Send C1 notifications from SendGrid - C1 docs
+og:description: Configure ConductorOne to send notification emails through your own Twilio SendGrid account so recipients see your company's domain as the sender.
+description: Configure ConductorOne to send notification emails through your own Twilio SendGrid account so recipients see your company's domain as the sender.
+sidebarTitle: SendGrid
+---
+{/* Editor Refresh: 2026-04-27 */}
+
+<Info>
+Email customization is in early access. Contact your ConductorOne account team to enable it.
+</Info>
+
+By default, C1 sends notifications from `no-reply@conductorone.com`. You can instead send through your own Twilio SendGrid account so recipients see your company's domain as the sender.
+
+This task requires the **Owner** role in C1 and an **Admin**-level account in SendGrid.
+
+C1 authenticates to SendGrid via a scoped API key with the **Mail Send** permission. No SMTP credentials or user passwords are shared, and you can revoke access at any time by deleting the API key.
+
+## Before you begin
+
+<Warning>
+**DNS records required for deliverability**
+
+Emails sent from your domain will land in spam unless the domain is authenticated with SendGrid and DMARC is published. DNS is managed at your DNS provider (Route 53, Cloudflare, etc.), not in C1.
+
+| Record | Name | Value |
+|---|---|---|
+| Domain authentication | multiple CNAMEs | provided by SendGrid during Sender Authentication → Authenticate Your Domain (see Step 1) |
+| SPF | handled by the domain authentication CNAMEs | SendGrid uses CNAMEs instead of a TXT include, so no separate SPF record is usually needed |
+| DMARC (TXT) | `_dmarc` | `v=DMARC1; p=none; rua=mailto:postmaster@yourdomain.com` |
+
+See [SendGrid's domain authentication guide](https://docs.sendgrid.com/ui/account-and-settings/how-to-set-up-domain-authentication). Propagation may take up to 48 hours.
+</Warning>
+
+You'll need:
+
+- A SendGrid account with API access (all paid plans; the Free plan's API access is sufficient for low volume).
+- Admin-level access in SendGrid to create API keys and authenticate domains.
+- Access to your DNS provider to publish CNAME records.
+
+## Step 1: Verify a sending identity
+
+SendGrid requires every sending email to come from a verified identity. You have two options:
+
+### Option A — Single Sender Verification (for testing only)
+
+Fastest way to send from one address, with no DNS changes required.
+
+<Steps>
+<Step>
+Sign in to [app.sendgrid.com](https://app.sendgrid.com).
+</Step>
+<Step>
+Navigate to **Settings** > **Sender Authentication** > **Single Sender Verification** > **Create New Sender**.
+</Step>
+<Step>
+Fill in the sender details (from name, from email, reply-to, company address).
+</Step>
+<Step>
+Click **Create**. SendGrid sends a verification email to the sender address.
+</Step>
+<Step>
+Click the verification link in that mailbox. The sender status becomes **Verified**.
+</Step>
+</Steps>
+
+Emails through this sender work immediately, but deliverability will be poor because SendGrid can't sign with your domain's DKIM. Use this only for initial testing — switch to Option B before going to production.
+
+### Option B — Domain Authentication (recommended for production)
+
+Authenticates your entire domain so every address on it can send, with proper SPF/DKIM alignment.
+
+<Steps>
+<Step>
+Navigate to **Settings** > **Sender Authentication** > **Authenticate Your Domain** > **Get Started**.
+</Step>
+<Step>
+Select your DNS host (e.g., AWS Route 53, Cloudflare) and choose whether you want SendGrid to also handle link branding (recommended: yes).
+</Step>
+<Step>
+Enter your domain (e.g., `yourcompany.com`). SendGrid displays 3–5 CNAME records to publish at your DNS provider.
+</Step>
+<Step>
+Publish each CNAME record exactly as shown at your DNS provider. Host names are typically of the form `s1._domainkey.yourcompany.com`, `em1234.yourcompany.com`, etc.
+</Step>
+<Step>
+Back in SendGrid, click **Verify**. If DNS has propagated, all records show a green check. If not, wait a few minutes and retry.
+</Step>
+</Steps>
+
+Once the domain is authenticated, you can send from any address on it without per-address verification.
+
+## Step 2: Create a scoped API key
+
+<Steps>
+<Step>
+In SendGrid, navigate to **Settings** > **API Keys** > **Create API Key**.
+</Step>
+<Step>
+Fill in:
+
+- **API Key Name**: C1 Email Sender (or similar).
+- **API Key Permissions**: select **Restricted Access**.
+</Step>
+<Step>
+In the permissions list, set every scope to **No Access** except **Mail Send**, which should be set to **Full Access**.
+</Step>
+<Step>
+Click **Create & View**.
+</Step>
+<Step>
+Immediately copy the API key — SendGrid will not show it again after you leave the page. You'll paste it into C1 in Step 3.
+</Step>
+</Steps>
+
+<Info>
+**Why Restricted Access?** A Full Access API key can also read mail activity, manage templates, edit senders, and modify billing. If the key leaks, Restricted Access limits the exposure to mail sending only, rather than full SendGrid tenant access.
+</Info>
+
+## Step 3: Configure the email provider in C1
+
+<Steps>
+<Step>
+In C1, navigate to **Settings** > **Email provider**.
+</Step>
+<Step>
+Click **Edit**.
+</Step>
+<Step>
+Select **Customer-provided**.
+</Step>
+<Step>
+In **Email service**, select **SendGrid**.
+</Step>
+<Step>
+Fill in the fields:
+
+- **Sender name**: The display name recipients see (e.g., Governance Team).
+- **Sender email address**: A verified sender from Step 1. Must match exactly — either a verified Single Sender or any address on an authenticated domain.
+- **Reply-to address**: Usually the same as the sender address.
+- **SendGrid API key**: The key value you copied in Step 2.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+When you save, C1 validates the API key by calling SendGrid's `GET /v3/scopes` endpoint. If the key is missing, wrong, or lacks the Mail Send permission, save fails with a clear error and your previous configuration is preserved.
+
+<Warning>
+**Sender must match a SendGrid-verified identity**
+
+The **Sender email address** must be either a verified Single Sender (exact match) or any address on a domain you've authenticated (Option B). SendGrid rejects sends from unverified senders with a 403 error.
+</Warning>
+
+## Step 4: Verify
+
+<Steps>
+<Step>
+On the **Email provider** page, click **Send test email**.
+</Step>
+<Step>
+Enter your own email address and click **Send**.
+</Step>
+<Step>
+Check your inbox. View the raw headers (in Gmail: ⋮ → **Show original**) and confirm SPF: PASS, DKIM: PASS with your domain as signer (only if you completed Option B in Step 1), DMARC: PASS.
+</Step>
+<Step>
+If the message does not arrive, check the spam folder and your SendGrid Activity Feed (**Activity** > **Email Activity**) for delivery status and error details.
+</Step>
+</Steps>
