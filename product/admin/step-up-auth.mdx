@@ -6,17 +6,15 @@ description: Require additional authentication for sensitive approvals to enhanc
 sidebarTitle: Step-up authentication
 ---
 
-{/* Editor Refresh: 2026-02-08 */}
+{/* Editor Refresh: 2026-04-27 */}
 
 <Warning>
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-Step-up authentication enhances your approval workflows by requiring approvers to re-authenticate with stronger verification before approving sensitive requests. Instead of relying solely on a user's initial session, this feature forces an additional authentication challenge at the moment of approval.
-
 ## What's step-up authentication?
 
-When you enable step-up authentication for an approval step, users must complete additional identity verification before they can approve the request. This creates a clear security boundary and audit trail for critical actions.
+Step-up authentication enhances your approval workflows by requiring approvers to re-authenticate with stronger verification before they can approve sensitive requests. Instead of relying solely on a user's initial session, C1 issues a fresh authentication challenge at the moment of approval, creating a clear security boundary and audit trail for critical actions.
 
 The flow works like this:
 
@@ -38,70 +36,35 @@ Consider enabling step-up authentication for approval workflows involving:
 - Critical infrastructure changes
 - Privileged role assignments
 
-## Add a step-up authentication provider
+## Before you begin
 
-<Warning>
-Step-up authentication is currently **not supported** for approvals made through Slack or the `cone` CLI. 
-</Warning>
-
-C1 supports two provider types:
-
-- **OAuth2 providers** (RFC 9470 compliant): Okta and other compliant providers
-- **Microsoft Entra**: Uses Conditional Access policies or authentication contexts
-
-### Prerequisites
-
-Before you configure step-up authentication, make sure you have:
+Confirm that you have:
 
 - The **Super Administrator** role in C1
 - Administrator access to your identity provider (Okta or Microsoft Entra)
 - The ability to create OAuth applications in your identity provider
 - **Microsoft Entra only**: Microsoft Entra ID P1 or P2 license if using Conditional Access for MFA
 
-To add a provider:
+## Add a step-up authentication provider
 
-<Steps>
-<Step>
-Navigate to **Admin** > **Integrations** > **Step up auth**.
-</Step>
-<Step>
-Click **Add step-up provider**.
-</Step>
-<Step>
-Select your provider type (OAuth2 or Microsoft Entra).
-</Step>
-<Step>
-Complete the configuration fields for your provider.
-</Step>
-</Steps>
+<Warning>
+Step-up authentication is currently **not supported** for approvals made through Slack, Teams, or the `cone` CLI.
+</Warning>
 
-See the [Okta integration guide](#okta-integration-guide) or [Microsoft Entra integration guide](#microsoft-entra-integration-guide) below for detailed setup instructions.
+C1 supports two provider types:
 
-### Test your configuration
-
-After configuring a provider, test it before using it in production:
-
-<Steps>
-<Step>
-From the **Step-up authentication providers** page, click the **...** (more actions) menu next to your provider and select **Test**.
-</Step>
-<Step>
-Complete the authentication flow with your identity provider.
-</Step>
-<Step>
-Verify you're redirected back to C1 with a success message.
-</Step>
-</Steps>
-
-Successful tests update the "Last tested" timestamp on the provider.
+- **OAuth2 providers** (RFC 9470 compliant): [Okta](#okta-integration-guide) and other compliant providers
+- **[Microsoft Entra](#microsoft-entra-integration-guide)**: Uses Conditional Access policies or authentication contexts
 
 ## Okta integration guide
+
+Configure Okta to act as your step-up authentication provider by creating a dedicated app integration and setting up the appropriate authentication policies.
 
 ### Create an Okta application
 
 <Steps>
 <Step>
-Log in to your Okta Admin Dashboard.
+Sign in to your Okta Admin Dashboard.
 </Step>
 <Step>
 Navigate to **Applications** > **Applications**.
@@ -233,9 +196,9 @@ Click **Save**.
 </Step>
 </Steps>
 
-<Note>
+<Tip>
 OIDC mode requires an ID token in the token response. If you see "ID token not found in response," confirm the request includes the `openid` scope and that your chosen flow returns ID tokens (enable implicit/hybrid only if you explicitly use those flows).
-</Note>
+</Tip>
 
 #### Step 3: Configure API permissions
 
@@ -270,13 +233,13 @@ Provide a description (for example, "C1 Step-Up") and select an expiration perio
 Click **Add**.
 </Step>
 <Step>
-Copy the secret value immediately—you won't be able to view it again.
+Copy the secret value immediately. You won't be able to view it again.
 </Step>
 </Steps>
 
-<Note>
+<Tip>
 Set a calendar reminder to rotate the secret before it expires.
-</Note>
+</Tip>
 
 #### Step 5: Create a Conditional Access policy
 
@@ -473,6 +436,24 @@ Save the configuration.
   </Tab>
 </Tabs>
 
+## Test your configuration
+
+After configuring a provider, test it before using it in production:
+
+<Steps>
+<Step>
+From the **Step-up authentication providers** page, click the **...** (more actions) menu next to your provider and select **Test**.
+</Step>
+<Step>
+Complete the authentication flow with your identity provider.
+</Step>
+<Step>
+Verify you're redirected back to C1 with a success message.
+</Step>
+</Steps>
+
+Successful tests update the "Last tested" timestamp on the provider.
+
 ## Enable step-up in policies
 
 Once your provider is configured and tested, enable step-up authentication in your approval policies:
@@ -495,10 +476,6 @@ Save the policy.
 </Step>
 </Steps>
 
-<Note>
-When step-up authentication is enabled for an approval step, auto-approval is automatically disabled since there's no user to perform the additional authentication.
-</Note>
-
 ## End-user experience
 
 When a task requires step-up authentication for approval:
@@ -510,34 +487,34 @@ When a task requires step-up authentication for approval:
 5. Upon successful authentication, the user is returned to C1.
 6. The approval is processed and an audit trail is created.
 
-## Frequently asked questions
+## Frequently asked questions about step-up authentication
 
-**How does step-up authentication affect automated approvals?**
+<AccordionGroup>
+  <Accordion title="How does step-up authentication affect automated approvals?">
+    When step-up authentication is enabled for an approval step, automated approvals are automatically disabled since there's no user to perform the additional authentication.
+  </Accordion>
 
-When step-up authentication is enabled for an approval step, automated approvals are automatically disabled since there's no user to perform the additional authentication.
+  <Accordion title="What happens if a user doesn't have MFA enabled in the identity provider?">
+    The behavior depends on your ACR values and provider policies. In Okta, if the ACR value is `urn:okta:loa:2fa:any:ifpossible`, the system will use MFA if available but proceed without it if not. With strict MFA requirements, users without MFA can't complete the approval.
+  </Accordion>
 
-**What happens if a user doesn't have MFA enabled in the identity provider?**
+  <Accordion title="Can different policies use different step-up providers?">
+    Yes. Each approval step can be configured with a different step-up provider, allowing you to require different authentication strengths for different types of approvals.
+  </Accordion>
 
-The behavior depends on your ACR values and provider policies. In Okta, if the ACR value is `urn:okta:loa:2fa:any:ifpossible`, the system will use MFA if available but proceed without it if not. With strict MFA requirements, users without MFA can't complete the approval.
+  <Accordion title="How does this work with SSO?">
+    Step-up authentication works outside of the SSO flow. Users still authenticate via SSO initially, but are prompted for additional verification when performing sensitive approvals based on the configured policy.
+  </Accordion>
 
-**Can different policies use different step-up providers?**
+  <Accordion title="What happens during identity provider outages?">
+    If the identity provider is unavailable, users can't complete the step-up authentication flow.
+  </Accordion>
 
-Yes. Each approval step can be configured with a different step-up provider, allowing you to require different authentication strengths for different types of approvals.
+  <Accordion title="Does this feature support mobile applications?">
+    Yes. The feature works on both web browsers and mobile devices using standard OAuth 2.0 redirect flows.
+  </Accordion>
 
-**How does this work with SSO?**
-
-Step-up authentication works outside of the SSO flow. Users still authenticate via SSO initially, but are prompted for additional verification when performing sensitive approvals based on the configured policy.
-
-**What happens during identity provider outages?**
-
-If the identity provider is unavailable, users can't complete the step-up authentication flow.
-
-**Does this feature support mobile applications?**
-
-Yes. The feature works on both web browsers and mobile devices using standard OAuth 2.0 redirect flows.
-
-**Which Microsoft Entra validation mode should I use?**
-
-For most deployments, **OIDC mode** (Cloud Apps approach) is recommended due to its simpler setup—you don't need to create authentication contexts. Use **ACRS mode** (Authentication Contexts approach) if you need multiple authentication contexts for different scenarios or require the ACRS claim in the token for compliance purposes.
-
-
+  <Accordion title="Which Microsoft Entra validation mode should I use?">
+    For most deployments, **OIDC mode** (Cloud Apps approach) is recommended due to its simpler setup — you don't need to create authentication contexts. Use **ACRS mode** (Authentication Contexts approach) if you need multiple authentication contexts for different scenarios or require the ACRS claim in the token for compliance purposes.
+  </Accordion>
+</AccordionGroup>
