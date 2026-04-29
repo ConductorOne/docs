@@ -1,0 +1,203 @@
+{/* Source: https://github.com/ConductorOne/baton-active-directory/blob/main/docs/ldaps-setup.md */}
+---
+title: "LDAPS setup for Active Directory"
+og:title: "LDAPS setup for Active Directory"
+description: "Configure LDAPS (LDAP over TLS) on Windows Server for the Active Directory connector, including certificate setup, connection modes, and diagnostics."
+og:description: "Configure LDAPS (LDAP over TLS) on Windows Server for the Active Directory connector, including certificate setup, connection modes, and diagnostics."
+sidebarTitle: "LDAPS setup"
+---
+
+## Why LDAPS is required
+
+Windows Server 2025 enforces LDAP signing by default. While signed LDAP over port 389 works, LDAPS (port 636) provides full TLS encryption of all LDAP traffic — the security best practice for production AD environments.
+
+LDAPS requires a valid server certificate on each domain controller. Without one, port 636 will listen but reject all TLS handshakes.
+
+## Connection modes and certificate trust
+
+The connector has two connection modes that handle TLS certificate validation differently:
+
+| Mode | Platform | Certificate trust source | Config flag |
+|------|----------|--------------------------|-------------|
+| `winldap` (default on Windows) | Windows only | Windows certificate store (`Cert:\LocalMachine\Root`) | Certs must be imported via `certutil -addstore Root <ca.cer>` |
+| `ldap` (default on Linux) | Any | Go's built-in TLS stack | `ldaps-skip-verify` controls certificate validation |
+
+**WinLDAP mode** delegates certificate validation entirely to the Windows Schannel library. The `ldaps-skip-verify` flag has no effect in this mode. If LDAPS fails, ensure the issuing CA certificate is in the machine's Trusted Root Certification Authorities store.
+
+**go-ldap mode** uses Go's TLS implementation. By default, `ldaps-skip-verify` is `true` for backwards compatibility with self-signed AD certificates. In production environments with properly issued certificates, set `ldaps-skip-verify: false` in your config to enable full certificate verification:
+
+```yaml
+ldaps: true
+ldaps-skip-verify: false  # Enforce certificate validation (recommended for production)
+```
+
+<Warning>
+`ldaps-skip-verify: true` disables certificate chain and hostname validation. This is acceptable for dev/lab environments with self-signed certificates but should not be used in production.
+</Warning>
+
+## Prerequisites
+
+- Windows Server 2025 with Active Directory Domain Services installed
+- Domain Admin or Enterprise Admin privileges
+- The DC must be able to reach itself (no firewall blocking port 636 loopback)
+
+## What gets installed
+
+| Component | Purpose |
+|-----------|---------|
+| AD CS Role (`ADCS-Cert-Authority`) | Certificate Authority that can issue certificates |
+| Enterprise Root CA | Trusted by all domain-joined machines automatically |
+| Domain Controller certificate | Auto-enrolled via the built-in "Domain Controller" template |
+
+## Step-by-step
+
+### Step 1: Install the AD CS role
+
+```powershell
+Install-WindowsFeature ADCS-Cert-Authority -IncludeManagementTools
+```
+
+This installs the Certificate Authority role and its management tools (certsrv.msc, certutil).
+
+### Step 2: Configure as Enterprise Root CA
+
+```powershell
+Install-AdcsCertificationAuthority `
+    -CAType EnterpriseRootCA `
+    -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" `
+    -KeyLength 4096 `
+    -HashAlgorithmName SHA256 `
+    -ValidityPeriod Years `
+    -ValidityPeriodUnits 10 `
+    -Force
+```
+
+**Why Enterprise Root CA?**
+- **Enterprise** (not Standalone): Integrates with AD, enabling auto-enrollment of DC certificates via certificate templates. Standalone CAs require manual certificate requests.
+- **Root** (not Subordinate): In a lab or single-domain environment, there's no parent CA to chain to. Production environments may use a two-tier hierarchy (offline Root CA + online Subordinate CA).
+
+**Parameter choices:**
+- `RSA 4096-bit` with `SHA256`: Strong key size and modern hash algorithm
+- `10-year validity`: Appropriate for a lab root CA
+
+### Step 3: Force domain controller certificate auto-enrollment
+
+After the CA is configured, the DC should auto-enroll for a certificate using the built-in "Domain Controller" template. To trigger this immediately:
+
+```powershell
+certutil -pulse
+```
+
+This tells the certificate auto-enrollment service to check for and request any certificates it's eligible for.
+
+### Step 4: Verify the certificate
+
+```powershell
+# Check that a DC certificate now exists in the Personal store
+Get-ChildItem Cert:\LocalMachine\My | Where-Object {
+    $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.1"  # Server Authentication
+} | Format-List Subject, Thumbprint, NotAfter, EnhancedKeyUsageList
+```
+
+The certificate should have:
+- **Subject**: `CN=<your-dc-fqdn>` (for example, `CN=DC01.corp.example.com`)
+- **Enhanced Key Usage**: Server Authentication (OID 1.3.6.1.5.5.7.3.1)
+- **Issued by**: Your new Enterprise Root CA
+
+### Step 5: Verify LDAPS
+
+```powershell
+# Test TLS handshake on port 636
+$tcp = New-Object System.Net.Sockets.TcpClient($env:COMPUTERNAME, 636)
+$ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, {$true})
+$ssl.AuthenticateAsClient($env:COMPUTERNAME)
+Write-Host "LDAPS working! Protocol: $($ssl.SslProtocol), Cert: $($ssl.RemoteCertificate.Subject)"
+$ssl.Close(); $tcp.Close()
+```
+
+Or using `ldp.exe`:
+
+1. Open `ldp.exe` (Start > Run > ldp)
+2. Connection > Connect: Server = localhost, Port = 636, check **SSL**
+3. Should connect successfully
+
+Or using `openssl`:
+
+```bash
+openssl s_client -connect localhost:636 -showcerts
+```
+
+## Diagnosing LDAPS with `test-ldaps`
+
+The connector includes a built-in diagnostic subcommand that tests connectivity to every configured domain in sequence:
+
+```console
+./baton-active-directory test-ldaps
+```
+
+It reads the same config file as the main connector (via `BATON_CONFIG_PATH` or the default path) and runs four checks per domain:
+
+1. **DC resolution** — finds a domain controller via native API (Windows) or DNS SRV records (Linux)
+2. **TCP connect** — raw TCP connection to the LDAP(S) port
+3. **TLS handshake** — validates the server certificate (LDAPS only); reports subject, issuer, and expiry even when validation fails
+4. **LDAP bind** — attempts authentication using the configured method (Kerberos/GSSAPI or Simple)
+
+Example output:
+
+```
+=== corp.example.com (primary) ===
+  DC:         DC01.corp.example.com:636
+  TCP:        PASS
+  TLS:        PASS (trusted)
+    Subject:  CN=DC01.corp.example.com
+    Issuer:   CN=corp-ROOT-CA
+    Expires:  2028-03-15
+  Bind:       PASS (GSSAPI/Kerberos)
+```
+
+If TLS validation fails, `test-ldaps` reports the certificate details and suggests a fix:
+
+```
+  TLS:        FAIL (x509: certificate signed by unknown authority)
+    Subject:  CN=DC01.remote-forest.example.com
+    Issuer:   CN=remote-ROOT-CA
+    Fix:      Import the CA cert into Trusted Root CAs:
+              certutil -addstore Root <path-to-ca.cer>
+```
+
+The subcommand tests all domains, including those listed in `additional-domains`, and reports a summary count at the end.
+
+## Troubleshooting
+
+### LDAPS still fails after CA setup
+
+1. **Certificate not yet enrolled**: Run `certutil -pulse` and wait 30 seconds
+2. **Wrong certificate template**: The "Domain Controller" template must be enabled on the CA. Check with:
+   ```powershell
+   certutil -CATemplates
+   ```
+3. **Certificate missing Server Authentication EKU**: The DC certificate must include OID 1.3.6.1.5.5.7.3.1
+4. **Schannel not picking up the cert**: Restart the DC, or restart the Active Directory Domain Services service:
+   ```powershell
+   Restart-Service NTDS -Force
+   ```
+
+### Certificate requirements for LDAPS
+
+Per Microsoft documentation, the DC certificate must:
+- Be in the Local Computer's Personal (`My`) certificate store
+- Have a private key present and associated
+- Include Server Authentication in Enhanced Key Usage (OID 1.3.6.1.5.5.7.3.1)
+- Have the DC's FQDN in Subject or Subject Alternative Name
+- Use a Schannel-compatible CSP (for example, Microsoft RSA SChannel Cryptographic Provider or KSP)
+- Be issued by a CA trusted by the DC and its clients
+
+### Production considerations
+
+- **Two-tier CA hierarchy**: Use an offline Root CA and an online Subordinate/Issuing CA
+- **Certificate lifetime**: DC certificates should auto-renew; monitor expiration
+- **CRL distribution**: Ensure Certificate Revocation Lists are accessible to all clients
+- **LDAP Channel Binding**: Server 2025 may also enforce channel binding tokens — ensure clients support it
+- **Certificate verification**: If running in go-ldap mode, set `ldaps-skip-verify: false` in production to enforce TLS certificate validation
+- **Cross-forest LDAPS**: Each forest's CA certificate must be independently trusted. See [Multi-domain and cross-forest setup](/baton/active-directory/multi-domain-setup) for details
+- **Diagnostics**: Run `./baton-active-directory test-ldaps` after any certificate or connectivity changes to verify all domains
