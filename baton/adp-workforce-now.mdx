@@ -25,6 +25,25 @@ The ADP Workforce Now connector syncs the following resources:
 
 *ADP Workforce Now has internal portal security roles (Security Administrator, User Master, etc.), but the ADP API does not expose security role assignments. These roles are managed exclusively through the ADP portal UI and cannot be synced.*
 
+## Worker profile fields
+
+Each synced worker is exposed as a user resource. The following keys are written to the user profile when the corresponding ADP field is populated. Empty values are omitted.
+
+| Profile key | ADP source | Notes |
+| :--- | :--- | :--- |
+| `associate_oid` | `worker.associateOID` | Always set. Also used as the user's `ExternalID`. |
+| `worker_id` | `worker.workerID.idValue` | The displayed worker number. |
+| `original_hire_date` | `worker.workerDates.originalHireDate` | |
+| `adjusted_service_date` | `worker.workerDates.adjustedServiceDate` | |
+| `raw_status` | `worker.workerStatus.statusCode.codeValue` | Literal status (`Active`, `Inactive`, `Terminated`). The SDK enabled/disabled mapping collapses `Inactive` and `Terminated` together; this field preserves the distinction. |
+| `reports_to_worker_id` | `workAssignments[<active>].reportsTo[0].workerID.idValue` | Manager's worker number. |
+| `manager_id` | `workAssignments[<active>].reportsTo[0].associateOID` | Manager's ADP `associateOID`. C1's directory manager mapper resolves this against the manager user's `ExternalID`, so the manager relationship is automatically populated in the C1 user graph. Both this field and `reports_to_worker_id` are derived from the same `reportsTo` entry. |
+| `job_title` | `workAssignments[<active>].jobTitle` | |
+| `department` | `workAssignments[<active>].homeOrganizationalUnits[<Department>].nameCode` | |
+| `location` | `workAssignments[<active>].homeWorkLocation.nameCode` | Assigned work location. Prefers `shortName`, falls back to `codeValue`. |
+
+When a worker has multiple work assignments, fields drawn from `workAssignments[]` come from the first non-terminated assignment, falling back to any assignment if all are terminated.
+
 ## Gather ADP Workforce Now credentials
 
 <Warning>
