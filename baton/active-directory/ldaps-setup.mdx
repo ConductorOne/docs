@@ -1,4 +1,3 @@
-{/* Source: https://github.com/ConductorOne/baton-active-directory/blob/main/docs/ldaps-setup.md */}
 ---
 title: "LDAPS setup for Active Directory"
 og:title: "LDAPS setup for Active Directory"
@@ -6,6 +5,9 @@ description: "Configure LDAPS (LDAP over TLS) on Windows Server for the Active D
 og:description: "Configure LDAPS (LDAP over TLS) on Windows Server for the Active Directory connector, including certificate setup, connection modes, and diagnostics."
 sidebarTitle: "LDAPS setup"
 ---
+
+{/* Editor Refresh: 2026-04-29 */}
+{/* Source: https://github.com/ConductorOne/baton-active-directory/blob/main/docs/ldaps-setup.md */}
 
 ## Why LDAPS is required
 
@@ -31,9 +33,9 @@ ldaps: true
 ldaps-skip-verify: false  # Enforce certificate validation (recommended for production)
 ```
 
-<Warning>
+<Note>
 `ldaps-skip-verify: true` disables certificate chain and hostname validation. This is acceptable for dev/lab environments with self-signed certificates but should not be used in production.
-</Warning>
+</Note>
 
 ## Prerequisites
 
@@ -49,83 +51,97 @@ ldaps-skip-verify: false  # Enforce certificate validation (recommended for prod
 | Enterprise Root CA | Trusted by all domain-joined machines automatically |
 | Domain Controller certificate | Auto-enrolled via the built-in "Domain Controller" template |
 
-## Step-by-step
+## Set up LDAPS on Windows Server
 
-### Step 1: Install the AD CS role
+<Steps>
+  <Step>
+    **Install the AD CS role.**
 
-```powershell
-Install-WindowsFeature ADCS-Cert-Authority -IncludeManagementTools
-```
+    ```powershell
+    Install-WindowsFeature ADCS-Cert-Authority -IncludeManagementTools
+    ```
 
-This installs the Certificate Authority role and its management tools (certsrv.msc, certutil).
+    This installs the Certificate Authority role and its management tools (certsrv.msc, certutil).
+  </Step>
 
-### Step 2: Configure as Enterprise Root CA
+  <Step>
+    **Configure as Enterprise Root CA.**
 
-```powershell
-Install-AdcsCertificationAuthority `
-    -CAType EnterpriseRootCA `
-    -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" `
-    -KeyLength 4096 `
-    -HashAlgorithmName SHA256 `
-    -ValidityPeriod Years `
-    -ValidityPeriodUnits 10 `
-    -Force
-```
+    ```powershell
+    Install-AdcsCertificationAuthority `
+        -CAType EnterpriseRootCA `
+        -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" `
+        -KeyLength 4096 `
+        -HashAlgorithmName SHA256 `
+        -ValidityPeriod Years `
+        -ValidityPeriodUnits 10 `
+        -Force
+    ```
 
-**Why Enterprise Root CA?**
-- **Enterprise** (not Standalone): Integrates with AD, enabling auto-enrollment of DC certificates via certificate templates. Standalone CAs require manual certificate requests.
-- **Root** (not Subordinate): In a lab or single-domain environment, there's no parent CA to chain to. Production environments may use a two-tier hierarchy (offline Root CA + online Subordinate CA).
+    **Why Enterprise Root CA?**
+    - **Enterprise** (not Standalone): Integrates with AD, enabling auto-enrollment of DC certificates via certificate templates. Standalone CAs require manual certificate requests.
+    - **Root** (not Subordinate): In a lab or single-domain environment, there's no parent CA to chain to. Production environments may use a two-tier hierarchy (offline Root CA + online Subordinate CA).
 
-**Parameter choices:**
-- `RSA 4096-bit` with `SHA256`: Strong key size and modern hash algorithm
-- `10-year validity`: Appropriate for a lab root CA
+    **Parameter choices:**
+    - `RSA 4096-bit` with `SHA256`: Strong key size and modern hash algorithm
+    - `10-year validity`: Appropriate for a lab root CA
+  </Step>
 
-### Step 3: Force domain controller certificate auto-enrollment
+  <Step>
+    **Force domain controller certificate auto-enrollment.**
 
-After the CA is configured, the DC should auto-enroll for a certificate using the built-in "Domain Controller" template. To trigger this immediately:
+    After the CA is configured, the DC should auto-enroll for a certificate using the built-in "Domain Controller" template. To trigger this immediately:
 
-```powershell
-certutil -pulse
-```
+    ```powershell
+    certutil -pulse
+    ```
 
-This tells the certificate auto-enrollment service to check for and request any certificates it's eligible for.
+    This tells the certificate auto-enrollment service to check for and request any certificates it's eligible for.
+  </Step>
 
-### Step 4: Verify the certificate
+  <Step>
+    **Verify the certificate.**
 
-```powershell
-# Check that a DC certificate now exists in the Personal store
-Get-ChildItem Cert:\LocalMachine\My | Where-Object {
-    $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.1"  # Server Authentication
-} | Format-List Subject, Thumbprint, NotAfter, EnhancedKeyUsageList
-```
+    ```powershell
+    # Check that a DC certificate now exists in the Personal store
+    Get-ChildItem Cert:\LocalMachine\My | Where-Object {
+        $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.1"  # Server Authentication
+    } | Format-List Subject, Thumbprint, NotAfter, EnhancedKeyUsageList
+    ```
 
-The certificate should have:
-- **Subject**: `CN=<your-dc-fqdn>` (for example, `CN=DC01.corp.example.com`)
-- **Enhanced Key Usage**: Server Authentication (OID 1.3.6.1.5.5.7.3.1)
-- **Issued by**: Your new Enterprise Root CA
+    The certificate should have:
+    - **Subject**: `CN=<your-dc-fqdn>` (for example, `CN=DC01.corp.example.com`)
+    - **Enhanced Key Usage**: Server Authentication (OID 1.3.6.1.5.5.7.3.1)
+    - **Issued by**: Your new Enterprise Root CA
+  </Step>
 
-### Step 5: Verify LDAPS
+  <Step>
+    **Verify LDAPS.**
 
-```powershell
-# Test TLS handshake on port 636
-$tcp = New-Object System.Net.Sockets.TcpClient($env:COMPUTERNAME, 636)
-$ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, {$true})
-$ssl.AuthenticateAsClient($env:COMPUTERNAME)
-Write-Host "LDAPS working! Protocol: $($ssl.SslProtocol), Cert: $($ssl.RemoteCertificate.Subject)"
-$ssl.Close(); $tcp.Close()
-```
+    Using PowerShell:
 
-Or using `ldp.exe`:
+    ```powershell
+    # Test TLS handshake on port 636
+    $tcp = New-Object System.Net.Sockets.TcpClient($env:COMPUTERNAME, 636)
+    $ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, {$true})
+    $ssl.AuthenticateAsClient($env:COMPUTERNAME)
+    Write-Host "LDAPS working! Protocol: $($ssl.SslProtocol), Cert: $($ssl.RemoteCertificate.Subject)"
+    $ssl.Close(); $tcp.Close()
+    ```
 
-1. Open `ldp.exe` (Start > Run > ldp)
-2. Connection > Connect: Server = localhost, Port = 636, check **SSL**
-3. Should connect successfully
+    Using `ldp.exe`:
 
-Or using `openssl`:
+    1. Open `ldp.exe` (Start > Run > ldp)
+    2. Connection > Connect: Server = localhost, Port = 636, check **SSL**
+    3. Should connect successfully
 
-```bash
-openssl s_client -connect localhost:636 -showcerts
-```
+    Using `openssl`:
+
+    ```bash
+    openssl s_client -connect localhost:636 -showcerts
+    ```
+  </Step>
+</Steps>
 
 ## Diagnosing LDAPS with `test-ldaps`
 
