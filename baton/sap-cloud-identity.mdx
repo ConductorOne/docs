@@ -1,8 +1,8 @@
 ---
 title: "Set up a SAP Cloud Identity connector"
 og:title: "Set up a SAP Cloud Identity connector"
-description: "C1 provides identity governance for SAP Cloud Identity. Integrate SAP Cloud Identity Services with C1 to run user access reviews (UARs) and gain visibility into users, groups, and group memberships across your SAP Cloud Identity tenant."
-og:description: "C1 provides identity governance for SAP Cloud Identity. Integrate SAP Cloud Identity Services with C1 to run user access reviews (UARs) and gain visibility into users, groups, and group memberships across your SAP Cloud Identity tenant."
+description: "C1 provides identity governance and just-in-time provisioning for SAP Cloud Identity. Integrate your SAP Cloud Identity instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for SAP Cloud Identity. Integrate your SAP Cloud Identity instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 sidebarTitle: "SAP Cloud Identity"
 ---
 
@@ -15,20 +15,32 @@ The SAP Cloud Identity connector syncs the following resources:
 
 | Resource | Sync                                                         | Provision                                                    |
 | :------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
-| User     | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
-| Group    | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+| User     | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Group    | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 
-- **User**: SCIM 2.0 directory users with email, login, status, MFA status, structured name, and SAP-specific profile fields.
-- **Group**: SCIM 2.0 directory groups with a static `member` entitlement. SAP classifies groups by type (`userGroup`, `authorization`, `role`, `deepLinkActivationPermission`, `license`), surfaced as `sap_group_type` in the resource profile so access reviewers can distinguish user groups from authorizations and roles.
+- **User**: SCIM 2.0 directory users with email, login, status, MFA status, structured name, and SAP-specific profile fields. Supports account create/delete and enable/disable lifecycle actions.
+- **Group**: SCIM 2.0 directory groups with a static `member` entitlement and membership grant/revoke. SAP classifies groups by type (`userGroup`, `authorization`, `role`, `deepLinkActivationPermission`, `license`), surfaced as `sap_group_type` in the resource profile so access reviewers can distinguish user groups from authorizations and roles.
+
+**Additional functionality:**
+The SAP Cloud Identity connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
 {/* AUTO-GENERATED:END - capabilities */}
+
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name    | Additional fields            | Description                                                       |
+| -------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `enable_user`  | `user_id` (string, required) | Activates a user in SAP Cloud Identity (sets SCIM active=true)    |
+| `disable_user` | `user_id` (string, required) | Deactivates a user in SAP Cloud Identity (sets SCIM active=false) |
 
 ## Gather SAP Cloud Identity credentials
 
 <Warning>
   To configure the SAP Cloud Identity connector, you need administrator
-  permissions in SAP Cloud Identity to create a SCIM technical user with read
-  access to `Users` and `Groups`.
+  permissions in SAP Cloud Identity to create a SCIM technical user with
+  read/write access to `Users` and `Groups`.
 </Warning>
 
 <Steps>
@@ -41,7 +53,7 @@ The SAP Cloud Identity connector syncs the following resources:
     Identity Directory SCIM endpoints:
 
     1. In the admin console create an API credential named `C1` (or similar).
-    2. Grant it SCIM read access to `Users` and `Groups`.
+    2. Grant it SCIM read/write access to `Users` and `Groups`.
     3. Copy the username and password and save them securely.
 
   </Step>
@@ -65,13 +77,15 @@ The SAP Cloud Identity connector syncs the following resources:
       <Step>
         Choose how to set up the new SAP Cloud Identity connector:
 
-        - Add the connector to a currently unmanaged app
-        - Add the connector to a managed app
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
         - Create a new managed app
       </Step>
 
       <Step>
-        Set the owner for this connector.
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
       </Step>
 
       <Step>
@@ -86,7 +100,7 @@ The SAP Cloud Identity connector syncs the following resources:
      Generated from config_schema.json. Do not edit manually. */}
 
       <Step>
-        Enter the required configuration:
+        Paste the credentials into the relevant fields:
 
         - **Tenant URL**: HTTPS base URL of the SAP Cloud Identity tenant (for example `https://YOURTENANT.accounts.ondemand.com`).
         - **SCIM Username**: HTTP Basic username for the Identity Directory SCIM API.
@@ -111,7 +125,7 @@ The SAP Cloud Identity connector syncs the following resources:
   <Tab title="Self-hosted">
     Follow these instructions to use the [SAP Cloud Identity](https://github.com/conductorone/baton-sap-cloud-identity) connector, hosted and run in your own environment.
 
-    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
 
     ### Step 1: Set up a new SAP Cloud Identity connector
 
@@ -125,19 +139,37 @@ The SAP Cloud Identity connector syncs the following resources:
       </Step>
 
       <Step>
-        Choose how to set up the new SAP Cloud Identity connector.
+        Choose how to set up the new SAP Cloud Identity connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
       </Step>
 
       <Step>
-        Set the owner for this connector and click **Next**.
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
       </Step>
 
       <Step>
-        In the **Settings** area of the page, click **Edit**, then click **Rotate** to generate a new Client ID and Secret. Carefully copy and save these credentials.
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 2.
       </Step>
     </Steps>
 
     ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your SAP Cloud Identity connector deployment:
 
     #### Secrets configuration
 
@@ -154,7 +186,10 @@ The SAP Cloud Identity connector syncs the following resources:
       BATON_SAP_CLOUD_IDENTITY_TENANT_URL: <tenant base URL, e.g. https://YOURTENANT.accounts.ondemand.com>
       BATON_SAP_CLOUD_IDENTITY_SCIM_USERNAME: <SCIM API username>
       BATON_SAP_CLOUD_IDENTITY_SCIM_PASSWORD: <SCIM API password>
+      BATON_PROVISIONING: true
     ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
 
     #### Deployment configuration
 
@@ -174,12 +209,12 @@ The SAP Cloud Identity connector syncs the following resources:
         metadata:
           labels:
             app: baton-sap-cloud-identity
-            baton: "true"
+            baton: true
             baton-app: sap-cloud-identity
         spec:
           containers:
           - name: baton-sap-cloud-identity
-            image: public.ecr.aws/conductorone/baton-sap-cloud-identity:latest
+            image: ghcr.io/conductorone/baton-sap-cloud-identity:latest
             imagePullPolicy: IfNotPresent
             env:
             - name: BATON_HOST_ID
@@ -195,6 +230,7 @@ The SAP Cloud Identity connector syncs the following resources:
       <Step>
         Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
       </Step>
+
       <Step>
         Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the SAP Cloud Identity connector to. SAP Cloud Identity data should be found on the **Entitlements** and **Accounts** tabs.
       </Step>
@@ -204,8 +240,6 @@ The SAP Cloud Identity connector syncs the following resources:
 
   </Tab>
 </Tabs>
-
----
 
 <Tip>
   All versions of this connector are available at
