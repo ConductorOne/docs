@@ -20,6 +20,28 @@ The Azure DevOps connector supports [automatic account provisioning](/product/ad
 
 This connector does not support account deprovisioning. You must deprovision accounts directly in Azure DevOps.
 
+Some Azure DevOps groups are managed in Microsoft Entra (formerly Azure AD),
+not in Azure DevOps. These groups appear in Azure DevOps and their members are
+visible, but membership changes are made in Entra.
+
+For Entra-managed groups, the connector accepts add and remove requests and
+reports them as successful without changing membership in Azure DevOps or
+Entra. These groups are assumed to be managed elsewhere — in the Entra admin
+center, through another C1 connector that integrates with Entra, or by another
+process. Reporting requests as successful prevents access reviews and
+just-in-time access requests from stalling on changes the connector does not
+perform.
+
+To have C1 manage Entra group membership through this connector, enable
+**Entra group membership provisioning** during setup. Requirements:
+
+- OAuth authentication. Personal Access Tokens do not support changes to
+  Entra group membership.
+- The `GroupMember.ReadWrite.All` permission on the Entra app registration,
+  with admin consent in the tenant.
+
+See [Configure the Azure DevOps connector](#configure-the-azure-devops-connector) below for setup steps.
+
 ## Gather Azure DevOps credentials
 
 Configuring the connector requires you to pass in credentials generated in Azure DevOps. Gather these credentials before you move on.
@@ -75,13 +97,45 @@ You can authenticate the Azure DevOps connector by registering a web app and sig
   Click **Add permissions**.
   </Step>
   <Step>
+  **Optional — only required for Entra group membership provisioning.**
+
+  If you want C1 to grant and revoke memberships on Entra-sourced Azure DevOps
+  groups (descriptor prefix `aadgp.`), grant this same Entra app the **Microsoft
+  Graph** application permission **`GroupMember.ReadWrite.All`** with admin
+  consent.
+
+  In the Entra portal, on this app registration:
+
+  1. Click **API permissions** > **Add a permission**.
+  2. Choose **Microsoft Graph** (not Azure DevOps).
+  3. Choose **Application permissions** (not Delegated).
+  4. Select **`GroupMember.ReadWrite.All`** and click **Add permissions**.
+  5. Click **Grant admin consent for &lt;tenant&gt;** at the top of the
+     permissions list.
+
+  This is the least-privilege Microsoft Graph permission for member-only
+  writes; the broader `Group.ReadWrite.All` is not required. Without it,
+  Entra group membership provisioning will fail with a clear "missing
+  GroupMember.ReadWrite.All" error at the first grant or revoke attempt.
+  </Step>
+  <Step>
   Carefully copy and save your **Azure tenant ID** and **organization URL**.
   </Step>
 </Steps>
 
-**Done.** Next, move on to the connector configuration instructions.
+**That's it!** Next, move on to the connector configuration instructions.
 
 ### Option 2: Create a personal access token
+
+<Note>
+Personal Access Token authentication does **not** support Entra group
+membership provisioning. With PAT auth, grant and revoke requests against
+Entra-sourced groups (descriptor prefix `aadgp.`) are silent no-ops — the
+connector accepts the request and returns success without making any API
+call. If you need C1 to actually grant or revoke memberships on Entra-sourced
+Azure DevOps groups, configure the connector with OAuth
+([Option 1](#option-1-register-a-web-application)) instead.
+</Note>
 
 <Steps>
   <Step>
@@ -113,7 +167,7 @@ You can authenticate the Azure DevOps connector by registering a web app and sig
   </Step>
 </Steps>
 
-**Done.** Next, move on to the connector configuration instructions.
+**That's it!** Next, move on to the connector configuration instructions.
 
 ## Configure the Azure DevOps connector
 
@@ -158,10 +212,11 @@ To complete this task, you'll need:
     1. Enter your organization URL, Azure tenant ID, OAuth client ID, and OAuth client secret in the relevant fields.
     2. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
     3. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
-    4. Click **Save**.
-    5. Click **Login with OAuth**.
-    6. Log in and authorize C1 with your Salesforce instance.
-    7. You will then be redirected back to the Salesforce setup page in C1, where you'll see an authorization message.
+    4. **Optional.** Check **Enable Entra group membership provisioning** to grant and revoke memberships on Entra-sourced groups via Microsoft Graph. Requires the `GroupMember.ReadWrite.All` Microsoft Graph application permission with admin consent (see Step 9 of [Option 1](#option-1-register-a-web-application)). Per Microsoft, changes may take up to 1 hour to appear in the Azure DevOps Members view.
+    5. Click **Save**.
+    6. Click **Login with OAuth**.
+    7. Log in and authorize C1 with your Azure DevOps instance.
+    8. You will then be redirected back to the Azure DevOps setup page in C1, where you'll see an authorization message.
     If you chose **Personal access token**:
     1. Paste your Azure DevOps organization URL in the format `https://dev.azure.com/{Your_Organization}` into the **Organization URL** field.
     2. Paste the token into the **Personal Access Token** field.
@@ -174,7 +229,7 @@ To complete this task, you'll need:
   </Step>
 </Steps>
 
-**Done.** Your Azure DevOps connector is now pulling access data into C1.
+**That's it!** Your Azure DevOps connector is now pulling access data into C1.
 
 </Tab>
 <Tab title="Self-hosted">
@@ -248,6 +303,12 @@ stringData:
 
   # Optional: include to read audit logs and capture updates between full syncs (requires Audit Log: Read permission)
   BATON_ENABLE_INCREMENTAL_SYNC: true
+
+  # Optional: include to provision membership on Entra-sourced groups via Microsoft Graph.
+  # Requires OAuth authentication (BATON_PAT-only deployments cannot use this)
+  # AND the GroupMember.ReadWrite.All Microsoft Graph application permission
+  # with admin consent on the Entra app registration. See the OAuth setup section above.
+  BATON_ENABLE_ENTRA_GROUP_PROVISIONING: true
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -296,7 +357,7 @@ spec:
   </Step>
 </Steps>
 
-**Done.** Your Azure DevOps connector is now pulling access data into C1.
+**That's it!** Your Azure DevOps connector is now pulling access data into C1.
 
 </Tab>
 </Tabs>
