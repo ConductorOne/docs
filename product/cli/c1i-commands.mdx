@@ -263,8 +263,9 @@ c1i users list [flags]
 | `--query string` | Search query. |
 | `--email string` | Filter by email address. |
 | `--status string` | Filter by status: `enabled`, `disabled`, or `deleted`. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 **Example:**
 
@@ -288,8 +289,9 @@ c1i apps list [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## Accounts
 
@@ -312,8 +314,9 @@ c1i accounts list --app-id <app-id> [flags]
 | `--type string` | Filter by type: `user`, `service_account`, or `system_account`. |
 | `--unmapped-only` | Only show unmapped accounts. |
 | `--query string` | Search query. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ### `set-owner`
 
@@ -349,8 +352,9 @@ c1i entitlements list [flags]
 | :--- | :--- |
 | `--app-id string` | Filter by application ID. |
 | `--query string` | Search query. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## Tasks
 
@@ -384,8 +388,9 @@ c1i tasks list [flags]
 | `--state string` | Filter by state: `open` or `closed`. |
 | `--query string` | Search query. |
 | `--assigned-to-me` | Only show tasks assigned to the current user. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ### `approve`
 
@@ -495,8 +500,9 @@ c1i connectors list --app-id <app-id> [flags]
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID. (Required.) |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## API
 
@@ -514,6 +520,7 @@ c1i api --path <path> [flags]
 | `--method string` | HTTP method: `GET`, `POST`, `PUT`, or `DELETE`. (Default: `GET`.) |
 | `--body string` | Request body (JSON). |
 | `--paginate` | Auto-paginate and output results as NDJSON. |
+| `--limit int` | With `--paginate`, cap the total number of NDJSON rows emitted (0 = unlimited). Errors if used without `--paginate`. |
 
 **Examples:**
 
@@ -532,6 +539,33 @@ c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' 
 ```
 
 If you call a POST-only endpoint with GET (for example a `/search/*` path with no `--body`), c1i prints a one-line hint suggesting `--body` or `--method=POST` so you can recover without consulting the schema.
+
+## Pagination and limits
+
+c1i list commands (and `c1i api --paginate`) auto-paginate by default — they keep fetching pages until the cursor is empty, so you don't have to manage tokens manually.
+
+Three flags control how much data flows:
+
+| Flag | Effect |
+| :--- | :--- |
+| `--page-size N` | Per-call batch size. The C1 API caps this at 100; c1i clamps client-side, so `--page-size 500` is treated as 100. Default is 50. |
+| `--page-token TOKEN` | Resume from a specific cursor. When set, c1i fetches a single page and exits — auto-pagination is disabled. |
+| `--limit N` | Cap the *total* number of results emitted across all pages (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached, and c1i tightens the per-call request size when `--limit` is smaller than `--page-size` so it doesn't over-fetch. |
+
+**Examples:**
+
+```bash
+# Peek at the first 5 users without fetching everyone
+c1i users list --limit 5
+
+# Cap a wide query — useful for cost control or quick previews
+c1i tasks list --state open --limit 25
+
+# --limit also works with the raw api command, but only with --paginate
+c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate --limit 10
+```
+
+`c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
 
 ## Version
 
