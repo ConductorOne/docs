@@ -1,0 +1,89 @@
+---
+title: Manage AI clients
+description: Understand how AI clients register with C1, the lifecycle states they move through, and the controls available to admins.
+og:title: Manage AI clients - C1 docs
+og:description: Understand how AI clients register with C1, the lifecycle states they move through, and the controls available to admins.
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+An **AI client** is any registered AI agent that talks to C1 MCP — Claude Desktop, Claude Code, Cursor, ChatGPT, Copilot, custom agents, and so on. This page covers how clients are registered, the lifecycle states they move through, the controls you have over them, and the tenant policy that governs which client types are allowed in your tenant.
+
+## How clients register
+
+C1 supports two registration methods:
+
+- **Dynamic Client Registration (DCR)** — the AI client registers itself with C1 by calling the registration endpoint, receives a unique client ID and secret, and then authenticates the user. Each client instance gets its own credentials.
+- **Client ID Metadata Document (CIMD)** — the AI client presents a metadata URL as its client ID (for example, `https://claude.ai/oauth/mcp-oauth-client-metadata`). C1 fetches and validates the metadata document on the fly. No per-instance registration step is needed — all instances of the same client share a single published identity.
+
+The registration method is determined by the AI client, not by the admin. Some clients (for example, Claude Desktop and Claude AI) use CIMD; others (for example, Cursor) use DCR. Both methods result in an AI connection bound to the authenticating user.
+
+End users complete registration themselves — no admin action is required. Admins control:
+
+- **Which client types are allowed** (tenant-wide; see [Enable AI access management](/product/admin/enable-ai-access-management))
+- **Which access profiles each user has** (which determines what tools each client can call)
+- **Per-client overrides** (kill switch, lifecycle override; see below)
+
+## View registered clients
+
+Go to **AI access management > AI clients**.
+
+The list shows every client registered against the tenant, with:
+
+| Column | What it shows |
+| :--- | :--- |
+| **Name** | Client display name (for example, "Claude Desktop") |
+| **Type** | Personal / shared / service / ephemeral |
+| **Owner** | C1 user the client is bound to |
+| **State** | Active / hidden / closed / deleted (see lifecycle below) |
+| **Last used** | Timestamp of the last tool call |
+| **Toolsets** | Toolsets currently accessible to the client (via the user's access profiles) |
+
+You can filter by any column. Click a client to open its detail panel.
+
+## Client lifecycle states
+
+C1 transitions clients through four states based on inactivity. Thresholds are set at the tenant level but can be overridden per client.
+
+| State | What it means | What the user sees |
+| :--- | :--- | :--- |
+| **Active** | Recently used; tokens valid | Normal operation |
+| **Hidden** | Inactive past the hidden threshold | Client is hidden from the user's connected-clients list, but tokens still work |
+| **Closed** | Inactive past the closed threshold | Tokens revoked; user must re-authenticate to use the client again |
+| **Deleted** | Inactive past the deleted threshold | Client registration is removed; user must re-register from scratch |
+
+A client moves back to **Active** as soon as it makes a successful tool call (assuming its tokens are still valid).
+
+## Per-client overrides
+
+From a client's detail panel:
+
+- **Kill switch** — immediately revokes all tokens for this client and forces it into Closed state. Use when a specific client is suspected of being compromised or behaving unexpectedly.
+- **Lifecycle override** — exempt this client from the tenant inactivity policy, or set stricter thresholds. Useful for service clients that shouldn't be auto-closed, or for sensitive clients that should be auto-closed sooner.
+
+## Tenant policy on client types
+
+The tenant decides which of the four client types — personal, shared, service, ephemeral — are allowed to register at all. A client whose type is not allowed is rejected at registration time and never appears in the list.
+
+To change which types are allowed:
+
+<Steps>
+<Step>
+Go to **Settings > AI Connections**.
+</Step>
+<Step>
+Edit **Allowed client types**.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+<Note>
+Clients of a now-disallowed type that are already registered keep working until their tokens expire. New registrations of that type are rejected immediately.
+</Note>
+
+## Next steps
+
+- [Audit AI tool usage](/product/admin/audit-ai-tool-usage)
+- [Get started with AI tools (end user)](/product/how-to/ai-tools)

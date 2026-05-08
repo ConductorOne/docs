@@ -1,0 +1,62 @@
+---
+title: Audit AI tool usage
+description: What C1 logs for every AI tool call, and how to export the audit log to S3 for long-term retention or SIEM ingestion.
+og:title: Audit AI tool usage - C1 docs
+og:description: What C1 logs for every AI tool call, and how to export the audit log to S3 for long-term retention or SIEM ingestion.
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+Every tool call that flows through C1 MCP is logged. This page covers what's captured, how to export it to your S3 bucket for long-term retention or SIEM ingestion, and how to use the log for compliance reviews.
+
+## What gets logged
+
+Each tool call produces one audit log entry with:
+
+{/* TODO: Confirm whether tool call parameters are logged in full, redacted, or hashed — this has compliance and privacy implications. */}
+
+| Field | Example |
+| :--- | :--- |
+| **Timestamp** | `2026-05-07T14:23:11Z` |
+| **End user** | The C1 user the AI client is bound to |
+| **AI client** | Client ID and display name |
+| **MCP server** | Registered server name |
+| **Tool** | Tool name (for example, `github_create_issue`) |
+| **Parameters** | Tool call parameters |
+| **Result** | Success / denied / error |
+| **Denial reason** | Populated when result = denied (for example, "tool not in user's access profile", "kill switch active", "client closed") |
+| **Latency** | Round-trip time for the call |
+
+In addition to tool call events, the following non-call events are also captured:
+
+- Access request submitted / approved / denied
+- Tool approved / disabled / classification changed
+- MCP server registered / removed / auth changed
+- AI client registered / state changed (active → hidden → closed → deleted)
+- Kill switch flipped (tenant, server, tool, or client level)
+- Tenant defaults changed
+
+## Export to S3
+
+C1's audit export writes events to a customer-owned S3 bucket. It is a **scheduled batch export, not a live stream** — events are batched and written to S3 on a configurable schedule, and your SIEM (Splunk, Datadog, and so on) ingests from S3.
+
+{/* TODO: Confirm the Settings path label — "Audit export" vs "SIEM" vs other. */}
+
+<Steps>
+<Step>
+Go to **Settings > Audit export**.
+</Step>
+<Step>
+Provide your S3 bucket name, region, and IAM role ARN. C1 assumes the role to write objects.
+</Step>
+<Step>
+Set the export schedule (for example, every 15 minutes).
+</Step>
+<Step>
+Click **Save**. C1 writes a test object to validate access, then begins exporting.
+</Step>
+</Steps>
+
+## Next steps
+
+- [Manage AI clients](/product/admin/ai-clients)
