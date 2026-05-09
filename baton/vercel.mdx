@@ -1,0 +1,237 @@
+---
+title: "Set up a Vercel connector"
+og:title: "Set up a Vercel connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Vercel. Integrate your Vercel instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Vercel. Integrate your Vercel instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Vercel"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Vercel connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | Create |
+| Teams | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | Grant, Revoke |
+| Access Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | Grant, Revoke |
+| Projects | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | Grant, Revoke |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+<Info>
+Projects and Access Groups are Enterprise-only features in Vercel. If you are using a Hobby or Pro plan, disable the **Projects** and **Access Groups** resource types from the ConductorOne UI to avoid 403 authorization errors during sync.
+</Info>
+
+## Gather Vercel credentials
+
+<Warning>
+To configure the Vercel connector, you need administrator permissions in Vercel.
+</Warning>
+
+<Steps>
+  <Step>
+    Log in to your Vercel account at [vercel.com](https://vercel.com).
+  </Step>
+
+  <Step>
+    Navigate to **Settings** > **Tokens** (or visit [vercel.com/account/tokens](https://vercel.com/account/tokens)).
+  </Step>
+
+  <Step>
+    Create a new Personal Access Token:
+
+    1. Click **Create Token**
+    2. Name it `ConductorOne`
+    3. Set the scope to the team(s) you want to sync
+    4. Copy the token and save it securely
+
+    The token must belong to a user with the **Owner** role on the target team(s).
+  </Step>
+</Steps>
+
+## Configure the Vercel connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Vercel** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Vercel connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **API Token**: Your Vercel Personal Access Token
+        - **Team ID** (optional): Sync only this team. If omitted, syncs all teams the token can access.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Vercel connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Vercel](https://github.com/ConductorOne/baton-vercel) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Vercel connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Vercel connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Vercel connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-vercel-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-vercel-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # Vercel credentials
+      BATON_VERCEL_API_TOKEN: <Vercel Personal Access Token>
+      # Optional: scope to a single team
+      # BATON_VERCEL_TEAM_ID: <Vercel Team ID>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-vercel.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-vercel
+      labels:
+        app: baton-vercel
+    spec:
+      selector:
+        matchLabels:
+          app: baton-vercel
+      template:
+        metadata:
+          labels:
+            app: baton-vercel
+            baton: "true"
+            baton-app: vercel
+        spec:
+          containers:
+          - name: baton-vercel
+            image: public.ecr.aws/conductorone/baton-vercel:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-vercel
+            envFrom:
+            - secretRef:
+                name: baton-vercel-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Vercel connector to. Vercel data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your Vercel connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-vercel).
+</Tip>
