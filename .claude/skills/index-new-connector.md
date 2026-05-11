@@ -74,7 +74,7 @@ grep -n "^\s*- \[" baton/intro.mdx | grep -i "<nearby name>"
 
 #### B) New this month tab
 
-Add the connector to the `<Tab title="New this month">` list. No fixed order required — just add it.
+Add the connector to the **top** of the `<Tab title="New this month">` list — newest connector always goes first.
 
 #### C) By category — pick one section
 
