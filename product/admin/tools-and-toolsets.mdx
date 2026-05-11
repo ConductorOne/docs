@@ -1,0 +1,172 @@
+---
+title: Govern tools and toolsets
+description: Review discovered tools, approve and classify them, bundle them into toolsets, and bind toolsets to access profiles.
+og:title: Govern tools and toolsets - C1 docs
+og:description: Review discovered tools, approve and classify them, bundle them into toolsets, and bind toolsets to access profiles.
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+After registering an MCP server, every tool it exposes starts life as **Unset**. This page covers reviewing those tools, approving the safe ones, classifying them, bundling them into toolsets, and binding toolsets to access profiles so end users can request them.
+
+## Review and govern tools
+
+Tools must be reviewed and approved before end users can request them. Use the sections below to work through the full governance workflow.
+
+### View discovered tools
+
+<Steps>
+<Step>
+In **Integrations > MCP servers**, open a registered server.
+</Step>
+<Step>
+Click the **Tools** tab.
+</Step>
+</Steps>
+
+The list shows every tool C1 has discovered, its current state, classification, and last-used timestamp.
+
+### Classify a tool
+
+C1 captures two classification axes per tool. Both are **metadata only** — there is no enforcement layer that uses them. They exist so admins can filter and reason about tools, and so enforcement can be built on top later.
+
+| Axis | Values | Meaning |
+| :--- | :--- | :--- |
+| **Action** | Read / Write / Delete | Whether the tool can mutate downstream state |
+| **Risk** | Sensitive / Dangerous | Severity of the worst outcome if misused |
+
+To classify a tool:
+
+<Steps>
+<Step>
+Open the tool's detail panel from the **Tools** tab.
+</Step>
+<Step>
+Set **Action** and **Risk**.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+Classification can be changed at any time and does not affect approval state.
+
+### Approve or disable a tool
+
+A tool must be **Approved** before it can be added to any toolset.
+
+| State | What it means |
+| :--- | :--- |
+| **Unset** | Default state for newly-discovered tools. Cannot be added to a toolset. |
+| **Approved** | Can be added to toolsets. |
+| **Disabled** | Cannot be added to toolsets; existing toolsets that reference it skip it. |
+
+To change state:
+
+<Steps>
+<Step>
+Select one or more tools (bulk selection is supported).
+</Step>
+<Step>
+Click **Approve** or **Disable**.
+</Step>
+</Steps>
+
+### Per-tool overrides
+
+Each approved tool has overrides that take precedence over the tenant defaults.
+
+| Override | What it does |
+| :--- | :--- |
+| **Kill switch** | Immediately blocks all calls to this tool from any client, regardless of access profile. Useful for fast incident response. |
+| **Allowed client types** | Restrict this tool to a subset of personal / shared / service / ephemeral. |
+
+### Tool lifecycle on re-sync
+
+C1 periodically re-runs tool discovery against each registered MCP server. When the inventory changes:
+
+- **New tool detected** — added to the list as **Unset**.
+- **Existing tool changes** (description, parameters) — the change is recorded; the tool keeps its current state and classification.
+- **Tool disappears** — the tool is marked **Removed**. It stays in toolsets (skipped at call time) until an admin removes it explicitly.
+
+## Create and manage toolsets
+
+A **toolset** is a named bundle of approved tools.
+
+### C1-maintained toolsets
+
+C1 ships and auto-maintains two toolsets per tenant:
+
+- **All approved tools** — every tool in **Approved** state across the server.
+- **All read tools** — every **Approved** tool with Action = Read.
+
+Both update automatically as tools are approved or disabled. They are read-only — admins can bind them to access profiles but cannot edit their contents.
+
+### Create a custom toolset
+
+Custom toolsets are manually curated — they do **not** auto-populate based on classification. If you approve a new tool that you want included, you have to add it to the toolset yourself.
+
+<Steps>
+<Step>
+Go to **AI access management > Toolsets**.
+</Step>
+<Step>
+Click **Add toolset**.
+</Step>
+<Step>
+Enter a **name**. **Optional.** Enter a **description**.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+Click back into the toolset to add approved tools.
+</Step>
+</Steps>
+
+To edit a toolset, open it and add or remove tools. Changes propagate to any access profile the toolset is bound to.
+
+## Bind a toolset to an access profile
+
+AIAM uses C1's existing access profile mechanism. A toolset becomes requestable by end users only after it is bound to an access profile. There are two ways to do this.
+
+### Option 1: From the toolset
+
+When creating or editing a custom toolset, you can link it to an access profile directly. This is the fastest path when you've just created a custom toolset and already know which access profile it belongs to.
+
+<Steps>
+<Step>
+Open the toolset.
+</Step>
+<Step>
+Select an existing access profile to bind it to.
+</Step>
+</Steps>
+
+The toolset's tools are now included in that profile.
+
+### Option 2: From the access profile
+
+You can also start from the access profile side and add toolsets as entitlements. This is required for C1-maintained toolsets and is the better path when you're setting up access profiles from scratch or adding multiple toolsets to a single profile.
+
+<Steps>
+<Step>
+Go to **Access profiles** and either create a new profile or open an existing one.
+</Step>
+<Step>
+Add the toolset as an entitlement — both C1-maintained toolsets (**All approved tools**, **All read tools**) and custom toolsets appear as options.
+</Step>
+<Step>
+Set the access policy on the profile (auto-approve, JIT with expiry, or approval required).
+</Step>
+<Step>
+Publish the access profile to the catalog.
+</Step>
+</Steps>
+
+End users can now request the access profile and, once approved, their AI client will see the toolset's tools.
+

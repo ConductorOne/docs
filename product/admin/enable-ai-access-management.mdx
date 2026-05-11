@@ -1,0 +1,150 @@
+---
+title: Enable AI access management
+description: Turn on AIAM for your tenant and configure tenant-wide defaults for MCP servers, tools, and AI clients.
+og:title: Enable AI access management - C1 docs
+og:description: Turn on AIAM for your tenant and configure tenant-wide defaults for MCP servers, tools, and AI clients.
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+AIAM lets you govern which AI clients can call which tools on your behalf, and which end users are allowed to use them. This page walks a Super Admin through turning AIAM on for the tenant and setting the tenant-wide defaults that apply to every MCP server, tool, and AI client you register afterward.
+
+Individual MCP servers, tools, and clients can override most of these defaults later. Set the defaults to the safest configuration you're willing to live with as a fallback.
+
+## Enable AIAM for your tenant
+
+Enabling AIAM exposes the AIAM surfaces (MCP servers, tools, AI clients, AIAM audit log) to admins. It does **not** automatically grant any end user access to any tool — every tool still has to be approved, added to a toolset, and bound to an access profile before it becomes requestable.
+
+<Steps>
+<Step>
+Log in to your C1 tenant as a Super Admin.
+</Step>
+<Step>
+Navigate to **Settings > AI Connections**.
+</Step>
+<Step>
+Click **Edit AI Connections**.
+</Step>
+<Step>
+Toggle **Enable AI Connections** to on.
+</Step>
+<Step>
+Click **Save** to confirm.
+</Step>
+</Steps>
+
+Once enabled, **MCP servers**, **AI clients**, and the **AIAM audit log** appear in the tenant.
+
+## Configure tenant defaults
+
+After enabling AIAM, configure the five tenant-wide defaults below. All of them have safer, stricter defaults pre-selected — only adjust them if your organization has a reason to loosen them.
+
+### Allowed client types
+
+Controls which categories of AI client are allowed to register against your tenant. A client whose type is not allowed is rejected at registration time, before any tool is exposed to it.
+
+| Type | What it is | Default |
+| :--- | :--- | :--- |
+| **Personal** | Tied to a single human user (for example, Claude Desktop on their laptop) | Allowed |
+| **Shared** | Used by multiple humans behind a single registration (for example, a team workspace agent) | Disallowed |
+| **Service** | Machine-to-machine, no human in the loop (CI/CD, batch agents) | Disallowed |
+| **Ephemeral** | Short-lived, single-session (one-off scripts, sandbox runs) | Disallowed |
+
+To change which types are allowed:
+
+<Steps>
+<Step>
+In **Settings > AI Connections**, find **Allowed client types**.
+</Step>
+<Step>
+Check the boxes for the types you want to permit.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+<Note>
+Any in-flight client of a now-disallowed type continues to function until its existing tokens expire. New registrations of that type are rejected immediately.
+</Note>
+
+### Default tool classification
+
+When C1 discovers a new tool on a registered MCP server, it assigns the tool this initial state. Until an admin reviews and approves the tool, it cannot be added to a toolset and end users cannot request it.
+
+- **State**: Pending Review / Unset (recommended — keeps every newly-discovered tool out of end-user reach until you've reviewed it)
+- **Classification**: Unclassified (recommended)
+
+To change the defaults:
+
+<Steps>
+<Step>
+In **Settings > AI Connections**, find **Default tool classification**.
+</Step>
+<Step>
+Select the state and classification to apply to newly-discovered tools.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+### Require tool approval
+
+When on, every newly-discovered tool starts in **Pending Review** and must be approved by an admin before it can be added to a toolset. When off, tools become available to be added to toolsets immediately on discovery.
+
+- **Default**: On
+- **Recommended**: On for production tenants. Off is appropriate only for sandbox tenants where you're testing the end-to-end flow.
+
+<Note>
+Turning this off does not bypass access profile approval — end users still go through the access profile's approval policy when they request a toolset.
+</Note>
+
+### Client lifecycle inactivity policy
+
+C1 tracks how long it's been since each registered AI client made a tool call. After configurable thresholds, the client transitions through three states:
+
+| State | What changes for the user | Default threshold |
+| :--- | :--- | :--- |
+| **Hidden** | Client is hidden from the end user's connected-clients list, but tokens still work if presented | 1 day |
+| **Closed** | Tokens are revoked; client must re-authenticate to be used again | 7 days |
+| **Deleted** | Client registration is removed; user must register again from scratch | 90 days |
+
+To change the thresholds:
+
+<Steps>
+<Step>
+In **Settings > AI Connections**, find **Client lifecycle**.
+</Step>
+<Step>
+Set the inactivity threshold for each state.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+### Emergency kill switch
+
+The kill switch immediately revokes every AI client's access to every tool, across all MCP servers in your tenant. Use it when you suspect an active compromise — for example, a leaked client credential or an MCP server that's behaving unexpectedly.
+
+**What happens when you flip it:**
+
+- All in-flight tool calls fail.
+- All AI clients are forced into the **Closed** state.
+- End users see an access-denied error in their AI client until you turn the switch off and they re-authenticate.
+- Audit log entries are still written for any failed call attempts after the switch is flipped.
+
+<Steps>
+<Step>
+In **Settings > AI Connections**, find **Emergency kill switch**.
+</Step>
+<Step>
+Click **Disable all AI access**.
+</Step>
+</Steps>
+

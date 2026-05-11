@@ -1,0 +1,65 @@
+---
+title: AI access management overview
+description: How C1 governs AI tool access — MCP servers, tools, toolsets, and AI clients.
+og:title: AI access management overview - C1 docs
+og:description: How C1 governs AI tool access — MCP servers, tools, toolsets, and AI clients.
+sidebarTitle: How AIAM works
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+AI Access Management (AIAM) extends C1's identity governance platform to the AI tool layer. It acts as a control plane between AI clients (Claude Desktop, Cursor, ChatGPT, Copilot, and other MCP-compatible clients) and the downstream MCP servers those clients connect to.
+
+When AIAM is enabled, every tool call from an AI client is routed through C1's identity-aware proxy. The proxy authenticates the caller, checks the tool call against the user's granted access profile, enforces any configured policy constraints, forwards the call to the downstream MCP server, and writes an audit log entry with full identity context.
+
+AIAM covers the following capabilities:
+
+- Registering and configuring MCP servers (from the 3,000+ hosted catalog)
+- Discovering and classifying the tools each server exposes
+- Governing tool access at a granular level — admins review, approve, or disable individual tools and control which tools each user and agent can call
+- Bundling approved tools into toolsets and binding them to access profiles
+- Provisioning end-user and agent access through the standard C1 request and approval workflow
+- Vaulting and rotating downstream credentials so they are never exposed to end users or stored locally
+- Logging every tool call with identity, tool, parameter, and policy context for audit and compliance
+
+<Note>
+C1's AI Connections feature has two sides. This page covers AI access management (AIAM) — governing outbound AI tool calls to external services like Salesforce and GitHub. If you want AI assistants to query C1's own identity data instead, see [C1 MCP](/product/admin/c1-mcp).
+</Note>
+
+## Key concepts
+
+| Concept | Description |
+| :--- | :--- |
+| **MCP server** | A downstream service that exposes one or more tools via the Model Context Protocol. C1 hosts a curated catalog. |
+| **C1 MCP** | The proxy your AI clients connect to. It accepts connections from AI clients, routes requests to the appropriate downstream servers, and enforces authorization on every tool call. AI clients connect to one URL — C1 MCP — not to each downstream server directly. |
+| **Tool** | A single capability exposed by an MCP server (for example, `github_create_issue` or `salesforce_query`). C1 discovers tools automatically when an MCP server is registered. |
+| **Toolset** | A named bundle of approved tools. Two kinds: C1-maintained (for example, "All approved tools" and "All read tools") and custom (admin-curated). |
+| **Access profile** | The same mechanism C1 already uses for traditional app access. A toolset is bound to an access profile, which carries the approval policy, expiry, and approvers. |
+| **AI client** | A specific registered AI client instance (for example, "Jess's Claude Desktop" or "the team's shared Cursor agent"). Registered via Dynamic Client Registration (DCR) or Client ID Metadata Document (CIMD). |
+| **AI connection** | The authenticated link between a user's AI client and C1. When a user connects an AI client to C1, C1 creates an AI connection record that ties the client instance to the user's identity. Admins can view, manage, and revoke AI connections across the tenant. |
+| **Auth mode** | How an MCP server authenticates downstream. Supported methods include bearer token, custom header, basic auth, and OAuth2 (client credentials, service mode, per-user passthrough, and JWT bearer). |
+| **Client type** | A classification on each AI client: personal, shared, service, or ephemeral. Tenant-level policy controls which types are allowed. |
+
+## How the pieces fit together
+
+A typical end-to-end flow:
+
+1. **Admin registers an MCP server** in C1 (for example, the GitHub MCP server) and configures its auth mode.
+2. **C1 discovers the tools** the server exposes and lists them as Unset.
+3. **Admin reviews and approves tools**, then bundles approved tools into a toolset.
+4. **Admin binds the toolset to an access profile** with an approval policy.
+5. **End user registers their AI client** with C1.
+6. **End user requests the access profile** from the C1 catalog (web, Slack, or from their AI client).
+7. **Approver approves**, and the toolset becomes available to the user's AI client.
+8. **AI client calls a tool** → request hits C1 MCP → C1 checks the user's access profile and the tool's approval status → forwards to the downstream MCP server using the configured auth mode → returns the result, logging the call.
+
+## Where to go from here
+
+- New to AIAM? Start with [Enable AI access management](/product/admin/enable-ai-access-management).
+- Already enabled? Move on to [Set up an MCP server](/product/admin/mcp-servers).
+- Setting up audit and compliance? See [Audit AI tool usage](/product/admin/audit-ai-tool-usage).
+- Ready to test your setup as an end user? See [Get started with AI tools](/product/how-to/ai-tools).

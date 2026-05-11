@@ -1,0 +1,101 @@
+---
+title: Set up an MCP server
+description: Register an MCP server with C1, link it to a C1 application, and configure authentication so C1 can govern access to its tools.
+og:title: Set up an MCP server - C1 docs
+og:description: Register an MCP server with C1, link it to a C1 application, and configure authentication so C1 can govern access to its tools.
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+This page walks through registering an MCP server with C1, linking it to a C1 application, and configuring authentication. Once registered, C1 automatically discovers the tools the server exposes — see [Govern tools and toolsets](/product/admin/tools-and-toolsets) for what to do next.
+
+## Before you begin
+
+- AIAM must be enabled for the tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- For OAuth-based auth, you'll need a client ID and secret from the downstream service.
+- For per-user OAuth, the downstream service must be reachable by C1's hosted callback URL.
+
+## Register an MCP server
+
+<Steps>
+<Step>
+In C1, go to **Integrations > MCP servers**.
+</Step>
+<Step>
+Click **Add an MCP server**.
+</Step>
+<Step>
+Select the MCP server you want to govern (for example, Salesforce, Google Analytics, or GitHub).
+</Step>
+<Step>
+Select which application the MCP server should be registered under:
+
+- **Add to an existing managed or unmanaged app** — select this if you already have a connector-backed C1 app for the same downstream service. The MCP server registers under that app and inherits its user assignments.
+- **Create a new app** — select this if you do not have a connector-backed app for the service. C1 creates a new app for the MCP server. You will need to add users to this app before they can request access to its tools.
+</Step>
+<Step>
+Click **Register**. C1 connects to the server, validates it, and runs initial tool discovery.
+</Step>
+</Steps>
+
+After registration, the server appears in **Integrations > MCP servers** with its discovered tools listed under the **Tools** tab and in the connected app's details page.
+
+## Configure authentication
+
+C1 supports multiple auth methods for downstream MCP servers. Admins can select any supported method when configuring a server.
+
+| Method | Who the downstream sees | When to use |
+| :--- | :--- | :--- |
+| **Bearer token** | A single shared service account | Simple integrations where per-user attribution downstream isn't required |
+| **Custom header** | A single shared identity via a custom HTTP header (for example, an API key) | Services that authenticate via a non-standard header or API key |
+| **Basic auth** | A single shared identity via username and password | Services that use HTTP Basic authentication |
+| **OAuth2 — client credentials** | A single shared OAuth client | Machine-to-machine OAuth where per-user identity isn't needed |
+| **OAuth2 — service mode** | A single shared identity (admin authenticates once) | When the downstream requires an OAuth auth code flow but a single shared credential is acceptable |
+| **OAuth2 — per-user passthrough** | Each end user, with their own credentials | When the downstream needs per-user identity (Google Workspace, GitHub, Salesforce, and so on) |
+| **OAuth2 — JWT bearer** | A service identity via signed JWT | Services that support certificate-based or JWT-based auth (for example, Tableau or Google service accounts) |
+
+For per-user OAuth passthrough, C1 vaults each user's downstream tokens and auto-refreshes them so end users don't hit token expiry mid-session.
+
+To configure auth:
+
+<Steps>
+<Step>
+From the registered server's settings, click **Edit authentication**.
+</Step>
+<Step>
+Select the auth method.
+</Step>
+<Step>
+Enter the required credentials for the selected method:
+
+- **Bearer token** — paste the token. C1 vaults it.
+- **Custom header** — enter the header name and value.
+- **Basic auth** — enter username and password.
+- **Client credentials** — enter client ID, client secret, and token URL.
+- **Service mode** — enter client ID, client secret, authorization URL, token URL, and scopes. An admin completes the OAuth flow once; all users share that credential.
+- **Per-user passthrough** — enter client ID, client secret, authorization URL, token URL, and scopes. End users see a Connect prompt the first time their AI client calls a tool from this server.
+- **JWT bearer** — enter the issuer, private key, subject, audience, token URL, and scopes.
+</Step>
+<Step>
+Click **Save**. C1 makes a test call to validate the credentials.
+</Step>
+</Steps>
+
+## Configure server settings
+
+| Setting | Required? | What it does |
+| :--- | :--- | :--- |
+| **Authentication** | Required | See above |
+| **Data sensitivity** | Optional | Metadata tag on the server (low / medium / high). Surfaces in the catalog and audit log; no enforcement |
+| **Tool prefix** | Optional; required if multiple servers under one app | Prepended to tool names so AI clients can disambiguate (for example, `gh_` vs `gl_` for two Git providers). C1 generates a default prefix if you don't set one. |
+
+## What happens after registration
+
+- C1 runs an initial **tool discovery** sweep against the server. Discovered tools appear under the **Tools** tab with state **Pending Review** by default.
+- C1 re-runs discovery on a schedule. New tools appear as Pending Review; tools that disappear are flagged but not auto-deleted.
+- No tool from this server is callable by any end user yet — see [Govern tools and toolsets](/product/admin/tools-and-toolsets) to approve, classify, and bundle them.
+
