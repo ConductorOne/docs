@@ -587,6 +587,26 @@ size(c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.i
   : appOwners
 ```
 
+### Entitlement owners with fallback
+
+`GetEntitlementOwners` returns the owners of the specific entitlement being requested — distinct from `appOwners`, which returns owners of the application. Use this when entitlements have their own ownership separate from app-level ownership.
+
+```go
+// Route to the owners of the entitlement being requested
+size(c1.directory.apps.v1.GetEntitlementOwners(entitlement)) > 0
+  ? c1.directory.apps.v1.GetEntitlementOwners(entitlement)
+  : appOwners
+
+// Pass app ID and entitlement ID explicitly instead
+size(c1.directory.apps.v1.GetEntitlementOwners(entitlement.appId, entitlement.id)) > 0
+  ? c1.directory.apps.v1.GetEntitlementOwners(entitlement.appId, entitlement.id)
+  : appOwners
+
+// Route to entitlement owners who don't already hold a specific entitlement
+c1.directory.apps.v1.GetEntitlementOwners(entitlement)
+  .filter(u, !c1.user.v1.HasEntitlement(u, "<app-id>", "<entitlement-id>"))
+```
+
 ### Conditional approver by department
 
 ```go

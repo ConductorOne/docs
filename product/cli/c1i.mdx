@@ -6,7 +6,7 @@ description: c1i is an agent-oriented CLI for the C1 API, designed for automatio
 sidebarTitle: "Install c1i"
 ---
 
-{/* Editor Refresh: 2026-04-24 */}
+{/* Editor Refresh: 2026-05-07 */}
 
 ## What is c1i?
 
@@ -16,7 +16,7 @@ Unlike [Cone](/product/cli/install), which is designed for interactive human use
 
 - **Structured output**: All data commands produce NDJSON (newline-delimited JSON) — never mixed or human-formatted output.
 - **Self-documenting API**: The `docs` commands let agents explore and understand the C1 API without credentials or external documentation.
-- **Predictable pagination**: List commands auto-paginate by default, with `--page-token` available for manual control.
+- **Predictable pagination**: List commands auto-paginate by default. `--page-token` gives manual control, and `--limit N` caps the total number of results when you want a quick peek.
 - **Raw API escape hatch**: The `api` command can call any C1 API endpoint directly, with optional NDJSON pagination.
 
 ## c1i vs Cone
@@ -81,7 +81,7 @@ c1i auth login --url example.conductor.one
 A browser window opens with an authorization code. Verify the code matches the one shown in your terminal, then click **Authorize**.
 </Step>
 <Step>
-c1i stores your credentials in the system keychain. You're ready to start using c1i.
+c1i stores your credentials and you're ready to start using c1i. See [Credential storage](#credential-storage) for where credentials are kept on each platform.
 </Step>
 </Steps>
 
@@ -91,11 +91,33 @@ You can also authenticate non-interactively using API credentials:
 c1i auth login --client-id <your-client-id> --client-secret <your-client-secret>
 ```
 
-To check whether you have valid credentials:
+To check which credentials are active and where they came from:
 
 ```shell
 c1i auth status
 ```
+
+To remove stored credentials:
+
+```shell
+c1i auth logout
+```
+
+To identify the authenticated principal (user ID, display name, role/permission counts):
+
+```shell
+c1i auth whoami
+```
+
+## Credential storage
+
+c1i reads credentials from the first source that has them, in this order:
+
+1. **Environment variables** — set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (alongside `C1I_URL`) for non-interactive scripts, CI runners, or container environments. Both must be set; if only one is set, the value is ignored. Credentials read from environment variables are never written to disk.
+2. **OS keyring** — Keychain on macOS, Credential Manager on Windows, Secret Service (such as gnome-keyring or KeePassXC) on Linux. Used by default whenever a keyring is available.
+3. **File fallback** — a `0600` JSON file under your config directory (`~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/` on macOS, `%AppData%\c1i\credentials\` on Windows). Used automatically when no OS keyring is available — typical on headless Linux servers, Docker and LXC containers, CI runners, and WSL without a desktop environment.
+
+`c1i auth login` writes to the OS keyring when it can and falls back to the file backend transparently. `c1i auth status` reports which source served the active credentials so you can confirm the storage path on your machine.
 
 ## Explore the API without credentials
 
@@ -123,6 +145,6 @@ c1i is designed to produce output that's easy for programs to parse:
 - **The `api` command** outputs pretty-printed JSON by default, or NDJSON when called with `--paginate`.
 - **The `docs` commands** output varies by subcommand: NDJSON for search results, plain text for pages, JSON for endpoint schemas, and YAML for the OpenAPI spec.
 
-List commands auto-paginate by default. To control pagination manually, use the `--page-token` flag.
+List commands auto-paginate by default. To control pagination manually, use the `--page-token` flag. To cap total output (e.g., for a quick preview without fetching everything), use the `--limit` flag — c1i will tighten the per-call request size to avoid over-fetching.
 
 See the [c1i command reference](/product/cli/c1i-commands) for a complete list of commands, subcommands, and flags.

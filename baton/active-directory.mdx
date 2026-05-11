@@ -20,14 +20,15 @@ The Active Directory connector is self-hosted and supports **Windows** and **Lin
 
 The Active Directory connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). When a new account is created by C1, the account's password is sent to a [vault](/product/admin/vaults).
 
-**Notes:**
+**Highlights:**
 
-- The connector syncs each user's primary group membership (for example, Domain Users) via the `primaryGroupID` attribute. AD does not include primary groups in `memberOf`, so the connector resolves these automatically.
-- The connector supports syncing across multiple AD domains and forests in a single run via `additional-domains` configuration.
-- gMSA sync is opt-in and requires the `enable-gmsa-sync` flag. gMSA provisioning modifies the `msDS-GroupMSAMembership` security descriptor ACL.
-- The connector supports two connection modes: **LDAP** (default on Linux) and **WinLDAP** (default on Windows, uses `wldap32.dll` for Kerberos/GSSAPI).
+- Primary group memberships sync automatically via `primaryGroupID`; AD's `memberOf` doesn't include them.
+- Multi-domain and cross-forest sync in a single run via `additional-domains` config — see [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync).
+- gMSA sync is opt-in via `enable-gmsa-sync`; provisioning modifies the `msDS-GroupMSAMembership` security descriptor ACL.
+- Two connection modes: **LDAP** (default on Linux) and **WinLDAP** (default on Windows; uses `wldap32.dll` for Kerberos/GSSAPI).
 - Account provisioning (create/delete) requires LDAPS (`ldaps: true`).
-- When `sync-scope` is set to `GlobalCatalog`, provisioning is not supported and some profile fields may be unavailable.
+
+User profiles include UAC-derived state booleans, FILETIME timestamps, and configurable extension attributes — see [User profile attributes](#user-profile-attributes) under Reference.
 
 ### Connector actions
 
@@ -49,7 +50,7 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
-| `update_profile` | `user_id` (resource ID, required), plus optional string fields (see [Profile push attributes](#profile-push-attributes) below), and `custom_attributes` (map of raw AD attribute names to values) | Update a user's profile attributes. Empty values clear the attribute in AD. |
+| `update_profile` | `user_id` (resource ID, required), plus optional string fields (see [Push attributes](#push-attributes) under User profile attributes), and `custom_attributes` (map of raw AD attribute names to values) | Update a user's profile attributes. Empty values clear the attribute in AD. |
 | `move_ou` | `user_id` (resource ID, required), `target_ou` (string, required) | Move a user to a different Organizational Unit. Automatically handles CN collisions by appending a numeric suffix. |
 
 **Resource actions** (on group resources):
@@ -190,578 +191,643 @@ To complete this task, you'll need:
 - An Active Directory service account with the appropriate permissions (see above)
 </Warning>
 
-<Tabs>
-  <Tab title="Cloud-hosted">
-    The Active Directory connector is self-hosted only. It runs on a Windows or Linux server in your environment with direct network access to your domain controllers.
+The Active Directory connector is self-hosted — it runs on a Windows or Linux server in your environment with direct network access to your domain controllers.
 
-    To get started, follow the **Self-hosted** tab instructions.
-  </Tab>
+Once installed and configured, Baton runs as a Windows service (or Linux daemon). The service maintains contact with C1, syncs and uploads data at regular intervals, and passes that data to the C1 UI for access reviews and access requests.
 
-  <Tab title="Self-hosted">
-    **Follow these instructions to use the Active Directory connector, hosted and run in your own environment.**
+### Requirements
 
-    Once installed and configured, Baton runs as a Windows service (or Linux daemon). The service maintains contact with C1, syncs and uploads data at regular intervals, and passes that data to the C1 UI for access reviews and access requests.
+**Host server** (Windows Server or Linux):
 
-    ### Requirements
+- 2-4 vCPU
+- 4-8 GB RAM
+- Minimum OS disk space for the binary (~60 MB) plus room for logs and the local sync database
+- The connector runs as a Windows service or Linux daemon — a dedicated host is not required
 
-    **Host server** (Windows Server or Linux):
+**Network:**
 
-    - 2-4 vCPU
-    - 4-8 GB RAM
-    - Minimum OS disk space for the binary (~60 MB) plus room for logs and the local sync database
-    - The connector runs as a Windows service or Linux daemon — a dedicated host is not required
+- Outbound TCP/443 to your C1 tenant
+- Outbound LDAP (TCP/UDP 389), LDAPS (TCP 636), and Kerberos (TCP/UDP 88) to each domain controller the connector talks to. Global Catalog adds TCP 3268 / 3269. For the full multi-domain port list, see [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync).
 
-    **Network:**
+**Identity:**
 
-    - Outbound TCP/443 to your C1 tenant
-    - Outbound LDAP (TCP/UDP 389), LDAPS (TCP 636), and Kerberos (TCP/UDP 88) to each domain controller the connector talks to. Global Catalog adds TCP 3268 / 3269. For the full multi-domain port list, see [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync).
+- An Active Directory service account with appropriate permissions (see [Gather Active Directory credentials](#gather-active-directory-credentials) above)
+- The **Connector Administrator** or **Super Administrator** role in C1
 
-    **Identity:**
+### File locations
 
-    - An Active Directory service account with appropriate permissions (see [Gather Active Directory credentials](#gather-active-directory-credentials) above)
-    - The **Connector Administrator** or **Super Administrator** role in C1
+**Windows** (the default install path; `%PROGRAMDATA%` is typically `C:\ProgramData`):
 
-    ### File locations
+- **Binary:** `C:\Program Files\ConductorOne\baton-active-directory.exe`
+- **Config:** `%PROGRAMDATA%\ConductorOne\baton-active-directory\config.yaml` — auto-discovered at startup if `BATON_CONFIG_PATH` is not set
+- **Log:** `%PROGRAMDATA%\ConductorOne\baton-active-directory\baton.log`
 
-    **Windows** (the default install path; `%PROGRAMDATA%` is typically `C:\ProgramData`):
+The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` so the connector can write to the log file. If the connector can't write to this directory, the service will fail to start.
 
-    - **Binary:** `C:\Program Files\ConductorOne\baton-active-directory.exe`
-    - **Config:** `%PROGRAMDATA%\ConductorOne\baton-active-directory\config.yaml` — auto-discovered at startup if `BATON_CONFIG_PATH` is not set
-    - **Log:** `%PROGRAMDATA%\ConductorOne\baton-active-directory\baton.log`
+**Linux**: there is no default config location — set `BATON_CONFIG_PATH` (or pass `--config-file`) to wherever you deploy `config.yaml`. A common pattern is `/etc/baton-active-directory/config.yaml` with the log redirected via systemd journal or `--file`.
 
-    The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` so the connector can write to the log file. If the connector can't write to this directory, the service will fail to start.
+### Step 1: Set up a new Active Directory connector in C1
 
-    **Linux**: there is no default config location — set `BATON_CONFIG_PATH` (or pass `--config-file`) to wherever you deploy `config.yaml`. A common pattern is `/etc/baton-active-directory/config.yaml` with the log redirected via systemd journal or `--file`.
+<Steps>
+  <Step>
+    In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+  </Step>
 
-    ### Step 1: Set up a new Active Directory connector in C1
+  <Step>
+    Search for **Baton** and click **Add**.
+  </Step>
 
-    <Steps>
-      <Step>
-        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
-      </Step>
+  <Step>
+    Choose how to set up the new Active Directory connector:
 
-      <Step>
-        Search for **Baton** and click **Add**.
-      </Step>
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
 
-      <Step>
-        Choose how to set up the new Active Directory connector:
+  <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-        - Add the connector to a managed app (select from the list of existing managed apps)
-        - Create a new managed app
-      </Step>
+    If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
 
-      <Step>
-        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+  <Step>
+    Click **Next**.
+  </Step>
 
-        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
-      </Step>
+  <Step>
+    In the **Settings** area of the page, click **Edit**.
+  </Step>
 
-      <Step>
-        Click **Next**.
-      </Step>
+  <Step>
+    Click **Rotate** to generate a new Client ID and Secret.
 
-      <Step>
-        In the **Settings** area of the page, click **Edit**.
-      </Step>
+    Carefully copy and save these credentials. You will need them when configuring the connector.
+  </Step>
 
-      <Step>
-        Click **Rotate** to generate a new Client ID and Secret.
+  <Step>
+    Next to the **Not Connected** label, click on the word **Baton** to navigate to the application page. Click the pencil icon at the top of the page and rename the application to **Active Directory**. This updates the application name, connector name, and icon.
+  </Step>
+</Steps>
 
-        Carefully copy and save these credentials. You will need them when configuring the connector.
-      </Step>
+### Step 2: Install and configure `baton-active-directory`
 
-      <Step>
-        Next to the **Not Connected** label, click on the word **Baton** to navigate to the application page. Click the pencil icon at the top of the page and rename the application to **Active Directory**. This updates the application name, connector name, and icon.
-      </Step>
-    </Steps>
+#### Option 1: MSI installer (recommended)
 
-    ### Step 2: Install and configure `baton-active-directory`
+<Steps>
+  <Step>
+    Download the latest Windows MSI from the [C1 download center](https://dist.conductorone.com/ConductorOne/baton-active-directory).
+  </Step>
 
-    #### Option 1: Windows installer (recommended)
+  <Step>
+    Run the MSI on the host designated to run the connector. The installer prompts for your AD domain, C1 credentials, and connection settings, then writes the YAML config (with DPAPI-encrypted secrets by default) and registers the Windows service with auto-restart recovery.
+  </Step>
 
-    <Steps>
-      <Step>
-        Download the latest `baton-ad-setup-*.exe` installer from C1.
-      </Step>
+  <Step>
+    After install, a **Configuration Editor** shortcut is available from the Start Menu if you need to change settings later. See [GUI Configuration Editor](#gui-configuration-editor) below.
+  </Step>
+</Steps>
 
-      <Step>
-        Run the installer on the host designated to run the connector. The installer prompts for your AD domain, C1 credentials, and connection settings.
-      </Step>
+#### Option 2: CLI `setup` command
 
-      <Step>
-        The installer writes a YAML config file (with optional DPAPI encryption for secrets), registers a Windows service with auto-restart recovery, and creates Start Menu shortcuts for the GUI Configuration Editor and uninstall.
-      </Step>
-    </Steps>
+<Steps>
+  <Step>
+    On the host designated to run the connector, create a folder: `C:\Program Files\ConductorOne`.
+  </Step>
 
-    #### Option 2: Manual setup
+  <Step>
+    Copy `baton-active-directory.exe` to the `ConductorOne` folder.
+  </Step>
 
-    <Steps>
-      <Step>
-        On the host designated to run the connector, create a folder: `C:\Program Files\ConductorOne`.
-      </Step>
+  <Step>
+    From an elevated **Command Prompt** (`cmd.exe`), run:
 
-      <Step>
-        Copy `baton-active-directory.exe` to the `ConductorOne` folder.
-      </Step>
-
-      <Step>
-        Install and set up the connector by running (from an elevated command prompt):
-
-        ```console
-        baton-active-directory.exe setup
-        ```
-
-        The setup process checks for a config file, opens the GUI config editor if none exists, offers to copy the binary to Program Files, optionally configures a service account, and registers the Windows service with auto-start and recovery.
-
-        For non-interactive setup, use: `baton-active-directory.exe setup -y`
-      </Step>
-
-      <Step>
-        Grant the service account **Modify** folder permissions to `C:\ProgramData\ConductorOne` so it can write to the log file.
-
-        <Warning>
-        Failing to grant this permission results in a service start error.
-        </Warning>
-      </Step>
-
-      <Step>
-        Launch the Services console, locate the service named **baton-active-directory**, and configure it:
-
-        1. Double-click to open properties
-        2. Change the **Startup type** to **Automatic**
-        3. Navigate to the **Log On** tab and click **This account**
-        4. Click **Browse**, enter your service account name, and click **Check Names**
-        5. Enter the service account password and confirm it
-        6. Click **Apply**
-        7. Navigate back to the **General** tab and click **Start**
-      </Step>
-    </Steps>
-
-    A minimal `config.yaml` looks like:
-
-    ```yaml
-    base-dn: DC=example,DC=com
-    domain: example.com
-    mode: winldap
-    ldaps: true
-    client-id: <C1 client ID>
-    client-secret: <C1 client secret>
-    # Include this line to enable provisioning
-    provisioning: true
+    ```console
+    baton-active-directory.exe setup
     ```
 
     <Warning>
-    If you make changes to the config file, a service restart is required for the changes to take effect.
+    The `setup` command must be run from `cmd.exe`. **PowerShell is not supported** — the command's interactive prompts and stdin handling rely on cmd.exe semantics, and running from PowerShell will fail or hang.
     </Warning>
 
-    #### Configuration reference
+    The setup command checks for a config file, offers to copy the binary to Program Files, optionally configures a service account, and registers the Windows service with auto-start and recovery.
 
-    All fields below can be set in the YAML config file. Unless noted, each field also maps to an equivalent CLI flag (`--field-name`) and environment variable (`BATON_FIELD_NAME`).
+    **First-run behavior:** if no config exists, `setup` launches the [GUI Configuration Editor](#gui-configuration-editor) in a separate window. Fill in your domain, base DN, and C1 credentials, click **Save**, and close the editor — `setup` resumes in `cmd.exe` and finishes registering the service.
 
-    **Connection:**
+    For non-interactive setup (no prompts, LocalSystem account, no editor), use: `baton-active-directory.exe setup -y`
+  </Step>
 
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `domain` | string | *(required)* | Fully-qualified Windows domain. Example: `baton.example.com` |
-    | `base-dn` | string | *(required)* | Base DN for LDAP searches. Example: `DC=baton,DC=example,DC=com` |
-    | `sitename` | string | *(any reachable DC)* | AD site name. When set, scopes DC discovery to an available DC in that site. Example: `US-DC-01` |
-    | `mode` | string | `winldap` (Windows) / `ldap` (Linux) | Connection mode: `ldap` (Go library) or `winldap` (Windows `wldap32.dll` system calls) |
-    | `ldaps` | bool | `false` | Enable LDAPS (TLS). Required for account provisioning. |
-    | `ldaps-port` | int | `636` | LDAPS port. Use `3269` for Global Catalog over LDAPS. |
-    | `ldaps-skip-verify` | bool | `true` | Skip LDAPS certificate validation (go-ldap mode only; ignored in WinLDAP). |
-    | `sync-scope` | string | `Standalone` | `Standalone` or `GlobalCatalog`. `GlobalCatalog` is sync-only and omits some profile fields. |
-
-    **Authentication:**
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `bind-type` | string | `external` | `external` (Kerberos/GSSAPI, uses the service account) or `simple` (username/password) |
-    | `bind-user` | string | — | Full DN of the bind user (required for `simple`) |
-    | `bind-password` | string (secret) | — | Password for the bind user (required for `simple`). On Windows, can be stored as `dpapi:…` for DPAPI encryption. |
-
-    **Search scope:**
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `user-search-dn` | string | `base-dn` | DN to search for users |
-    | `user-search-filter` | string | `(&(objectCategory=person)(objectClass=user))` | LDAP filter for users |
-    | `group-search-dn` | string | `base-dn` | DN to search for groups |
-    | `group-search-filter` | string | `(objectCategory=group)` | LDAP filter for groups |
-    | `skip-ous` | list of DNs | — | OUs to exclude. Mutually exclusive with `only-ous`. |
-    | `only-ous` | list of DNs | — | OUs to include. Mutually exclusive with `skip-ous`. |
-    | `custom-user-attributes` | list of strings | — | Extra LDAP attributes to include in the user profile (for example, `githubUserName`) |
-
-    **gMSA:**
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `enable-gmsa-sync` | bool | `false` | Enable syncing of Group Managed Service Accounts |
-    | `gmsa-search-dn` | string | `base-dn` | DN to search for gMSAs. Example: `CN=Managed Service Accounts,DC=example,DC=com` |
-    | `gmsa-search-filter` | string | `(objectClass=msDS-GroupManagedServiceAccount)` | LDAP filter for gMSAs |
-
-    **Actions & provisioning:**
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `provisioning` | bool | `false` | Enable Grant/Revoke and account provisioning. Required for any write operation. |
-    | `powershell-actions` | map | — | Custom PowerShell-backed actions. See [Custom PowerShell actions](#custom-powershell-actions). |
-
-    **C1 credentials:**
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `client-id` | string | *(required)* | C1 client ID. On Windows, can be stored as `dpapi:…`. |
-    | `client-secret` | string (secret) | *(required)* | C1 client secret. On Windows, can be stored as `dpapi:…`. |
-
-    **Multi-domain:**
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `additional-domains` | list of maps | — | Additional trusted domains to sync. **YAML-only** — not exposed as a CLI flag or environment variable. See [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync). |
-
-    Run `baton-active-directory --help` to see every flag with its current default.
-
-    #### Connector modes
-
-    The connector supports two connection modes:
-
-    - **LDAP mode** (default on Linux): Uses a Go LDAP library. Supports both External Bind (Kerberos/GSSAPI) and Simple Bind authentication.
-    - **WinLDAP mode** (default on Windows): Uses Windows `wldap32.dll` system calls with GSSAPI authentication. Simple Bind is not supported in this mode.
-
-    If LDAP mode does not connect (usually because your AD server requires more secure authentication methods), try `mode: winldap` in your config.
-
-    #### Multi-domain and cross-forest sync
-
-    The connector can sync across multiple AD domains and forests in a single run. Add additional trusted domains to your config using native YAML syntax:
-
-    ```yaml expandable
-    additional-domains:
-      - domain: remote-forest.example.com
-        base-dn: DC=remote-forest,DC=example,DC=com
-      - domain: child.example.com
-        base-dn: DC=child,DC=example,DC=com
-        bind-type: simple
-        bind-user: "CN=svc-baton,OU=ServiceAccounts,DC=child,DC=example,DC=com"
-        bind-password: "secret"
-        ldaps: true
-    ```
-
-    Each additional domain supports independent connection settings (bind type, credentials, LDAPS, search filters, OU restrictions, read-only mode). Cross-domain group memberships are resolved automatically via Foreign Security Principals.
+  <Step>
+    Grant the service account **Modify** folder permissions to `C:\ProgramData\ConductorOne` so it can write to the log file.
 
     <Note>
-    The `additional-domains` field is YAML-only — it cannot be set via CLI flags or environment variables.
+    `baton-active-directory setup` and the Windows installer now apply this grant automatically when you specify a non-LocalSystem service account. This step is only required if you change the service account later via `services.msc` or `sc config`.
     </Note>
-
-    ##### Supported trust types
-
-    - 1-way outbound trust (primary trusts remote, or remote trusts primary)
-    - 2-way trust
-    - Cross-forest trust
-    - External (non-transitive) trust
-
-    ##### Prerequisites
-
-    **1. Active Directory trust.** A trust relationship must exist between the domains. For Kerberos (`bind-type: external`), the connector's domain must be trusted by the remote domain. For simple bind, any network connectivity is sufficient.
-
-    Verify with:
-
-    ```powershell
-    Get-ADTrust -Filter * | Select-Object Name, Direction, TrustType, ForestTransitive
-    ```
-
-    **2. DNS resolution.** The connector machine must resolve the remote domain's SRV records, DC hostnames, and A records. The recommended approach is a conditional forwarder on your primary DNS server:
-
-    ```powershell
-    Add-DnsServerConditionalForwarderZone `
-        -Name "remote-forest.example.com" `
-        -MasterServers "10.0.2.10" `
-        -ReplicationScope "Forest"
-    ```
-
-    Verify with:
-
-    ```powershell
-    Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.remote-forest.example.com" -Type SRV
-    Resolve-DnsName -Name "DC01.remote-forest.example.com"
-    ```
-
-    **3. Network connectivity.** The connector must reach the remote domain's DCs on the ports you use:
-
-    | Port | Protocol | Purpose |
-    |---|---|---|
-    | 389 | TCP/UDP | LDAP (plaintext with signing) |
-    | 636 | TCP | LDAPS (TLS) |
-    | 88 | TCP/UDP | Kerberos KDC (external/Kerberos auth) |
-    | 3268 | TCP | Global Catalog (optional) |
-    | 3269 | TCP | Global Catalog over SSL (optional) |
-
-    **4. LDAPS certificate trust** (if using LDAPS). The remote forest's root CA certificate must be trusted on the connector machine:
-
-    - **Option A — Automatic cross-forest trust:** With a 2-way trust and Enterprise CAs in both forests, the remote root CA is typically published to AD automatically.
-    - **Option B — Manual import:** Export the remote CA and import it into the connector machine's Trusted Root CAs (machine store):
-
-      ```powershell
-      Import-Certificate -FilePath "remote-root-ca.cer" `
-          -CertStoreLocation "Cert:\LocalMachine\Root"
-      ```
-
-    - **Option C — Skip validation (go-ldap mode only, lab/testing):** Set `ldaps-skip-verify: true`. This has no effect in WinLDAP mode, which always validates against the Windows certificate store.
-    - **Option D — Plain LDAP with signing:** Omit `ldaps: true` for the additional domain and connect over TCP/389 with LDAP signing.
-
-    **5. Kerberos configuration** (for `bind-type: external`). On Windows domain-joined hosts, cross-realm Kerberos is typically automatic when a forest or external trust exists. The connector targets the remote DC's **hostname** (for example, `DC01.remote-forest.example.com`) rather than the domain FQDN, because the SPN (`ldap/DC01…`) is registered under the DC's machine account.
-
-    On Linux, add the remote realm to `/etc/krb5.conf`:
-
-    ```ini
-    [realms]
-    REMOTE-FOREST.EXAMPLE.COM = {
-        kdc = DC01.remote-forest.example.com
-        admin_server = DC01.remote-forest.example.com
-    }
-
-    [domain_realm]
-    .remote-forest.example.com = REMOTE-FOREST.EXAMPLE.COM
-    remote-forest.example.com = REMOTE-FOREST.EXAMPLE.COM
-
-    [capaths]
-    PRIMARY.EXAMPLE.COM = {
-        REMOTE-FOREST.EXAMPLE.COM = .
-    }
-    ```
-
-    **6. Permissions.** `Authenticated Users` has read access to most AD objects by default, which is usually sufficient. For gMSA provisioning in an additional domain, set `read-only: false` on the domain entry and grant the bind account write access to `msDS-GroupMSAMembership`.
-
-    ##### Additional domain fields
-
-    Each entry under `additional-domains` supports the following fields:
-
-    | Field | Type | Default | Description |
-    |---|---|---|---|
-    | `domain` | string | *(required)* | FQDN of the remote domain |
-    | `base-dn` | string | auto-discovered via rootDSE | Base DN for LDAP searches |
-    | `bind-type` | string | `external` | `external` (Kerberos) or `simple` |
-    | `bind-user` | string | — | Bind DN (required for `simple`) |
-    | `bind-password` | string | — | Bind password (required for `simple`) |
-    | `ldaps` | bool | inherits primary | Omit to inherit from the primary domain; set `true` or `false` to override |
-    | `ldaps-port` | int | `636` | LDAPS port |
-    | `read-only` | bool | see below | Prevent write operations (Grant/Revoke) to this domain |
-    | `user-search-dn` | string | base-dn | Override user search base |
-    | `user-search-filter` | string | primary filter | Override user search filter |
-    | `group-search-dn` | string | base-dn | Override group search base |
-    | `group-search-filter` | string | primary filter | Override group search filter |
-    | `skip-ous` | list | — | OUs to exclude |
-    | `only-ous` | list | — | OUs to include (mutually exclusive with `skip-ous`) |
-    | `gmsa-search-dn` | string | base-dn | Override gMSA search base |
-    | `gmsa-search-filter` | string | primary filter | Override gMSA search filter |
-
-    **`read-only` default:** When omitted, `read-only` defaults to `true` unless `bind-type` is explicitly set (in which case it defaults to `false`). Providing domain-specific bind credentials signals that writes are intended. Set `read-only` explicitly to override.
-
-    ##### How it works
-
-    - **Resource enumeration:** the connector paginates across all configured domains — the primary completes first, then each additional domain. All resources land in a single unified sync.
-    - **Cross-domain DN lookups** (group members, managers, Foreign Security Principals): the DN's domain suffix is matched against your configured domains to route the lookup.
-    - **Cross-domain SID lookups** (gMSA ACLs, primary group SIDs): the SID is resolved against each configured domain in order until a match is found.
-    - **NetBIOS names** (needed for down-level logon display): each forest's `configurationNamingContext` is queried for `crossRef` entries. On Windows, the primary domain also uses the native `DsCrackNamesW` API; additional domains always fall back to LDAP `crossRef`.
-
-    ##### Diagnosing issues
-
-    Run the built-in test harness to check DC resolution, TLS handshake, certificate validation, and LDAP bind for every configured domain:
-
-    ```console
-    baton-active-directory.exe test-ldaps
-    ```
-
-    Common failures:
-
-    - **LDAP error 81 ("Server Down")** on the remote domain — TLS handshake failure, almost always a missing CA trust. Import the remote root CA (Option B above) or use plain LDAP with signing.
-    - **LDAP result code 32 ("No Such Object")** during the grants phase — the connector hit a DN or SID on a remote domain that isn't configured. Add the missing domain to `additional-domains`.
-    - **"baseDN auto-discovery failed"** — can't reach the remote rootDSE. Check DNS and network, or set `base-dn` explicitly.
-    - **"SASL bind failed" / "Cannot obtain Kerberos ticket"** — cross-realm Kerberos isn't working. Verify the trust, DNS SRV records, and that you're targeting the DC hostname rather than the domain FQDN. As a fallback, switch that domain to `bind-type: simple`.
-    - **"netbios domain is empty" warnings** — the NetBIOS cache couldn't load crossRef entries. Confirm read access to the remote `configurationNamingContext`.
-
-    ##### Performance
-
-    Each additional domain adds to the sync cycle. The connector completes one domain fully before moving on; LDAP pagination (1000 entries per page) is used throughout; total sync time scales linearly with the number of domains and objects.
-
-    #### gMSA sync
-
-    To sync Group Managed Service Accounts, enable the flag in your config:
-
-    ```yaml
-    enable-gmsa-sync: true
-    # Optional: restrict gMSA search scope
-    gmsa-search-dn: "OU=gMSA,DC=example,DC=com"
-    ```
-
-    Each gMSA exposes a `password_retrieval` entitlement representing which principals are authorized to retrieve the managed password. Grant and Revoke operations modify the gMSA's `msDS-GroupMSAMembership` security descriptor ACL.
-
-    #### OU filtering
-
-    You can restrict which Organizational Units the connector syncs by using `skip-ous` or `only-ous` (mutually exclusive):
-
-    ```yaml
-    # Exclude specific OUs
-    skip-ous:
-      - "OU=Test,DC=example,DC=com"
-      - "OU=Disabled,DC=example,DC=com"
-
-    # Or include only specific OUs
-    only-ous:
-      - "OU=Engineering,DC=example,DC=com"
-      - "OU=Sales,DC=example,DC=com"
-    ```
-
-    #### Custom user attributes
-
-    By default, the connector syncs a standard set of AD user attributes. Use `custom-user-attributes` to include additional AD attributes in the user profile for account correlation:
-
-    ```yaml
-    custom-user-attributes:
-      - githubUserName
-      - extensionAttribute1
-      - whenCreated
-      - pwdLastSet
-    ```
-
-    Once synced, the specified attributes appear as profile fields on the user in C1 and can be configured as additional usernames for account correlation.
-
-    #### Custom PowerShell actions
-
-    You can define additional connector actions backed by PowerShell scripts:
-
-    ```yaml expandable
-    powershell-actions:
-      reset-password:
-        path: "C:\\Scripts\\Reset-Password.ps1"
-        args:
-          resource_id:
-            type: string
-            is_required: true
-          new_password:
-            type: string
-            is_required: true
-    ```
-
-    Each custom action appears alongside the built-in connector actions and can be used in C1 automations. Argument types can be `string`, `int`, or `bool`.
-
-    #### Profile push attributes
-
-    The `update_profile` resource action declares the following 23 named string fields in its schema. The platform's schema-driven UI shows a dedicated input for each. Attributes outside this list (including `extensionAttribute1` through `extensionAttribute15`) must be set via the `custom_attributes` map field on `update_profile`, or via the `update_user_attrs` global action.
-
-    | Field name | AD attribute | Category |
-    |---|---|---|
-    | `first_name` | `givenName` | Identity |
-    | `middle_name` | `middleName` | Identity |
-    | `last_name` | `sn` | Identity |
-    | `display_name` | `displayName` | Identity |
-    | `sam_account_name` | `sAMAccountName` | Identity |
-    | `user_principal_name` | `userPrincipalName` | Identity |
-    | `email` | `mail` | Contact |
-    | `phone_number` | `telephoneNumber` | Contact |
-    | `mobile_phone` | `mobile` | Contact |
-    | `job_title` | `title` | Organization |
-    | `department` | `department` | Organization |
-    | `division` | `division` | Organization |
-    | `company` | `company` | Organization |
-    | `description` | `description` | Organization |
-    | `employee_id` | `employeeID` | Organization |
-    | `employee_number` | `employeeNumber` | Organization |
-    | `employment_type` | `employeeType` | Organization |
-    | `city` | `l` | Address |
-    | `state` | `st` | Address |
-    | `street_address` | `streetAddress` | Address |
-    | `postal_code` | `postalCode` | Address |
-    | `country` | `c` | Address |
-    | `physical_delivery_office_name` | `physicalDeliveryOfficeName` | Address |
 
     <Warning>
-    AD enforces schema constraints on attribute values. For example, the `c` (country) attribute has a maximum length of 3 characters and expects ISO 3166-1 alpha-2 codes (for example, `US`, not `United States`). Constraint violations are logged with each attribute name and value length to aid debugging.
+    Failing to grant this permission results in a silent service start error (SCM code 1053). The underlying `open sink ".../baton.log": Access is denied` message is recorded in the Application event log under the `baton-active-directory` source.
     </Warning>
+  </Step>
 
-    The `update_user_attrs` global action recognizes the 23 named fields above plus 15 additional aliases (`extension_attribute_1` through `extension_attribute_15` mapping to `extensionAttribute1`–`extensionAttribute15`). Any attribute name not in the combined list is passed through as a raw AD attribute name, allowing direct access to any writable AD attribute.
+  <Step>
+    Launch the Services console, locate the service named **baton-active-directory**, and configure it:
 
-    #### LDAPS configuration
+    1. Double-click to open properties
+    2. Change the **Startup type** to **Automatic**
+    3. Navigate to the **Log On** tab and click **This account**
+    4. Click **Browse**, enter your service account name, and click **Check Names**
+    5. Enter the service account password and confirm it
+    6. Click **Apply**
+    7. Navigate back to the **General** tab and click **Start**
+  </Step>
+</Steps>
 
-    To enable LDAPS, add the following to your config:
+### Step 3: Manage the Windows service
 
-    ```yaml
-    ldaps: true
-    ldaps-port: 636       # default; use 3269 for Global Catalog over LDAPS
-    ldaps-skip-verify: true  # default; set to false to enforce certificate validation (go-ldap mode only)
-    ```
+<Steps>
+  <Step>
+    Use the following commands to manage the service (all require administrator privileges):
 
-    <Note>
-    The `ldaps-skip-verify` flag only affects go-ldap mode. WinLDAP mode uses the Windows certificate store for certificate validation and is not affected by this setting.
-    </Note>
+    - To start the service: `baton-active-directory.exe start`
+    - To stop the service: `baton-active-directory.exe stop`
+    - To check the status: `baton-active-directory.exe status`
+    - To remove the service: `baton-active-directory.exe remove` (config and binary are preserved)
+  </Step>
 
-    To diagnose LDAPS connectivity issues, use the built-in diagnostic command:
+  <Step>
+    The connector syncs current data, uploads it to C1, and prints a **Task complete!** message when finished.
+  </Step>
 
-    ```console
-    baton-active-directory.exe test-ldaps
-    ```
+  <Step>
+    Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Active Directory connector to. Active Directory data should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
 
-    This tests DC resolution, TLS handshake, certificate validation, and LDAP bind for all configured domains with detailed error reporting.
+**Done.** Your Active Directory connector is now pulling access data into C1.
 
-    #### DPAPI secrets encryption
+## Reference
 
-    On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, and `bind-password`) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup. The installer encrypts by default; you can also encrypt an existing config manually:
+The sections below cover advanced configuration, troubleshooting, and customization. Skim them only when you need to tune the connector beyond defaults.
 
-    ```console
-    baton-active-directory.exe encrypt-config
-    ```
+### Configuration reference
 
-    #### GUI Configuration Editor
+All fields below can be set in the YAML config file. Unless noted, each field also maps to an equivalent CLI flag (`--field-name`) and environment variable (`BATON_FIELD_NAME`).
 
-    The connector includes a native Windows GUI for managing configuration without editing YAML files manually:
+Example minimal config:
 
-    ```console
-    baton-active-directory.exe config-editor
-    ```
+```yaml
+base-dn: DC=example,DC=com
+domain: example.com
+mode: winldap
+ldaps: true
+client-id: <C1 client ID>
+client-secret: <C1 client secret>
+# Include this line to enable provisioning
+provisioning: true
+```
 
-    If installed via the Windows installer, a **Configuration Editor** shortcut is available in the Start Menu.
+<Warning>
+If you make changes to the config file, a service restart is required for the changes to take effect.
+</Warning>
 
-    #### Authentication
+**Connection:**
 
-    The connector supports two authentication methods, configured via `bind-type`:
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `domain` | string | *(required)* | Fully-qualified Windows domain. Example: `baton.example.com` |
+| `base-dn` | string | *(required)* | Base DN for LDAP searches. Example: `DC=baton,DC=example,DC=com` |
+| `sitename` | string | *(any reachable DC)* | AD site name. When set, scopes DC discovery to an available DC in that site. Example: `US-DC-01` |
+| `mode` | string | `winldap` (Windows) / `ldap` (Linux) | Connection mode: `ldap` (Go library) or `winldap` (Windows `wldap32.dll` system calls) |
+| `ldaps` | bool | `false` | Enable LDAPS (TLS). Required for account provisioning. |
+| `ldaps-port` | int | `636` | LDAPS port. Use `3269` for Global Catalog over LDAPS. |
+| `ldaps-skip-verify` | bool | `true` | Skip LDAPS certificate validation (go-ldap mode only; ignored in WinLDAP). |
+| `sync-scope` | string | `Standalone` | `Standalone` or `GlobalCatalog`. `GlobalCatalog` is sync-only — provisioning is not supported and some profile fields are unavailable. |
 
-    - **`external`** (default): Uses Kerberos/GSSAPI. The connector authenticates as the service account running the Windows service. No `bind-user` or `bind-password` needed.
-    - **`simple`**: Uses username/password bind. Requires `bind-user` (the full DN) and `bind-password`.
+**Authentication:**
 
-    ```yaml
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `bind-type` | string | `external` | `external` (Kerberos/GSSAPI, uses the service account running the Windows service — no `bind-user` or `bind-password` needed) or `simple` (username/password) |
+| `bind-user` | string | — | Full DN of the bind user (required for `simple`) |
+| `bind-password` | string (secret) | — | Password for the bind user (required for `simple`). On Windows, can be stored as `dpapi:…` for DPAPI encryption. |
+
+Simple-bind example:
+
+```yaml
+bind-type: simple
+bind-user: "CN=svc-baton,OU=ServiceAccounts,DC=example,DC=com"
+bind-password: "secret"
+```
+
+**Search scope:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `user-search-dn` | string | `base-dn` | DN to search for users |
+| `user-search-filter` | string | `(&(objectCategory=person)(objectClass=user))` | LDAP filter for users |
+| `group-search-dn` | string | `base-dn` | DN to search for groups |
+| `group-search-filter` | string | `(objectCategory=group)` | LDAP filter for groups |
+| `skip-ous` | list of DNs | — | OUs to exclude. Mutually exclusive with `only-ous`. |
+| `only-ous` | list of DNs | — | OUs to include. Mutually exclusive with `skip-ous`. |
+| `custom-user-attributes` | list of strings | — | Extra LDAP attributes to include in the user profile (for example, `githubUserName`) |
+| `sync-extension-attributes` | bool | `false` | Sync `extensionAttribute1`–`extensionAttribute15` on every user profile. Equivalent to listing all 15 names in `custom-user-attributes`. |
+| `use-display-name` | bool | `false` | Use the LDAP `displayName` attribute as the C1 resource label instead of `cn`. Falls back to `cn` when `displayName` is empty. Applies to user and gMSA resources. |
+
+**gMSA:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enable-gmsa-sync` | bool | `false` | Enable syncing of Group Managed Service Accounts |
+| `gmsa-search-dn` | string | `base-dn` | DN to search for gMSAs. Example: `CN=Managed Service Accounts,DC=example,DC=com` |
+| `gmsa-search-filter` | string | `(objectClass=msDS-GroupManagedServiceAccount)` | LDAP filter for gMSAs |
+
+**Actions & provisioning:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `provisioning` | bool | `false` | Enable Grant/Revoke and account provisioning. Required for any write operation. |
+| `powershell-actions` | map | — | Custom PowerShell-backed actions. See [Custom PowerShell actions](#custom-powershell-actions). |
+
+**C1 credentials:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `client-id` | string | *(required)* | C1 client ID. On Windows, can be stored as `dpapi:…`. |
+| `client-secret` | string (secret) | *(required)* | C1 client secret. On Windows, can be stored as `dpapi:…`. |
+
+**Multi-domain:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `additional-domains` | list of maps | — | Additional trusted domains to sync. **YAML-only** — not exposed as a CLI flag or environment variable. See [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync). |
+
+Run `baton-active-directory --help` to see every flag with its current default.
+
+### Multi-domain and cross-forest sync
+
+The connector can sync across multiple AD domains and forests in a single run. Add additional trusted domains to your config using native YAML syntax:
+
+```yaml expandable
+additional-domains:
+  - domain: remote-forest.example.com
+    base-dn: DC=remote-forest,DC=example,DC=com
+  - domain: child.example.com
+    base-dn: DC=child,DC=example,DC=com
     bind-type: simple
-    bind-user: "CN=svc-baton,OU=ServiceAccounts,DC=example,DC=com"
+    bind-user: "CN=svc-baton,OU=ServiceAccounts,DC=child,DC=example,DC=com"
     bind-password: "secret"
-    ```
+    ldaps: true
+```
 
-    Run `baton-active-directory --help` to see the full list of configuration flags and environment variables.
+Each additional domain supports independent connection settings (bind type, credentials, LDAPS, search filters, OU restrictions, read-only mode). Cross-domain group memberships are resolved automatically via Foreign Security Principals.
 
-    ### Step 3: Manage the Windows service
+<Note>
+The `additional-domains` field is YAML-only — it cannot be set via CLI flags or environment variables.
+</Note>
 
-    <Steps>
-      <Step>
-        Use the following commands to manage the service (all require administrator privileges):
+##### Supported trust types
 
-        - To start the service: `baton-active-directory.exe start`
-        - To stop the service: `baton-active-directory.exe stop`
-        - To check the status: `baton-active-directory.exe status`
-        - To remove the service: `baton-active-directory.exe remove` (config and binary are preserved)
-      </Step>
+- 1-way outbound trust (primary trusts remote, or remote trusts primary)
+- 2-way trust
+- Cross-forest trust
+- External (non-transitive) trust
 
-      <Step>
-        The connector syncs current data, uploads it to C1, and prints a **Task complete!** message when finished.
-      </Step>
+##### Prerequisites
 
-      <Step>
-        Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Active Directory connector to. Active Directory data should be found on the **Entitlements** and **Accounts** tabs.
-      </Step>
-    </Steps>
+**1. Active Directory trust.** A trust relationship must exist between the domains. For Kerberos (`bind-type: external`), the connector's domain must be trusted by the remote domain. For simple bind, any network connectivity is sufficient.
 
-    **Done.** Your Active Directory connector is now pulling access data into C1.
-  </Tab>
-</Tabs>
+Verify with:
 
-### What's next?
+```powershell
+Get-ADTrust -Filter * | Select-Object Name, Direction, TrustType, ForestTransitive
+```
+
+**2. DNS resolution.** The connector machine must resolve the remote domain's SRV records, DC hostnames, and A records. The recommended approach is a conditional forwarder on your primary DNS server:
+
+```powershell
+Add-DnsServerConditionalForwarderZone `
+    -Name "remote-forest.example.com" `
+    -MasterServers "192.0.2.10" `
+    -ReplicationScope "Forest"
+```
+
+Verify with:
+
+```powershell
+Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.remote-forest.example.com" -Type SRV
+Resolve-DnsName -Name "DC01.remote-forest.example.com"
+```
+
+**3. Network connectivity.** The connector must reach the remote domain's DCs on the ports you use:
+
+| Port | Protocol | Purpose |
+|---|---|---|
+| 389 | TCP/UDP | LDAP (plaintext with signing) |
+| 636 | TCP | LDAPS (TLS) |
+| 88 | TCP/UDP | Kerberos KDC (external/Kerberos auth) |
+| 3268 | TCP | Global Catalog (optional) |
+| 3269 | TCP | Global Catalog over SSL (optional) |
+
+**4. LDAPS certificate trust** (if using LDAPS). The remote forest's root CA certificate must be trusted on the connector machine:
+
+- **Option A — Automatic cross-forest trust:** With a 2-way trust and Enterprise CAs in both forests, the remote root CA is typically published to AD automatically.
+- **Option B — Manual import:** Export the remote CA and import it into the connector machine's Trusted Root CAs (machine store):
+
+  ```powershell
+  Import-Certificate -FilePath "remote-root-ca.cer" `
+      -CertStoreLocation "Cert:\LocalMachine\Root"
+  ```
+
+- **Option C — Skip validation (go-ldap mode only, lab/testing):** Set `ldaps-skip-verify: true`. This has no effect in WinLDAP mode, which always validates against the Windows certificate store.
+- **Option D — Plain LDAP with signing:** Omit `ldaps: true` for the additional domain and connect over TCP/389 with LDAP signing.
+
+**5. Kerberos configuration** (for `bind-type: external`). On Windows domain-joined hosts, cross-realm Kerberos is typically automatic when a forest or external trust exists. The connector targets the remote DC's **hostname** (for example, `DC01.remote-forest.example.com`) rather than the domain FQDN, because the SPN (`ldap/DC01…`) is registered under the DC's machine account.
+
+On Linux, add the remote realm to `/etc/krb5.conf`:
+
+```ini
+[realms]
+REMOTE-FOREST.EXAMPLE.COM = {
+    kdc = DC01.remote-forest.example.com
+    admin_server = DC01.remote-forest.example.com
+}
+
+[domain_realm]
+.remote-forest.example.com = REMOTE-FOREST.EXAMPLE.COM
+remote-forest.example.com = REMOTE-FOREST.EXAMPLE.COM
+
+[capaths]
+PRIMARY.EXAMPLE.COM = {
+    REMOTE-FOREST.EXAMPLE.COM = .
+}
+```
+
+**6. Permissions.** `Authenticated Users` has read access to most AD objects by default, which is usually sufficient. For gMSA provisioning in an additional domain, set `read-only: false` on the domain entry and grant the bind account write access to `msDS-GroupMSAMembership`.
+
+##### Additional domain fields
+
+Each entry under `additional-domains` supports the following fields:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `domain` | string | *(required)* | FQDN of the remote domain |
+| `base-dn` | string | auto-discovered via rootDSE | Base DN for LDAP searches |
+| `bind-type` | string | `external` | `external` (Kerberos) or `simple` |
+| `bind-user` | string | — | Bind DN (required for `simple`) |
+| `bind-password` | string | — | Bind password (required for `simple`) |
+| `ldaps` | bool | inherits primary | Omit to inherit from the primary domain; set `true` or `false` to override |
+| `ldaps-port` | int | `636` | LDAPS port |
+| `read-only` | bool | see below | Prevent write operations (Grant/Revoke) to this domain |
+| `user-search-dn` | string | base-dn | Override user search base |
+| `user-search-filter` | string | primary filter | Override user search filter |
+| `group-search-dn` | string | base-dn | Override group search base |
+| `group-search-filter` | string | primary filter | Override group search filter |
+| `skip-ous` | list | — | OUs to exclude |
+| `only-ous` | list | — | OUs to include (mutually exclusive with `skip-ous`) |
+| `gmsa-search-dn` | string | base-dn | Override gMSA search base |
+| `gmsa-search-filter` | string | primary filter | Override gMSA search filter |
+
+**`read-only` default:** When omitted, `read-only` defaults to `true` unless `bind-type` is explicitly set (in which case it defaults to `false`). Providing domain-specific bind credentials signals that writes are intended. Set `read-only` explicitly to override.
+
+##### How it works
+
+- **Resource enumeration:** the connector paginates across all configured domains — the primary completes first, then each additional domain. All resources land in a single unified sync.
+- **Cross-domain DN lookups** (group members, managers, Foreign Security Principals): the DN's domain suffix is matched against your configured domains to route the lookup.
+- **Cross-domain SID lookups** (gMSA ACLs, primary group SIDs): the SID is resolved against each configured domain in order until a match is found.
+- **NetBIOS names** (needed for down-level logon display): each forest's `configurationNamingContext` is queried for `crossRef` entries. On Windows, the primary domain also uses the native `DsCrackNamesW` API; additional domains always fall back to LDAP `crossRef`.
+
+##### Diagnosing issues
+
+Run the built-in test harness to check DC resolution, TLS handshake, certificate validation, and LDAP bind for every configured domain:
+
+```console
+baton-active-directory.exe test-ldaps
+```
+
+Common failures:
+
+- **LDAP error 81 ("Server Down")** on the remote domain — TLS handshake failure, almost always a missing CA trust. Import the remote root CA (Option B above) or use plain LDAP with signing.
+- **LDAP result code 32 ("No Such Object")** during the grants phase — the connector hit a DN or SID on a remote domain that isn't configured. Add the missing domain to `additional-domains`.
+- **"baseDN auto-discovery failed"** — can't reach the remote rootDSE. Check DNS and network, or set `base-dn` explicitly.
+- **"SASL bind failed" / "Cannot obtain Kerberos ticket"** — cross-realm Kerberos isn't working. Verify the trust, DNS SRV records, and that you're targeting the DC hostname rather than the domain FQDN. As a fallback, switch that domain to `bind-type: simple`.
+- **"netbios domain is empty" warnings** — the NetBIOS cache couldn't load crossRef entries. Confirm read access to the remote `configurationNamingContext`.
+
+##### Performance
+
+Each additional domain adds to the sync cycle. The connector completes one domain fully before moving on; LDAP pagination (1000 entries per page) is used throughout; total sync time scales linearly with the number of domains and objects.
+
+### gMSA sync
+
+To sync Group Managed Service Accounts, enable the flag in your config:
+
+```yaml
+enable-gmsa-sync: true
+# Optional: restrict gMSA search scope
+gmsa-search-dn: "OU=gMSA,DC=example,DC=com"
+```
+
+Each gMSA exposes a `password_retrieval` entitlement representing which principals are authorized to retrieve the managed password. Grant and Revoke operations modify the gMSA's `msDS-GroupMSAMembership` security descriptor ACL.
+
+### OU filtering
+
+You can restrict which Organizational Units the connector syncs by using `skip-ous` or `only-ous` (mutually exclusive):
+
+```yaml
+# Exclude specific OUs
+skip-ous:
+  - "OU=Test,DC=example,DC=com"
+  - "OU=Disabled,DC=example,DC=com"
+
+# Or include only specific OUs
+only-ous:
+  - "OU=Engineering,DC=example,DC=com"
+  - "OU=Sales,DC=example,DC=com"
+```
+
+### Custom user attributes
+
+By default, the connector syncs a standard set of AD user attributes. Use `custom-user-attributes` to include additional AD attributes in the user profile for account correlation:
+
+```yaml
+custom-user-attributes:
+  - githubUserName
+  - extensionAttribute1
+  - whenCreated
+  - pwdLastSet
+```
+
+Once synced, the specified attributes appear as profile fields on the user in C1 and can be configured as additional usernames for account correlation.
+
+For the common case of surfacing the full Exchange-schema extension attribute range, use the convenience flag `sync-extension-attributes: true` instead of listing all 15 names manually:
+
+```yaml
+sync-extension-attributes: true
+```
+
+### Resource label (`cn` vs `displayName`)
+
+By default, the connector uses the LDAP `cn` attribute as the C1 resource label. AD often stores `cn` in `Last, First` order while `displayName` carries the operator-curated `First Last` form. To use `displayName` as the C1 Identity Name, set:
+
+```yaml
+use-display-name: true
+```
+
+Falls back to `cn` when `displayName` is empty or whitespace. Applies to both user and gMSA resources. This setting is off by default to preserve existing Identity Names on upgrade — flipping it changes resource labels across access reviews and audit history.
+
+### Custom PowerShell actions
+
+You can define additional connector actions backed by PowerShell scripts:
+
+```yaml expandable
+powershell-actions:
+  reset-password:
+    path: "C:\\Scripts\\Reset-Password.ps1"
+    args:
+      resource_id:
+        type: string
+        is_required: true
+      new_password:
+        type: string
+        is_required: true
+```
+
+Each custom action appears alongside the built-in connector actions and can be used in C1 automations. Argument types can be `string`, `int`, or `bool`.
+
+### User profile attributes
+
+Synced user profiles carry the standard AD attributes (display name, email, manager, department, etc.) plus three groups of extra fields the connector populates from AD: read-only state booleans, FILETIME timestamps, and any custom attributes you list in `custom-user-attributes`.
+
+#### Read-only state attributes
+
+Four booleans are surfaced on every user profile:
+
+| Field | Source | Meaning |
+|---|---|---|
+| `password_never_expires` | stored `userAccountControl` | Static admin config (`DONT_EXPIRE_PASSWD` bit) |
+| `password_not_required` | stored `userAccountControl` | Static admin config (`PASSWD_NOTREQD` bit) |
+| `account_locked` | computed `msDS-User-Account-Control-Computed` | Live state — matches what ADUC and `Get-ADUser` show, accounting for `lockoutDuration` |
+| `password_expired` | computed `msDS-User-Account-Control-Computed` | Live state — accounts for max-password-age policy |
+
+The two static flags come from the stored UAC bits set by an admin. The two live-state flags come from AD's server-computed UAC attribute, which is re-evaluated each time the connector reads the user.
+
+By default, locked-out accounts also map to `STATUS_DISABLED` in C1 (backwards-compatible). To keep locked accounts as `STATUS_ENABLED` and report lockout state solely via the `account_locked` field above, set:
+
+```yaml
+locked-account-is-disabled: false
+```
+
+This is recommended when locked users should remain visible in access reviews.
+
+#### Timestamp attributes
+
+Four RFC3339 timestamps parsed from AD's Windows FILETIME integers:
+
+| Profile field | AD attribute |
+|---|---|
+| `passwordLastSet` | `pwdLastSet` |
+| `accountExpiresAt` | `accountExpires` |
+| `lockedOutAt` | `lockoutTime` |
+| `lastBadPasswordAt` | `badPasswordTime` |
+
+Sentinel values are handled — `0` ("never set") and `0x7FFFFFFFFFFFFFFF` ("never expires") cause the key to be omitted rather than rendering a year-1601 or year-30828 date.
+
+<Note>
+`pwdLastSet` and `lockoutTime` are not replicated to the Global Catalog, so they may be missing under `sync-scope: GlobalCatalog`. `badPasswordTime` is local to each domain controller and not replicated at all — its value reflects the DC the connector talked to during the sync.
+</Note>
+
+#### Push attributes
+
+The `update_profile` resource action accepts the following 23 named string fields. The platform's schema-driven UI shows a dedicated input for each. Attributes outside this list (including `extensionAttribute1` through `extensionAttribute15`) must be set via the `custom_attributes` map field on `update_profile`, or via the `update_user_attrs` global action.
+
+| Field name | AD attribute | Category |
+|---|---|---|
+| `first_name` | `givenName` | Identity |
+| `middle_name` | `middleName` | Identity |
+| `last_name` | `sn` | Identity |
+| `display_name` | `displayName` | Identity |
+| `sam_account_name` | `sAMAccountName` | Identity |
+| `user_principal_name` | `userPrincipalName` | Identity |
+| `email` | `mail` | Contact |
+| `phone_number` | `telephoneNumber` | Contact |
+| `mobile_phone` | `mobile` | Contact |
+| `job_title` | `title` | Organization |
+| `department` | `department` | Organization |
+| `division` | `division` | Organization |
+| `company` | `company` | Organization |
+| `description` | `description` | Organization |
+| `employee_id` | `employeeID` | Organization |
+| `employee_number` | `employeeNumber` | Organization |
+| `employment_type` | `employeeType` | Organization |
+| `city` | `l` | Address |
+| `state` | `st` | Address |
+| `street_address` | `streetAddress` | Address |
+| `postal_code` | `postalCode` | Address |
+| `country` | `c` | Address |
+| `physical_delivery_office_name` | `physicalDeliveryOfficeName` | Address |
+
+<Warning>
+AD enforces schema constraints on attribute values. For example, the `c` (country) attribute has a maximum length of 3 characters and expects ISO 3166-1 alpha-2 codes (for example, `US`, not `United States`). Constraint violations are logged with each attribute name and value length to aid debugging.
+</Warning>
+
+The `update_user_attrs` global action recognizes the 23 named fields above plus 15 additional aliases (`extension_attribute_1` through `extension_attribute_15` mapping to `extensionAttribute1`–`extensionAttribute15`). Any attribute name not in the combined list is passed through as a raw AD attribute name, allowing direct access to any writable AD attribute.
+
+### LDAPS troubleshooting
+
+LDAPS settings (`ldaps`, `ldaps-port`, `ldaps-skip-verify`) live in the [Configuration reference](#configuration-reference). This section covers the parts that don't fit in a flag table: how the two connection modes treat certificate trust differently, and how to diagnose handshake failures.
+
+#### Certificate trust depends on connection mode
+
+The `ldaps-skip-verify` flag behaves differently depending on `mode`:
+
+- **WinLDAP mode** (default on Windows): TLS validation is delegated to the Windows certificate store. `ldaps-skip-verify` has **no effect** — the OS always validates against `Cert:\LocalMachine\Root`. To trust a CA, import its root certificate into the Windows machine store:
+
+  ```powershell
+  certutil -addstore Root <path-to-ca.cer>
+  ```
+
+- **LDAP mode** (Go library, default on Linux): TLS validation uses Go's TLS stack. `ldaps-skip-verify: true` (the default) disables hostname and chain validation, which lets self-signed AD certs work in lab environments. For production, set `ldaps-skip-verify: false` and either trust the CA at the OS level or import it into the connector machine.
+
+If `mode: ldap` doesn't connect on a Windows host (typical when the AD server requires channel binding or LDAP signing), switch to `mode: winldap`.
+
+#### Diagnose with `test-ldaps`
+
+The connector ships a diagnostic command that exercises every configured domain end-to-end:
+
+```console
+baton-active-directory.exe test-ldaps
+```
+
+It runs four checks per domain — DC resolution, TCP connect, TLS handshake (with cert subject/issuer/expiry reported even on validation failure), and LDAP bind — and prints per-step PASS/FAIL with the actionable fix when something breaks.
+
+Common LDAPS failure signatures and what they mean:
+
+- **`x509: certificate signed by unknown authority`** (go-ldap mode) — the connector machine doesn't trust the CA that issued the DC certificate. Import the CA root or set `ldaps-skip-verify: true` for testing only.
+- **`tls: failed to verify certificate: x509: certificate is valid for X, not Y`** — certificate Subject/SAN doesn't include the hostname the connector is connecting to. Verify you're targeting a DC hostname that matches the cert (DCs typically have multiple SAN entries).
+- **`LDAP Result Code 81 "Server is unavailable"`** in WinLDAP mode — usually a TLS handshake failure where Schannel rejected the cert. Check the Windows event log under `LDAP-Client` and `Schannel` sources for the rejection reason.
+- **Connection times out on port 636** — port not open between the connector host and the DC, or LDAPS isn't enabled on the DC. Confirm the DC has a Server Authentication EKU certificate in its Personal store.
+
+For multi-domain setups, `test-ldaps` checks every entry in `additional-domains` plus the primary, so a single run covers your whole topology.
+
+### DPAPI secrets encryption
+
+On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, and `bind-password`) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup. The installer encrypts by default; you can also encrypt an existing config manually:
+
+```console
+baton-active-directory.exe encrypt-config
+```
+
+### GUI Configuration Editor
+
+The connector includes a native Windows GUI for managing configuration without editing YAML files manually. It's the same window that `setup` launches automatically on first run when no config exists ([Option 2, Step 3](#step-2-install-and-configure-baton-active-directory)) — you can also open it standalone at any time:
+
+```console
+baton-active-directory.exe config-editor
+```
+
+If installed via the MSI installer, a **Configuration Editor** shortcut is also available in the Start Menu.
+
+The editor exposes every YAML config field across a tabbed layout (Connection, Authentication, Sync Scope, Multi-Domain, gMSA, Advanced). Notable toggles on the Advanced tab include `Lockout Status Behavior` (`locked-account-is-disabled`), `Sync Extension Attributes` (`sync-extension-attributes`), and `Use displayName as Resource Label` (`use-display-name`). Secret fields (bind passwords, client secret) are write-only — entering a new value encrypts it via DPAPI on save; leaving a field blank preserves the existing encrypted value.
+
+## What's next?
 
 Once your Active Directory connector is synced, you can use C1 to run user access reviews on AD group memberships, enable just-in-time access requests for AD groups and gMSAs, and automate provisioning workflows using connector actions.

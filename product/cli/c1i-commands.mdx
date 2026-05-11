@@ -6,7 +6,7 @@ description: A comprehensive reference for all c1i commands, subcommands, and fl
 sidebarTitle: "c1i commands"
 ---
 
-{/* Editor Refresh: 2026-04-24 */}
+{/* Editor Refresh: 2026-05-07 */}
 
 <Tip>
 **Key commands:**
@@ -29,7 +29,7 @@ c1i [command]
 | Command | Subcommands | Description |
 | :--- | :--- | :--- |
 | `docs` | `search` `page` `endpoints` `endpoint` `openapi` `skill` | Explore API documentation (no auth required). |
-| `auth` | `login` `status` | Manage authentication. |
+| `auth` | `login` `logout` `status` `whoami` | Manage authentication. |
 | `users` | `list` | Search and list C1 users. |
 | `apps` | `list` | List applications. |
 | `accounts` | `list` `set-owner` | Manage application accounts. |
@@ -38,6 +38,8 @@ c1i [command]
 | `requests` | `create grant` `create revoke` | Create access requests. |
 | `connectors` | `list` | List connectors. |
 | `api` | | Make raw C1 API requests. |
+| `version` | | Print the c1i version. |
+| `completion` | `bash` `fish` `powershell` `zsh` | Generate a shell completion script. |
 
 ## Global flags
 
@@ -161,7 +163,9 @@ c1i auth [command]
 | Subcommand | Description |
 | :--- | :--- |
 | `login` | Authenticate via browser or API credentials. |
-| `status` | Check if valid credentials are stored. |
+| `logout` | Remove stored credentials for the current URL. |
+| `status` | Check if valid credentials are stored and report the storage backend. |
+| `whoami` | Show the authenticated principal's identity, roles, permissions, and feature flags. |
 
 ### `login`
 
@@ -189,15 +193,56 @@ c1i auth login --url example.conductor.one
 c1i auth login --client-id <id> --client-secret <secret>
 ```
 
+For non-interactive scripts and CI environments, you can skip stored credentials entirely by setting `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (alongside `C1I_URL`) as environment variables. Both must be set; partial values are ignored. See [Credential storage](#credential-storage) for the full precedence order.
+
+### `logout`
+
+Remove stored c1i credentials for the current URL from both the OS keyring and the file fallback. Environment variables (`C1I_CLIENT_ID`, `C1I_CLIENT_SECRET`) are not affected.
+
+**Usage:**
+
+```bash
+c1i auth logout
+```
+
 ### `status`
 
-Check whether valid C1 credentials are stored and working.
+Check whether valid C1 credentials are stored and working. Reports which source (environment, keyring, or file) served the active credentials.
 
 **Usage:**
 
 ```bash
 c1i auth status
 ```
+
+### `whoami`
+
+Show the authenticated principal — user ID, display name, email, and counts of roles, permissions, and tenant feature flags. Useful for agents and scripts that need to confirm identity before making other API calls.
+
+**Usage:**
+
+```bash
+c1i auth whoami [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `-v`, `--verbose` | Include the full `roles`, `permissions`, and `features` arrays. |
+
+By default, `whoami` returns a compact summary. Use `--verbose` when you need the full role and permission lists.
+
+## Credential storage
+
+c1i reads credentials from the first source that has them, in this order:
+
+1. **Environment variables** — `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (combined with `C1I_URL`). Both must be set. Used for non-interactive scripts, CI, and containers. Never written to disk.
+2. **OS keyring** — Keychain (macOS), Credential Manager (Windows), or Secret Service (Linux). Default when available.
+3. **File fallback** — a `0600` JSON file under your config directory:
+   - Linux: `~/.config/c1i/credentials/`
+   - macOS: `~/Library/Application Support/c1i/credentials/`
+   - Windows: `%AppData%\c1i\credentials\`
+
+The file fallback is used automatically when no OS keyring is available — typical on headless Linux servers, Docker or LXC containers, CI runners, and WSL without a desktop environment. `c1i auth login` writes to the keyring when it can and to the file otherwise; `c1i auth status` reports the active source.
 
 ## Users
 
@@ -218,8 +263,9 @@ c1i users list [flags]
 | `--query string` | Search query. |
 | `--email string` | Filter by email address. |
 | `--status string` | Filter by status: `enabled`, `disabled`, or `deleted`. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 **Example:**
 
@@ -243,8 +289,9 @@ c1i apps list [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## Accounts
 
@@ -267,8 +314,9 @@ c1i accounts list --app-id <app-id> [flags]
 | `--type string` | Filter by type: `user`, `service_account`, or `system_account`. |
 | `--unmapped-only` | Only show unmapped accounts. |
 | `--query string` | Search query. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ### `set-owner`
 
@@ -304,8 +352,9 @@ c1i entitlements list [flags]
 | :--- | :--- |
 | `--app-id string` | Filter by application ID. |
 | `--query string` | Search query. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## Tasks
 
@@ -339,8 +388,9 @@ c1i tasks list [flags]
 | `--state string` | Filter by state: `open` or `closed`. |
 | `--query string` | Search query. |
 | `--assigned-to-me` | Only show tasks assigned to the current user. |
-| `--page-size int` | Number of results per page. |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ### `approve`
 
@@ -439,18 +489,20 @@ Manage connectors.
 
 ### `list`
 
-List connectors. Outputs NDJSON.
+List connectors for an application. Outputs NDJSON.
 
 **Usage:**
 
 ```bash
-c1i connectors list [flags]
+c1i connectors list --app-id <app-id> [flags]
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--page-size int` | Number of results per page. |
+| `--app-id string` | Application ID. (Required.) |
+| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## API
 
@@ -468,16 +520,89 @@ c1i api --path <path> [flags]
 | `--method string` | HTTP method: `GET`, `POST`, `PUT`, or `DELETE`. (Default: `GET`.) |
 | `--body string` | Request body (JSON). |
 | `--paginate` | Auto-paginate and output results as NDJSON. |
+| `--limit int` | With `--paginate`, cap the total number of NDJSON rows emitted (0 = unlimited). Errors if used without `--paginate`. |
 
 **Examples:**
 
 ```bash
-# Get a single resource
+# GET request
 c1i api --path /api/v1/apps
 
-# POST with a body
-c1i api --path /api/v1/tasks/search --method POST --body '{"state":"open"}'
+# POST request — passing --body switches the method to POST automatically
+c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}'
 
 # Paginate through results as NDJSON
 c1i api --path /api/v1/apps --paginate
+
+# Paginate a POST search endpoint
+c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate
 ```
+
+If you call a POST-only endpoint with GET (for example a `/search/*` path with no `--body`), c1i prints a one-line hint suggesting `--body` or `--method=POST` so you can recover without consulting the schema.
+
+## Pagination and limits
+
+c1i list commands (and `c1i api --paginate`) auto-paginate by default — they keep fetching pages until the cursor is empty, so you don't have to manage tokens manually.
+
+Three flags control how much data flows:
+
+| Flag | Effect |
+| :--- | :--- |
+| `--page-size N` | Per-call batch size. The C1 API caps this at 100; c1i clamps client-side, so `--page-size 500` is treated as 100. Default is 50. |
+| `--page-token TOKEN` | Resume from a specific cursor. When set, c1i fetches a single page and exits — auto-pagination is disabled. |
+| `--limit N` | Cap the *total* number of results emitted across all pages (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached, and c1i tightens the per-call request size when `--limit` is smaller than `--page-size` so it doesn't over-fetch. |
+
+**Examples:**
+
+```bash
+# Peek at the first 5 users without fetching everyone
+c1i users list --limit 5
+
+# Cap a wide query — useful for cost control or quick previews
+c1i tasks list --state open --limit 25
+
+# --limit also works with the raw api command, but only with --paginate
+c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate --limit 10
+```
+
+`c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
+
+## Version
+
+Print the c1i version.
+
+**Usage:**
+
+```bash
+c1i version
+```
+
+You can also use `c1i --version`.
+
+## Completion
+
+Generate a shell completion script. Output is the script itself, which you can write to a file or `source` directly. Supported shells are bash, zsh, fish, and PowerShell.
+
+**Usage:**
+
+```bash
+c1i completion <shell>
+```
+
+**Examples:**
+
+```bash
+# bash
+c1i completion bash > /etc/bash_completion.d/c1i
+
+# zsh
+c1i completion zsh > "${fpath[1]}/_c1i"
+
+# fish
+c1i completion fish > ~/.config/fish/completions/c1i.fish
+
+# PowerShell
+c1i completion powershell > $PROFILE
+```
+
+For shell-specific install steps, run `c1i completion <shell> --help`.
