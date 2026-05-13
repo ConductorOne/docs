@@ -1,0 +1,241 @@
+---
+title: "Set up a n8n connector"
+og:title: "Set up a n8n connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for n8n. Integrate your n8n instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision global roles and project membership."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for n8n. Integrate your n8n instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision global roles and project membership."
+sidebarTitle: "n8n"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The n8n connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Global Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Projects | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+<Note>
+**Known limitations:**
+
+- n8n does not support disabling or suspending users — only inviting or deleting them. ConductorOne cannot suspend n8n users.
+- Project membership provisioning is blocked by n8n (returns 403) when SSO-based provisioning is enabled on the instance. ConductorOne will report the error if this occurs.
+- Revoking the `global:member` role is a no-op — it is the base instance role. To remove a user entirely, use the delete user action.
+- There is no SCIM support in n8n.
+</Note>
+
+## Gather n8n credentials
+
+<Warning>
+To configure the n8n connector, you need **Owner** or **Admin** permissions in your n8n instance so that the API key has access to user and project management endpoints.
+</Warning>
+
+<Steps>
+  <Step>
+    Log in to your n8n instance and click your user avatar in the bottom-left corner, then select **Settings**.
+  </Step>
+
+  <Step>
+    In the left sidebar, select **API**.
+  </Step>
+
+  <Step>
+    Click **Create an API key**, give it a descriptive name (for example, `ConductorOne`), and click **Save**.
+  </Step>
+
+  <Step>
+    Copy the generated API key. You will not be able to view it again after leaving this page.
+  </Step>
+
+  <Step>
+    Note the base URL of your n8n instance (for example, `https://n8n.mycompany.com`). This is the value you will use for the **Instance URL** field.
+  </Step>
+</Steps>
+
+## Configure the n8n connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **n8n** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new n8n connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **API Key** (`BATON_N8N_API_KEY`): The n8n API key you created above.
+        - **Instance URL** (`BATON_N8N_INSTANCE_URL`): The base URL of your n8n instance (for example, `https://n8n.mycompany.com`).
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **That's it!** Your n8n connector is now pulling access data into ConductorOne.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [n8n](https://github.com/ConductorOne/baton-n8n) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new n8n connector
+
+    <Steps>
+      <Step>
+        In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new n8n connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your n8n connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-n8n-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-n8n-secrets
+    type: Opaque
+    stringData:
+      # ConductorOne credentials
+      BATON_CLIENT_ID: <ConductorOne client ID>
+      BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+      # n8n credentials
+      BATON_N8N_API_KEY: <n8n API key>
+      BATON_N8N_INSTANCE_URL: <n8n instance URL, e.g. https://n8n.mycompany.com>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-n8n.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-n8n
+      labels:
+        app: baton-n8n
+    spec:
+      selector:
+        matchLabels:
+          app: baton-n8n
+      template:
+        metadata:
+          labels:
+            app: baton-n8n
+            baton: "true"
+            baton-app: n8n
+        spec:
+          containers:
+          - name: baton-n8n
+            image: public.ecr.aws/conductorone/baton-n8n:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-n8n
+            envFrom:
+            - secretRef:
+                name: baton-n8n-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the n8n connector to. n8n data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **That's it!** Your n8n connector is now pulling access data into ConductorOne.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-n8n).
+</Tip>
