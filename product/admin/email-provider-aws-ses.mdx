@@ -1,0 +1,205 @@
+---
+title: Send C1 notifications from AWS SES
+og:title: Send C1 notifications from AWS SES - C1 docs
+og:description: Configure C1 to send notification emails through your own AWS Simple Email Service account so recipients see your company's domain as the sender.
+description: Configure C1 to send notification emails through your own AWS Simple Email Service account so recipients see your company's domain as the sender.
+sidebarTitle: AWS SES
+---
+{/* Editor Refresh: 2026-04-27 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+By default, C1 sends notifications from `no-reply@conductorone.com`. You can instead send through your own AWS Simple Email Service (SES) account so recipients see your company's domain as the sender.
+
+This task requires the **Super Admin** role in C1 and permission to create IAM roles and verify identities in your AWS account.
+
+C1 authenticates to your AWS account via IAM role assumption with an External ID — no access keys or secrets are shared with C1. You keep full control of the role and can revoke access at any time by deleting it.
+
+## Before you begin
+
+<Warning>
+**DNS records required for deliverability**
+
+Emails sent from your domain will land in spam unless the domain publishes SPF, DKIM, and DMARC records. These are managed at your DNS provider (Route 53, Cloudflare, etc.), not in C1.
+
+| Record | Name | Value |
+|---|---|---|
+| SPF (TXT) | `@` (apex) | `v=spf1 include:amazonses.com ~all` |
+| DKIM (CNAME × 3) | provided by SES | provided by SES during domain verification (see Step 1) |
+| DMARC (TXT) | `_dmarc` | `v=DMARC1; p=none; rua=mailto:postmaster@yourdomain.com` |
+
+For deeper authentication setup (custom MAIL FROM domain, DMARC alignment), see the [AWS SES email authentication guide](https://docs.aws.amazon.com/ses/latest/dg/send-email-authentication.html). Propagation may take up to 48 hours before mail providers fully trust the domain.
+</Warning>
+
+You'll need:
+
+- An AWS account with SES available in your target region.
+- The ability to create IAM roles and policies in that account.
+- A sending identity (email address or domain) you own and can verify.
+
+## Step 1: Verify a sending identity in SES
+
+Before SES will send mail on your behalf, the sender address (or its domain) must be verified.
+
+<Steps>
+<Step>
+Sign in to the AWS console and navigate to **SES** > **Identities** > **Create identity**.
+</Step>
+<Step>
+Choose one:
+
+- **Domain (recommended)**: Enter your domain (for example, `yourcompany.com`). SES displays three DKIM CNAME records. Publish all three at your DNS provider.
+- **Email address**: Enter the specific sender address. SES sends a verification link to that address — click it to verify.
+</Step>
+<Step>
+Wait for the **Identity status** to become **Verified**. Domain verification can take up to 72 hours, though it's usually much faster.
+</Step>
+<Step>
+If your account is still in the SES sandbox (the default for new accounts), you can only send to verified recipient addresses. To send to any recipient, request production access: **SES** > **Account dashboard** > **Request production access**. Approval typically takes 24 hours.
+</Step>
+</Steps>
+
+## Step 2: Open C1 and copy your tenant's External ID
+
+C1 generates a unique External ID per tenant. This value is used in your IAM role's trust policy so that only your C1 tenant can assume the role.
+
+<Steps>
+<Step>
+In C1, navigate to **Settings** > **Email provider**.
+</Step>
+<Step>
+Click **Edit**.
+</Step>
+<Step>
+Select **Customer provided**.
+</Step>
+<Step>
+In **Email service**, select **AWS SES**.
+</Step>
+<Step>
+In the **AWS SES configuration** section, click the copy icon next to the **External ID** field and save the value — you'll paste it into the IAM trust policy in Step 3.
+</Step>
+</Steps>
+
+<Tip>
+The External ID is tenant-specific. Do not reuse External IDs across tenants. If you manage multiple C1 tenants, each needs its own IAM role with its own External ID.
+</Tip>
+
+Leave the C1 edit form open — you'll return to it in Step 4 to finish configuration.
+
+## Step 3: Create the IAM role
+
+Create a role in your AWS account that C1 can assume to send mail.
+
+<Tip>
+C1 uses a dedicated, isolated AWS account for customer integrations. The only principal that can assume your role is `arn:aws:iam::765656841499:role/ConductorOneService`. The External ID condition ensures only your tenant's assume-role calls succeed.
+</Tip>
+
+<Steps>
+<Step>
+In the AWS console, navigate to **IAM** > **Roles** > **Create role**.
+</Step>
+<Step>
+For **Trusted entity type**, select **Custom trust policy** and paste the following, replacing `YOUR_C1_EXTERNAL_ID` with the value you copied in Step 2:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::765656841499:role/ConductorOneService"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "sts:ExternalId": "YOUR_C1_EXTERNAL_ID"
+        }
+      }
+    }
+  ]
+}
+```
+</Step>
+<Step>
+Click **Next**. Skip the managed-policy selection and click **Next** again.
+</Step>
+<Step>
+Name the role (for example, `c1-ses-sender`) and click **Create role**.
+</Step>
+<Step>
+On the role's detail page, open the **Permissions** tab and click **Add permissions** > **Create inline policy**. Paste the following:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+</Step>
+<Step>
+Name the policy (for example, `c1-ses-send`) and save.
+</Step>
+<Step>
+Copy the role's ARN (for example, `arn:aws:iam::123456789012:role/c1-ses-sender`). You'll paste this into C1 in the next step.
+</Step>
+</Steps>
+
+## Step 4: Finish configuring the email provider in C1
+
+Return to the **Settings** > **Email provider** edit form you left open in Step 2.
+
+<Steps>
+<Step>
+Fill in the remaining fields:
+
+- **Sender name**: The display name recipients see (for example, Governance Team).
+- **Sender email address**: A verified SES identity, or an address on a verified domain from Step 1.
+- **Reply-to address**: Usually the same as the sender address.
+- **IAM role ARN**: The role ARN from Step 3.
+- **AWS region**: The AWS region where your SES identity is verified (for example, `us-east-1`).
+- **Configuration set name** (optional): An SES configuration set for tracking and metrics. Leave blank if you don't use configuration sets.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+When you save, C1 validates the full assume-role chain by calling `sts:GetCallerIdentity` against your role. If the role ARN, trust policy, or External ID is wrong, save fails with a clear error and your previous configuration is preserved.
+
+<Warning>
+**Sender must be a verified SES identity**
+
+The address in **Sender email address** must be verified in SES — either directly, or as an address on a verified domain. SES rejects sends from unverified identities. If your account is still in the SES sandbox, the recipient must also be verified.
+</Warning>
+
+## Step 5: Verify
+
+Send a test message to confirm C1 can send through SES and that your email authentication records are passing.
+
+<Steps>
+<Step>
+On the **Email provider** page, click **Send test**.
+</Step>
+<Step>
+Enter your own email address and click **Send test**.
+</Step>
+<Step>
+Check your inbox. View the raw headers (in Gmail: ⋮ → **Show original**) and confirm SPF: PASS, DKIM: PASS with your domain as signer, DMARC: PASS.
+</Step>
+<Step>
+If the message does not arrive, check the spam folder and your SES sending activity (**SES** > **Monitoring** > **Sending statistics**).
+</Step>
+</Steps>

@@ -1,0 +1,225 @@
+---
+title: Send C1 notifications from Microsoft 365
+og:title: Send C1 notifications from Microsoft 365 - C1 docs
+og:description: Configure C1 to send notification emails through your Microsoft 365 tenant using the Microsoft Graph sendMail API so recipients see your company's domain as the sender.
+description: Configure C1 to send notification emails through your Microsoft 365 tenant using the Microsoft Graph sendMail API so recipients see your company's domain as the sender.
+sidebarTitle: Microsoft 365
+---
+{/* Editor Refresh: 2026-04-27 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+By default, C1 sends notifications from `no-reply@conductorone.com`. You can instead send through your own Microsoft 365 tenant using the Microsoft Graph `sendMail` API, so recipients see your company's domain as the sender.
+
+This task requires the **Super Admin** role in C1 and the **Application Administrator** (or **Global Administrator**) role in Entra ID, plus an Exchange Online administrator who can configure mailbox access policies.
+
+C1 authenticates to your tenant via an Entra ID app registration with the `Mail.Send` application permission. No user passwords are shared with C1, and you can revoke access at any time by removing the client secret or deleting the app.
+
+## Before you begin
+
+<Warning>
+**DNS records required for deliverability**
+
+Emails sent from your domain will land in spam unless the domain publishes SPF, DKIM, and DMARC records. These are managed at your DNS provider (Route 53, Cloudflare, etc.), not in Microsoft 365.
+
+| Record | Name | Value |
+|---|---|---|
+| SPF (TXT) | `@` (apex) | `v=spf1 include:spf.protection.outlook.com -all` |
+| DKIM | configured in the Microsoft 365 admin center, then 2 CNAMEs published per domain | see [Microsoft 365 DKIM setup](https://learn.microsoft.com/en-us/microsoft-365/security/office-365-security/email-authentication-dkim-configure) |
+| DMARC (TXT) | `_dmarc` | `v=DMARC1; p=none; rua=mailto:postmaster@yourdomain.com` |
+
+If your domain is already used for Microsoft 365 mail, SPF and DKIM may already be in place. Propagation may take up to 48 hours.
+</Warning>
+
+You'll need:
+
+- A Microsoft 365 (Entra ID) tenant.
+- A licensed mailbox to send from (for example, `governance@yourcompany.com`).
+- Permission to register applications and grant admin consent in Entra ID.
+- Permission to run Exchange Online PowerShell to configure the mailbox access policy (Step 4).
+
+## Step 1: Register an app in Entra ID
+
+Create an Entra ID app registration that C1 will authenticate as to call the Microsoft Graph `sendMail` API.
+
+<Steps>
+<Step>
+Sign in to [entra.microsoft.com](https://entra.microsoft.com) as an **Application Administrator** or **Global Administrator**.
+</Step>
+<Step>
+Navigate to **Identity** > **Applications** > **App registrations** > **New registration**.
+</Step>
+<Step>
+Fill in:
+
+- **Name**: C1 Email Sender (or similar).
+- **Supported account types**: Accounts in this organizational directory only (single tenant).
+- **Redirect URI**: leave blank.
+</Step>
+<Step>
+Click **Register**.
+</Step>
+<Step>
+On the app's **Overview** page, copy and save:
+
+- **Application (client) ID** — you'll paste this into C1.
+- **Directory (tenant) ID** — you'll paste this into C1.
+</Step>
+</Steps>
+
+## Step 2: Grant the Mail.Send application permission
+
+Grant the app permission to send mail and authorize it for your tenant.
+
+<Steps>
+<Step>
+On the app's page, navigate to **API permissions** > **Add a permission**.
+</Step>
+<Step>
+Select **Microsoft Graph** > **Application permissions** (not Delegated).
+</Step>
+<Step>
+Search for and select **Mail.Send**.
+</Step>
+<Step>
+Click **Add permissions**.
+</Step>
+<Step>
+Click **Grant admin consent for your tenant** and confirm. The **Status** column should show a green check next to Mail.Send.
+</Step>
+</Steps>
+
+<Warning>
+**Application permission is required, not Delegated.** Delegated permissions require an interactive user sign-in, which doesn't fit a service-to-service email sender. Application permissions allow C1 to send mail without a user present, but also grant the app the ability to send as any mailbox in the tenant by default. Step 4 below restricts that scope.
+</Warning>
+
+## Step 3: Create a client secret
+
+Create the credential C1 will use to authenticate as the app.
+
+<Steps>
+<Step>
+On the app's page, navigate to **Certificates & secrets** > **Client secrets** > **New client secret**.
+</Step>
+<Step>
+Enter a description (for example, C1 Email Sender) and choose an expiration. 24 months is the maximum; a shorter expiration is better practice.
+</Step>
+<Step>
+Click **Add**.
+</Step>
+<Step>
+Immediately copy the secret's **Value** — Azure will not show it again after you leave the page. You'll paste this into C1 in Step 5.
+</Step>
+</Steps>
+
+<Tip>
+Set a calendar reminder before this secret expires. Once it expires, C1 will fail to send email and there is no automatic renewal. Best practice: rotate the secret 30 days before expiry.
+</Tip>
+
+## Step 4: Restrict the app to a specific mailbox (highly recommended)
+
+By default, the app you created can send mail as any user in your tenant. Use an Application Access Policy in Exchange Online to scope it down to only the sender mailbox.
+
+<Steps>
+<Step>
+Connect to Exchange Online PowerShell as an Exchange administrator:
+
+```powershell
+Install-Module -Name ExchangeOnlineManagement
+Connect-ExchangeOnline
+```
+</Step>
+<Step>
+Create the access policy, replacing `<APP_CLIENT_ID>` with the Application (client) ID from Step 1 and `<SENDER_MAILBOX>` with the address you'll use as the sender (for example, `governance@yourcompany.com`):
+
+```powershell
+New-ApplicationAccessPolicy `
+    -AppId "<APP_CLIENT_ID>" `
+    -PolicyScopeGroupId "<SENDER_MAILBOX>" `
+    -AccessRight RestrictAccess `
+    -Description "Restrict C1 Email Sender to governance mailbox"
+```
+</Step>
+<Step>
+Verify the policy:
+
+```powershell
+Test-ApplicationAccessPolicy -Identity "<SENDER_MAILBOX>" -AppId "<APP_CLIENT_ID>"
+# AccessCheckResult: Granted
+
+Test-ApplicationAccessPolicy -Identity "<ANY_OTHER_MAILBOX>" -AppId "<APP_CLIENT_ID>"
+# AccessCheckResult: Denied
+```
+</Step>
+</Steps>
+
+<Tip>
+**Why this matters.** Without this policy, anyone with the app's client secret can send mail as any user in your tenant, including executives. The policy is enforced at the Exchange layer.
+
+If you want the app to send from multiple mailboxes (for example, `governance@` and `security@`), create a mail-enabled security group containing those mailboxes and use the group's primary SMTP address for `-PolicyScopeGroupId` — one policy covers the whole group.
+</Tip>
+
+## Step 5: Configure the email provider in C1
+
+Enter the app credentials and sender mailbox from the previous steps in C1 to activate the integration.
+
+<Steps>
+<Step>
+In C1, navigate to **Settings** > **Email provider**.
+</Step>
+<Step>
+Click **Edit**.
+</Step>
+<Step>
+Select **Customer provided**.
+</Step>
+<Step>
+In **Email service**, select **Microsoft Graph**.
+</Step>
+<Step>
+Fill in the fields:
+
+- **Sender name**: The display name recipients see (for example, Governance Team).
+- **Sender email address**: The mailbox you scoped in Step 4 (for example, `governance@yourcompany.com`).
+- **Reply-to address**: Usually the same as the sender address.
+- **Azure tenant ID**: The Directory (tenant) ID from Step 1.
+- **Application (client) ID**: The Application (client) ID from Step 1.
+- **Client secret**: The secret value you copied in Step 3.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+When you save, C1 validates the credentials by acquiring an OAuth token from Azure AD. If the tenant ID, client ID, or secret is wrong, save fails with a clear error and your previous configuration is preserved.
+
+<Warning>
+**Sender mailbox must be allowed by the access policy**
+
+If you applied an Application Access Policy in Step 4, the **Sender email address** must match a mailbox covered by that policy. Otherwise Microsoft Graph rejects the send with `ErrorAccessDenied`.
+</Warning>
+
+## Step 6: Verify
+
+Send a test message to confirm C1 can send through your Microsoft 365 tenant and that your email authentication records are passing.
+
+<Steps>
+<Step>
+On the **Email provider** page, click **Send test**.
+</Step>
+<Step>
+Enter your own email address and click **Send test**.
+</Step>
+<Step>
+Check your inbox. View the raw headers and confirm SPF: PASS, DKIM: PASS with your domain as signer, DMARC: PASS.
+</Step>
+<Step>
+If the message does not arrive, check the spam folder and Microsoft 365 message trace (**Exchange admin center** > **Mail flow** > **Message trace**).
+</Step>
+</Steps>
+
+<Tip>
+**Sent items**: C1 sends mail with `saveToSentItems=false`, so emails sent via this provider do not appear in the sender mailbox's Sent folder. For an audit trail, use C1's email activity log (**Settings** > **Email provider** > **View activity**) or Microsoft 365 message trace.
+</Tip>

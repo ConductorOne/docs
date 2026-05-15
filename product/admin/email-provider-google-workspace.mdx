@@ -1,0 +1,196 @@
+---
+title: Send C1 notifications from Google Workspace
+og:title: Send C1 notifications from Google Workspace - C1 docs
+og:description: Configure C1 to send notification emails through your own Google Workspace mailbox so recipients see your company's domain as the sender.
+description: Configure C1 to send notification emails through your own Google Workspace mailbox so recipients see your company's domain as the sender.
+sidebarTitle: Google Workspace
+---
+{/* Editor Refresh: 2026-04-27 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+By default, C1 sends notifications from `no-reply@conductorone.com`. You can instead send from your own Google Workspace mailbox so recipients see your company's domain as the sender.
+
+This task requires the **Super Admin** role in C1 and the **Super Admin** role in Google Workspace.
+
+## Before you begin
+
+<Warning>
+**DNS records required for deliverability**
+
+Emails sent from your domain will land in spam unless the domain publishes SPF, DKIM, and DMARC records. These are managed at your DNS provider (Route 53, Cloudflare, etc.), not in C1 or Google Workspace. At minimum, publish:
+
+| Record | Name | Value |
+|---|---|---|
+| SPF (TXT) | `@` (apex) | `v=spf1 include:_spf.google.com ~all` |
+| DKIM (TXT) | `google._domainkey` | Generated in admin.google.com → Apps → Google Workspace → Gmail → Authenticate email |
+| DMARC (TXT) | `_dmarc` | `v=DMARC1; p=none; rua=mailto:postmaster@yourdomain.com` |
+
+Consult your DNS provider's documentation for how to publish TXT records. Propagation may take up to 48 hours before Gmail fully trusts the domain. See [Google's email authentication guide](https://support.google.com/a/answer/33786) for details.
+</Warning>
+
+You'll need:
+
+- A Workspace super admin account.
+- A DNS domain you control (with the records above published).
+- Google Cloud Platform access in the same organization as your Workspace.
+
+## Step 1: Create a dedicated sender mailbox
+
+The address that C1 sends mail as must be a real, licensed user in Google Workspace — not an alias, group, or forwarding address.
+
+<Steps>
+<Step>
+In admin.google.com, navigate to **Directory** > **Users** > **Add new user**.
+</Step>
+<Step>
+Create a user with an address like `governance@yourcompany.com` or `c1-notifications@yourcompany.com`.
+</Step>
+<Step>
+Assign a license with Gmail enabled.
+</Step>
+<Step>
+Sign in as this user once (incognito window) to accept the ToS and complete first-login setup.
+
+<Tip>
+Gmail API calls fail for users who have never completed first login.
+</Tip>
+</Step>
+<Step>
+**Optional.** In Gmail, go to **Settings** > **Accounts** > **Send mail as**, edit the primary identity, and set **Name** to the display name you want recipients to see (for example, Governance Team). Gmail may override custom display names from the MIME header with this value.
+</Step>
+</Steps>
+
+## Step 2: Create a GCP service account
+
+C1 uses a GCP service account to call the Gmail API on behalf of your sender mailbox. Create the service account in the same GCP organization as your Workspace tenant.
+
+<Steps>
+<Step>
+Sign in to the [Google Cloud console](https://console.cloud.google.com) as a super admin.
+</Step>
+<Step>
+Create a new project or select an existing one for the C1 email integration.
+</Step>
+<Step>
+In the navigation menu, go to **APIs & Services** > **Library**.
+</Step>
+<Step>
+Search for **Gmail API** and click **Enable**.
+</Step>
+<Step>
+Navigate to **APIs & Services** > **Credentials**.
+</Step>
+<Step>
+Click **Create credentials** > **Service account**.
+</Step>
+<Step>
+Set a name (for example, C1 Email Sender) and click **Create and continue**. No project roles are required — click **Continue**, then **Done**.
+</Step>
+<Step>
+In the service account list, click the service account you just created.
+</Step>
+<Step>
+Open the **Keys** tab. Click **Add key** > **Create new key**, choose **JSON** format, and click **Create**. Save the downloaded JSON file securely — you'll upload it to C1 in Step 4.
+</Step>
+<Step>
+On the service account's **Details** tab, copy the **OAuth 2 Client ID** (a numeric string like `108123456789012345678`). You'll need it for Step 3.
+
+<Tip>
+Do not confuse the OAuth 2 Client ID with the service account's email address.
+</Tip>
+</Step>
+</Steps>
+
+## Step 3: Grant domain-wide delegation
+
+Domain-wide delegation allows the service account to impersonate the sender mailbox when calling the Gmail API. You configure this in the Google Admin console, not in GCP.
+
+<Steps>
+<Step>
+In admin.google.com, navigate to **Security** > **Access and data control** > **API controls**.
+</Step>
+<Step>
+In the **Domain-wide delegation** section, click **Manage domain-wide delegation**.
+</Step>
+<Step>
+Click **Add new**.
+</Step>
+<Step>
+In **Client ID**, paste the OAuth 2 Client ID from Step 2.
+</Step>
+<Step>
+In **OAuth scopes**, enter:
+
+```text
+https://www.googleapis.com/auth/gmail.send
+```
+</Step>
+<Step>
+Click **Authorize**.
+</Step>
+</Steps>
+
+<Tip>
+This is a one-time, domain-wide grant. Adding new sender mailboxes later does not require repeating this step.
+</Tip>
+
+## Step 4: Configure the email provider in C1
+
+Enter the sender mailbox and service account credentials from the previous steps in C1 to activate the integration.
+
+<Steps>
+<Step>
+In C1, navigate to **Settings** > **Email provider**.
+</Step>
+<Step>
+Click **Edit**.
+</Step>
+<Step>
+Select **Customer provided**.
+</Step>
+<Step>
+In **Email service**, select **Google Workspace**.
+</Step>
+<Step>
+Fill in the fields:
+
+- **Sender name**: The display name recipients see (for example, Governance Team).
+- **Sender email address**: The mailbox you created in Step 1 (for example, `governance@yourcompany.com`).
+- **Reply-to address**: Usually the same as the sender address.
+- **Delegated user email**: Same as the sender address.
+- **Service account JSON**: Upload the JSON file downloaded in Step 2.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+<Warning>
+**Sender and Delegated user must match**
+
+Gmail only allows sending with a From: address that matches the authenticated user's primary email or a verified "Send mail as" alias in that user's Gmail settings. Use the same address for both **Sender email address** and **Delegated user email**. If they differ without a verified alias, Gmail will silently rewrite the From: header to the delegated user's address.
+</Warning>
+
+## Step 5: Verify
+
+Send a test message to confirm C1 can send through your Workspace mailbox and that your email authentication records are passing.
+
+<Steps>
+<Step>
+On the **Email provider** page, click **Send test**.
+</Step>
+<Step>
+Enter your own email address and click **Send test**.
+</Step>
+<Step>
+Check your inbox. If the message arrives, view the raw headers (in Gmail: ⋮ → **Show original**) and confirm SPF: PASS, DKIM: PASS, DMARC: PASS.
+</Step>
+<Step>
+If the message does not arrive, check the spam folder, mark it as **Not spam**, and re-test.
+</Step>
+</Steps>
+
+New sending domains typically take 24–72 hours and multiple engaged recipients before Gmail fully trusts them. Display names may not appear in the inbox UI until this trust is established, even though SPF, DKIM, and DMARC are all passing. This is expected behavior and resolves with normal use.
