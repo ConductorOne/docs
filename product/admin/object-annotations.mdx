@@ -1,0 +1,133 @@
+---
+title: "Object annotations"
+og:title: "Object annotations - C1 docs"
+description: "Attach custom key/value metadata to C1 objects to track cost centers, compliance scope, ownership, and IaC management state."
+og:description: "Attach custom key/value metadata to C1 objects to track cost centers, compliance scope, ownership, and IaC management state."
+sidebarTitle: "Annotations"
+---
+
+{/* Editor Refresh: 2026-05-15 */}
+
+Annotations let you attach custom key/value metadata to C1 objects. Use them to record cost centers, compliance scope, ownership, or to mark which objects an infrastructure-as-code (IaC) tool — such as Terraform, OpenTofu, or Pulumi — is responsible for managing.
+
+Annotations are stored on the object, returned on every read, and fully tracked in object history.
+
+## Supported objects
+
+| Object | Terraform resource |
+| :--- | :--- |
+| Policy | `conductorone_policy` |
+| App | `conductorone_app` |
+| App entitlement | `conductorone_app_entitlement`, `conductorone_custom_app_entitlement` |
+| App resource | `conductorone_app_resource` |
+| Access profile | `conductorone_access_profile` |
+| Automation | `conductorone_automation` |
+| Access review template | `conductorone_access_review_template` |
+
+## Add and edit annotations
+
+### In the C1 UI
+
+On any supported object's detail page, annotations appear as chips in the header. Click the pencil icon to open the annotations editor and add, update, or remove keys.
+
+### In the Terraform provider
+
+Add an `annotations` block to any supported resource. The provider automatically sets the IaC well-known keys (`managed_by`, `iac_workspace`, `iac_resource_address`) — you only need to supply your own keys:
+
+```hcl
+resource "conductorone_policy" "approval_default" {
+  display_name = "Default approval"
+  annotations = {
+    "myteam/cost-center" = "iam-platform"
+    "myteam/audit"       = "soc2"
+  }
+}
+```
+
+### Through the API
+
+Pass `annotations` in the request body and include `"annotations"` in the update mask. The API uses merge semantics: keys you include are set or updated; keys you omit are left unchanged; set a key's value to an empty string to delete it. You only need to send the keys you're changing, not the full map.
+
+```bash
+curl -X POST "$C1_URL/api/v1/policies/$POLICY_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "policy": {
+      "id": "'"$POLICY_ID"'",
+      "annotations": {
+        "myteam/cost-center": "iam-platform",
+        "myteam/audit": ""
+      }
+    },
+    "updateMask": "annotations"
+  }'
+```
+
+In this example, `myteam/cost-center` is set and `myteam/audit` is deleted. Any other existing annotation keys are preserved.
+
+## Annotation key conventions
+
+Keys can be anything that passes the [shape rules](#limits), but prefixing with a short namespace avoids collisions with other tools' keys:
+
+```
+myteam/cost-center     = iam-platform
+myteam/owner           = alice@example.com
+acme.com/compliance    = soc2
+acme.com/data-class    = internal
+acme.com/audit-cycle   = quarterly
+```
+
+Use your team name, company domain, or a runtime identifier as the namespace. Within the namespace, lowercase with `-` or `_` as separators is conventional.
+
+**Common uses:**
+
+- **Cost reporting** — tag apps and access profiles with a cost center, then query the API or export to your dashboard
+- **Compliance scope** — tag entitlements and access profiles with framework values like `soc2`, `hipaa`, or `pci`
+- **Ownership** — record an owner for objects where no C1 user maps cleanly
+- **Audit cadence** — tag access review templates with `quarterly`, `annual`, or `ad-hoc`
+
+## IaC management labels
+
+A set of reserved keys mark an object as managed by an IaC tool. The C1 Terraform provider sets them automatically; you can also set them manually for other tools.
+
+| Key | What it means | Set by the Terraform provider? |
+| :--- | :--- | :--- |
+| `managed_by` | The tool managing this object — `terraform`, `opentofu`, `pulumi`, `crossplane`, `ansible`, or any lowercase value | Yes |
+| `iac_workspace` | Workspace or project identifier, for example `prod/c1-config` | Yes (from `TF_WORKSPACE`) |
+| `iac_resource_address` | Tool-native resource address, for example `conductorone_policy.approval_default` | Yes |
+| `iac_tool_version` | IaC tool or provider version | No — set manually if you want to track it |
+
+When these keys are present, the object's detail page shows a **Managed by [tool]** chip.
+
+<Note>
+`iac_tool_version` is intentionally not set automatically by the Terraform provider. Setting it automatically would produce a diff across every managed object after each provider upgrade, even when nothing in your configuration changed.
+</Note>
+
+### Take ownership
+
+When you edit any field on an IaC-managed object in the C1 UI — other than the annotations themselves — C1 atomically clears the IaC keys in the same operation and shows a confirmation toast. This signals that C1, not your IaC tool, now manages the object.
+
+Editing annotations directly, or editing the object via the API or `c1i`, does not trigger this transfer — the IaC keys are left in place.
+
+<Warning>
+If your IaC tool runs `terraform apply` after you take ownership in the C1 UI, it will attempt to reconcile the object back to the state in your configuration. To avoid overwriting your change, remove the resource from your IaC configuration or run `terraform state rm` on it.
+</Warning>
+
+## Limits
+
+| Constraint | Limit |
+| :--- | :--- |
+| Max keys per object | 16 |
+| Key length | 1–128 characters |
+| Key format | Must start with a letter; alphanumeric plus `.` `_` `/` `-` only — no spaces or Unicode |
+| Value length | 0–256 characters |
+| Value format | URL-safe ASCII — no Unicode, control characters, or newlines |
+| Total size per object | ≤ 4 KB (all keys and values combined) |
+| Reserved prefix | Keys starting with `c1/` are rejected |
+
+The 4 KB total budget is the binding constraint. Reduce key or value lengths if you hit it before reaching 16 keys.
+
+## Auditing
+
+Every annotation change is recorded in the object's history alongside other field changes. Changes to IaC management keys — setting or clearing `managed_by` — are called out with a distinct badge, so you can see at a glance when an object moved in or out of IaC management and who made the change.
