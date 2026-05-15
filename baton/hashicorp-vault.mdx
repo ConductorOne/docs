@@ -20,9 +20,14 @@ sidebarTitle: "HashiCorp Vault"
 
 ## Gather HashiCorp Vault credentials 
 
-Configuring the connector requires you to pass in credentials generated in HashiCorp Vault. Gather these credentials before you move on. 
+Configuring the connector requires you to pass in credentials generated in HashiCorp Vault. Gather these credentials before you move on.
 
-### Look up your Vault token
+The connector supports two authentication methods. Choose one:
+
+- **Vault Token** — authenticate directly with a Vault token.
+- **AppRole** — authenticate using a Role ID and Secret ID via the [AppRole auth method](https://developer.hashicorp.com/vault/docs/auth/approle). This is recommended for automated, machine-to-machine access.
+
+### Option 1: Look up your Vault token
 
 <Steps>
 <Step>
@@ -34,9 +39,54 @@ Click the user menu (person icon) and select **Copy token**.
 <Step>
 Carefully save the token value.
 </Step>
-</Steps> 
+</Steps>
 
-**Done.** Next, move on to the connector configuration instructions. 
+Next, move on to the connector configuration instructions.
+
+### Option 2: Set up AppRole authentication
+
+<Steps>
+<Step>
+Follow the [Vault UI documentation](https://developer.hashicorp.com/vault/docs/ui) to log into the Vault UI, or use the Vault CLI.
+</Step>
+<Step>
+Enable the AppRole auth method if it isn't already enabled:
+
+```bash
+vault auth enable approle
+```
+</Step>
+<Step>
+Create an AppRole role with the appropriate policies for the connector:
+
+```bash
+vault write auth/approle/role/baton-connector \
+    token_policies="<your-policy>" \
+    token_ttl=1h \
+    token_max_ttl=4h
+```
+</Step>
+<Step>
+Retrieve the **Role ID** for the role you just created:
+
+```bash
+vault read auth/approle/role/baton-connector/role-id
+```
+
+Carefully save the `role_id` value.
+</Step>
+<Step>
+Generate a **Secret ID** for the role:
+
+```bash
+vault write -f auth/approle/role/baton-connector/secret-id
+```
+
+Carefully save the `secret_id` value.
+</Step>
+</Steps>
+
+Next, move on to the connector configuration instructions.
 
 ## Configure the HashiCorp Vault connector 
 
@@ -116,10 +166,18 @@ stringData:
   # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-  
-  # HashiCorp Vault credentials
-  BATON_VAULT_TOKEN: <HashiCorp Vault token>
+
+  # HashiCorp Vault host (required)
   BATON_VAULT_HOST: <HashiCorp Vault address or host, such as http://127.0.0.1:8200>
+
+  # Authentication — use one of the following two options, not both:
+
+  # Option 1: Vault Token
+  BATON_VAULT_TOKEN: <HashiCorp Vault token>
+
+  # Option 2: AppRole (remove Option 1 if using this)
+  # BATON_ROLE_ID: <AppRole role ID>
+  # BATON_SECRET_ID: <AppRole secret ID>
 
   # Optional: Include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
@@ -171,7 +229,7 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 </Step>
 </Steps>
 
-**Done.** Your HashiCorp Vault connector is now pulling access data into C1.
+Your HashiCorp Vault connector is now pulling access data into C1.
 </Tab>
 </Tabs>
 

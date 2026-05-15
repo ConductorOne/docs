@@ -1,0 +1,128 @@
+---
+title: Tool call hooks
+description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
+og:title: Tool call hooks - C1 docs
+og:description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
+---
+
+{/* Editor Refresh: 2026-05-08 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+Tool call hooks are interception points that run on every governed MCP tool call. They can observe a call, modify its inputs or outputs, or deny it outright. Use them to redact sensitive data, cap risky parameters, or enforce conditional access rules that see beyond the entitlement grant model.
+
+## How hooks work
+
+Each hook fires on one of two events:
+
+| Event | When it runs | What it can do |
+| :--- | :--- | :--- |
+| **Pre-tool use** | Before C1 forwards the call to the MCP server | Inspect or rewrite the input, or deny the call |
+| **Post-tool use** | After the MCP server returns | Inspect or rewrite the output, or deny the response from reaching the client |
+
+Hooks run in **priority order** (lower priority numbers run first). Each hook is independently enabled or disabled and can be scoped to specific tools with a [CEL](/product/admin/expressions) filter expression. Multiple hooks can stack on the same call — input or output modifications from earlier hooks are passed to later ones, and any hook can short-circuit the chain by denying.
+
+Hooks are **fail-closed**. If a hook errors, times out, or its filter expression fails to evaluate, the call is denied. Custom function hooks have a 60-second invocation timeout.
+
+Every hook execution is recorded in the [audit log](/product/admin/audit-ai-tool-usage) with one of these statuses: `ALLOWED`, `MUTATED`, `DENIED`, `ERROR`, `TIMEOUT`, or `FILTER_ERROR`.
+
+## Configure a hook
+
+<Steps>
+<Step>
+Go to **Settings > AI Governance** and open the **Hooks** tab.
+</Step>
+<Step>
+Click **Add hook**.
+</Step>
+<Step>
+Fill out the form:
+
+| Field | Notes |
+| :--- | :--- |
+| **Name** | Required. 1–100 characters. |
+| **Description** | Optional. Up to 2048 characters. |
+| **Hook type** | **Built-in pattern** for one of the patterns below, or **Custom function** to invoke a [function](/product/admin/functions). |
+| **Event** | **Pre-tool use** or **Post-tool use**. Some built-in patterns only support one event. |
+| **Filter** | Optional CEL expression. Available variable: `ctx.tool_name`. Empty matches all tools. Example: `ctx.tool_name.startsWith("github_")`. |
+| **Priority** | 0–1000. Lower runs first. |
+| **Enabled** | Toggle on to activate the hook immediately on save. |
+</Step>
+<Step>
+If you selected **Built-in pattern**, choose the pattern and configure its options. If you selected **Custom function**, pick the function from the dropdown.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+## Built-in patterns
+
+C1 ships five pre-built hook patterns. Each one is a self-contained handler with its own configuration; no function code is required.
+
+| Pattern | Event | What it does |
+| :--- | :--- | :--- |
+| **PII field redaction** | Post | Replaces values in JSON output fields whose names match a configurable list (defaults: `ssn`, `social_security_number`, `date_of_birth`, `salary`, `bank_account`) with a placeholder string. |
+| **Credit card blocking** | Post | Scans tool output for Luhn-valid credit card numbers and denies the response if any are found. |
+| **Query scope limit** | Pre | Caps numeric input fields (defaults: `limit`, `page_size`, `count`, `max_results`) at a configured maximum to prevent oversized queries. |
+| **Write authorization** | Pre | Denies tool calls whose classification is in a blocked list, optionally only outside a configured business-hours window (timezone, start/end times, days of the week). |
+| **Sensitive file guard** | Pre | Denies tool calls that reference sensitive file paths or directories (defaults: `.env`, `*.pem`, `*.key`, `id_rsa`, `.ssh/`, `.aws/`, and similar). |
+
+## Custom function hooks
+
+When the built-in patterns don't fit, write a [function](/product/admin/functions) and attach it to a hook. C1 invokes the function with a JSON payload describing the call and uses the return value to decide whether to allow, modify, or deny.
+
+See the [Functions overview](/product/admin/functions) and [Create a function](/product/admin/functions-create) for how to author and deploy a function.
+
+### Pre-tool-use payload
+
+The function receives:
+
+```json
+{
+  "tool_name": "github_create_issue",
+  "input": { /* the tool's input arguments */ },
+  "context": {
+    "tool_source": "connector",
+    "classification": "WRITE"
+  }
+}
+```
+
+`tool_source` is either `builtin` or `connector`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`).
+
+### Post-tool-use payload
+
+The function receives the same fields plus the call result:
+
+```json
+{
+  "tool_name": "github_create_issue",
+  "input": { /* original input */ },
+  "output": { /* whatever the tool returned */ },
+  "error": "",
+  "context": { /* same as pre */ }
+}
+```
+
+### Return value
+
+In both events the function returns an object with any subset of these fields:
+
+```json
+{
+  "deny": false,
+  "reason": "explanation shown in audit log",
+  "input":  { /* pre only: replacement input */ },
+  "output": { /* post only: replacement output */ }
+}
+```
+
+- Set `deny: true` to block the call. The `reason` is recorded in the audit log and surfaced to the AI client as a denial.
+- Omit `input` (pre) or `output` (post) when you don't need to modify the payload.
+- Returning an empty object `{}` is equivalent to allowing the call unchanged.
+
+If the function throws, exceeds the 60-second timeout, or returns invalid JSON, the call is denied and the failure is recorded as `ERROR` or `TIMEOUT` in the audit log.
+

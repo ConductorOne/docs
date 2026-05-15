@@ -1,0 +1,234 @@
+---
+title: "Use c1i with AI coding agents"
+og:title: Use c1i with AI coding agents | Docs - C1
+og:description: Set up c1i as a skill for Claude Code, Cursor, and other AI coding agents so they can manage users, apps, entitlements, and access requests in C1.
+description: Set up c1i as a skill for Claude Code, Cursor, and other AI coding agents so they can manage users, apps, entitlements, and access requests in C1.
+sidebarTitle: "Use c1i with AI agents"
+---
+
+{/* Editor Refresh: 2026-05-07 */}
+
+c1i is designed from the ground up for AI agents. The `c1i docs skill` command exports a self-contained skill file that teaches your AI coding agent how to use every c1i command, discover API endpoints, and manage C1 resources — without needing external documentation.
+
+## What is a skill file?
+
+A **skill file** is a structured markdown document that gives an AI coding agent the context it needs to use a tool effectively. The skill file produced by `c1i docs skill` covers:
+
+- All c1i commands, flags, and output formats
+- API discovery workflows (how to find and understand endpoints)
+- Common API endpoints and pagination patterns
+- Authentication setup
+
+When you add this skill file to your agent's context, the agent can manage users, apps, entitlements, tasks, and access requests in C1 through natural-language instructions.
+
+## Generate the skill file
+
+Run `c1i docs skill` to output the skill file to your terminal:
+
+```shell
+c1i docs skill
+```
+
+To write it directly to a file:
+
+```shell
+c1i docs skill -o SKILL.md
+```
+
+<Tip>
+The `docs skill` command works without authentication, so you can generate the skill file before logging in.
+</Tip>
+
+## Set up c1i with Claude Code
+
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) loads skills from `.claude/skills/` in your project directory. To add c1i as a skill:
+
+<Steps>
+<Step>
+Create the skills directory if it doesn't exist:
+
+```shell
+mkdir -p .claude/skills/c1i
+```
+</Step>
+<Step>
+Generate the skill file into that directory:
+
+```shell
+c1i docs skill -o .claude/skills/c1i/SKILL.md
+```
+</Step>
+<Step>
+Verify the file was created:
+
+```shell
+cat .claude/skills/c1i/SKILL.md
+```
+
+You should see the skill content starting with a YAML frontmatter block containing `name: c1i`.
+</Step>
+<Step>
+Start using c1i through Claude Code. You can now give Claude natural-language instructions like:
+
+- "List all users with status enabled"
+- "Search for entitlements related to admin access"
+- "Show me all open access request tasks"
+- "Create a grant request for user X to entitlement Y"
+</Step>
+</Steps>
+
+<Note>
+Make sure c1i is installed and authenticated (`c1i auth login`) before asking Claude Code to run c1i commands. For non-interactive setups (CI, containers, headless servers), set `C1I_URL`, `C1I_CLIENT_ID`, and `C1I_CLIENT_SECRET` as environment variables instead of running `auth login` — c1i picks them up automatically. See [Credential storage](/product/cli/c1i#credential-storage) for the full precedence order.
+</Note>
+
+## Set up c1i with Cursor
+
+[Cursor](https://www.cursor.com/) uses project rules to provide context to its AI. To add the c1i skill:
+
+<Tabs>
+<Tab title="Project rule (recommended)">
+<Steps>
+<Step>
+Create the rules directory if it doesn't exist:
+
+```shell
+mkdir -p .cursor/rules
+```
+</Step>
+<Step>
+Generate the skill file as a Cursor rule:
+
+```shell
+c1i docs skill -o .cursor/rules/c1i.md
+```
+</Step>
+<Step>
+Open Cursor and start giving instructions. Cursor's AI now understands c1i and can run commands on your behalf.
+</Step>
+</Steps>
+</Tab>
+<Tab title="User rule (global)">
+To make c1i available across all your Cursor projects, add it as a user rule:
+
+<Steps>
+<Step>
+Open Cursor and go to **Settings** > **Rules** > **User Rules**.
+</Step>
+<Step>
+Generate the skill file:
+
+```shell
+c1i docs skill
+```
+</Step>
+<Step>
+Copy the output and paste it into the user rules text area.
+</Step>
+</Steps>
+</Tab>
+</Tabs>
+
+## Set up c1i with other agents
+
+The skill file is plain markdown with YAML frontmatter, so it works with any AI coding agent that accepts context files. The general pattern:
+
+<Steps>
+<Step>
+Generate the skill file:
+
+```shell
+c1i docs skill -o c1i-skill.md
+```
+</Step>
+<Step>
+Add the file wherever your agent reads context. Common locations:
+
+| Agent | Where to put the skill file |
+| :--- | :--- |
+| **Claude Code** | `.claude/skills/c1i/SKILL.md` |
+| **Cursor** | `.cursor/rules/c1i.md` |
+| **Windsurf** | `.windsurfrules` (append the content) |
+| **GitHub Copilot** | `.github/copilot-instructions.md` (append the content) |
+| **Cline** | `.clinerules` (append the content) |
+</Step>
+<Step>
+Authenticate c1i if you haven't already:
+
+```shell
+c1i auth login --url your-tenant.conductor.one
+```
+</Step>
+</Steps>
+
+## Example workflows
+
+Once your agent has the c1i skill, you can use natural language to accomplish common tasks.
+
+### Confirm the active identity
+
+Ask your agent to verify which user it's acting as before making changes:
+
+```text
+"Who am I authenticated as in C1, and how many roles do I have?"
+```
+
+The agent runs `c1i auth whoami` and reports the user ID, display name, email, and counts of roles, permissions, and feature flags.
+
+### Explore the API
+
+Ask your agent to discover what's available before running authenticated commands:
+
+```text
+"What C1 API endpoints are available for managing tasks?"
+```
+
+The agent uses `c1i docs endpoints` and `c1i docs endpoint` to explore the API without credentials.
+
+### Audit user access
+
+```text
+"List all enabled users, then show me entitlements for the AWS app"
+```
+
+The agent runs `c1i users list --status=enabled` and `c1i entitlements list --app-id=<id>` and presents the results.
+
+For broader queries where you want a fast answer rather than a full dataset, ask the agent to limit results:
+
+```text
+"Show me 5 example users with status enabled — just enough to verify the data shape."
+```
+
+The agent runs `c1i users list --status=enabled --limit=5`. c1i tightens the per-call request size to match `--limit` and stops auto-paginating once the cap is reached, so the API call is small even when the underlying tenant has thousands of users.
+
+### Manage access requests
+
+```text
+"Show me all open tasks assigned to me and approve the ones related to the staging environment"
+```
+
+The agent runs `c1i tasks list --state=open --assigned-to-me`, filters the results, and uses `c1i tasks approve` for the matching tasks.
+
+### Investigate an app's accounts
+
+```text
+"Find all unmapped accounts in the Okta app and list their details"
+```
+
+The agent runs `c1i accounts list --app-id=<id> --unmapped-only` to surface accounts that haven't been linked to C1 users.
+
+## Keep the skill file up to date
+
+The skill file is versioned — it includes the c1i version in its frontmatter. When you update c1i, regenerate the skill file to pick up any new commands or changes:
+
+```shell
+# Update c1i
+go install github.com/ConductorOne/c1i@latest
+
+# Regenerate the skill file
+c1i docs skill -o .claude/skills/c1i/SKILL.md
+```
+
+## Pages related to c1i agent setup
+
+- [Install c1i](/product/cli/c1i) — installation, authentication, and configuration
+- [c1i command reference](/product/cli/c1i-commands) — complete list of commands, subcommands, and flags

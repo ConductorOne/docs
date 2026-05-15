@@ -1,0 +1,224 @@
+---
+title: "Set up an AWS Bedrock AgentCore connector"
+og:title: "Set up an AWS Bedrock AgentCore connector"
+description: "C1 provides identity governance for AWS Bedrock AgentCore. Integrate Bedrock AgentCore with C1 to manage non-human identities (AI agents), audit credential provider access, and track gateway and policy engine associations."
+og:description: "C1 provides identity governance for AWS Bedrock AgentCore. Integrate Bedrock AgentCore with C1 to manage non-human identities (AI agents), audit credential provider access, and track gateway and policy engine associations."
+sidebarTitle: "AWS Bedrock AgentCore"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The AWS Bedrock AgentCore connector syncs the following resources:
+
+| Resource                     | Sync                                                         | Provision                                                    |
+| :--------------------------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| Agents                       | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#DE2323"/> |
+| OAuth2 Credential Providers  | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#DE2323"/> |
+| API Key Credential Providers | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#DE2323"/> |
+| Gateways                     | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#DE2323"/> |
+| Gateway Targets              | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#DE2323"/> |
+| Policy Engines               | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#DE2323"/> |
+
+- **Agents**: Non-human identities (NHIs) for AI agents (workload identities).
+- **OAuth2 Credential Providers**: OAuth2 client credentials stored in the Token Vault (GitHub, Slack, Google, etc.).
+- **API Key Credential Providers**: API key credentials stored in the Token Vault (Stripe, SendGrid, etc.).
+- **Gateways**: Proxies connecting agents to external tools. Each gateway has "Gateway Access" and "Policy Enforcement" entitlements showing which agent and policy engine are associated.
+- **Gateway Targets**: External tool/API endpoints connected through a gateway (e.g., MCP servers). Each target has a "Target Access" entitlement derived from its parent gateway.
+- **Policy Engines**: Cedar policy evaluation engines for authorizing agent tool calls.
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather AWS credentials
+
+<Warning>
+  To configure the AWS Bedrock AgentCore connector, you need an **IAM user or
+  role** with `bedrock-agentcore:*` permissions. You can use the AWS managed
+  policy `BedrockAgentCoreFullAccess`.
+</Warning>
+
+<Steps>
+  <Step>
+    Sign in to the [AWS Management Console](https://console.aws.amazon.com/).
+  </Step>
+
+  <Step>
+    Go to **IAM** > **Users** > select your user (or create a new one).
+  </Step>
+
+<Step>
+  Attach the `BedrockAgentCoreFullAccess` managed policy (or create a custom
+  policy with `bedrock-agentcore:*`).
+</Step>
+
+  <Step>
+    Click **Security Credentials** > **Create access key** > choose **Application running outside AWS**.
+  </Step>
+
+  <Step>
+    Copy the **Access Key ID** and **Secret Access Key**.
+  </Step>
+</Steps>
+
+## Configure the AWS Bedrock AgentCore connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **AWS Bedrock AgentCore** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **AWS Access Key ID**: The IAM access key ID.
+        - **AWS Secret Access Key**: The IAM secret access key.
+        - **AWS Region**: The AWS region (defaults to `us-east-1`).
+        - **AWS Session Token**: Optional, for temporary/SSO credentials.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your AWS Bedrock AgentCore connector is now pulling access data into C1.
+
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [AWS Bedrock AgentCore](https://github.com/conductorone/baton-aws-bedrock-agentcore) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector and click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**, then click **Rotate** to generate a new Client ID and Secret. Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-aws-bedrock-agentcore-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-aws-bedrock-agentcore-secrets
+    type: Opaque
+    stringData:
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+      BATON_AWS_ACCESS_KEY_ID: <AWS Access Key ID>
+      BATON_AWS_SECRET_ACCESS_KEY: <AWS Secret Access Key>
+      BATON_AWS_REGION: us-east-1
+    ```
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-aws-bedrock-agentcore.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-aws-bedrock-agentcore
+      labels:
+        app: baton-aws-bedrock-agentcore
+    spec:
+      selector:
+        matchLabels:
+          app: baton-aws-bedrock-agentcore
+      template:
+        metadata:
+          labels:
+            app: baton-aws-bedrock-agentcore
+            baton: "true"
+            baton-app: aws-bedrock-agentcore
+        spec:
+          containers:
+          - name: baton-aws-bedrock-agentcore
+            image: ghcr.io/conductorone/baton-aws-bedrock-agentcore:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-aws-bedrock-agentcore
+            - name: BATON_PROVISIONING
+              value: "false"
+            envFrom:
+            - secretRef:
+                name: baton-aws-bedrock-agentcore-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the connector to. Data should be found on the **Entitlements**, **Accounts**, and **Secrets** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your AWS Bedrock AgentCore connector is now pulling access data into C1.
+
+  </Tab>
+</Tabs>

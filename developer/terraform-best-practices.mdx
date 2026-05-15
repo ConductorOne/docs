@@ -1,0 +1,532 @@
+---
+title: "C1 Terraform best practices"
+og:title: "C1 Terraform best practices - C1"
+og:description: "Best practices for using the C1 Terraform provider, including creating groups, entitlements, access profiles, and policies."
+description: "Best practices for using the C1 Terraform provider, including creating groups, entitlements, access profiles, and policies."
+sidebarTitle: "Terraform best practices"
+---
+
+{/* Editor Refresh: 2026-04-29 */}
+
+This guide covers best practices for Terraform practitioners managing C1 resources. Each section is self-contained, so you can read them in any order.
+
+<Info>
+Before you begin, make sure the C1 Terraform provider is installed and configured. See [C1 Terraform provider](/developer/terraform).
+</Info>
+
+## Creating groups in C1
+
+Creating a group in C1 requires three resources working together:
+
+1. **An app resource** — the group object itself
+2. **A custom app entitlement** — defines the "member" role that users can request
+3. **An entitlement automation** — evaluates a CEL expression against user attributes and automatically grants or revokes group membership, with no manual access request required
+
+### Example: create a C1 group with dynamic membership
+
+The following example creates a group in the ConductorOne application and automatically adds any user whose `department` attribute contains "engineering."
+
+```hcl
+# Look up the ConductorOne app. You can also store this ID as a local variable
+# if you reference the C1 app in multiple places.
+data "conductorone_app" "c1" {
+  display_name = "ConductorOne"
+}
+
+# Look up the group resource type. This already exists in C1 — do not create a new one.
+data "conductorone_app_resource_type" "group_type" {
+  app_ids = [data.conductorone_app.c1.id]
+  query   = "GROUP"
+}
+
+# Create the group resource.
+resource "conductorone_app_resource" "group_resource" {
+  app_id               = data.conductorone_app.c1.id
+  app_resource_type_id = data.conductorone_app_resource_type.group_type.id
+  description          = "Group created from Terraform"
+  display_name         = "C1GroupFromTerraform"
+}
+
+# Create the member entitlement for the group.
+resource "conductorone_custom_app_entitlement" "tf_group" {
+  app_id               = data.conductorone_app.c1.id
+  app_resource_id      = conductorone_app_resource.group_resource.id
+  app_resource_type_id = data.conductorone_app_resource_type.group_type.id
+  display_name         = "C1 Group Created by Terraform"
+  alias                = "terraform_created_group"
+  slug                 = "Member"
+  description          = "created from Terraform"
+}
+
+# Create the entitlement automation. This evaluates the CEL expression on each user
+# and automatically grants membership to users who match.
+resource "conductorone_app_entitlement_automation" "dynamic_group_expression" {
+  app_entitlement_id = conductorone_custom_app_entitlement.tf_group.id
+  app_id             = data.conductorone_app.c1.id
+  description        = "Automatic group membership based on department"
+  display_name       = "Auto Membership Rule"
+
+  app_entitlement_automation_rule_cel = {
+    expression = <<-EOT
+      has(subject.department) &&
+      subject.department != "" &&
+      subject.department.lowerAscii().contains("engineering")
+    EOT
+  }
+}
+```
+
+### Keep in mind
+
+- **Don't create a new resource type.** The resource type for groups already exists in C1. Creating a duplicate will cause a conflict.
+- **The ConductorOne app ID is stable within your tenant.** You can look it up once with a data source, or store it as a local variable if you reference it in multiple places.
+- **Consider wrapping this pattern in a reusable Terraform module.** You'll repeat these same three resources for every group you create.
+
+---
+
+## Custom app entitlements vs app entitlements
+
+There are two Terraform resources for managing entitlements. Choosing the right one depends on whether the entitlement already exists in C1.
+
+- Use `conductorone_custom_app_entitlement` to **create** a new entitlement that does not yet exist in C1 — for virtual entitlements, or when pre-creating an IDP group before a connector sync.
+- Use `conductorone_app_entitlement` to **configure or update** an entitlement that a connector already manages. This resource is update-only; it cannot create or delete entitlements.
+
+### Creating virtual entitlements
+
+Use [conductorone_custom_app_entitlement](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/custom_app_entitlement) when you need to create a virtual entitlement for a permission not yet discovered by a connector.
+
+This resource also supports the `match_baton_id` field, which links the Terraform resource to an external ID (such as an Okta group ID). When the connector syncs, C1 merges the two rather than creating a duplicate.
+
+```hcl
+data "conductorone_app" "okta_app" {
+  display_name = "Okta v2"
+}
+
+data "conductorone_app_resource_type" "group" {
+  app_ids = [data.conductorone_app.okta_app.id]
+  query   = "Group"
+}
+
+resource "conductorone_app_resource" "group_resource" {
+  display_name         = var.okta_group_name
+  app_id               = data.conductorone_app.okta_app.id
+  app_resource_type_id = data.conductorone_app_resource_type.group.id
+  match_baton_id       = okta_group.example.id
+}
+
+resource "conductorone_custom_app_entitlement" "custom_app_entitlement" {
+  app_id               = conductorone_app_resource.group_resource.app_id
+  app_resource_type_id = conductorone_app_resource.group_resource.app_resource_type_id
+  app_resource_id      = conductorone_app_resource.group_resource.id
+  display_name         = "Group Display Name"
+  duration_grant       = var.duration_grant
+  slug                 = "member"
+  match_baton_id       = okta_group.example.id
+  grant_policy_id      = var.policy_id
+
+  # Required when using match_baton_id: prevents Terraform from overwriting
+  # the display_name after the connector syncs and updates it.
+  lifecycle {
+    ignore_changes = [display_name]
+  }
+}
+```
+
+### Keep in mind
+
+- **`display_name`** is required, but if the entitlement is connector-managed, the connector will overwrite it on sync. Add `lifecycle { ignore_changes = [display_name] }` when using `match_baton_id` to prevent Terraform from flagging this as drift.
+- **`slug`** describes the role level within the resource (for example, `"member"` or `"admin"`). Use descriptive, lowercase slugs.
+- **`alias`** is user-facing. Keep it lowercase with underscores.
+
+<Tip>
+`duration_grant` and `duration_unset` are mutually exclusive. Set `duration_grant` to a duration string in seconds (for example, `"3600s"` for one hour) to cap how long a grant lasts. Set `duration_unset = {}` for no maximum duration. Never set both.
+</Tip>
+
+---
+
+## Updating connector-managed entitlements
+
+Use [conductorone_app_entitlement](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement) to configure or update an entitlement whose lifecycle is managed by a connector. This is useful for bulk-updating policies or provisioning steps across many entitlements at once.
+
+This resource is also used to manage the app access entitlement, a static entitlement that exists on every app.
+
+<Warning>
+`conductorone_app_entitlement` is update-only. Running `terraform destroy` removes the resource from Terraform state, but the entitlement still exists in C1. To roll back a change, run a subsequent `terraform apply` with the previous configuration values.
+</Warning>
+
+### Example: configure app access with account provisioning
+
+Use this pattern when you want C1 to provision a new account in the target system when access is granted, rather than assigning an existing account.
+
+```hcl
+resource "conductorone_app_entitlement" "app_access" {
+  app_id                            = data.conductorone_app.postgres.id
+  description                       = "Local and federated users."
+  display_name                      = "Access"
+  duration_unset                    = {}
+  emergency_grant_enabled           = false
+  id                                = data.conductorone_app_entitlement.access.id
+  override_access_requests_defaults = false
+  provision_policy = {
+    connector_provision = {
+      account_provision = {
+        config = jsonencode({
+          email = "subject.email"
+        })
+        connector_id  = conductorone_integration_baton.postgres.id
+        do_not_save   = null
+        save_to_vault = {
+          vault_ids = [conductorone_vault.my_vault.id]
+        }
+      }
+    }
+  }
+}
+```
+
+### Example: configure multistep provisioning
+
+Use this pattern when granting access requires more than one provisioning action — for example, delegating to another app's entitlement before running the connector.
+
+```hcl
+resource "conductorone_app_entitlement" "test_entitlement_update_multistep" {
+  id             = data.conductorone_app_entitlement.group1.id
+  app_id         = data.conductorone_app.postgres.id
+  duration_unset = {}
+  provision_policy = {
+    multi_step = jsonencode({
+      provisionSteps = [
+        {
+          delegated = {
+            appId         = data.conductorone_app.aws.id
+            entitlementId = data.conductorone_app_entitlement.role.id
+            implicit      = false
+          }
+        },
+        {
+          connector = {}
+        }
+      ]
+    })
+  }
+}
+```
+
+### Keep in mind
+
+- **Terraform import is not required.** Reference the entitlement by ID using a data source lookup.
+- **JSON encoding is required** for `multi_step` provisioning and `account_provision` config blocks.
+- **Entitlement owners** can be managed in parallel using [conductorone_app_entitlement_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement_owner).
+
+<Tip>
+`duration_grant` and `duration_unset` are mutually exclusive. Set `duration_grant` to a duration string in seconds (for example, `"3600s"` for one hour) to cap how long a grant lasts. Set `duration_unset = {}` for no maximum duration. Never set both.
+</Tip>
+
+---
+
+## Creating access profiles
+
+Access profiles group multiple entitlements into a single requestable bundle. The C1 UI calls these "access profiles," but the Terraform provider and API use the term "catalog" — you'll see `catalog_id` as a field name throughout these resources.
+
+A fully configured access profile requires five related resources:
+
+1. [conductorone_access_profile](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/access_profile) — the main profile object
+2. [conductorone_app_entitlement](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement) — sets the grant and revoke policies on the access profile
+3. [conductorone_access_profile_requestable_entries](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/access_profile_requestable_entries) or [conductorone_access_profile_requestable_entry](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/access_profile_requestable_entry) — adds entitlements to the profile (choose one; see Step 3)
+4. [conductorone_access_profile_visibility_bindings](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/access_profile_visibility_bindings) — controls who can see and request the profile
+5. [conductorone_bundle_automation](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/bundle_automation) — auto-enrolls users based on entitlement membership
+
+### Step 1: Create the access profile
+
+Start with `published = "false"` while you configure the remaining resources. Flip to `"true"` when the profile is ready.
+
+```hcl
+resource "conductorone_access_profile" "access_profile" {
+  display_name                      = "Full Config Access Profile"
+  description                       = "Complete access profile with all features"
+  visible_to_everyone               = "false"
+  enrollment_behavior               = "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY"
+  unenrollment_behavior             = "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_ALL"
+  unenrollment_entitlement_behavior = "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_BYPASS"
+  published                         = "true"
+  request_bundle                    = "true"
+}
+```
+
+Key fields:
+
+**`enrollment_behavior`** — controls how entitlement policies are handled when a user enrolls:
+
+| Value | Behavior |
+|---|---|
+| `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY` | Bypasses individual entitlement approval policies. Users get all entitlements in a single request. |
+| `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE_ENTITLEMENT_REQUEST_POLICY` | Enforces each entitlement's approval policy individually during enrollment. |
+
+**`unenrollment_behavior`** — controls what happens to a user's entitlements when they unenroll:
+
+| Value | Behavior |
+|---|---|
+| `REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_ALL` | Revokes all entitlements in the profile. |
+| `REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_UNJUSTIFIED` | Revokes only entitlements the user doesn't hold through another path. |
+| `REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_LEAVE_ACCESS_AS_IS` | Leaves all entitlements in place after unenrollment. |
+
+**`unenrollment_entitlement_behavior`** — controls whether approval policies are enforced when revoking entitlements at unenrollment:
+
+| Value | Behavior |
+|---|---|
+| `REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_BYPASS` | Bypasses approval policies when revoking entitlements. |
+| `REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_ENFORCE` | Enforces each entitlement's revoke policy individually. |
+
+- **`request_bundle`**: Set to `"true"` to allow users to request the entire profile as a bundle rather than individual entitlements.
+- **`create_requests`**: Set to `"true"` to create provisioning tasks when users enroll or unenroll.
+
+### Step 2: Set the grant and revoke policies
+
+Set the policy before configuring bundle automation. If the policy is not set first, tasks created during automation may have unexpected policies applied.
+
+Use the `conductorone_policy` data source to look up policies by display name:
+
+```hcl
+data "conductorone_policy" "grant_policy" {
+  display_name = "My Grant Policy"
+}
+
+data "conductorone_policy" "revoke_policy" {
+  display_name = "My Revoke Policy"
+}
+
+resource "conductorone_app_entitlement" "access_profile_policy" {
+  app_id           = data.conductorone_app.c1.id
+  id               = conductorone_access_profile.access_profile.id
+  grant_policy_id  = data.conductorone_policy.grant_policy.id
+  revoke_policy_id = data.conductorone_policy.revoke_policy.id
+  duration_grant   = "600s"
+}
+```
+
+### Step 3: Add entitlements to the profile
+
+Use one of the following two resources — not both.
+
+**Option A: Add multiple entitlements as a set (`conductorone_access_profile_requestable_entries`)**
+
+Use this option when all entitlements are in the same Terraform state and you want to manage them as a single unit. All changes to the set are applied together. Requires a `toset()` wrapper.
+
+```hcl
+resource "conductorone_access_profile_requestable_entries" "some_entries" {
+  catalog_id = conductorone_access_profile.access_profile.id
+  app_entitlements = toset([
+    {
+      app_id = data.conductorone_app.okta.id
+      id     = data.conductorone_app_entitlement.group2.id
+    },
+    {
+      app_id = data.conductorone_app.okta.id
+      id     = data.conductorone_app_entitlement.group3.id
+    }
+  ])
+  create_requests = true
+}
+```
+
+**Option B: Add entitlements individually (`conductorone_access_profile_requestable_entry`)**
+
+Use this option when you need per-entitlement control over `create_requests`, or when entitlements span multiple Terraform workspaces. Each entitlement gets its own state entry.
+
+```hcl
+locals {
+  requestable_entitlements = {
+    okta_group1 = {
+      app_id         = data.conductorone_app.okta.id
+      entitlement_id = data.conductorone_app_entitlement.group1.id
+    }
+    okta_group2 = {
+      app_id         = data.conductorone_app.okta.id
+      entitlement_id = data.conductorone_app_entitlement.group2.id
+    }
+  }
+}
+
+resource "conductorone_access_profile_requestable_entry" "entitlement_entry" {
+  for_each        = local.requestable_entitlements
+  catalog_id      = conductorone_access_profile.access_profile.id
+  app_id          = each.value.app_id
+  entitlement_id  = each.value.entitlement_id
+  create_requests = true
+}
+```
+
+### Step 4: Configure visibility
+
+Visibility bindings control which users or groups can see and request the profile. Without this, the profile may not be visible even after publishing.
+
+```hcl
+resource "conductorone_access_profile_visibility_bindings" "visibility_bindings" {
+  access_entitlements = [
+    {
+      app_id = data.conductorone_app.okta.id
+      id     = data.conductorone_app_entitlement.everyone.id
+    }
+  ]
+  catalog_id = conductorone_access_profile.access_profile.id
+}
+```
+
+### Step 5: Add bundle automation
+
+Bundle automation automatically enrolls users who hold a specific entitlement. Use `depends_on` to ensure the policy from Step 2 is applied first.
+
+```hcl
+resource "conductorone_bundle_automation" "bundle_automation" {
+  bundle_automation_rule_entitlement = {
+    entitlement_refs = [
+      {
+        app_id = data.conductorone_app.okta.id
+        id     = data.conductorone_app_entitlement.group1.id
+      }
+    ]
+  }
+  create_tasks            = true
+  disable_circuit_breaker = false
+  enabled                 = true
+  request_catalog_id      = conductorone_access_profile.access_profile.id
+  depends_on = [
+    conductorone_app_entitlement.access_profile_policy
+  ]
+}
+```
+
+### Keep in mind
+
+- Always use `depends_on` to ensure the policy (Step 2) is applied before bundle automation (Step 5).
+- Use Option A for single-workspace configs. Use Option B when entitlements span multiple workspaces, or when you need per-entitlement `create_requests` settings.
+- Keep `published = "false"` while configuring. This prevents users from requesting an incomplete profile.
+
+---
+
+## Policy best practices
+
+Policies define the approval workflow for access requests — who reviews, in what order, and under what conditions.
+
+### Always include a baseline rule
+
+<Warning>
+Every policy must include a `grant` key with at least one step. Without it, any request that does not match a named rule's condition will fail or get stuck in an undefined state. Terraform does not validate this requirement — C1 enforces it at runtime.
+</Warning>
+
+The `grant` key is the catch-all baseline rule. It runs for every request that does not match any named rule's condition. In the examples below, it rejects those unmatched requests by default, so only requests satisfying `my_policy_key`'s condition are auto-approved.
+
+### What a broken policy looks like
+
+This policy will not work because it is missing the `grant` baseline step:
+
+```hcl
+resource "conductorone_policy" "auto_approve_policy" {
+  description  = "Policy with auto-approval preauth step"
+  display_name = "Auto Approve Policy"
+  policy_steps = {
+    "my_policy_key" = {
+      steps = [
+        {
+          accept = {
+            accept_message = "your request is auto approved"
+          }
+        }
+      ]
+    }
+    # Missing grant step — requests that don't match will fail
+  }
+  rules = [
+    {
+      condition  = "false"
+      policy_key = "my_policy_key"
+    },
+  ]
+  policy_type = "POLICY_TYPE_GRANT"
+}
+```
+
+### What a working policy looks like
+
+```hcl
+resource "conductorone_policy" "auto_approve_policy" {
+  description  = "Policy with auto-approval preauth step"
+  display_name = "Auto Approve Policy"
+  policy_steps = {
+    "my_policy_key" = {
+      steps = [
+        {
+          accept = {
+            accept_message = "your request is auto approved"
+          }
+        }
+      ]
+    }
+
+    # The grant key is the baseline rule. It handles any request that does not
+    # match a named condition. Here it rejects those requests by default.
+    grant = {
+      steps = [
+        {
+          reject = {}
+        },
+      ]
+    }
+  }
+  rules = [
+    {
+      condition  = "false"
+      policy_key = "my_policy_key"
+    },
+  ]
+  policy_type = "POLICY_TYPE_GRANT"
+}
+```
+
+### Use built-in policies as templates
+
+Terraform does not validate policy structure the same way the C1 UI does. The safest starting point is to generate HCL from an existing, working policy.
+
+<Steps>
+  <Step title="Import the policy">
+    Add an import block for an existing policy you want to use as a template:
+
+    ```hcl
+    import {
+      to = conductorone_policy.template
+      id = "XXXXXXXX"
+    }
+    ```
+  </Step>
+  <Step title="Generate the configuration">
+    ```bash
+    terraform plan -generate-config-out template.tf
+    ```
+  </Step>
+  <Step title="Edit the generated HCL">
+    Use the generated file as your starting point. Before modifying:
+
+    - Remove any auto-generated `id` fields from resources you're creating fresh — Terraform sets these on creation and they shouldn't be hardcoded.
+    - Watch for read-only attributes. Terraform includes them in generated output, but setting them in config will cause errors.
+    - Keep the `grant` baseline step intact.
+  </Step>
+</Steps>
+
+### Keep in mind
+
+1. **Always include a `grant` baseline step** — this is required.
+2. Use meaningful policy keys that describe the approval workflow (for example, `manager_approval` rather than `step_1`).
+3. Limit approval chains to three or fewer sequential steps.
+4. Use group reviewers instead of individual user IDs, so the policy keeps working when people change roles or leave.
+5. Include clear `accept_message` and `reject_message` values to guide requestors and approvers.
+6. Use CEL expressions in rule conditions for attribute-based logic. See [CEL expressions](/product/admin/expressions).
+
+---
+
+## Related resources
+
+- [C1 Terraform provider](/developer/terraform)
+- [CEL expressions](/product/admin/expressions)
+- [CEL expressions reference](/product/admin/expressions-reference)
+- [conductorone_policy on the Terraform Registry](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/policy)
+- [conductorone_access_profile on the Terraform Registry](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/access_profile)
