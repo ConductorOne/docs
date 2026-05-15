@@ -20,6 +20,60 @@ This single source of truth is typically one of these:
 
 Once the directory is designated, C1 uses its data to automatically create C1 user accounts for everyone in your company.
 
+## Account to user flow
+
+Every account from every connector takes one of two paths before it becomes — or attaches to — a C1 user, depending on whether the connector is on your directory app. Directory apps drive identity creation; accounts from non-directory apps attach to users that already exist.
+
+### Key terms
+
+- **[Account](/product/glossary#account)** — A unique record for an actor (a human, a service account, or a system account) inside an application.
+- **[User](/product/glossary#user)** — A human at your organization whose access data is synced to C1 and who can be assigned tasks in C1.
+- **[Directory filter](/product/admin/directory#optional-limit-which-accounts-will-be-pulled-into-c1)** — A CEL expression that decides whether an account from your directory should create (or match) a C1 user.
+- **[User identification rules](/product/admin/directory#configure-merge-matching)** — The merge-matching rules that determine whether an incoming directory account links to an existing C1 user instead of creating a new one.
+- **[Account ownership rules](/product/admin/managing-accounts#auto-match-accounts-with-users)** — The matching strategy (Narrow, Broad, or Custom) used to assign an account from a non-directory app to a C1 user as its owner.
+
+```mermaid
+flowchart LR
+    subgraph Account["ACCOUNT"]
+        A1[Synced from<br>a connector]
+        A2["- Directory app<br>- Non-directory app"]
+    end
+    subgraph DirPath["DIRECTORY APP PATH"]
+        D1[Filter, then<br>identification rules]
+        D2["Filter returns:<br>- CREATE<br>- MATCH_ONLY<br>- IGNORE<br><br>Then match against<br>existing C1 users"]
+    end
+    subgraph NonDir["NON-DIRECTORY APP PATH"]
+        N1[Account<br>ownership rules]
+        N2["Narrow, Broad, or<br>Custom strategy<br>matches account<br>to a C1 user"]
+    end
+    subgraph Outcomes["OUTCOMES"]
+        O1[Result for<br>the account]
+        O2["- Linked to existing user<br>- New user created<br>(directory CREATE only)<br>- Skipped (IGNORE)<br>- Unmerged (MATCH_ONLY,<br>no match)<br>- No owner — manual<br>assignment available"]
+    end
+    Account --> DirPath --> Outcomes
+    Account --> NonDir --> Outcomes
+```
+
+Directory apps that pass the filter with `CREATE` either link to an existing user or seed a new one. `MATCH_ONLY` accounts only attach to users that already exist. Accounts from non-directory apps don't create users — they find an owner via account ownership rules, or wait for manual assignment.
+
+### Common scenarios
+
+#### One person, many apps
+
+A user has accounts in Okta, GitHub, Workday, and Slack. All four accounts link to one C1 user via primary-email match, and profile attributes are aggregated from each app according to the configured [attribute mapping priorities](/product/admin/attributes).
+
+#### Identity provider plus apps
+
+When an IdP connector (Okta, Entra ID) is configured, it typically syncs the largest set of identities and serves as the de-facto source of truth — most other apps' accounts find a C1 user to link to via the IdP's primary emails. The IdP also produces an IdP record per user, which keeps the C1 user retained for audit even after every other account is removed.
+
+#### Service account aliased to a human
+
+A human's secondary email is also listed as a service-account address in your directory app. Without intervention, the alias-email match path can link the service-account to the human's C1 user. Resolve this by unlinking the service account in the C1 UI, or by filtering service accounts out at the [directory level](/product/admin/directory#optional-limit-which-accounts-will-be-pulled-into-c1) using `IGNORE`. For service accounts in non-directory apps, only the UI unlink applies.
+
+#### MATCH_ONLY directory for shadow imports
+
+A secondary HR system is configured in `MATCH_ONLY` mode so its accounts can enrich C1 users with HR attributes (employee ID, manager, etc.) without inflating the user count. Accounts from that directory that don't match an existing C1 user are left unmerged until a primary-directory account creates the identity.
+
 ## Connect a directory and create user accounts
 
 As part of setting up C1 for your organization, designate a key app as your directory, which will serve as the source of truth for creating C1 user accounts. 
@@ -38,7 +92,7 @@ Next, tell C1 that the app you've integrated is your directory.
 
 <Steps>
 <Step>
-Navigate to **Directory** > **User data sources**.
+Navigate to **Directory** - **User data sources**.
 
 </Step>
 <Step>
@@ -90,16 +144,6 @@ Your CEL expression is now shown in the directory's **Account import condition**
 When an app is set as a directory, C1 automatically uses the info in the directory's accounts to create C1 user accounts. Each user's email address is the key data point. 
 
 Accounts from various apps integrated with C1 are all tied to the same human user because they all share an email address.
-
-## How does C1 match and rationalize users across apps?
-
-C1 creates a single, unified identity for each employee by intelligently matching their various accounts across all connected applications. 
-
-C1 reads the list of employees from the your directory and automatically creates a new C1 user for each human. The user's unique identifier (generally a work email address) is stored with this central identity.
-
-When you integrate subsequent applications with C1, the platform ingests the list of accounts from each app. For each ingested app account, C1 attempts to match the account's unique identifier with an identifier already associated with a C1 user. 
-
-Once a match is confirmed, the new application account is linked to the C1 user. All of the user's access, entitlements, and activity across every integrated app are now rationalized under this single user identity.
 
 ## Configure merge matching
 
