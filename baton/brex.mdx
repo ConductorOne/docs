@@ -1,0 +1,232 @@
+---
+title: "Set up a Brex connector"
+og:title: "Set up a Brex connector"
+description: "C1 provides identity governance and just-in-time provisioning for Brex. Integrate your Brex instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Brex. Integrate your Brex instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Brex"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Brex connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Departments | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Locations | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Titles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Actions
+
+The Brex connector supports the following account actions:
+
+| Action | Description |
+| :--- | :--- |
+| Enable User | Sets a user's status to `ACTIVE` |
+| Disable User | Sets a user's status to `DISABLED` |
+
+## Gather Brex credentials
+
+<Warning>
+To configure the Brex connector, you need administrator permissions in Brex.
+</Warning>
+
+<Steps>
+  <Step>
+    Navigate to the Brex admin console or API settings.
+  </Step>
+
+  <Step>
+    Create API credentials for C1:
+
+    1. Create a new API key or token named `C1`
+    2. Grant the required scopes or permissions
+    3. Copy the credentials and save them securely
+  </Step>
+</Steps>
+
+## Configure the Brex connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Brex** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Brex connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **API Key**: Your Brex API key
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Brex connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Brex](https://github.com/conductorone/baton-brex) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Brex connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Brex connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Brex connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-brex-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-brex-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Brex credentials
+      # Add connector-specific credentials here
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-brex.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-brex
+      labels:
+        app: baton-brex
+    spec:
+      selector:
+        matchLabels:
+          app: baton-brex
+      template:
+        metadata:
+          labels:
+            app: baton-brex
+            baton: "true"
+            baton-app: brex
+        spec:
+          containers:
+          - name: baton-brex
+            image: public.ecr.aws/conductorone/baton-brex:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-brex
+            envFrom:
+            - secretRef:
+                name: baton-brex-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Brex connector to. Brex data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Brex connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-brex).
+</Tip>
