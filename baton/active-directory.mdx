@@ -658,6 +658,10 @@ custom-user-attributes:
 
 Once synced, the specified attributes appear as profile fields on the user in C1 and can be configured as additional usernames for account correlation.
 
+<Note>
+**Casing:** LDAP attribute names are case-insensitive (RFC 4512 §2.5), so configuring `mail`, `Mail`, or `MAIL` all reference the same AD attribute. The connector matches the operator's configured casing case-insensitively against the entry's returned attribute names. The profile-map key preserves the operator's configured casing — so a config of `Mail` produces `profile["Mail"]`, not `profile["mail"]` — predictable for downstream consumers reading the C1 profile JSON.
+</Note>
+
 For the common case of surfacing the full Exchange-schema extension attribute range, use the convenience flag `sync-extension-attributes: true` instead of listing all 15 names manually:
 
 ```yaml
@@ -720,56 +724,93 @@ This is recommended when locked users should remain visible in access reviews.
 
 #### Timestamp attributes
 
-Four RFC3339 timestamps parsed from AD's Windows FILETIME integers:
+The connector parses every well-known AD time attribute to an RFC3339 (UTC) timestamp and surfaces it under a canonical `*At` profile key. The canonical naming convention is **raw AD attribute name + `At`**.
 
-| Profile field | AD attribute |
-|---|---|
-| `passwordLastSet` | `pwdLastSet` |
-| `accountExpiresAt` | `accountExpires` |
-| `lockedOutAt` | `lockoutTime` |
-| `lastBadPasswordAt` | `badPasswordTime` |
+| Canonical profile key | Source AD attribute(s) | Source format |
+|---|---|---|
+| `pwdLastSetAt` | `pwdLastSet` | FILETIME |
+| `accountExpiresAt` | `accountExpires` | FILETIME |
+| `lockoutTimeAt` | `lockoutTime` | FILETIME |
+| `badPasswordTimeAt` | `badPasswordTime` | FILETIME |
+| `lastLoginAt` | `lastLogon` or `lastLogonTimestamp` | FILETIME |
+| `whenChangedAt` | `whenChanged` | generalizedTime |
+| `whenCreatedAt` | `whenCreated` | generalizedTime |
 
-Sentinel values are handled — `0` ("never set") and `0x7FFFFFFFFFFFFFFF` ("never expires") cause the key to be omitted rather than rendering a year-1601 or year-30828 date.
+**Sentinel handling:** values that AD encodes as "never" (`0`) or "never expires" (`0x7FFFFFFFFFFFFFFF` for FILETIME) cause the parsed `*At` key to be omitted — no year-1601 or year-30828 dates leak into a profile view.
+
+**Raw values for operator-configured attributes:** if you include one of the source AD attribute names above in `custom-user-attributes`, the raw value is also surfaced under the operator-requested key (preserving the YAML contract for downstream tooling that reads by attribute name) — *except* when the value is a sentinel, in which case the raw is also suppressed (the meaningless 19-digit integer would only confuse reviewers).
+
+| Operator config | Raw value type | Profile contains |
+|---|---|---|
+| `custom-user-attributes: [pwdLastSet]` | valid FILETIME | `pwdLastSet` (raw) + `pwdLastSetAt` (parsed) + `passwordLastSet` (legacy alias) |
+| `custom-user-attributes: [accountExpires]` | sentinel `9223372036854775807` | neither key (both suppressed) |
+| `custom-user-attributes: [lastLogon]` | sentinel `0` | neither key (both suppressed) |
+| `custom-user-attributes: [whenChanged]` | valid generalizedTime | `whenChanged` (raw) + `whenChangedAt` (parsed) |
+| (default — not listed in `custom-user-attributes`) | any non-sentinel | parsed `*At` only |
 
 <Note>
-`pwdLastSet` and `lockoutTime` are not replicated to the Global Catalog, so they may be missing under `sync-scope: GlobalCatalog`. `badPasswordTime` is local to each domain controller and not replicated at all — its value reflects the DC the connector talked to during the sync.
+`pwdLastSet` and `lockoutTime` are not replicated to the Global Catalog, so they may be missing under `sync-scope: GlobalCatalog`. `badPasswordTime` is local to each domain controller and not replicated at all — its value reflects the DC the connector talked to during the sync. `lastLogon` is also per-DC and not replicated; the connector prefers `lastLogonTimestamp` (replicated) when both are present.
+</Note>
+
+<Note>
+**Backwards-compat aliases (v0.5.5 transition):** for one release, the connector also emits each renamed FILETIME canonical key under its pre-v0.5.5 name — `passwordLastSet` (alongside `pwdLastSetAt`), `lockedOutAt` (alongside `lockoutTimeAt`), and `lastBadPasswordAt` (alongside `badPasswordTimeAt`) — so downstream automations reading the older keys continue to work. The new generalizedTime keys (`whenChangedAt`, `whenCreatedAt`, `lastLoginAt`) have no legacy aliases since they're introduced in this release. Legacy aliases will be dropped in a future release; new consumers should target the canonical `*At` form.
 </Note>
 
 #### Push attributes
 
-The `update_profile` resource action accepts the following 23 named string fields. The platform's schema-driven UI shows a dedicated input for each. Attributes outside this list (including `extensionAttribute1` through `extensionAttribute15`) must be set via the `custom_attributes` map field on `update_profile`, or via the `update_user_attrs` global action.
+The `update_profile` resource action accepts 23 named string fields, each named after the **canonical AD attribute** it targets. The platform's push-rule UI shows the AD attribute name in its "App attribute" column, so the value you map to in C1 corresponds directly to the attribute AD will receive. Attributes outside this list (including `extensionAttribute1` through `extensionAttribute15`) must be set via the `custom_attributes` map field on `update_profile`, or via the `update_user_attrs` global action.
 
-| Field name | AD attribute | Category |
+| AD attribute | Category | Notes |
 |---|---|---|
-| `first_name` | `givenName` | Identity |
-| `middle_name` | `middleName` | Identity |
-| `last_name` | `sn` | Identity |
-| `display_name` | `displayName` | Identity |
-| `sam_account_name` | `sAMAccountName` | Identity |
-| `user_principal_name` | `userPrincipalName` | Identity |
-| `email` | `mail` | Contact |
-| `phone_number` | `telephoneNumber` | Contact |
-| `mobile_phone` | `mobile` | Contact |
-| `job_title` | `title` | Organization |
-| `department` | `department` | Organization |
-| `division` | `division` | Organization |
-| `company` | `company` | Organization |
-| `description` | `description` | Organization |
-| `employee_id` | `employeeID` | Organization |
-| `employee_number` | `employeeNumber` | Organization |
-| `employment_type` | `employeeType` | Organization |
-| `city` | `l` | Address |
-| `state` | `st` | Address |
-| `street_address` | `streetAddress` | Address |
-| `postal_code` | `postalCode` | Address |
-| `country` | `c` | Address |
-| `physical_delivery_office_name` | `physicalDeliveryOfficeName` | Address |
+| `givenName` | Identity | First name |
+| `middleName` | Identity | Middle name |
+| `sn` | Identity | Last name / surname |
+| `displayName` | Identity | Operator-curated full name |
+| `sAMAccountName` | Identity | Pre-Windows-2000 login |
+| `userPrincipalName` | Identity | UPN login, e.g. `user@domain.com` |
+| `mail` | Contact | Email address |
+| `telephoneNumber` | Contact | Primary phone |
+| `mobile` | Contact | Mobile phone |
+| `title` | Organization | Job title |
+| `department` | Organization | Department |
+| `division` | Organization | Division |
+| `company` | Organization | Company |
+| `description` | Organization | Free-form description |
+| `employeeID` | Organization | Employee ID (string) |
+| `employeeNumber` | Organization | Employee number |
+| `employeeType` | Organization | Employment type |
+| `l` | Address | City / locality |
+| `st` | Address | State or province |
+| `streetAddress` | Address | Street address |
+| `postalCode` | Address | Postal / ZIP code |
+| `c` | Address | Country code, ISO 3166 alpha-2 |
+| `physicalDeliveryOfficeName` | Address | Office location |
+
+<Note>
+Pre-v0.5.5 push rules used snake_case field names (`first_name`, `display_name`, `email`, etc.). Those rules continue to work — the connector resolves both the canonical AD names listed above and the legacy snake_case aliases to the same target attribute. New push rules should prefer the AD-canonical names so the C1 UI's "App attribute" column matches what AD actually expects.
+</Note>
 
 <Warning>
 AD enforces schema constraints on attribute values. For example, the `c` (country) attribute has a maximum length of 3 characters and expects ISO 3166-1 alpha-2 codes (for example, `US`, not `United States`). Constraint violations are logged with each attribute name and value length to aid debugging.
 </Warning>
 
-The `update_user_attrs` global action recognizes the 23 named fields above plus 15 additional aliases (`extension_attribute_1` through `extension_attribute_15` mapping to `extensionAttribute1`–`extensionAttribute15`). Any attribute name not in the combined list is passed through as a raw AD attribute name, allowing direct access to any writable AD attribute.
+The `update_user_attrs` global action recognizes the 23 fields above (plus their legacy snake_case aliases for backwards compatibility), plus 15 extension attribute names (`extensionAttribute1` through `extensionAttribute15` — also accepted as `extension_attribute_1`–`extension_attribute_15`). Any attribute name not in the combined list is passed through as a raw AD attribute name, allowing direct access to any writable AD attribute.
+
+### Troubleshooting "search returned 0 entries"
+
+When the connector logs `winldap_ldap_search: search returned 0 entries` at INFO level, it means a configured search base (typically `user-search-dn` or `group-search-dn`) produced no entries. The log line includes `base`, `filter`, and `scope` so you can correlate which search returned empty. There are three common causes:
+
+1. **The search filter is too narrow** — verify with an `ldapsearch` or `Get-ADUser -LDAPFilter` from the same DC the connector is bound to. If they also return zero, the filter or the DN is wrong.
+
+2. **The DN doesn't exist as written** — the connector logs the exact `base` string sent to AD. Copy it verbatim into `dsquery * "<base>" -limit 1` on the DC to confirm.
+
+3. **The bound DC isn't authoritative for the search base** — when you narrow `user-search-dn` or `group-search-dn` into a delegated OU, a child-domain OU, or a Read-Only DC subtree, the bound DC may answer with `LDAP_REFERRAL` (result code 10) or `LDAP_PARTIAL_RESULTS` (9) instead of entries. The connector surfaces this case explicitly: alongside the zero-entries INFO, look for a WARN log of the form `ldap_ext_search: non-success result code_name=LDAP_REFERRAL r1=10`. The same condition surfaces in the C1 sync-failure panel as `LDAP error: LDAP_REFERRAL`, so it's identifiable from the platform side too without needing log access.
+
+   **The connector does not chase referrals.** WinLDAP's referral-chasing option (`LDAP_OPT_REFERRALS`) is explicitly disabled — it has to be, to work around an [AD pagination bug](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/ldap-paged-queries-subordinate-referrals-not-chased) where chased subordinate referrals confuse the paging control and corrupt the page cookie. Re-enabling chasing would also introduce an authentication-security risk (chased referrals can authenticate against arbitrary servers). The remediation is to **adjust the search configuration so the bound DC is authoritative for the subtree**:
+
+   - Widen the search base (e.g. move from `OU=Sub,OU=Parent,DC=corp,DC=example,DC=com` up to `OU=Parent,...` or to the partition root `DC=corp,DC=example,DC=com`).
+   - Configure a different bind DC that *is* authoritative for the OU — pass `--sitename` to scope discovery to a site that includes an authoritative DC, or set up [`additional-domains`](#multi-domain-and-cross-forest-sync) if the subtree belongs to a different partition.
+   - For multi-domain forests, use [`additional-domains`](#multi-domain-and-cross-forest-sync) so the connector binds separately against each partition's authoritative DC instead of chasing referrals from one DC.
 
 ### LDAPS troubleshooting
 
