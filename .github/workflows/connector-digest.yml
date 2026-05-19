@@ -1,0 +1,28 @@
+name: Connector Digest
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # 9am UTC = 5am ET
+  workflow_dispatch:      # allow manual runs from the Actions tab
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run digest
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.CONNECTOR_DIGEST_SLACK_WEBHOOK }}
+        run: python3 connector-digest/digest.py
+
+      - name: Commit updated snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add connector-digest/snapshot.json
+          git diff --staged --quiet || git commit -m "chore: update connector snapshot"
+          git push
