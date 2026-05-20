@@ -278,10 +278,16 @@ resource_types:
         no_password:
           preferred: true
         random_password:
-          min_length: 16
-          max_length: 32
-          disallowed_characters: "!@#$%^&*()"
           preferred: false
+          constraints:
+            - char_set: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              min_count: 2
+            - char_set: "abcdefghijklmnopqrstuvwxyz"
+              min_count: 2
+            - char_set: "0123456789"
+              min_count: 2
+            - char_set: "!@#$%^&*"
+              min_count: 1
 
       validate:
         vars:
@@ -300,6 +306,33 @@ resource_types:
             VALUES (?<username>, ?<email>, crypt(?<password>, gen_salt('bf')))
 ```
 
+### Password constraints
+
+Use `constraints` under `random_password` to enforce character set rules on generated passwords. Each entry specifies a set of characters and the minimum number of those characters that must appear. When defined, these constraints replace any constraints provided by the platform.
+
+```yaml
+random_password:
+  preferred: true
+  constraints:
+    - char_set: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      min_count: 2
+    - char_set: "abcdefghijklmnopqrstuvwxyz"
+      min_count: 2
+    - char_set: "0123456789"
+      min_count: 2
+    - char_set: "!@#$%^&*"
+      min_count: 1
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `char_set` | Yes | The set of characters to draw from |
+| `min_count` | Yes | Minimum number of characters from this set that must appear in the password (must be > 0) |
+
+<Note>
+The `min_length`, `max_length`, and `disallowed_characters` fields on `random_password` are deprecated. They are accepted for backwards compatibility but have no effect — password length is controlled by the platform, and character set rules should be defined using `constraints` instead.
+</Note>
+
 ### Credential rotation
 
 Rotate credentials for existing accounts:
@@ -308,9 +341,16 @@ Rotate credentials for existing accounts:
 credential_rotation:
   credentials:
     random_password:
-      min_length: 16
-      max_length: 32
       preferred: true
+      constraints:
+        - char_set: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+          min_count: 2
+        - char_set: "abcdefghijklmnopqrstuvwxyz"
+          min_count: 2
+        - char_set: "0123456789"
+          min_count: 2
+        - char_set: "!@#$%^&*"
+          min_count: 1
   update:
     vars:
       user_id: "resource_id"
