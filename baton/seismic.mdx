@@ -1,0 +1,241 @@
+---
+title: "Set up a Seismic connector"
+og:title: "Set up a Seismic connector"
+description: "C1 provides identity governance and just-in-time provisioning for Seismic. Integrate your Seismic instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Seismic. Integrate your Seismic instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Seismic"
+---
+
+## Capabilities
+
+The Seismic connector syncs the following resources:
+
+| Resource | Sync                                                         | Provision                                                    |
+| :------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| Users    | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Groups   | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles    | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+## Gather Seismic credentials
+
+<Warning>
+  To configure the Seismic connector, you need **System Administrator**
+  permissions in Seismic.
+</Warning>
+
+<Steps>
+  <Step>
+    Go to the [Seismic Developer Portal](https://developer.seismic.com) and log in with your admin account. Alternatively, navigate to **System Settings** > **App Registration** in the Seismic admin portal.
+  </Step>
+
+<Step>Click **My Apps**, then **Create New App**.</Step>
+
+<Step>
+  Fill in the app details (name, description) and select **Client Credentials**
+  as the authentication flow.
+</Step>
+
+  <Step>
+    Assign the following scopes to the app registration:
+
+    - `seismic.user.view` — required for syncing users, groups, and group members
+    - `seismic.user.manage` — required for provisioning (create/delete users, grant/revoke group membership and role assignments)
+    - `seismic.reporting` — required for syncing platform roles
+
+    For **sync-only** deployments, assign `seismic.user.view` and `seismic.reporting`.
+    For **sync + provisioning** deployments, assign all three scopes.
+
+  </Step>
+
+<Step>
+  Save the app registration. Copy the **Client ID** and **Client Secret** and
+  save them securely. The Client Secret is only shown once.
+</Step>
+
+  <Step>
+    Identify your **Seismic tenant** name (the subdomain from your login URL, e.g., `acme` if you access `acme.seismic.com`). The connector uses this to build the OAuth2 token endpoint URL automatically: `https://auth.seismic.com/tenants/{tenant}/connect/token`.
+  </Step>
+</Steps>
+
+## Configure the Seismic connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Seismic** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Seismic connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the required configuration:
+
+        - **Seismic Client ID**: OAuth2 Client ID from the app registration
+        - **Seismic Client Secret**: OAuth2 Client Secret from the app registration
+        - **Seismic Tenant**: Your Seismic tenant identifier (used to build the OAuth2 token endpoint URL `https://auth.seismic.com/tenants/TENANT/connect/token`)
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Seismic connector is now pulling access data into C1.
+
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Seismic](https://github.com/conductorone/baton-seismic) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Seismic connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Seismic connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Seismic connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-seismic-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-seismic-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Seismic credentials
+      BATON_SEISMIC_CLIENT_ID: <Seismic OAuth2 Client ID>
+      BATON_SEISMIC_CLIENT_SECRET: <Seismic OAuth2 Client Secret>
+      BATON_SEISMIC_TENANT: <Seismic tenant name>
+
+      # Enable provisioning (create/delete users, grant/revoke groups and roles)
+      BATON_PROVISIONING: "true"
+    ```
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-seismic.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-seismic
+      labels:
+        app: baton-seismic
+    spec:
+      selector:
+        matchLabels:
+          app: baton-seismic
+      template:
+        metadata:
+          labels:
+            app: baton-seismic
+            baton: "true"
+            baton-app: seismic
+        spec:
+          containers:
+          - name: baton-seismic
+            image: ghcr.io/conductorone/baton-seismic:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-seismic
+            envFrom:
+            - secretRef:
+                name: baton-seismic-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Seismic connector to. Seismic data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Seismic connector is now pulling access data into C1.
+
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+  All versions of this connector are available at
+  [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-seismic).
+</Tip>
