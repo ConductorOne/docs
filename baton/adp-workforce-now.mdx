@@ -44,6 +44,48 @@ Each synced worker is exposed as a user resource. The following keys are written
 
 When a worker has multiple work assignments, fields drawn from `workAssignments[]` come from the first non-terminated assignment, falling back to any assignment if all are terminated.
 
+## Custom worker attributes
+
+ADP Workforce Now tenants can define custom fields on workers via the ADP admin UI. These appear in the `customFieldGroup` object on the worker record and are **not synced by default** — you must explicitly map the fields you want using the `worker-custom-fields` configuration option.
+
+### Configuration format
+
+Each entry maps an ADP custom field to a profile key using the format `"<fieldType>/<codeValue>"="<profileKey>"`:
+
+```
+"amountFields/Rate"    → profile key "pay_rate"
+"stringFields/PR code" → profile key "pr_code"
+```
+
+The `fieldType` must be one of: `stringFields`, `numberFields`, `dateFields`, `indicatorFields`, `codeFields`, `amountFields`, `percentFields`, `telephoneFields`.
+
+The `codeValue` must match the field's `nameCode.codeValue` **exactly** as it appears in ADP, including spaces and capitalisation.
+
+### Amount fields
+
+Amount fields emit two profile keys: the numeric value under `<profileKey>` and the ISO currency code under `<profileKey>_currency_code`. For example, mapping `"amountFields/Rate"="pay_rate"` produces:
+
+| Profile key | Value |
+| :--- | :--- |
+| `pay_rate` | `23.0` (number) |
+| `pay_rate_currency_code` | `"AUD"` |
+
+### Example
+
+```bash
+baton-adp-workforce-now \
+  --worker-custom-fields="amountFields/Rate"="pay_rate" \
+  --worker-custom-fields="stringFields/PR code"="pr_code" \
+  --worker-custom-fields="indicatorFields/Emp radio"="is_senior_emp" \
+  --worker-custom-fields="dateFields/Emp Date"="emp_custom_date"
+```
+
+Or via environment variable (comma-separated):
+
+```bash
+BATON_WORKER_CUSTOM_FIELDS="amountFields/Rate=pay_rate,stringFields/PR code=pr_code"
+```
+
 ## Gather ADP Workforce Now credentials
 
 <Warning>
@@ -111,6 +153,7 @@ To configure the ADP Workforce Now connector, you need administrator permissions
         - **SSL Certificate** (`adp-workforce-now-ssl-cert`): PEM-encoded SSL client certificate for mTLS
         - **SSL Key** (`adp-workforce-now-ssl-key`): PEM-encoded SSL client private key for mTLS
         - **Base URL** (`adp-workforce-now-base-url`): The ADP API base URL (default: `https://api.adp.com`)
+        - **Worker Custom Fields** (`worker-custom-fields`): Optional. Map worker custom attributes to profile keys. See [Custom worker attributes](#custom-worker-attributes) for format details.
       </Step>
 
 {/* AUTO-GENERATED:END - config-params */}
