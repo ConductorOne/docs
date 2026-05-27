@@ -1,0 +1,237 @@
+---
+title: "Set up an Airtable connector"
+og:title: "Set up an Airtable connector"
+description: "C1 provides identity governance and just-in-time provisioning for Airtable. Integrate your Airtable instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access to workspaces, bases, and groups."
+og:description: "C1 provides identity governance and just-in-time provisioning for Airtable. Integrate your Airtable instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access to workspaces, bases, and groups."
+sidebarTitle: "Airtable"
+---
+
+## Capabilities
+
+The Airtable connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Workspaces | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Bases | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Invite Links | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+**Permission levels:**
+- **Workspaces:** `owner`, `create`, `edit`, `comment`, `read`
+- **Bases:** `create`, `edit`, `comment`, `read` (Airtable does not expose `owner` as a base-level permission)
+- **Groups:** `member`
+- **Invite Links:** Provisioning revokes (deletes) the link. Creating new invite links is not supported via the API.
+
+## Gather Airtable credentials
+
+<Warning>
+To configure the Airtable connector, you need Enterprise Admin permissions in Airtable.
+</Warning>
+
+<Steps>
+  <Step>
+    **Create a personal access token** with enterprise admin scope:
+
+    1. Log in to Airtable and navigate to [airtable.com/create/tokens](https://airtable.com/create/tokens).
+    2. Click **Create new token**.
+    3. Name the token (for example, `ConductorOne`).
+    4. Add the following scopes:
+
+       Required for sync:
+       - `enterprise.account:read` — lists workspaces
+       - `workspace.collaborators:read` — reads workspace collaborators and invite links
+       - `schema.bases:read` — reads base collaborators and invite links
+       - `enterprise.scim.usersAndGroups:manage` — lists and provisions users and groups via SCIM
+
+       Additional scopes required for provisioning:
+       - `workspace.collaborators:write` — grants, revokes, and updates workspace access; deletes workspace invite links
+       - `schema.bases:write` — grants, revokes, and updates base access; deletes base invite links
+    5. Click **Create token** and copy the value — it is shown only once.
+  </Step>
+
+  <Step>
+    **Find your Enterprise Account ID**:
+
+    1. In the Airtable Enterprise Admin Panel, navigate to **Settings**.
+    2. Your Enterprise Account ID appears in the URL or in the account details section. It begins with `ent`.
+  </Step>
+</Steps>
+
+## Configure the Airtable connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Airtable** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Airtable connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the required configuration:
+
+        - **API Token**: Your Airtable personal access token with enterprise admin scope.
+        - **Enterprise Account ID**: Your Airtable enterprise account ID (starts with `ent`), found in the Enterprise Admin Panel.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Airtable connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Airtable](https://github.com/conductorone/baton-airtable) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Airtable connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Airtable connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Airtable connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-airtable-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-airtable-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Airtable credentials
+      BATON_AIRTABLE_TOKEN: <Airtable personal access token>
+      BATON_AIRTABLE_ENTERPRISE_ACCOUNT_ID: <Airtable enterprise account ID>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-airtable.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-airtable
+      labels:
+        app: baton-airtable
+    spec:
+      selector:
+        matchLabels:
+          app: baton-airtable
+      template:
+        metadata:
+          labels:
+            app: baton-airtable
+            baton: "true"
+            baton-app: airtable
+        spec:
+          containers:
+          - name: baton-airtable
+            image: public.ecr.aws/conductorone/baton-airtable:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-airtable
+            envFrom:
+            - secretRef:
+                name: baton-airtable-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Airtable connector to. Airtable data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Airtable connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-airtable).
+</Tip>
