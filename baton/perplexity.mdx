@@ -1,0 +1,328 @@
+---
+title: "Set up a Perplexity connector"
+og:title: "Set up a Perplexity connector"
+description: "ConductorOne provides identity governance and just-in-time provisioning for Perplexity. Integrate your Perplexity Enterprise instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Perplexity. Integrate your Perplexity Enterprise instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Perplexity"
+---
+
+<Warning>
+This connector requires a **Perplexity Enterprise** subscription with at least **50 seats** (or at least one Enterprise Max user), which is the threshold at which Perplexity unlocks SCIM provisioning. Perplexity Pro and standard Enterprise tiers below 50 seats are not supported.
+</Warning>
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Perplexity connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> Create |
+| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> Grant, Revoke |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+**Additional functionality:**
+
+<Icon icon="square-check" iconType="solid" color="#65DE23"/> Supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning)
+
+#### Account creation fields
+
+When provisioning a new Perplexity user account, ConductorOne prompts for the following field:
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `display_name` | Yes | The user's first and last name, space-separated (e.g., "Jane Smith"). The first word is used as the given name; the remainder is used as the family name. Enter names in "First Last" order — the connector does not detect locale-native orderings such as family-name-first. |
+
+The user's email address is provided automatically by ConductorOne and is used as the SCIM username. No password is required — Perplexity Enterprise authenticates users through SSO, so accounts are created without credentials.
+
+### Connector actions
+
+Connector actions are custom capabilities that extend ConductorOne automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `disable_user` | `user_id` (string, required) | Deactivate a Perplexity user account by setting `active` to `false` via the SCIM API. This is the connector's deprovisioning hook — Perplexity SCIM does not support hard delete, so the account record remains in Perplexity but the user loses access. |
+| `enable_user` | `user_id` (string, required) | Activate a Perplexity user account by setting `active` to `true` via the SCIM API. |
+
+## Understanding Admin and Member roles in Perplexity
+
+Perplexity Enterprise uses a two-tier role model:
+
+- **Admin** — manages the organization, billing, and member access.
+- **Member** — consumes Perplexity AI features.
+
+Role assignment is driven entirely through your identity provider (IdP). In your IdP (Okta, Microsoft Entra ID, or OneLogin), you create two groups — one mapped to the Admin role and one mapped to the Member role — and then add or remove users from those groups to grant or revoke their Perplexity role.
+
+In ConductorOne, these IdP-pushed groups appear as the syncable, grantable resources. Granting a Perplexity user the "member" entitlement on the Admin group makes them a Perplexity Admin; revoking that entitlement (or moving them to the Member group) downgrades them to a Member.
+
+## SCIM-only connector
+
+This connector uses the SCIM 2.0 API exclusively. Perplexity does not currently offer a public Admin API for user or organization management, so SCIM is the only programmatic interface available.
+
+### What this means in practice
+
+- **Only SCIM-managed users and groups are visible.** Users created directly in the Perplexity admin console (rather than through SCIM) may not appear in syncs.
+- **Deprovisioning means deactivation, not deletion.** Perplexity SCIM does not support hard delete. The connector deactivates users by setting `active: false`; the account record remains in Perplexity.
+- **Groups are managed through SCIM only.** The connector can sync groups and grant or revoke group membership, but it cannot create or delete groups. Groups must be created in your IdP and pushed to Perplexity via SCIM.
+- **Google Workspace is not supported as an IdP** because Perplexity only supports just-in-time provisioning (not full SCIM) for Google Workspace. Supported IdPs are Okta, Microsoft Entra ID, and OneLogin.
+
+### What SCIM provides
+
+| Capability | Supported |
+| :--- | :--- |
+| Provision (create) user | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Deprovision (deactivate) user | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Add user to group | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Remove user from group | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Sync all users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Sync all groups and memberships | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Hard delete user | |
+| Create or delete groups | |
+| Sub-role permissions beyond Admin / Member | |
+
+<Note>
+If Perplexity adds an Admin API in the future, the connector can be extended to support additional capabilities such as direct role management or finer-grained entitlements.
+</Note>
+
+## Gather Perplexity credentials
+
+Configuring the connector requires SCIM credentials issued by Perplexity. Gather these credentials before you move on.
+
+<Warning>
+A Perplexity Enterprise administrator must perform this task. SCIM credentials are issued by Perplexity only after Enterprise SSO has been set up; they are not available in public documentation and may need to be requested through your Perplexity admin console or support contact.
+</Warning>
+
+<Steps>
+  <Step>
+    Complete Enterprise SSO setup in Perplexity if you have not already done so. Supported identity providers are Okta, Microsoft Entra ID, and OneLogin.
+  </Step>
+
+  <Step>
+    In the Perplexity admin console, navigate to the SCIM provisioning section and generate (or copy) the **SCIM bearer token** and the **SCIM endpoint URL**.
+
+    <Tip>
+    If the SCIM section is not visible in your admin console, contact Perplexity support to confirm SCIM has been enabled for your tenant.
+    </Tip>
+  </Step>
+
+  <Step>
+    In your identity provider, create two groups — one to map to the Perplexity **Admin** role and one to map to the **Member** role — and assign users to the appropriate group. These groups will be pushed to Perplexity via SCIM and will appear as syncable resources in ConductorOne.
+  </Step>
+
+  <Step>
+    Copy and save the **SCIM bearer token** and **SCIM endpoint URL** securely. You will need both to configure the connector.
+  </Step>
+</Steps>
+
+For more information, see the [Perplexity SCIM documentation](https://www.perplexity.ai/help-center/en/articles/11652604-scim-based-user-account-management).
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the Perplexity connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in ConductorOne
+- Access to the Perplexity SCIM credentials generated by following the instructions above
+</Warning>
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+
+  **Follow these instructions to use a built-in, no-code connector hosted by ConductorOne.**
+
+  <Steps>
+    <Step>
+      In ConductorOne, navigate to **Integrations** > **Connectors** and click **Add connector**.
+    </Step>
+
+    <Step>
+      Search for **Perplexity** and click **Add**.
+    </Step>
+
+    <Step>
+      Choose how to set up the new Perplexity connector:
+
+      - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with ConductorOne)
+      - Add the connector to a managed app (select from the list of existing managed apps)
+      - Create a new managed app
+    </Step>
+
+    <Step>
+      Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+      If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+
+    <Step>
+      Click **Next**.
+    </Step>
+
+    <Step>
+      Find the **Settings** area of the page and click **Edit**.
+    </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+    <Step>
+      Enter the required configuration:
+
+      - **SCIM Token** (required): The SCIM bearer token from the Perplexity Enterprise admin console.
+      - **SCIM URL** (required): The Perplexity Enterprise SCIM endpoint URL provided by Perplexity during Enterprise SSO setup.
+    </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+    <Step>
+      Click **Save**.
+    </Step>
+
+    <Step>
+      The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+    </Step>
+  </Steps>
+
+  **That's it!** Your Perplexity connector is now pulling access data into ConductorOne.
+
+  </Tab>
+
+  <Tab title="Self-hosted">
+
+  **Follow these instructions to use the [Perplexity](https://github.com/ConductorOne/baton-perplexity) connector, hosted and run in your own environment.**
+
+  When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with ConductorOne, automatically syncing and uploading data at regular intervals. This data is immediately available in the ConductorOne UI for access reviews and access requests.
+
+  ### Resources
+
+  * [Official download center](https://dist.conductorone.com/ConductorOne/baton-perplexity): For stable binaries (Windows/Linux/macOS) and container images.
+
+  * [GitHub repository](https://github.com/ConductorOne/baton-perplexity): Access the source code, report issues, or contribute to the project.
+
+  ### Step 1: Set up a new Perplexity connector
+
+  <Steps>
+    <Step>
+      In ConductorOne, navigate to **Integrations** > **Connectors** > **Add connector**.
+    </Step>
+
+    <Step>
+      Search for **Baton** and click **Add**.
+    </Step>
+
+    <Step>
+      Choose how to set up the new Perplexity connector:
+
+      - Add the connector to a currently unmanaged app
+      - Add the connector to a managed app
+      - Create a new managed app
+    </Step>
+
+    <Step>
+      Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of ConductorOne users. Setting multiple owners is allowed.
+
+      If you choose someone else, ConductorOne will notify the new connector owner by email that their help is needed to complete the setup process.
+    </Step>
+
+    <Step>
+      Click **Next**.
+    </Step>
+
+    <Step>
+      In the **Settings** area of the page, click **Edit**.
+    </Step>
+
+    <Step>
+      Click **Rotate** to generate a new Client ID and Secret.
+
+      Carefully copy and save these credentials. We'll use them in Step 2.
+    </Step>
+  </Steps>
+
+  ### Step 2: Create Kubernetes configuration files
+
+  Create two Kubernetes manifest files for your Perplexity connector deployment:
+
+  #### Secrets configuration
+
+  ```yaml expandable
+  # baton-perplexity-secrets.yaml
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: baton-perplexity-secrets
+  type: Opaque
+  stringData:
+    # ConductorOne credentials
+    BATON_CLIENT_ID: <ConductorOne client ID>
+    BATON_CLIENT_SECRET: <ConductorOne client secret>
+
+    # Perplexity SCIM credentials
+    BATON_SCIM_TOKEN: <SCIM bearer token>
+    BATON_SCIM_URL: <SCIM endpoint URL>
+
+    # Optional: include if you want ConductorOne to provision access using this connector
+    BATON_PROVISIONING: "true"
+  ```
+
+  See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+  #### Deployment configuration
+
+  ```yaml expandable
+  # baton-perplexity.yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: baton-perplexity
+    labels:
+      app: baton-perplexity
+  spec:
+    selector:
+      matchLabels:
+        app: baton-perplexity
+    template:
+      metadata:
+        labels:
+          app: baton-perplexity
+          baton: "true"
+          baton-app: perplexity
+      spec:
+        containers:
+        - name: baton-perplexity
+          image: public.ecr.aws/conductorone/baton-perplexity:latest
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: BATON_HOST_ID
+            value: baton-perplexity
+          envFrom:
+          - secretRef:
+              name: baton-perplexity-secrets
+  ```
+
+  ### Step 3: Deploy the connector
+
+  <Steps>
+    <Step>
+      Create a namespace in which to run ConductorOne connectors (if desired), then apply the secret config and deployment config files.
+    </Step>
+
+    <Step>
+      Check that the connector data uploaded correctly. In ConductorOne, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Perplexity connector to. Perplexity data should be found on the **Entitlements** and **Accounts** tabs.
+    </Step>
+  </Steps>
+
+  **That's it!** Your Perplexity connector is now pulling access data into ConductorOne.
+
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-perplexity).
+</Tip>
