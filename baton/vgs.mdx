@@ -1,0 +1,323 @@
+---
+title: "Set up a VGS connector"
+og:title: "Set up a VGS connector - C1 docs"
+description: "C1 provides identity governance and just-in-time provisioning for Very Good Security (VGS). Integrate your VGS organization with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision vault access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Very Good Security (VGS). Integrate your VGS organization with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision vault access."
+sidebarTitle: "VGS"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Invitations | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Organizations | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/>* |
+| Vaults | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+*Organization provisioning supports updating a user's role (user or admin). Removing a member from an organization is not supported by the VGS API.
+
+The VGS connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning) for vault access.
+
+## Gather VGS credentials
+
+Configuring the connector requires a VGS service account and your organization ID. Gather these before moving on.
+
+<Warning>
+A user with **admin** access to your VGS organization must perform this task.
+</Warning>
+
+### Find your Organization ID
+
+<Steps>
+<Step>
+Sign into the [VGS Dashboard](https://dashboard.verygoodsecurity.com/).
+</Step>
+<Step>
+Navigate to **Organization Settings**.
+</Step>
+<Step>
+Copy and save the **Organization ID** (format: `ACxxxxxxxxxxxxxxxxxxxxxxxx`).
+</Step>
+</Steps>
+
+### Create a service account
+
+<Tabs>
+<Tab title="Dashboard (UI)">
+<Steps>
+<Step>
+Sign into the [VGS Dashboard](https://dashboard.verygoodsecurity.com/) with an **admin** user.
+</Step>
+<Step>
+In the top-left corner, click your **organization name** and select **Manage**.
+</Step>
+<Step>
+Under **Organization Settings**, select the **Service Accounts** tab.
+</Step>
+<Step>
+Click **Create New**.
+</Step>
+<Step>
+Enter a name for the service account, such as `c1integration`.
+</Step>
+<Step>
+Select all vaults.
+</Step>
+<Step>
+Add the required scopes:
+
+   **For syncing only:**
+   - `organizations:read`
+   - `vaults:read`
+   - `organization-users:read`
+
+   **To also enable provisioning** add:
+   - `organization-users:write`
+   
+</Step>
+<Step>
+Click **Create**. Carefully copy and save the **Client ID** and **Client Secret** that are displayed. These credentials are shown only once.
+</Step>
+</Steps>
+</Tab>
+<Tab title="CLI">
+
+Follow the [VGS CLI getting started guide](https://www.verygoodsecurity.com/docs/vgs-cli/getting-started#install) to install the CLI first.
+
+<Steps>
+<Step>
+Authenticate with the VGS CLI:
+
+```bash
+vgs login
+```
+</Step>
+<Step>
+Create a service account manifest. Save it as `c1-service-account.yaml`:
+
+**For syncing only:**
+```yaml
+name: c1integration
+scopes:
+  - organizations:read
+  - vaults:read
+  - organization-users:read
+```
+
+**To also enable provisioning** (granting/revoking vault access and updating org roles), add:
+```yaml
+name: c1integration
+scopes:
+  - organizations:read
+  - vaults:read
+  - organization-users:read
+  - organization-users:write
+```
+</Step>
+<Step>
+Apply the manifest to your organization:
+
+```bash
+vgs apply service-account -O <YOUR_ORG_ID> -f c1-service-account.yaml
+```
+</Step>
+<Step>
+The CLI outputs the service account credentials. Carefully copy and save the **Client ID** and **Client Secret**. These are shown only once.
+</Step>
+</Steps>
+</Tab>
+</Tabs>
+
+<Note>
+Service accounts have an email in the format `clientId@vgs.dev`. These accounts appear in vault member lists but are automatically excluded from synced user resources in C1.
+</Note>
+
+**That's it!** Next, move on to the connector configuration instructions.
+
+## Configure the VGS connector
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Connector Administrator** or **Super Administrator** role in C1
+- The service account **Client ID** and **Client Secret** from the steps above
+- Your VGS **Organization ID**
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+**Follow these instructions to use a built-in, no-code connector hosted by C1.**
+
+<Steps>
+<Step>
+In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+</Step>
+<Step>
+Search for **VGS** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new VGS connector:
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+<Step>
+Enter your service account credentials and organization ID:
+
+   - **Service Account Client ID**: the client ID from the service account you created
+   - **Service Account Client Secret**: the client secret from the service account you created
+   - **Organization ID**: your VGS organization ID
+</Step>
+<Step>
+Click **Save**.
+</Step>
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**That's it!** Your VGS connector is now pulling access data into C1.
+
+</Tab>
+<Tab title="Self-hosted">
+
+**Follow these instructions to use the VGS connector, hosted and run in your own environment.**
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+### Resources
+
+* [Official download center](https://dist.conductorone.com/ConductorOne/baton-vgs): For stable binaries (Windows/Linux/macOS) and container images.
+
+* [GitHub repository](https://github.com/conductorone/baton-vgs): Access the source code, report issues, or contribute to the project.
+
+### Step 1: Set up a new VGS connector
+
+<Steps>
+<Step>
+In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+</Step>
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+<Step>
+Choose how to set up the new VGS connector:
+
+   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+
+   - Add the connector to a managed app (select from the list of existing managed apps)
+
+   - Create a new managed app
+</Step>
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+<Step>
+Click **Next**.
+</Step>
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+   Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your VGS connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-vgs-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-vgs-secrets
+type: Opaque
+stringData:
+  # C1 credentials
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
+
+  # VGS service account credentials
+  BATON_SERVICE_ACCOUNT_CLIENT_ID: <VGS service account client ID>
+  BATON_SERVICE_ACCOUNT_CLIENT_SECRET: <VGS service account client secret>
+  BATON_ORGANIZATION_ID: <VGS organization ID>
+
+  # Optional: include if you want C1 to provision access using this connector
+  # Requires organization-users:write scope on the service account
+  BATON_PROVISIONING: "true"
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-vgs.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-vgs
+  labels:
+    app: baton-vgs
+spec:
+  selector:
+    matchLabels:
+      app: baton-vgs
+  template:
+    metadata:
+      labels:
+        app: baton-vgs
+        baton: true
+        baton-app: vgs
+    spec:
+      containers:
+      - name: baton-vgs
+        image: ghcr.io/conductorone/baton-vgs:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-vgs
+        envFrom:
+        - secretRef:
+            name: baton-vgs-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+<Step>
+Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the VGS connector to. VGS data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**That's it!** Your VGS connector is now pulling access data into C1.
+
+</Tab>
+</Tabs>
