@@ -1,0 +1,181 @@
+---
+title: "Set up an Alibaba Cloud connector"
+og:title: "Set up an Alibaba Cloud connector"
+description: "C1 provides identity governance for Alibaba Cloud. Integrate your Alibaba Cloud instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for Alibaba Cloud. Integrate your Alibaba Cloud instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "Alibaba Cloud"
+---
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Account|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Groups|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Roles|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Policies|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+## Gather Alibaba Cloud credentials
+
+<Warning>
+The current Alibaba Cloud connector is read-only partial access sync. It syncs
+identity inventory and group membership grants, but does not yet sync policy
+attachment or role assumption grants.
+</Warning>
+
+<Steps>
+  <Step>
+    Create or select an Alibaba Cloud RAM user for the connector. Do not use
+    Alibaba Cloud account root AccessKeys.
+  </Step>
+
+  <Step>
+    Attach the Alibaba-managed `AliyunRAMReadOnlyAccess` policy, or attach a
+    custom read-only policy that allows `ram:GetAccountAlias`, `ram:ListUsers`,
+    `ram:ListGroups`, `ram:ListUsersForGroup`, `ram:ListRoles`, and
+    `ram:ListPolicies`.
+  </Step>
+
+  <Step>
+    Create an AccessKey pair for that RAM user.
+  </Step>
+
+  <Step>
+    Copy the AccessKey ID.
+  </Step>
+
+  <Step>
+    Copy the AccessKey Secret.
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Description|
+|-|-|-|
+|`access-key-id`|Yes|AccessKey ID for an Alibaba Cloud RAM user with read-only RAM permissions.|
+|`access-key-secret`|Yes|AccessKey Secret paired with the AccessKey ID.|
+
+## Synced resource types
+
+- **Account**: account alias from RAM `GetAccountAlias`.
+- **Users**: active and frozen users from IMS `ListUsers`.
+- **Groups**: groups from IMS `ListGroups`.
+- **Group membership grants**: group members from IMS `ListUsersForGroup`.
+- **Roles**: roles from RAM `ListRoles`.
+- **Policies**: system and custom policies from RAM `ListPolicies`.
+
+## Special notes
+
+- Authentication uses Alibaba Cloud ACS3-HMAC-SHA256 request signing.
+- Use one connector instance per Alibaba Cloud account.
+- Policy attachment grants are not emitted in the current build.
+- Role assumption grants and role attached-policy grants are not emitted in
+  the current build.
+- The connector keeps Alibaba RAM and IMS metadata snapshots in the repo for
+  local validation.
+
+## Configure the Alibaba Cloud connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Alibaba Cloud** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Alibaba Cloud connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Paste the Alibaba Cloud credentials into the relevant fields:
+
+        - **AccessKey ID**: The RAM identity AccessKey ID.
+        - **AccessKey Secret**: The paired AccessKey Secret.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by
+        **Connected**. You can view the logs to ensure that information is
+        syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Alibaba Cloud connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Alibaba Cloud connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Alibaba Cloud connector, set the owner,
+        and click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area, click **Edit**, then click **Rotate** to
+        generate a new Client ID and Client Secret. Store these values
+        securely for your deployment.
+      </Step>
+
+      <Step>
+        Configure C1 credentials and Alibaba Cloud credentials as environment
+        variables:
+
+        ```bash
+        BATON_CLIENT_ID=<C1 client ID>
+        BATON_CLIENT_SECRET=<C1 client secret>
+        BATON_HOST_ID=baton-alibaba-cloud
+        BATON_ACCESS_KEY_ID=<Alibaba Cloud RAM AccessKey ID>
+        BATON_ACCESS_KEY_SECRET=<Alibaba Cloud RAM AccessKey Secret>
+        ```
+      </Step>
+
+      <Step>
+        Deploy the connector using the Public ECR image:
+
+        ```bash
+        public.ecr.aws/conductorone/baton-alibaba-cloud:<version>
+        ```
+
+        Use a version tag without the leading `v`, such as `0.0.3`.
+      </Step>
+    </Steps>
+
+    **Done.** Your Alibaba Cloud connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
