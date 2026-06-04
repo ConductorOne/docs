@@ -1,0 +1,239 @@
+---
+title: "Set up a Arctic Wolf connector"
+og:title: "Set up a Arctic Wolf connector"
+description: "C1 provides identity governance and just-in-time provisioning for Arctic Wolf. Integrate your Arctic Wolf instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Arctic Wolf. Integrate your Arctic Wolf instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Arctic Wolf"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Arctic Wolf connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Zones | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+<Note>
+Account provisioning creates console users only. The Aurora API has no set-password endpoint, so no password is set and none is returned. Console role and per-zone role (Zone Manager / User) assignments are provisionable. The "Zone Manager" console role is derived (set a user's console role to **User** and assign a zone with the Zone Manager role), so it is synced but not directly grantable.
+</Note>
+
+## Gather Arctic Wolf credentials
+
+<Warning>
+To configure the Arctic Wolf connector, you need administrator permissions in the Aurora Endpoint Defense console.
+</Warning>
+
+<Steps>
+  <Step>
+    In the Aurora console, go to **Settings** > **Integrations** and add a new application (integration) for C1.
+  </Step>
+
+  <Step>
+    Grant the application these scopes/privileges: `user:list`, `user:read`, `user:create`, `user:update`, and `zone:list`.
+  </Step>
+
+  <Step>
+    Copy the **Application ID**, **Application Secret**, and **Tenant ID** from the Integrations page and save them securely. Also note your console's **region/data center** (for example, North America, Europe, or Asia-Pacific).
+  </Step>
+</Steps>
+
+## Configure the Arctic Wolf connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Arctic Wolf** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Arctic Wolf connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **region** (required): Aurora API region/data center — one of `us`, `eu`, `apne`, `au`, `sa`, `usgov`
+        - **app-id** (required): Aurora API Application ID (used as the JWT subject)
+        - **app-secret** (required): Aurora API Application Secret (used to sign the JWT)
+        - **tenant-id** (required): Aurora API Tenant ID
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Arctic Wolf connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Arctic Wolf](https://github.com/conductorone/baton-arctic-wolf) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    
+    ### Resources
+
+    * [Official download center](https://dist.conductorone.com/ConductorOne/baton-arctic-wolf): For stable binaries (Windows/Linux/macOS) and container images.
+
+    * [GitHub repository](https://github.com/conductorone/baton-arctic-wolf): Access the source code, report issues, or contribute to the project.
+
+    ### Step 1: Set up a new Arctic Wolf connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Arctic Wolf connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Arctic Wolf connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-arctic-wolf-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-arctic-wolf-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Arctic Wolf (Aurora Endpoint Defense) credentials
+      BATON_REGION: <us|eu|apne|au|sa|usgov>
+      BATON_APP_ID: <Aurora Application ID>
+      BATON_APP_SECRET: <Aurora Application Secret>
+      BATON_TENANT_ID: <Aurora Tenant ID>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-arctic-wolf.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-arctic-wolf
+      labels:
+        app: baton-arctic-wolf
+    spec:
+      selector:
+        matchLabels:
+          app: baton-arctic-wolf
+      template:
+        metadata:
+          labels:
+            app: baton-arctic-wolf
+            baton: "true"
+            baton-app: arctic-wolf
+        spec:
+          containers:
+          - name: baton-arctic-wolf
+            image: public.ecr.aws/conductorone/baton-arctic-wolf:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-arctic-wolf
+            envFrom:
+            - secretRef:
+                name: baton-arctic-wolf-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Arctic Wolf connector to. Arctic Wolf data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Arctic Wolf connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-arctic-wolf).
+</Tip>
