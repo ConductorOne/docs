@@ -8,35 +8,37 @@ C1 connectors periodically sync data from your integrated systems to keep your a
 
 ## Default sync schedule
 
-By default, connectors sync every **24 hours**. This means that once a connector is set up and running, C1 automatically retrieves the latest access data from the integrated system approximately once per day.
+C1 automatically syncs each connector on a recurring schedule. The default interval depends on your tenant configuration:
 
-Some connectors may have different default intervals based on the requirements of the integrated system. For example, connectors for systems with strict API rate limits may have longer minimum sync intervals to avoid exceeding those limits.
+- **Tenants with access requests enabled:** Connectors sync every **1 hour** by default.
+- **All other tenants:** Connectors sync every **24 hours** by default.
 
-## Sync scheduling types
+These defaults apply when no custom sync schedule has been configured for the connector. Some connectors may have different minimum intervals based on the requirements of the integrated system. For example, connectors for systems with strict API rate limits may have longer minimum sync intervals to avoid exceeding those limits.
 
-C1 supports three ways to schedule syncs:
+## Custom sync schedules
 
-### Interval-based sync (default)
+You can configure a custom sync schedule for individual connectors. Custom schedules support two formats:
 
-Most connectors use interval-based syncing, where a full sync runs at regular intervals. After each sync completes, the next sync is automatically scheduled based on the configured interval.
+- **Fixed interval:** Set a specific duration between syncs (for example, every 6 hours). The minimum configurable interval is **30 minutes**.
+- **Cron schedule:** Use a cron expression with timezone support for more precise scheduling (for example, daily at midnight in a specific timezone).
 
-- The default interval is **24 hours**.
-- Some connectors enforce a **minimum interval** based on the integrated system's API limits. If you configure a custom interval below this minimum, C1 automatically raises it to meet the requirement.
-- Custom intervals that exceed the connector's minimum are preserved as configured.
+Some connector types enforce a **minimum sync interval** that overrides shorter custom schedules to protect the external system from excessive API calls. If you configure a custom interval below this minimum, C1 automatically raises it to meet the requirement. Custom intervals that exceed the connector's minimum are preserved as configured.
 
-### Continuous sync
+## On-demand sync
 
-Some connectors support **continuous sync**, which pulls new data as it becomes available rather than waiting for the next scheduled sync. Continuous sync uses event feeds or change detection to identify and retrieve only the data that has changed since the last sync.
+You can start a sync at any time from the connector's integration page in C1, regardless of the configured schedule. On-demand syncs run a full sync immediately. There is a short cooldown period between on-demand syncs to prevent overlapping operations.
 
-Continuous sync is useful for systems where near-real-time data accuracy is important, such as tracking admin events or audit logs. See each connector's documentation to check whether it supports continuous sync.
+This is useful when you've made changes in an integrated system and want them reflected in C1 right away.
+
+## Continuous sync
+
+Some connectors support **continuous sync**, which supplements the scheduled sync cycle. Instead of waiting for the next scheduled sync, continuous sync listens for change events from the external system and pulls new data as it becomes available. This reduces the delay between a change occurring in the external system and that change being reflected in C1.
+
+Continuous sync works alongside scheduled syncs -- it does not replace them. Scheduled syncs still run at their configured interval to ensure a complete, consistent view of the external system's data.
 
 <Note>
-  Even with continuous sync enabled, periodic full syncs still occur to ensure complete data consistency.
+  See each connector's documentation to check whether it supports continuous sync.
 </Note>
-
-### On-demand sync
-
-You can manually trigger a sync at any time from the connector's integration page in C1. On-demand syncs run a full sync immediately, regardless of the regular schedule. This is useful when you've made changes in an integrated system and want them reflected in C1 right away.
 
 ## Sync failure notifications
 
@@ -52,7 +54,7 @@ You can pause a connector's sync schedule from the connector's configuration pag
 
 For audit purposes, keep the following in mind:
 
-- The default sync interval of 24 hours means that access data in C1 may be up to 24 hours behind the source system.
+- The default sync interval means that access data in C1 may be up to 1 hour (for tenants with access requests) or 24 hours behind the source system.
 - You can trigger an on-demand sync before generating audit reports to ensure the most current data.
 - Sync history and status are available on each connector's integration page, providing a record of when syncs occurred and whether they completed successfully.
-- If your audit requirements call for more frequent syncs, contact your C1 representative to discuss available options.
+- If your audit requirements call for more frequent syncs, you can configure a custom sync schedule with a shorter interval (minimum 30 minutes).
