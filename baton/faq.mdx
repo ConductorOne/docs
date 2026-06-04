@@ -33,6 +33,34 @@ Specifically, C1 syncs:
 
 Syncing is a read-only operation. Most connectors use syncs that are scheduled to run at regular intervals. Some connectors support **continuous sync**, which pulls new data as it becomes available rather than waiting for the next iteration of a set schedule. You can also start a sync on demand on any connector’s integration page.
 
+#### Default sync schedule
+
+C1 automatically syncs each connector on a recurring schedule. The default interval depends on your tenant configuration:
+
+- **Tenants with access requests enabled:** Connectors sync every **1 hour** by default.
+- **All other tenants:** Connectors sync every **24 hours** by default.
+
+These defaults apply when no custom sync schedule has been configured for the connector.
+
+#### Custom sync schedules
+
+You can configure a custom sync schedule for individual connectors. Custom schedules support two formats:
+
+- **Fixed interval:** Set a specific duration between syncs (for example, every 6 hours). The minimum configurable interval is 30 minutes.
+- **Cron schedule:** Use a cron expression with timezone support for more precise scheduling (for example, daily at midnight in a specific timezone).
+
+Some connector types enforce a minimum sync interval that overrides shorter custom schedules to protect the external system from excessive API calls.
+
+#### On-demand sync
+
+You can start a sync at any time from the connector’s integration page in C1, regardless of the configured schedule. There is a short cooldown period between on-demand syncs to prevent overlapping operations.
+
+#### Continuous sync
+
+Some connectors support continuous sync, which supplements the scheduled sync cycle. Instead of waiting for the next scheduled sync, continuous sync listens for change events from the external system and pulls new data as it becomes available. This reduces the delay between a change occurring in the external system and that change being reflected in C1.
+
+Continuous sync works alongside scheduled syncs — it does not replace them. Scheduled syncs still run at their configured interval to ensure a complete, consistent view of the external system’s data.
+
 ### Sync issue or failure notifications
 
 If a connector experiences three consecutive sync failures, an automated email alert is immediately dispatched to the designated owner, letting you take action quickly to correct the issue.
@@ -96,6 +124,17 @@ To learn more about configuring ticketing, check out [External ticketing](/produ
     You can run multiple instances of the same connector using the same client ID and secret. Each instance must have a unique host identifier — this happens automatically when instances run on separate hosts (since the system hostname is used by default), but if you run multiple instances on the same host, set the `BATON_HOST_ID` environment variable to a unique value for each instance.
 
     Connectors periodically check in with C1 to request work. When tasks are available, any idle instance can claim the next task. This creates a worker-queue architecture: if one connector instance goes down, the remaining instances will pick up subsequent tasks. Note that only one sync task runs at a time per connector, and if an instance processing a task becomes unavailable, there may be a short delay (up to a few minutes) before the task is released and becomes available for another instance to claim.
+    </Accordion>
+
+    <Accordion title="What is the default sync schedule?">
+    C1 automatically syncs each connector on a recurring schedule. The default sync interval depends on your tenant configuration:
+
+    - **Tenants with access requests enabled:** Every **1 hour**.
+    - **All other tenants:** Every **24 hours**.
+
+    You can customize the sync schedule for individual connectors by setting a fixed interval (minimum 30 minutes) or a cron expression with timezone support. Some connector types enforce a minimum interval that overrides shorter custom schedules. You can also trigger a sync on demand at any time from the connector's integration page.
+
+    Connectors that support **continuous sync** supplement the scheduled cycle by listening for change events from the external system in near real-time, reducing the delay between changes and their reflection in C1. Continuous sync works alongside scheduled syncs and does not replace them.
     </Accordion>
 
     <Accordion title="Where are sync state files stored?">
