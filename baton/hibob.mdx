@@ -1,0 +1,192 @@
+---
+title: "Set up a HiBob connector"
+og:title: "Set up a HiBob connector"
+description: "C1 provides identity governance for HiBob. Integrate your HiBob instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for HiBob. Integrate your HiBob instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "HiBob"
+---
+
+C1 provides identity governance for HiBob. Integrate your HiBob instance with
+C1 for unified visibility and governance over user access.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Employees|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Departments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+## Gather HiBob credentials
+
+<Warning>
+You need admin access in HiBob to create a service user and manage permission
+groups. Service users start with no access — the connector only sees what the
+permission group grants.
+</Warning>
+
+<Steps>
+  <Step>
+    In HiBob, navigate to **Settings** > **Integrations** > **Automation** >
+    **Service Users** and create a new service user.
+  </Step>
+
+  <Step>
+    Copy the **Service user ID** and **Token**. The token is shown once —
+    treat it like a password.
+  </Step>
+
+  <Step>
+    Add the service user to a permission group that can read employee data in
+    the **root**, **about**, **employment**, and **work** categories. To sync
+    terminated employees, the permission group must also cover inactive
+    (former) employees.
+  </Step>
+
+  <Step>
+    Note your HiBob API URL. Production is `https://api.hibob.com/v1`. If
+    HiBob has provisioned a sandbox for your company, the sandbox URL is
+    `https://api.sandbox.hibob.com/v1` — sandbox access is granted by HiBob on
+    request, not self-serve.
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Description|
+|-|-|-|
+|`hibob-base-url`|Yes|The HiBob API base URL including the `/v1` segment, with no trailing slash. Production is `https://api.hibob.com/v1`.|
+|`hibob-service-user-id`|Yes|The ID of the HiBob service user.|
+|`hibob-service-user-token`|Yes|The token paired with the service user ID. Sent with HTTP Basic authentication.|
+
+## Synced resource types
+
+- **Employees**: people from HiBob's people search. Each employee becomes a
+  user. Terminated employees are included and synced with a disabled status;
+  employees in every other lifecycle state (employed, hired, garden leave,
+  leave, parental leave) are synced as enabled, with the exact state kept on
+  the user profile.
+- **Departments**: the company's department list, including sub-departments.
+  Each department becomes a group with a single `member` entitlement.
+- **Department membership**: an employee is a member of the department named
+  in the employee's work data.
+
+## Special notes
+
+- Provisioning is not supported. The connector reads employees and departments
+  only.
+- The connector authenticates with HTTP Basic credentials: the service user ID
+  as the username and its token as the password.
+- HiBob omits any field the service user is not permitted to read, without
+  raising an error. If the permission group is missing a category, the
+  connector's validation step reports it when the connector is set up.
+- An employee with no department is synced as a user but holds no department
+  membership.
+- HiBob reports an employee's department by name, so the connector matches the
+  name from the employee's work data to the department list.
+- An employee's manager is recorded on the user profile.
+
+## Configure the HiBob connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **HiBob** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new HiBob connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Paste the HiBob credentials into the relevant fields:
+
+        - **HiBob API URL**: `https://api.hibob.com/v1`.
+        - **Service user ID**: The ID of the service user you created in HiBob.
+        - **Service user token**: The token paired with the service user ID.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by
+        **Connected**. You can view the logs to ensure that information is
+        syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your HiBob connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the HiBob connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new HiBob connector, set the owner, and
+        click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area, click **Edit**, then click **Rotate** to
+        generate a new Client ID and Client Secret. Store these values
+        securely for your deployment.
+      </Step>
+
+      <Step>
+        Configure C1 credentials and HiBob credentials as environment
+        variables:
+
+        ```bash
+        BATON_CLIENT_ID=<C1 client ID>
+        BATON_CLIENT_SECRET=<C1 client secret>
+        BATON_HOST_ID=baton-hibob
+        BATON_HIBOB_BASE_URL=https://api.hibob.com/v1
+        BATON_HIBOB_SERVICE_USER_ID=<HiBob service user ID>
+        BATON_HIBOB_SERVICE_USER_TOKEN=<HiBob service user token>
+        ```
+      </Step>
+
+      <Step>
+        Deploy the connector using the Public ECR image:
+
+        ```bash
+        public.ecr.aws/conductorone/baton-hibob:<version>
+        ```
+
+        Use a version tag without the leading `v`, such as `0.0.1`.
+      </Step>
+    </Steps>
+
+    **Done.** Your HiBob connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
