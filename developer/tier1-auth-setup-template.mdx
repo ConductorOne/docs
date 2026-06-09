@@ -1,0 +1,213 @@
+---
+title: "Tier 1 auth setup template"
+sidebarTitle: "Auth setup template"
+description: "Repeatable template for documenting Tier 1 vendor authentication setup. Use this template when onboarding a new Tier 1 connector to capture auth modes, scopes, credential lifecycle, and validation steps."
+---
+
+Use this template when onboarding a new Tier 1 vendor connector. Copy the sections below into a new document, fill in the details, and link the completed doc from the connector's setup page. The template is designed to work for both simple API-key vendors and complex OAuth/JWT/domain-wide delegation vendors.
+
+## Vendor overview
+
+| Field | Value |
+| :--- | :--- |
+| **Vendor / service name** | _e.g., Okta, Google Workspace, Datadog_ |
+| **Vendor documentation URL** | _Link to the vendor's API authentication docs_ |
+| **C1 connector repo** | `baton-<name>` |
+| **Connector type** | Cloud-hosted / Self-hosted / Both |
+
+## Supported API auth modes
+
+List every authentication method the vendor API supports, then indicate which ones C1 supports today.
+
+| Auth mode | Vendor supports | C1 supports today | Notes |
+| :--- | :--- | :--- | :--- |
+| API key / token | _Yes / No_ | _Yes / No_ | _e.g., "Long-lived, scoped to creating user"_ |
+| OAuth 2.0 client credentials | _Yes / No_ | _Yes / No_ | _e.g., "Short-lived tokens, auto-refresh"_ |
+| OAuth 2.0 + private key (JWT) | _Yes / No_ | _Yes / No_ | _e.g., "OIDC app with client credentials flow"_ |
+| Service account JSON key (DWD) | _Yes / No_ | _Yes / No_ | _e.g., "Google-style domain-wide delegation"_ |
+| IAM role / cross-account trust | _Yes / No_ | _Yes / No_ | _e.g., "AWS STS AssumeRole with external ID"_ |
+| LDAP bind | _Yes / No_ | _Yes / No_ | _e.g., "Simple bind or Kerberos/GSSAPI"_ |
+| SCIM bearer token | _Yes / No_ | _Yes / No_ | |
+| Other: ________________ | _Yes / No_ | _Yes / No_ | |
+
+## Recommended setup path
+
+Describe the recommended auth method and why it is preferred. If there are multiple valid approaches, rank them.
+
+### Primary recommendation
+
+> _Example: "Use OAuth 2.0 with private key (JWT) for production environments. This provides scoped access with short-lived tokens and easier credential rotation compared to long-lived API tokens."_
+
+**Auth method:** _e.g., OAuth 2.0 Private Key_
+
+**Why this method:**
+- _e.g., Least-privilege scopes available_
+- _e.g., Short-lived tokens reduce blast radius_
+- _e.g., No human-tied credentials_
+
+### Alternative method (if applicable)
+
+> _Example: "Use an API token for quick setup or non-production environments. Simpler to configure but uses long-lived credentials tied to an admin account."_
+
+**Auth method:** _e.g., API Token_
+
+**When to use instead:** _e.g., Quick proof-of-concept, vendor doesn't support OAuth for all required scopes_
+
+## Required scopes and permissions
+
+### For sync only (read access)
+
+List the minimum scopes or permissions required for C1 to sync data from the vendor.
+
+| Scope / permission | Purpose |
+| :--- | :--- |
+| _e.g., `okta.users.read`_ | _Read and sync user accounts_ |
+| _e.g., `okta.groups.read`_ | _Read and sync groups and memberships_ |
+| _e.g., `okta.apps.read`_ | _Read and sync application assignments_ |
+| _e.g., `okta.roles.read`_ | _Read and sync admin role assignments_ |
+
+### For sync + provisioning (read/write access)
+
+List additional scopes or permissions required for C1 to provision and deprovision access.
+
+| Scope / permission | Purpose |
+| :--- | :--- |
+| _e.g., `okta.users.manage`_ | _Provision and deprovision user accounts_ |
+| _e.g., `okta.groups.manage`_ | _Add and remove users from groups_ |
+
+### Vendor admin role requirements
+
+| C1 capability | Minimum vendor role required |
+| :--- | :--- |
+| _Sync-only_ | _e.g., Read-Only Administrator_ |
+| _Sync + provision_ | _e.g., Super Administrator or App Admin + Group Admin_ |
+
+## Credential setup instructions
+
+Step-by-step instructions for creating the credentials. Adapt the structure based on auth complexity.
+
+### Simple auth (API key / token)
+
+<Steps>
+  <Step>
+    _Log into the vendor admin console._
+  </Step>
+  <Step>
+    _Navigate to **Settings** > **API** > **Tokens** (adjust path for vendor)._
+  </Step>
+  <Step>
+    _Create a new token named `ConductorOne` with the scopes listed above._
+  </Step>
+  <Step>
+    _Copy and securely store the token. You will need it when configuring the connector in C1._
+  </Step>
+</Steps>
+
+### Complex auth (OAuth / JWT / DWD)
+
+Use this section for vendors that require multiple steps such as creating an application, generating keys, configuring delegation, or setting up trust relationships.
+
+<Steps>
+  <Step>
+    **Create an application / service account**
+
+    _Navigate to the vendor's developer console and create a new application or service account for the C1 integration._
+  </Step>
+  <Step>
+    **Configure authentication method**
+
+    _Select the appropriate auth method (e.g., public key / private key) and generate or upload credentials._
+  </Step>
+  <Step>
+    **Grant scopes / permissions**
+
+    _Assign the required scopes from the tables above. Use the sync-only set for read-only access, or the sync + provisioning set for full access._
+  </Step>
+  <Step>
+    **Configure delegation (if applicable)**
+
+    _For domain-wide delegation or cross-account trust, configure the trust relationship between the service account and the vendor's admin domain._
+
+    _Example for Google: Add the service account's Client ID to Admin Console > Security > API Controls > Domain-wide Delegation with the required OAuth scopes._
+
+    _Example for AWS: Create an IAM role with a trust policy referencing C1's service account ARN and the provided External ID._
+  </Step>
+  <Step>
+    **Collect required values**
+
+    Record the following values — you will need them when configuring the connector in C1:
+
+    | Value | Where to find it |
+    | :--- | :--- |
+    | _e.g., Client ID_ | _Application settings page_ |
+    | _e.g., Private Key (PEM)_ | _Downloaded during key creation_ |
+    | _e.g., Key ID_ | _Shown after key is added_ |
+    | _e.g., Customer / Tenant ID_ | _Admin console > Account Settings_ |
+    | _e.g., Domain_ | _Admin console > Domains_ |
+  </Step>
+</Steps>
+
+## Rotation and expiration behavior
+
+| Field | Value |
+| :--- | :--- |
+| **Credential type** | _e.g., API token, OAuth client secret, service account JSON key, IAM role_ |
+| **Expires automatically?** | _Yes (after N days) / No (manual rotation required)_ |
+| **Vendor-enforced max lifetime** | _e.g., 90 days, 1 year, unlimited_ |
+| **Rotation method** | _e.g., Generate new token in admin console and update connector settings in C1_ |
+| **Does rotation cause downtime?** | _e.g., No — old token remains valid until explicitly revoked_ |
+| **C1 rotation procedure** | _e.g., Navigate to Integrations > Connectors > [Connector] > Settings > Edit, paste new token, click Save_ |
+
+### Rotation checklist
+
+- [ ] Generate new credentials in the vendor's admin console
+- [ ] Update the connector configuration in C1 with the new credentials
+- [ ] Verify a successful sync completes after the update
+- [ ] Revoke the old credentials in the vendor's admin console (if not auto-expired)
+
+## Known caveats
+
+Document any known issues, limitations, or non-obvious behaviors. Assign an owner to each caveat.
+
+| Caveat | Impact | Owner |
+| :--- | :--- | :--- |
+| _e.g., API token inherits permissions of the creating user — if that user's role changes, the token's effective permissions change too_ | _Sync or provisioning may silently lose capabilities_ | _@team-connectors_ |
+| _e.g., OAuth scopes must be re-granted after adding new ones — removing and re-adding the app resets all scopes_ | _Provisioning stops working until scopes are re-granted_ | _@team-connectors_ |
+| _e.g., Rate limit is 100 req/min per token; large orgs may hit this during initial sync_ | _Sync may take longer; SDK handles retries automatically_ | _@team-connectors_ |
+
+## Validation
+
+Use these commands or steps to verify that credentials are working correctly.
+
+### CLI validation
+
+```bash
+# Replace with the actual baton connector name and required flags
+baton-<connector-name> \
+  --<auth-flag> "<credential-value>" \
+  --<domain-flag> "<domain-value>"
+```
+
+A successful run produces a `sync.c1z` file in the current directory. Inspect it with:
+
+```bash
+baton resources -f sync.c1z
+```
+
+### Conformance validation
+
+```bash
+# Run the connector's built-in conformance checks (if available)
+baton-<connector-name> \
+  --<auth-flag> "<credential-value>" \
+  --<domain-flag> "<domain-value>" \
+  capabilities
+```
+
+### Cloud-hosted validation
+
+After configuring the connector in C1:
+1. Navigate to **Integrations** > **Connectors**
+2. Find the connector and check that its status shows **Connected**
+3. Click the connector name and verify **Last sync** is recent with no errors
+4. Navigate to the app's **Accounts** and **Entitlements** tabs to confirm data was synced

@@ -1,0 +1,105 @@
+---
+title: "Tier 1 auth setup process"
+sidebarTitle: "Auth setup process"
+description: "Process for creating, maintaining, and reviewing Tier 1 vendor auth setup documentation."
+---
+
+This page defines the process for using the [Tier 1 auth setup template](/developer/tier1-auth-setup-template) to document vendor authentication for Tier 1 connectors. It covers where docs live, who owns them, and how to keep them current.
+
+## Where docs live
+
+| Content | Location | Format |
+| :--- | :--- | :--- |
+| **Auth setup template** (blank) | [`developer/tier1-auth-setup-template`](/developer/tier1-auth-setup-template) | MDX in `ConductorOne/docs` |
+| **Connector setup guides** (user-facing) | [`baton/<connector-name>`](/baton/intro) | MDX in `ConductorOne/docs` |
+| **Connector source code** | `ConductorOne/baton-<connector-name>` | Go — README contains CLI flags and env vars |
+| **Auth recipes** (developer reference) | [`developer/recipes-auth`](/developer/recipes-auth) | MDX in `ConductorOne/docs` |
+
+Each Tier 1 connector's user-facing setup page (in `baton/`) should be the single source of truth for end-user auth instructions. The auth setup template is an internal planning tool used during onboarding — its output feeds into the connector's setup page.
+
+## Who updates docs
+
+| Role | Responsibility |
+| :--- | :--- |
+| **Connector engineer** | Fills out the auth setup template when building or upgrading a Tier 1 connector. Verifies scopes and permissions against source code. |
+| **Docs team** | Reviews completed templates and publishes user-facing setup guides. Ensures writing style matches existing docs conventions. |
+| **Connector owner** | Keeps the setup guide current when the vendor changes their auth model, scopes, or admin roles. Reviews rotation procedures during credential rotation events. |
+| **Security / compliance** | Reviews known caveats and rotation behavior for compliance requirements. |
+
+## Process: onboarding a new Tier 1 connector
+
+<Steps>
+  <Step>
+    **Copy the template**
+
+    Start with the [Tier 1 auth setup template](/developer/tier1-auth-setup-template). Copy its contents into a working document or directly into a new branch of `ConductorOne/docs`.
+  </Step>
+
+  <Step>
+    **Fill in vendor details**
+
+    Complete every section of the template:
+    - **Vendor overview** — name, docs URL, connector repo, connector type
+    - **Supported API auth modes** — list all vendor auth methods and which C1 supports
+    - **Recommended setup path** — primary and alternative methods with rationale
+    - **Required scopes** — separate sync-only from sync + provisioning scopes
+    - **Credential setup instructions** — step-by-step for each supported auth method
+    - **Rotation and expiration** — credential lifecycle and C1 update procedure
+    - **Known caveats** — gotchas with assigned owners
+    - **Validation** — CLI commands and cloud-hosted verification steps
+  </Step>
+
+  <Step>
+    **Verify against source code**
+
+    Cross-reference every scope, permission, and configuration flag against the connector's source code in `ConductorOne/baton-<connector-name>`. Run the connector locally to confirm the documented auth flow works.
+  </Step>
+
+  <Step>
+    **Write the user-facing setup guide**
+
+    Using the completed template as your source of truth, write (or update) the connector's setup page in `baton/<connector-name>.mdx`. Follow the structure in the [connector template](/connector-template) and match the writing style of existing connector docs.
+  </Step>
+
+  <Step>
+    **Open a PR for review**
+
+    Create a PR against `ConductorOne/docs` with both:
+    - The completed auth setup template (if stored in the docs repo)
+    - The new or updated connector setup page
+
+    Tag the connector owner and docs team for review.
+  </Step>
+
+  <Step>
+    **Review and merge**
+
+    The docs team reviews for style and accuracy. The connector engineer verifies technical details. Once approved, merge and confirm the pages render correctly on the docs site.
+  </Step>
+</Steps>
+
+## Process: updating an existing Tier 1 connector's auth docs
+
+When a vendor changes their auth model, deprecates scopes, or introduces new auth methods:
+
+1. **Identify the change** — vendor changelog, support notification, or failed sync.
+2. **Update the auth setup template** — revise the affected sections (auth modes, scopes, rotation behavior).
+3. **Update the user-facing setup guide** — reflect the changes in `baton/<connector-name>.mdx`.
+4. **Verify** — run the connector locally with the updated auth configuration.
+5. **Open a PR** — tag the connector owner and docs team for review.
+
+## Template coverage by auth complexity
+
+The template is designed to handle the full range of Tier 1 vendor auth patterns:
+
+| Complexity | Example vendors | Template sections to focus on |
+| :--- | :--- | :--- |
+| **Simple** (API key) | Datadog, Linear, PagerDuty | Vendor overview, scopes, simple auth instructions, rotation |
+| **Moderate** (OAuth 2.0) | Okta, Slack, Salesforce | All sections — include both API token and OAuth paths |
+| **Complex** (JWT / DWD / IAM) | Google Workspace, AWS, Microsoft Entra | All sections — detail delegation setup, multi-step credential creation, trust policies |
+
+## Keeping docs current
+
+- **Quarterly review**: Connector owners should review their auth setup docs quarterly to catch vendor-side changes.
+- **On credential rotation**: When rotating credentials for a Tier 1 connector, verify that the documented rotation procedure is still accurate.
+- **On connector upgrade**: When upgrading a connector version, check if new auth methods or scopes were added and update docs accordingly.
