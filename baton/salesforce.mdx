@@ -53,6 +53,21 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 |-------------|-------------------|-------------|
 | update_user_status | `resource_id` (string, required) <br/>`is_active` (Boolean, required) | Updates a Salesforce user's status to active or inactive |
 
+## Choose an authentication method
+
+The Salesforce connector supports four authentication methods. Choose the method that best fits your security requirements and environment.
+
+| Method | Best for | Requires |
+| :--- | :--- | :--- |
+| **JWT Bearer** | Production environments, automated deployments | External Client App, X.509 certificate, private key |
+| **Client Credentials** | Service-to-service, no user context needed | External Client App, client ID and secret |
+| **OAuth** | Interactive setup, quick evaluation | Salesforce login via browser |
+| **Username and password** *(deprecated)* | Legacy environments only | Username, password, security token |
+
+<Tip>
+For production deployments, Salesforce recommends **JWT Bearer** or **Client Credentials**. Salesforce is actively disabling SOAP API login for new orgs, which affects username/password authentication.
+</Tip>
+
 ## Gather Salesforce credentials 
 
 Configuring the connector requires you to pass in credentials generated in Salesforce. Gather these credentials before you move on. 
@@ -198,6 +213,54 @@ Go to the **Settings** tab, expand **OAuth Configuration**, and click **Consumer
 </Steps>
 
 **Done.** You now have a Consumer Key and Consumer Secret to use with the Client Credentials authentication method.
+
+### Validate your Salesforce credentials
+
+After creating your credentials, verify they work before configuring the connector.
+
+<Tabs>
+<Tab title="JWT Bearer">
+Run the following command, replacing the placeholders with your values:
+
+```bash
+curl -s -X POST https://login.salesforce.com/services/oauth2/token \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
+  -d "assertion=$(YOUR_JWT_ASSERTION)"
+```
+
+To generate the JWT assertion, you need to sign a JWT with your private key. If you have `openssl` and `jq` available, verify you can exchange credentials for a token by checking that your Consumer Key and private key are valid in your Salesforce External Client App configuration.
+
+A successful response returns an `access_token` and `instance_url`. If you see `invalid_grant`, verify:
+- The Consumer Key matches your External Client App
+- The certificate uploaded to Salesforce corresponds to your private key
+- The JWT subject is a valid Salesforce username with the correct profile pre-authorized
+- The JWT Bearer flow is enabled in the app's policies
+</Tab>
+<Tab title="Client Credentials">
+Run the following command, replacing the placeholders with your values:
+
+```bash
+curl -s -X POST https://<your-domain>.my.salesforce.com/services/oauth2/token \
+  -d "grant_type=client_credentials" \
+  -d "client_id=<consumer-key>" \
+  -d "client_secret=<consumer-secret>"
+```
+
+A successful response returns an `access_token` and `instance_url`:
+
+```json
+{"access_token":"00D...","instance_url":"https://your-domain.my.salesforce.com","...":"..."}
+```
+
+If you see `invalid_client`, verify:
+- The Consumer Key and Consumer Secret are correct
+- The Client Credentials flow is enabled in the app's policies
+- The **Run As** username is set in the OAuth Policies section
+</Tab>
+<Tab title="OAuth">
+OAuth credentials are validated during the interactive login flow in C1. No separate validation step is needed.
+</Tab>
+</Tabs>
 
 ## Configure the Salesforce connector
 

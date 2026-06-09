@@ -22,6 +22,14 @@ This connector can also be configured to automatically create and update Linear 
 
 Configuring the connector requires you to pass in credentials generated in Linear. Gather these credentials before you move on.
 
+### Prerequisites
+
+<Warning>
+The user who generates the API key must have the **Admin** or **Owner** role in the Linear workspace. The API key inherits all permissions of the user who creates it.
+
+If provisioning is enabled (inviting users, suspending users, managing team membership), the key creator must have **Admin** or **Owner** access.
+</Warning>
+
 ### Generate a new Linear API key
 
 <Steps>
@@ -36,6 +44,36 @@ In the **Personal API keys** section of the page, enter a label such as "C1" and
 </Step>
 <Step>
 The new API key is generated for you. Carefully copy and save the API key.
+
+<Warning>
+Linear only displays the API key once. If you lose it, you must delete the key and create a new one.
+</Warning>
+</Step>
+</Steps>
+
+### Validate your API key
+
+After creating your API key, verify it works before configuring the connector.
+
+<Steps>
+<Step>
+Open a terminal and run the following command, replacing `<your-api-key>` with your key:
+
+```bash
+curl -s -H "Authorization: <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ viewer { id name email } }"}' \
+  https://api.linear.app/graphql
+```
+</Step>
+<Step>
+A successful response returns your user details:
+
+```json
+{"data":{"viewer":{"id":"...","name":"Your Name","email":"you@example.com"}}}
+```
+
+If you see an authentication error, verify that you copied the full API key and that the key has not been revoked.
 </Step>
 </Steps>
 
@@ -232,5 +270,22 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your Linear connector is now pulling access data into C1.
 </Tab>
 </Tabs>
+
+## Troubleshooting Linear authentication
+
+### The connector fails to authenticate
+
+The connector validates your API key at startup by querying the Linear API. If you see `failed to authenticate` in the connector logs:
+
+1. Verify the API key is correct and has not been revoked. In Linear, go to **Settings** > **Security & access** > **Personal API keys** and check that the key is still listed.
+2. Generate a new API key if needed and update the connector configuration.
+
+### The connector cannot provision access
+
+If sync works but provisioning operations fail, the API key may belong to a user without sufficient permissions:
+
+1. Verify the user who created the API key has the **Admin** or **Owner** role in Linear.
+2. Members and Guests cannot perform provisioning operations such as inviting users, suspending accounts, or managing team membership.
+3. If needed, have an Admin or Owner generate a new API key.
 
 

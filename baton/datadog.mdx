@@ -36,14 +36,27 @@ If your user has a custom Datadog role, make sure it includes the **User App Key
 
 ### Locate your Datadog site
 
+Your Datadog site determines which regional API endpoint the connector uses. Identify your site from your Datadog URL:
+
+| Datadog URL | Site value |
+| :--- | :--- |
+| `https://app.datadoghq.com` | `datadoghq.com` |
+| `https://app.datadoghq.eu` | `datadoghq.eu` |
+| `https://app.us3.datadoghq.com` | `us3.datadoghq.com` |
+| `https://app.us5.datadoghq.com` | `us5.datadoghq.com` |
+| `https://app.ddog-gov.com` | `ddog-gov.com` |
+| `https://app.ap1.datadoghq.com` | `ap1.datadoghq.com` |
+
 <Steps>
   <Step>
-  Navigate to the Datadog login screen and make a note of your Datadog site:
+  Navigate to the Datadog login screen and make a note of your Datadog site from the URL.
 
   </Step>
 </Steps>
 
 ### Create an API key
+
+The API key authenticates requests to the Datadog API.
 
 <Steps>
   <Step>
@@ -64,6 +77,8 @@ If your user has a custom Datadog role, make sure it includes the **User App Key
 
 ### Create an application key
 
+The application key works with the API key to control which API endpoints are accessible. Application keys inherit the permissions of the user who creates them by default, but you can restrict them to specific scopes.
+
 <Steps>
   <Step>
   Navigate back to **Organization Settings**.
@@ -79,6 +94,51 @@ If your user has a custom Datadog role, make sure it includes the **User App Key
   Copy and save the newly created application key.
 
   </Step>
+</Steps>
+
+<Tip>
+If you configure scopes on the application key, the connector requires the following scopes at minimum:
+
+- **Access Management** — read and manage users and roles
+- **Teams** — read team information and membership
+
+If scopes are not configured, the application key inherits all permissions of the user who created it.
+</Tip>
+
+### Validate your credentials
+
+After creating your keys, verify they work before configuring the connector.
+
+<Steps>
+<Step>
+Run the following command, replacing the placeholders with your API key, application key, and site:
+
+```bash
+curl -s -X GET "https://api.<your-site>/api/v1/validate" \
+  -H "DD-API-KEY: <your-api-key>" \
+  -H "DD-APPLICATION-KEY: <your-app-key>"
+```
+
+For example, if your site is `datadoghq.com`:
+
+```bash
+curl -s -X GET "https://api.datadoghq.com/api/v1/validate" \
+  -H "DD-API-KEY: <your-api-key>" \
+  -H "DD-APPLICATION-KEY: <your-app-key>"
+```
+</Step>
+<Step>
+A successful response returns:
+
+```json
+{"valid": true}
+```
+
+If you see `{"valid": false}` or an authentication error, verify:
+- The API key and application key are correct and have not been revoked
+- The site value matches your Datadog instance
+- The application key has the required scopes (**Access Management** and **Teams**)
+</Step>
 </Steps>
 
 **Done.** Next, move on to the connector configuration instructions.
@@ -272,5 +332,23 @@ spec:
 
 </Tab>
 </Tabs>
+
+## Troubleshooting Datadog authentication
+
+### The connector reports "API key not valid"
+
+The connector validates both the API key and application key at startup. If you see this error:
+
+1. Verify the API key has not been revoked. In Datadog, go to **Organization Settings** > **API Keys** and check that the key is still listed.
+2. Verify the application key has not been revoked. Go to **Organization Settings** > **Application Keys** and check that the key is still listed.
+3. Confirm the site value matches your Datadog instance. An incorrect site causes API calls to reach the wrong regional endpoint, resulting in authentication failures.
+
+### The connector syncs users but not teams or roles
+
+If the connector authenticates successfully but fails to sync certain resources, the application key may lack the required scopes:
+
+1. In Datadog, go to **Organization Settings** > **Application Keys**.
+2. Click the application key used by the connector.
+3. Verify that the **Access Management** and **Teams** scopes are included. If scopes are not configured, the key inherits all permissions of the user who created it — verify that user has the **Datadog Admin** or **Datadog Standard** role.
 
 
