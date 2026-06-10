@@ -1,8 +1,8 @@
 ---
 title: Apply request settings automatically with entitlement routing rules
 og:title: Apply request settings automatically with entitlement routing rules - C1 docs
-og:description: Use entitlement routing rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of sparse apps.
-description: Use entitlement routing rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of sparse apps.
+og:description: Use entitlement routing rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of cloud infrastructure apps.
+description: Use entitlement routing rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of cloud infrastructure apps.
 sidebarTitle: Entitlement routing rules
 ---
 {/* Editor Refresh: 2026-06-04 */}
@@ -13,7 +13,7 @@ Entitlement routing rules are app-scoped rules that automatically determine whic
 
 Each rule has two parts: a **condition** that decides which entitlements the rule applies to, and the **request settings** the rule provides when its condition matches. Rules are evaluated in priority order, and the **first rule whose condition matches** an entitlement provides that entitlement's effective request settings. Because only the first match wins, order your rules from most specific to most general: put narrow, high-priority rules at the top and broader fallback rules below them. A rule with an **empty condition** acts as a catch-all—it matches every entitlement that no higher-priority rule has already claimed, which is a convenient way to set a default policy for an entire app.
 
-Routing rules work for both **classic** apps (where each entitlement is a single permission, group, or role) and **sparse** apps (where access is modeled as a role granted on a scope). For sparse apps, a rule's condition can match on the granted role and the scope it applies to—see [How the CEL condition works for sparse apps](#how-the-cel-condition-works-for-sparse-apps) below.
+Routing rules work for both **classic** apps (where each entitlement is a single permission, group, or role) and **cloud infrastructure apps** (where access is modeled as a role granted on a scope). For cloud infrastructure apps, a rule's condition can match on the granted role and the scope it applies to—see [How the CEL condition works for cloud infrastructure apps](#how-the-cel-condition-works-for-cloud-infrastructure-apps) below.
 
 <Warning>
 A **Super Admin** or an application owner with the **Application Admin** role must configure entitlement routing rules.
@@ -52,7 +52,7 @@ You can author a rule's condition in one of two modes.
 
 Build a list of predicate rows, each made up of a **field**, an **operator**, and one or more **values**, combined with a single **AND** or **OR**:
 
-* **Fields:** Entitlement name, Resource type ID, and Risk level ID. For sparse apps, you can also match on Role name and Scope name.
+* **Fields:** Entitlement name, Resource type ID, and Risk level ID. For cloud infrastructure apps, you can also match on Role name and Scope name.
 * **Operators:** *equals*, *does not equal*, *starts with*, *ends with*, *contains*, and *is any of*.
 
 The Basic editor covers the most common matching needs without writing any code. C1 compiles your rows into a CEL expression behind the scenes.
@@ -65,20 +65,20 @@ Write the condition directly as a [CEL expression](/product/admin/expressions) f
 Switching a condition from Basic to Advanced is one-way for that rule. Once you edit the raw CEL, the structured Basic rows are no longer kept in sync with it.
 </Info>
 
-## How the CEL condition works for sparse apps
+## How the CEL condition works for cloud infrastructure apps
 
 A routing rule condition is a CEL expression evaluated against a single variable, **`entitlement`**, that describes the entitlement being routed. The expression returns `true` (the rule matches) or `false` (it doesn't). For example:
 
-```cel
+```go
 entitlement.display_name == "Admin"
 entitlement.app_resource_type_id == "group"
 entitlement.display_name.startsWith("prod-")
 ```
 
-For **sparse apps**—apps that model access as a role granted on a scope (a scope-role binding) rather than as a single flat entitlement—the entitlement also carries the granted **role** and the **scope** it applies to. These are exposed as nested objects, `entitlement.role` and `entitlement.scope`, so you can match on them directly:
+For **cloud infrastructure apps**—apps that model access as a role granted on a scope rather than as a single flat entitlement—the entitlement also carries the granted **role** and the **scope** it applies to. These are exposed as nested objects, `entitlement.role` and `entitlement.scope`, so you can match on them directly:
 
-```cel
-// Any sparse entitlement that grants an Admin role
+```go
+// Any cloud infrastructure entitlement that grants an Admin role
 entitlement.role.display_name.contains("Admin")
 
 // A specific scope resource type
@@ -94,13 +94,13 @@ entitlement.role.id == "ROLE_RESOURCE_ID" && entitlement.scope.id == "SCOPE_RESO
 
 The key detail is how `role` and `scope` behave across app types:
 
-* For a **sparse** (role-scope) entitlement, `entitlement.role.*` and `entitlement.scope.*` are populated from the binding.
+* For a **cloud infrastructure app** entitlement, `entitlement.role.*` and `entitlement.scope.*` are populated from the binding.
 * For a **classic** entitlement, those nested objects are empty—every string field is `""`.
 
-A rule therefore implicitly fences itself to one shape or the other by which fields it references. A condition like `entitlement.role.display_name.contains("Admin")` can only match sparse entitlements, because the role display name is always empty on a classic entitlement. To make a rule explicitly sparse-only, use the canonical guard:
+A rule therefore implicitly fences itself to one shape or the other by which fields it references. A condition like `entitlement.role.display_name.contains("Admin")` can only match cloud infrastructure app entitlements, because the role display name is always empty on a classic entitlement. To explicitly target only cloud infrastructure app entitlements, use this guard:
 
-```cel
-// True only for sparse targets; false for classic ones
+```go
+// True only for cloud infrastructure apps; false for classic apps
 entitlement.scope.id != ""
 ```
 
@@ -114,12 +114,12 @@ The most commonly used accessors are listed below. String comparisons support th
 | `entitlement.app_resource_type_id` | Resource type the entitlement is on. For sparse targets, the role's resource type. |
 | `entitlement.app_resource_id` | Resource the entitlement is on. For sparse targets, the role's resource. |
 | `entitlement.risk_level_value_id` | Risk level value ID, if one is set. |
-| `entitlement.role.display_name` | Display name of the granted role *(sparse only)*. |
-| `entitlement.role.id` | Stable ID of the granted role *(sparse only)*. |
-| `entitlement.role.app_resource_type_id` | Resource type of the role *(sparse only)*. |
-| `entitlement.scope.display_name` | Display name of the scope the role applies to *(sparse only)*. |
-| `entitlement.scope.id` | Stable ID of the scope *(sparse only)*. |
-| `entitlement.scope.app_resource_type_id` | Resource type of the scope *(sparse only)*. |
+| `entitlement.role.display_name` | Display name of the granted role *(cloud infrastructure apps only)*. |
+| `entitlement.role.id` | Stable ID of the granted role *(cloud infrastructure apps only)*. |
+| `entitlement.role.app_resource_type_id` | Resource type of the role *(cloud infrastructure apps only)*. |
+| `entitlement.scope.display_name` | Display name of the scope the role applies to *(cloud infrastructure apps only)*. |
+| `entitlement.scope.id` | Stable ID of the scope *(cloud infrastructure apps only)*. |
+| `entitlement.scope.app_resource_type_id` | Resource type of the scope *(cloud infrastructure apps only)*. |
 
 <Info>
 Routing rule conditions see only the entitlement and its role/scope context. They do not have access to the requestor, the request, or the app itself, since rules are already scoped to a single app. When you're unsure whether a condition matches what you intend, use the preview panel to check it against the app's real entitlements before saving.
