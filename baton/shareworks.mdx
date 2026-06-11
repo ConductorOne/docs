@@ -1,0 +1,149 @@
+---
+title: "Set up a Shareworks connector"
+og:title: "Set up a Shareworks connector"
+description: "C1 provides identity governance for Shareworks. Integrate your Shareworks instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for Shareworks. Integrate your Shareworks instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "Shareworks"
+---
+
+C1 provides identity governance for Shareworks by Morgan Stanley. Integrate your
+Shareworks instance with C1 for unified visibility and governance over equity
+plan participant access.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Participants|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Companies|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Plans|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+## Gather Shareworks credentials
+
+<Warning>
+Shareworks API access is provisioned during partner onboarding with Morgan
+Stanley. You receive a client identifier and an RSA key pair; the connector
+performs read-only API calls.
+</Warning>
+
+<Steps>
+  <Step>
+    Complete Shareworks API onboarding to obtain a client ID and register your
+    RSA public key with Shareworks.
+  </Step>
+
+  <Step>
+    Keep the matching RSA private key (PEM) available; the connector uses it to
+    sign the verification JWT that is exchanged for an access token.
+  </Step>
+
+  <Step>
+    Note whether your access targets the production or QA Shareworks
+    environment, and any key identifier (kid) assigned during onboarding.
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Description|
+|-|-|-|
+|`environment`|No|Shareworks environment to target: `production` or `qa`. Defaults to `production`.|
+|`api-client-id`|Yes|Shareworks client identifier issued during onboarding. Used as the JWT issuer claim.|
+|`private-key`|Yes|RSA private key (PEM) used to sign the verification JWT.|
+|`key-id`|No|Optional key identifier (kid) assigned during onboarding.|
+
+## Synced resource types
+
+- **Participants**: equity plan participants from `GET /rest/admin/v1/participants`.
+- **Companies**: administering companies from `GET /rest/admin/v1/companies`.
+- **Plans**: equity and stock plans from `GET /rest/admin/v1/plans`.
+- **Company membership grants**: participants are emitted as company member
+  grants, and company administrators receive an additional admin grant.
+- **Plan membership grants**: enrolled participants are emitted as plan member
+  grants.
+
+## Special notes
+
+- All Shareworks resource types are opt-in.
+- Company and plan memberships are not separate resources; they are grant edges
+  on the company and plan resources.
+- Authentication is a two-step exchange: the connector signs a verification JWT
+  with the client RSA private key and exchanges it for a short-lived access
+  token, which is cached and refreshed before expiry.
+- List endpoints use `offset` and `limit` pagination.
+- On rate limit responses, the connector retries with exponential backoff.
+
+## Configure the Shareworks connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Shareworks** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Shareworks connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the Shareworks credentials:
+
+        - **Environment**: `production` or `qa`.
+        - **Client ID**: the client identifier from onboarding.
+        - **Private key (PEM)**: the RSA private key matching your registered public key.
+        - **Key ID**: the optional key identifier, if assigned.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Shareworks connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Shareworks connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        Create secrets for the Shareworks client ID and RSA private key.
+      </Step>
+
+      <Step>
+        Configure the connector with the `environment`, `client-id`,
+        `private-key`, and optional `key-id` fields.
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your Shareworks connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
