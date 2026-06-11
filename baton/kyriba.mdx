@@ -1,0 +1,259 @@
+---
+title: "Set up a Kyriba connector"
+og:title: "Set up a Kyriba connector"
+description: "C1 provides identity governance and just-in-time provisioning for Kyriba. Integrate your Kyriba instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Kyriba. Integrate your Kyriba instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Kyriba"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Kyriba connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Access Profiles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Data Permission Profiles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| User Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather Kyriba credentials
+
+<Warning>
+To configure the Kyriba connector, you need administrator access to the Kyriba Developer Portal to create API credentials.
+</Warning>
+
+The connector authenticates using OAuth2 client credentials. You will need:
+
+- **Kyriba URL** — the base URL of your Kyriba instance (for example, `https://api.kyriba.com`)
+- **Token URL** — the OAuth2 token endpoint (for example, `https://api.kyriba.com/gateway/oauth/token`)
+- **Client ID** — your OAuth2 client identifier
+- **Client Secret** — your OAuth2 client secret
+
+<Steps>
+  <Step>
+    Log in to the [Kyriba Portal](https://www.kyriba.com) and navigate to **API Access** or **OAuth Applications**.
+  </Step>
+
+  <Step>
+    Create a new OAuth2 application or API credential set named `ConductorOne`.
+  </Step>
+
+  <Step>
+    Grant the following OAuth scopes to enable full sync and provisioning:
+
+    | Scope | Used for |
+    | :--- | :--- |
+    | `user-scope` | Sync users and access profiles; create and delete users; assign data permission profiles |
+    | `user-group-scope` | Sync user groups; add and remove members |
+    | `data-permission-profile-scope` | Sync data permission profiles |
+
+    For sync-only (read) access, all three scopes are still required. Provisioning requires write permissions on the relevant scopes: `user-scope` for account creation/deletion and data permission profile assignment; `user-group-scope` for group membership changes.
+  </Step>
+
+  <Step>
+    Copy the **Client ID**, **Client Secret**, and **Token URL**. Save these securely — the secret cannot be retrieved again after creation.
+  </Step>
+</Steps>
+
+## Configure the Kyriba connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Kyriba** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Kyriba connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Kyriba URL**: The base URL of your Kyriba instance (for example, `https://api.kyriba.com`)
+        - **Token URL**: The OAuth2 token endpoint URL (for example, `https://api.kyriba.com/gateway/oauth/token`)
+        - **Kyriba Client ID**: Your OAuth2 client ID from the Kyriba Developer Portal
+        - **Kyriba Client Secret**: Your OAuth2 client secret from the Kyriba Developer Portal
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Kyriba connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Kyriba](https://github.com/conductorone/baton-kyriba) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    
+    ### Resources
+
+    * [Official download center](https://dist.conductorone.com/ConductorOne/baton-kyriba): For stable binaries (Windows/Linux/macOS) and container images.
+
+    * [GitHub repository](https://github.com/conductorone/baton-kyriba): Access the source code, report issues, or contribute to the project.
+
+    ### Step 1: Set up a new Kyriba connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Kyriba connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Kyriba connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-kyriba-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-kyriba-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Kyriba credentials
+      BATON_KYRIBA_URL: https://api.kyriba.com
+      BATON_TOKEN_URL: https://api.kyriba.com/gateway/oauth/token
+      BATON_KYRIBA_CLIENT_ID: <Kyriba OAuth2 client ID>
+      BATON_KYRIBA_CLIENT_SECRET: <Kyriba OAuth2 client secret>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-kyriba.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-kyriba
+      labels:
+        app: baton-kyriba
+    spec:
+      selector:
+        matchLabels:
+          app: baton-kyriba
+      template:
+        metadata:
+          labels:
+            app: baton-kyriba
+            baton: "true"
+            baton-app: kyriba
+        spec:
+          containers:
+          - name: baton-kyriba
+            image: public.ecr.aws/conductorone/baton-kyriba:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-kyriba
+            envFrom:
+            - secretRef:
+                name: baton-kyriba-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Kyriba connector to. Kyriba data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Kyriba connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+## Known Limitations
+
+**Access profiles with no assigned users** — The Kyriba API does not expose a standalone list endpoint for access profiles. ConductorOne derives access profile resources from user-assignment data. Any access profile that exists in Kyriba but has no users currently assigned to it will not appear in the ConductorOne catalog until at least one user is assigned to it and a sync completes.
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-kyriba).
+</Tip>
