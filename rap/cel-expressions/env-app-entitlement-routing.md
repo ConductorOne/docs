@@ -1,8 +1,8 @@
-# Entitlement Routing Rule Expressions
+# Entitlement Configuration Rule Expressions
 
-Entitlement routing rules are app-scoped rules that resolve the **request settings** (request policy, emergency grant behavior, maximum grant duration) for an entitlement. Each rule's condition evaluates to `bool`. Rules are evaluated by priority (then id), and the first rule whose condition returns `true` provides the effective settings. An empty condition is a catch-all that matches every entitlement no higher-priority rule has claimed.
+Entitlement configuration rules are app-scoped rules that resolve the **request settings** (request policy, emergency grant behavior, maximum grant duration) for an entitlement. Each rule's condition evaluates to `bool`. Rules are evaluated by priority (then id), and the first rule whose condition returns `true` provides the effective settings. An empty condition is a catch-all that matches every entitlement no higher-priority rule has claimed.
 
-The condition can be authored in **Basic** mode (field/operator/value rows joined by a single AND/OR, compiled to CEL) or **Advanced** mode (raw CEL).
+The condition is authored as a CEL expression.
 
 ## Available Variables
 
@@ -12,7 +12,7 @@ Every evaluation receives a single top-level variable: **`entitlement`**.
 |----------|------|-------------|
 | `entitlement` | `AppEntitlement` | The entitlement being routed. For sparse (role-scope) targets, `entitlement.role` and `entitlement.scope` are populated. |
 
-There is **no** `subject`, `task`, `user`, or `app` variable here—routing rules see only the entitlement and its binding context, and are already scoped per-app.
+There is **no** `subject`, `task`, `user`, or `app` variable here—configuration rules see only the entitlement and its binding context, and are already scoped per-app.
 
 ### `entitlement` fields
 
