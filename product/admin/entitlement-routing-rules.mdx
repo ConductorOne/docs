@@ -1,9 +1,9 @@
 ---
-title: Apply request settings automatically with entitlement routing rules
-og:title: Apply request settings automatically with entitlement routing rules - C1 docs
-og:description: Use entitlement routing rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of cloud infrastructure apps.
-description: Use entitlement routing rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of cloud infrastructure apps.
-sidebarTitle: Entitlement routing rules
+title: Apply request settings automatically with entitlement configuration rules
+og:title: Apply request settings automatically with entitlement configuration rules - C1 docs
+og:description: Use entitlement configuration rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of cloud infrastructure apps.
+description: Use entitlement configuration rules to resolve the request policy and access request settings for many entitlements at once, based on conditions you define—including conditions that match the role and scope of cloud infrastructure apps.
+sidebarTitle: Entitlement configuration rules
 ---
 {/* Editor Refresh: 2026-06-04 */}
 
@@ -11,18 +11,18 @@ sidebarTitle: Entitlement routing rules
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-## What are entitlement routing rules?
+## What are entitlement configuration rules?
 
-Entitlement routing rules are app-scoped rules that automatically determine which **request settings**—the [request policy](/product/admin/policies), emergency grant behavior, and maximum grant duration—apply when someone requests an entitlement. Instead of opening each entitlement and configuring its request settings by hand, you write a small, ordered set of rules that match entitlements by their attributes and apply the right settings to every matching entitlement, including entitlements that are created later but fit the same pattern.
+Entitlement configuration rules are app-scoped rules that automatically determine which **request settings**—the [request policy](/product/admin/policies), emergency grant behavior, and maximum grant duration—apply when someone requests an entitlement. Instead of opening each entitlement and configuring its request settings by hand, you write a small, ordered set of rules that match entitlements by their attributes and apply the right settings to every matching entitlement, including entitlements that are created later but fit the same pattern.
 
-Each rule has two parts: a **condition** that decides which entitlements the rule applies to, and the **request settings** the rule provides when its condition matches. Rules are evaluated in priority order, and the **first rule whose condition matches** an entitlement provides that entitlement's effective request settings. Because only the first match wins, order your rules from most specific to most general: put narrow, high-priority rules at the top and broader fallback rules below them. A rule with an **empty condition** acts as a catch-all—it matches every entitlement that no higher-priority rule has already claimed, which is a convenient way to set a default policy for an entire app.
+Each rule has two parts: a **condition** that decides which entitlements the rule applies to, and the **request settings** the rule provides when its condition matches. Rules are evaluated in priority order, and the **first rule whose condition matches** an entitlement provides that entitlement's effective request settings. Because only the first match wins, order your rules from most specific to most general: put narrow, high-priority rules at the top and broader fallback rules below them.
 
-Routing rules work for both **classic** apps (where each entitlement is a single permission, group, or role) and **cloud infrastructure apps** (where access is modeled as a role granted on a scope). For cloud infrastructure apps, a rule's condition can match on the granted role and the scope it applies to—see [How the CEL condition works for cloud infrastructure apps](#how-the-cel-condition-works-for-cloud-infrastructure-apps) below.
+Configuration rules work for both **classic** apps (where each entitlement is a single permission, group, or role) and **cloud infrastructure apps** (where access is modeled as a role granted on a scope). For cloud infrastructure apps, a rule's condition can match on the granted role and the scope it applies to—see [How the CEL condition works for cloud infrastructure apps](#how-the-cel-condition-works-for-cloud-infrastructure-apps) below.
 
-## Create an entitlement routing rule
+## Create an entitlement configuration rule
 
 <Warning>
-A **Super Admin** or an application owner with the **Application Admin** role must configure entitlement routing rules.
+A **Super Admin** or an application owner with the **Application Admin** role must configure entitlement configuration rules.
 </Warning>
 
 <Steps>
@@ -33,7 +33,7 @@ Navigate to the **Apps** page and select a managed application.
 On the app's **Overview** tab, scroll to the **Entitlement management** section, find **Entitlement configuration rules**, and click **Edit**.
 </Step>
 <Step>
-Define the rule's **condition** using either the Basic or Advanced editor (see [Author a rule condition](#author-a-rule-condition) below). Leave the condition empty to create a catch-all default rule for the app.
+Define the rule's **condition** as a [CEL expression](#author-a-rule-condition). Leave the condition empty to create a catch-all default rule for the app.
 </Step>
 <Step>
 Use the **preview** panel to confirm which of the app's entitlements your draft condition matches. This lets you verify a rule is neither too broad nor too narrow before it affects any live requests.
@@ -46,32 +46,15 @@ Click **Save**.
 </Step>
 </Steps>
 
-Rules take effect in priority order. To change which rule wins when more than one could match an entitlement, reorder your rules—lower-priority numbers are evaluated first.
+Rules take effect in priority order. To change which rule wins when more than one could match an entitlement, reorder your rules—lower-priority numbers are evaluated first. A rule must be turned **On** to be evaluated; rules that are Off are skipped.
 
 ## Author a rule condition
 
-You can author a rule's condition in one of two modes.
-
-### Basic
-
-Build a list of predicate rows, each made up of a **field**, an **operator**, and one or more **values**, combined with a single **AND** or **OR**:
-
-* **Fields:** Entitlement name, Resource type ID, and Risk level ID. For cloud infrastructure apps, you can also match on Role name and Scope name.
-* **Operators:** *equals*, *does not equal*, *starts with*, *ends with*, *contains*, and *is any of*.
-
-The Basic editor covers the most common matching needs without writing any code. C1 compiles your rows into a CEL expression behind the scenes.
-
-### Advanced
-
-Write the condition directly as a [CEL expression](/product/admin/expressions) for full control. When you switch a Basic condition to Advanced, the editor seeds the CEL with the expression compiled from your rows so you can extend it.
-
-<Info>
-Switching a condition from Basic to Advanced is one-way for that rule. Once you edit the raw CEL, the structured Basic rows are no longer kept in sync with it.
-</Info>
+Write the rule's condition as a [CEL expression](/product/admin/expressions). The expression evaluates to `true` (the rule matches an entitlement) or `false` (it doesn't). See [How the CEL condition works for cloud infrastructure apps](#how-the-cel-condition-works-for-cloud-infrastructure-apps) below for the variables and fields available to your expression.
 
 ## How the CEL condition works for cloud infrastructure apps
 
-A routing rule condition is a CEL expression evaluated against a single variable, **`entitlement`**, that describes the entitlement being routed. The expression returns `true` (the rule matches) or `false` (it doesn't). For example:
+A configuration rule condition is a CEL expression evaluated against a single variable, **`entitlement`**, that describes the entitlement being routed. The expression returns `true` (the rule matches) or `false` (it doesn't). For example:
 
 ```go
 entitlement.display_name == "Admin"
@@ -126,5 +109,5 @@ The most commonly used accessors are listed below. String comparisons support th
 | `entitlement.scope.app_resource_type_id` | Resource type of the scope *(cloud infrastructure apps only)*. |
 
 <Info>
-Routing rule conditions see only the entitlement and its role/scope context. They do not have access to the requestor, the request, or the app itself, since rules are already scoped to a single app. When you're unsure whether a condition matches what you intend, use the preview panel to check it against the app's real entitlements before saving.
+Configuration rule conditions see only the entitlement and its role/scope context. They do not have access to the requestor, the request, or the app itself, since rules are already scoped to a single app. When you're unsure whether a condition matches what you intend, use the preview panel to check it against the app's real entitlements before saving.
 </Info>
