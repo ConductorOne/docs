@@ -114,6 +114,39 @@ Editing annotations directly, or editing the object via the API or `c1i`, does n
 If your IaC tool runs `terraform apply` after you take ownership in the C1 UI, it will attempt to reconcile the object back to the state in your configuration. To avoid overwriting your change, remove the resource from your IaC configuration or run `terraform state rm` on it.
 </Warning>
 
+## Use annotations in policy and automation logic
+
+CEL expressions in policies, approver rules, and entitlement routing rules can read annotations on entitlements, app resources, and other supported objects. This lets you fork logic based on metadata your team has already applied — without adding new fields or changing your object configuration.
+
+### Read an annotation value
+
+Use bracket notation to read a specific key:
+
+```cel
+entitlement.annotations["team"] == "infrastructure"
+```
+
+The same field is available on other objects where annotations are supported:
+
+```cel
+role.annotations["managed_by"] == "terraform"
+scope.annotations["data-class"] == "restricted"
+```
+
+### Check whether a key exists
+
+Use the `in` operator before reading a key to avoid a runtime error if the key isn't present:
+
+```cel
+"team" in entitlement.annotations && entitlement.annotations["team"] == "infrastructure"
+```
+
+### Example use cases
+
+- **Route approvals by team**: In a policy approver expression, read `entitlement.annotations["team"]` to send approval tasks to the right group without managing a separate mapping.
+- **Fork logic for IaC-managed objects**: Check `entitlement.annotations["managed_by"] == "terraform"` in an entitlement routing rule to apply different settings to IaC-managed entitlements.
+- **Scope automations by compliance tag**: In an automation condition, check `entitlement.annotations["compliance"] == "sox"` to limit a workflow to entitlements tagged for SOX review.
+
 ## Limits
 
 | Constraint | Limit |
