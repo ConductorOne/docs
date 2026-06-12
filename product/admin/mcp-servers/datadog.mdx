@@ -1,0 +1,131 @@
+---
+title: Set up the Datadog MCP server
+description: Create your Datadog API and application keys, then register the Datadog MCP server with C1 and configure authentication.
+og:title: Set up the Datadog MCP server
+og:description: Create your Datadog API and application keys, then register the Datadog MCP server with C1 and configure authentication.
+sidebarTitle: Datadog
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Datadog MCP server lets you govern access to the Datadog observability platform — metrics, monitors, dashboards, logs, security signals, incidents, and more — as tools your AI clients can call through C1.
+
+Datadog authenticates with two credentials that work together:
+
+- An **API key** identifies your organization to Datadog.
+- An **application key** authorizes a user or role to read and write data.
+
+Most Datadog endpoints need both, so you'll create each one in Datadog and then provide them to C1 when you register the server.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- You need a Datadog user with permission to manage keys, typically the **Datadog Admin** role.
+- Know which Datadog site your organization uses. See [Find your Datadog site](#find-your-datadog-site).
+
+## Find your Datadog site
+
+Datadog hosts each organization on a regional site with its own API host. You'll select this site when you register the server in C1. To find yours, match the host in your browser's address bar while you're signed in to Datadog.
+
+| Site | Web host | API host |
+| :--- | :--- | :--- |
+| US1 | `app.datadoghq.com` | `api.datadoghq.com` |
+| US3 | `us3.datadoghq.com` | `api.us3.datadoghq.com` |
+| US5 | `us5.datadoghq.com` | `api.us5.datadoghq.com` |
+| EU1 | `app.datadoghq.eu` | `api.datadoghq.eu` |
+| AP1 | `ap1.datadoghq.com` | `api.ap1.datadoghq.com` |
+| AP2 | `ap2.datadoghq.com` | `api.ap2.datadoghq.com` |
+| US1-FED | `app.ddog-gov.com` | `api.ddog-gov.com` |
+| US2-FED | `us2.ddog-gov.com` | `api.us2.ddog-gov.com` |
+
+For more detail, see Datadog's [Getting Started with Datadog sites](https://docs.datadoghq.com/getting_started/site/).
+
+## Create a Datadog API key
+
+<Steps>
+<Step>
+Sign in to Datadog as a user who can manage API keys.
+</Step>
+<Step>
+Go to **Organization Settings** > **API Keys**.
+</Step>
+<Step>
+Select **New Key**, give it a recognizable name such as `C1`, and select **Create API key**.
+</Step>
+<Step>
+Copy the key and store it safely. You'll add it to C1 when you register the server.
+</Step>
+</Steps>
+
+API keys are organization-level. They don't expire by default and aren't tied to a specific user.
+
+## Create a Datadog application key
+
+<Steps>
+<Step>
+Go to **Organization Settings** > **Application Keys**.
+</Step>
+<Step>
+Select **New Key** and give it a recognizable name such as `C1`.
+</Step>
+<Step>
+**Recommended.** Under **Authorization Scopes**, select **Limit Authorization Scopes** and grant only the scopes you need, such as `dashboards_read`, `monitors_read`, and `incident_read`. If you don't limit scopes, the application key inherits all of the creating user's permissions.
+</Step>
+<Step>
+Select **Create Application Key** and copy the key.
+</Step>
+</Steps>
+
+Application keys are tied to the user who creates them. They inherit that user's permissions and are revoked if the user is deactivated. For a durable setup, create the application key from a dedicated service-account user that has only the roles you need.
+
+For more detail on both key types, see Datadog's [API and application keys](https://docs.datadoghq.com/account_management/api-app-keys/) reference.
+
+## Register the Datadog MCP server in C1
+
+With both keys ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Datadog** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), provide the credentials Datadog needs:
+
+- Your Datadog **site** from [Find your Datadog site](#find-your-datadog-site)
+- Your **API key**
+- Your **application key**
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Datadog server exposes.
+</Step>
+</Steps>
+
+{/* REVIEWER NOTE — remove before publishing. Datadog is a C1-hosted catalog server, so its registration form is driven by the catalog's config schema and prompts for Datadog-specific fields (site, API key, application key) rather than the generic auth-method picker described on the "Set up an MCP server" page. Confirm the exact field labels in the product UI; screenshots would help here. */}
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Datadog. Discovered tools appear on the server's **Tools** tab. Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **Settings** > **AI Connections**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Datadog tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+## How Datadog credentials are shared
+
+The Datadog MCP server uses a single shared credential. The API key and application key you provide are used for every user's tool calls, so Datadog sees all activity as one identity — the user or service account that owns the application key. C1 still attributes each call to the individual user who made it in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+To keep that shared identity attributable to C1 rather than a person, create the application key from a dedicated service-account user, as described in [Create a Datadog application key](#create-a-datadog-application-key).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Manage your Datadog credentials
+
+- **Rotate the API key** in **Organization Settings** > **API Keys** in Datadog, then update the credential on the server's authentication settings in C1.
+- **Rotate the application key** the same way under **Application Keys**. If you used a service-account user, keep that account active so the key stays valid.
+- **Adjust scopes** at any time by editing the application key's authorization scopes in Datadog.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Datadog credentials when an approved user successfully calls a Datadog tool from their AI client.
+</Note>
