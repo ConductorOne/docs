@@ -1,122 +1,78 @@
 ---
-title: "Set up a Fortimanager connector"
-og:title: "Set up a Fortimanager connector"
-description: "C1 provides identity governance for Fortimanager. Integrate your Fortimanager instance with C1 for unified visibility and governance over user access."
-og:description: "C1 provides identity governance for Fortimanager. Integrate your Fortimanager instance with C1 for unified visibility and governance over user access."
-sidebarTitle: "Fortimanager"
+title: "Set up a Fortinet FortiManager connector"
+og:title: "Set up a Fortinet FortiManager connector"
+description: "C1 provides read-only identity governance for Fortinet FortiManager management administrator accounts and admin profiles."
+og:description: "C1 provides read-only identity governance for Fortinet FortiManager management administrator accounts and admin profiles."
+sidebarTitle: "Fortinet FortiManager"
 ---
 
-{/* CONNECTOR_DOCS_TEMPLATE_DO_NOT_RELEASE */}
-
-<Warning>
-Author note: replace this template with customer-facing setup steps before launch. Remove this note, scaffolding text, build commands, local test steps, source paths, and other engineering-only details from this file.
-</Warning>
-
-C1 provides identity governance for Fortimanager. Integrate your Fortimanager
-instance with C1 for unified visibility and governance over user access.
+C1 provides read-only identity governance for Fortinet FortiManager. Integrate
+your FortiManager instance with C1 for unified visibility over privileged
+management administrator accounts and the admin profiles they are assigned.
 
 ## Capabilities
 
-Replace these rows with the resources this connector syncs. Add a provisioning
-check only for resources that support write behavior.
-
 |Resource|Sync|Provision|
 |-|-|-|
-|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
-|Groups|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Users (management admins)|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Admin profiles (roles)|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
 
-## Gather Fortimanager credentials
+This connector is **read-only**. It syncs FortiManager management administrator
+accounts as users, admin profiles as roles, and each admin's assigned profile
+as a role-membership grant. It does not provision changes back to FortiManager.
+This covers privileged management access -- not end-user identities.
 
-<Warning>
-To configure the Fortimanager connector, you need [specific permission level]
-permissions in Fortimanager.
-</Warning>
+## Gather FortiManager credentials
+
+The connector talks to the FortiManager JSON-RPC API at `<base-url>/jsonrpc`.
+It supports two authentication modes; configure one.
+
+<Note>
+API-token auth (FortiManager 7.2.2+) sends the token as an HTTP
+`Authorization: Bearer` header and stores it as a masked secret in C1.
+Session auth sends the username and password to `/sys/login/user` to
+obtain a session key; the password field is not masked. Prefer API-token
+auth when possible.
+</Note>
+
+### Option 1 -- API token (FortiManager 7.2.2+)
 
 <Steps>
-  <Step>
-    [Describe where to create or find the first required credential.]
+  <Step title="Create an API user">
+    In FortiManager, create an administrator with **RPC Permit (JSON API
+    Access)** enabled and Trusted Hosts restricted to the C1 egress range.
   </Step>
-
-  <Step>
-    [List required scopes, roles, or tenant settings.]
-  </Step>
-
-  <Step>
-    [Copy the values needed to configure the connector.]
+  <Step title="Generate the token">
+    Generate the API token for that admin and copy it.
   </Step>
 </Steps>
 
-## Configure the Fortimanager connector
+### Option 2 -- Username and password (session auth)
 
-<Tabs>
-  <Tab title="Cloud-hosted">
-    Follow these instructions to use a built-in, no-code connector hosted by C1.
+<Steps>
+  <Step title="Use a read-only admin">
+    Provide the login name and password of a FortiManager administrator with
+    read access to system admin settings. The connector calls
+    `exec /sys/login/user` to obtain a session key.
+  </Step>
+</Steps>
 
-    <Steps>
-      <Step>
-        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
-      </Step>
+## Configure the connector
 
-      <Step>
-        Search for **Fortimanager** and click **Add**.
-      </Step>
+|Field|Required|Description|
+|-|-|-|
+|Base URL|Yes|FortiManager host origin, e.g. `https://fortimanager.example.com`.|
+|API token|One of|API token for token auth (7.2.2+).|
+|Username|One of|Admin login name for session auth.|
+|Password|One of|Admin password for session auth.|
 
-      <Step>
-        Choose how to set up the new Fortimanager connector.
-      </Step>
+Set either the API token, or both username and password. When the API token is
+set it takes precedence.
 
-      <Step>
-        Set the owner for this connector.
-      </Step>
+## Notes
 
-      <Step>
-        Click **Next**.
-      </Step>
-
-      <Step>
-        Find the **Settings** area of the page and click **Edit**.
-      </Step>
-
-      <Step>
-        Enter the Fortimanager credentials:
-
-        - **[Config field]**: [What value to enter.]
-        - **[Secret field]**: [What value to enter.]
-      </Step>
-
-      <Step>
-        Click **Save**.
-      </Step>
-
-      <Step>
-        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
-      </Step>
-    </Steps>
-
-    **Done.** Your Fortimanager connector is now pulling access data into C1.
-  </Tab>
-
-  <Tab title="Self-hosted">
-    Follow these instructions to run the Fortimanager connector in your own
-    environment.
-
-    <Steps>
-      <Step>
-        Create secrets for the Fortimanager credentials.
-      </Step>
-
-      <Step>
-        Configure the connector environment variables:
-
-        - **[Environment variable]**: [What value to provide.]
-        - **[Secret environment variable]**: [What value to provide.]
-      </Step>
-
-      <Step>
-        Deploy the connector using your standard self-hosted connector process.
-      </Step>
-    </Steps>
-
-    **Done.** Your Fortimanager connector is now pulling access data into C1.
-  </Tab>
-</Tabs>
+- ADOM mode does not change the global admin scope; the connector reads
+  `/cli/global/system/admin/user` and `/cli/global/system/admin/profile`.
+- FortiManager often uses a self-signed certificate. The JSON-RPC transport has
+  no insecure-TLS toggle; add the FortiManager CA to the trust store of the
+  environment running the connector.
