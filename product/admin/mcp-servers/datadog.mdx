@@ -73,16 +73,24 @@ Go to **Organization Settings** > **Application Keys**.
 Select **New Key** and give it a recognizable name such as `C1`.
 </Step>
 <Step>
-**Optional.** Under **Authorization Scopes**, select **Limit Authorization Scopes** and grant only the scopes you need, such as `dashboards_read`, `monitors_read`, and `incident_read`. If you don't limit scopes, the application key inherits all of the creating user's permissions.
+**Optional.** Under **Authorization Scopes**, select **Limit Authorization Scopes** and grant only the scopes your tools need. The right scopes depend on which Datadog tools you plan to expose — read-only tools need scopes like `dashboards_read` and `monitors_read`, while tools that take action (such as creating monitors or updating incidents) need the corresponding write scopes. For a full list of available scopes, see Datadog's [API and application keys](https://docs.datadoghq.com/account_management/api-app-keys/) reference. If you don't limit scopes, the application key inherits all of the creating user's permissions.
 </Step>
 <Step>
 Select **Create Application Key** and copy the key.
 </Step>
 </Steps>
 
-Application keys are tied to the user who creates them. They inherit that user's permissions and are revoked if the user is deactivated. For a durable setup, create the application key from a dedicated service-account user that has only the roles you need.
+Application keys are tied to the user who creates them. They inherit that user's permissions and are revoked if the user is deactivated. For a durable setup, create the application key from a dedicated service-account user — a Datadog user object not tied to a specific person that won't be deactivated when employees leave. Create the service account in Datadog first, then repeat these steps while signed in as that account.
 
 For more detail on both key types, see Datadog's [API and application keys](https://docs.datadoghq.com/account_management/api-app-keys/) reference.
+
+## How Datadog credentials are shared
+
+The Datadog MCP server uses a single shared credential. The API key and application key you provide are used for every user's tool calls, so Datadog sees all activity as one identity — the user or service account that owns the application key. C1 still attributes each call to the individual user who made it in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+To keep that shared identity attributable to C1 rather than a person, create the application key from a dedicated service-account user, as described in [Create a Datadog application key](#create-a-datadog-application-key).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
 ## Register the Datadog MCP server in C1
 
@@ -112,20 +120,12 @@ After you register the server, C1 runs tool discovery against Datadog. Discovere
 
 Before anyone can call a Datadog tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
 
-## How Datadog credentials are shared
-
-The Datadog MCP server uses a single shared credential. The API key and application key you provide are used for every user's tool calls, so Datadog sees all activity as one identity — the user or service account that owns the application key. C1 still attributes each call to the individual user who made it in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
-
-To keep that shared identity attributable to C1 rather than a person, create the application key from a dedicated service-account user, as described in [Create a Datadog application key](#create-a-datadog-application-key).
-
-For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Datadog credentials when an approved user successfully calls a Datadog tool from their AI client.
+</Note>
 
 ## Manage your Datadog credentials
 
 - **Rotate the API key** in **Organization Settings** > **API Keys** in Datadog, then update the credential on the server's authentication settings in C1.
 - **Rotate the application key** the same way under **Application Keys**. If you used a service-account user, keep that account active so the key stays valid.
 - **Adjust scopes** at any time by editing the application key's authorization scopes in Datadog.
-
-<Note>
-Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Datadog credentials when an approved user successfully calls a Datadog tool from their AI client.
-</Note>
