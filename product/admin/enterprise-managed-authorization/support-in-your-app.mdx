@@ -1,0 +1,158 @@
+---
+title: Support enterprise-managed authorization in your MCP server
+description: Make your MCP server accept C1-issued tokens by trusting C1 as an issuer and exchanging its ID-JAGs for your own access tokens.
+og:title: Support enterprise-managed authorization in your MCP server - C1 docs
+og:description: Make your MCP server accept C1-issued tokens by trusting C1 as an issuer and exchanging its ID-JAGs for your own access tokens.
+sidebarTitle: Support in your MCP server
+---
+
+{/* Editor Refresh: 2026-06-13 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+This page is for a developer making an MCP server accept C1-issued tokens, whether that server is an internal application your organization builds or a SaaS your organization runs. The C1 admin registers your server inside C1; the work described here is the other side, done at your authorization server.
+
+This is the protocol-level page. Enterprise-managed authorization is built on the open Cross-App Access (XAA) standard, and the token C1 issues is an ID-JAG; both are used directly below because they're what you implement against.
+
+## What your MCP server needs to do
+
+To support enterprise-managed authorization, your server does two things:
+
+- Accept C1 as a trusted token issuer.
+- Exchange the tokens C1 issues for your own access tokens, using the JWT bearer grant.
+
+C1 issues an ID-JAG, a short-lived JWT whose audience is your authorization server's issuer. Your authorization server verifies C1's signature, confirms the token is meant for it, and returns one of your own access tokens that the agent then uses to call your API.
+
+## Trust C1 as an issuer
+
+Configure your authorization server to recognize C1 as a token issuer and to advertise the grant C1 relies on.
+
+<Steps>
+<Step>
+Add C1's issuer URL and its JWKS URL to your authorization server's trusted-issuer configuration. The issuer is the tenant URL, and the keys are published at the tenant's JWKS endpoint:
+
+```text
+Issuer:  https://<your-tenant>.conductor.one
+JWKS:    https://<your-tenant>.conductor.one/auth/v1/jwks
+```
+
+Your authorization server verifies the ID-JAG signature against the keys at the JWKS URL.
+</Step>
+<Step>
+Register the agent's client at your authorization server. The `client_id` claim in the ID-JAG names the agent's client; the client ID you assign at your authorization server must match it so the same client is recognized on both sides. The client authenticates to your authorization server with its own credentials on the JWT bearer request; you choose which client authentication method to require.
+</Step>
+<Step>
+Advertise the JWT bearer grant (`urn:ietf:params:oauth:grant-type:jwt-bearer`) in your authorization-server metadata, as defined by [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html). C1 discovers this metadata to confirm your authorization server can redeem an ID-JAG.
+</Step>
+<Step>
+Serve protected-resource metadata from your system, as defined by [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html). This is how C1 discovers which authorization server protects your system.
+</Step>
+</Steps>
+
+## Verify the token
+
+When your authorization server receives an ID-JAG on a JWT bearer grant, verify each of the following before issuing your own access token:
+
+| Check | Expected value |
+| :--- | :--- |
+| Token type header (`typ`) | `oauth-id-jag+jwt` |
+| Audience (`aud`) | Exactly your authorization server's issuer, and only that value |
+| Client | Matches the client authenticating the JWT bearer request |
+| Signature | Verifies against C1's published keys at the JWKS URL |
+| Scope (`scope`) | Issue an access token carrying only the scopes in the ID-JAG. You may narrow them, but don't add any. |
+
+### Requesting scopes (and omitting `scope`)
+
+The ID-JAG token-exchange `scope` parameter is **optional** ([RFC 8693 §2.1](https://www.rfc-editor.org/rfc/rfc8693.html#section-2.1)).
+
+- **`scope` omitted (or blank):** ConductorOne grants the subject's **default full set** at the resource server — every *enabled* scope the subject is actually entitled to (`enabled-at-RS ∩ subject-held`). This is the path most silent clients use (e.g. Claude Code's silent exchange sends no `scope`).
+- **`scope` provided:** the grant is narrowed to `requested ∩ enabled ∩ held`. A request can drop scopes but never widen beyond what the subject holds; un-held or not-enabled scopes are silently dropped.
+- If the subject holds **no** scopes at the resource server, the exchange is **denied** (`invalid_grant`) whether or not `scope` was sent — an omitted `scope` is never a free pass.
+
+The issued ID-JAG's `scope` claim always reflects exactly the granted set.
+
+## Identify the user
+
+The ID-JAG identifies the C1 user the agent is acting for. Use these claims to resolve the token to an account in your system.
+
+| Claim | What it carries |
+| :--- | :--- |
+| `sub` | An opaque, C1-minted subject pseudonym — a bare random URL-safe identifier with no internal structure, never the user's raw C1 ID and with no `user:` prefix. By default it is **pairwise**: stable for your system, but a different value at every other system, so the same user can't be correlated across systems. (A C1 admin can opt your system into a global pseudonym instead — the same value for that user everywhere.) For your system it is **consistent across token types**: the same value appears whether it's in a C1 ID token issued to your system or in an ID-JAG for your system, so if you also do direct C1 SSO the subjects match. It is not the user's email address. |
+| `email` | The user's email address. C1 includes it by default so you can link the token to an existing account or provision one just in time. |
+| `auth_time` | When the user last authenticated, when that information is available. |
+
+Key your local account on the full opaque `sub` — at one system, `iss` + `sub` is a stable, durable account key. Store it verbatim; never parse it or expect a raw C1 user ID inside it. Because the `sub` is pairwise by default, it isn't a cross-system identifier, so use `email` to link accounts across systems or to provision one just in time when you don't already have a mapping.
+
+C1 does not send a SAML `NameID` (`sub_id`) or a resource-server-specific user identifier (`aud_sub`) in this release. If your system resolves users by one of those, contact the C1 Support team.
+
+## Signing algorithms C1 can use
+
+C1 can sign ID-JAGs with ES256 (the default), RS256, or EdDSA. Pick the algorithm your authorization server verifies, and tell your C1 admin which one to use for your system. C1 uses the chosen algorithm with no silent fallback, so the algorithm your admin configures must be one your authorization server accepts.
+
+## Example
+
+The following are taken from a verified end-to-end exchange against a live C1 tenant. The protected-resource metadata document shows the fields C1 reads during discovery, and the decoded ID-JAG shows the claims your authorization server verifies.
+
+<Warning>
+**The `resource` in your protected-resource metadata must equal the exact URL the agent calls, including any path** — not just the origin. If your MCP server is at `https://api.example.com/mcp`, serve the metadata at `https://api.example.com/.well-known/oauth-protected-resource/mcp` with `"resource": "https://api.example.com/mcp"`. A bare-origin `resource` (e.g. `https://api.example.com`) causes the client's discovery to fail with a resource mismatch.
+</Warning>
+
+<CodeGroup>
+
+```json Protected-resource metadata
+{
+  "resource": "https://api.example.com/mcp",
+  "authorization_servers": [
+    "https://api.example.com"
+  ],
+  "jwks_uri": "https://api.example.com/jwks",
+  "scopes_supported": [
+    "read:widgets"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ]
+}
+```
+
+```json Decoded ID-JAG (verified, real)
+{
+  "header": {
+    "typ": "oauth-id-jag+jwt",
+    "alg": "ES256",
+    "kid": "3F93AL379BJf0x4kk1p9zye3lhd"
+  },
+  "payload": {
+    "iss": "https://your-tenant.conductor.one",
+    "aud": "https://api.example.com",
+    "sub": "3FFshhPuwk7lbS1M0nESX4KUIxs",
+    "client_id": "agent-client-at-example",
+    "scope": "read:widgets",
+    "jti": "3F96Wa1In8PvfGnv8lBiW8QFctN",
+    "iat": 1781474969,
+    "exp": 1781475269
+  }
+}
+```
+
+```http Token request to your authorization server
+POST /token HTTP/1.1
+Host: api.example.com
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic <client credentials at your authorization server>
+
+grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
+&assertion=<the ID-JAG>
+```
+
+</CodeGroup>
+
+<Note>
+**`sub` is an opaque pseudonym, not a C1 user ID.** The `sub` above (`3FFshhPuwk7lbS1M0nESX4KUIxs`) is a bare, C1-minted identifier with no internal structure — by default it's unique to your system, so don't parse it and don't expect to see a raw C1 user ID. Store it verbatim as your account key. (`email` is included when available; the `auth_time` claim is present when C1 has that information.)
+</Note>
+
+<Note>
+**Advertise an `authorization_endpoint` in your authorization-server metadata** even though the JWT bearer grant does not use it. Some clients validate the RFC 8414 metadata document for a well-formed `authorization_endpoint` before they will use the JWT bearer grant, and reject the document if it is absent.
+</Note>

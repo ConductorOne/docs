@@ -1,0 +1,88 @@
+---
+title: "Govern access: scopes & access profiles"
+description: Turn an MCP server's scopes into governable, requestable C1 entitlements, bundle them into access profiles, and control how access is granted and revoked.
+og:title: "Govern access: scopes & access profiles - C1 docs"
+og:description: Turn an MCP server's scopes into governable, requestable C1 entitlements, bundle them into access profiles, and control how access is granted and revoked.
+sidebarTitle: Govern access
+---
+
+{/* Editor Refresh: 2026-06-13 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Scopes are how you control what an agent's token can do at an MCP server. This page covers turning a server's scopes into C1 entitlements, bundling them into access profiles, and the levers you use to grant and revoke access.
+
+## Scopes are individual entitlements
+
+Each scope an MCP server exposes becomes its own C1 entitlement. Because a scope is an entitlement, you can request, review, certify, and audit it on its own, the same way you govern any other access in C1. A server can expose many scopes.
+
+Modeling each scope as its own entitlement gives you per-scope governance. It does not put C1 between the agent and the system on each call. C1 evaluates your policy when it issues a token, not on every API call the agent makes afterward.
+
+## Add and enable scopes
+
+You bring an MCP server's scopes into C1, classify each one, and enable the scopes you want to expose. This happens on the resource server's **Scopes** tab (open the resource server from the application's **Cross-App Access** tab). The tab lists each scope with its **State**, **Classification**, and **Source**, offers a **Pending review** quick filter, and has a **Declare scope** button for adding one by hand.
+
+<Steps>
+<Step>
+Get the scopes into C1.
+
+Scopes are **discovered** automatically in the background — imported from the server and listed with source **Discovered** in a **Pending review** state so you can confirm them before use. To add one by hand, click **Declare scope** and fill in the drawer: **Scope value** (the literal OAuth scope string, required and immutable after creation), **Display name** (required), **Description**, **Classification**, and **State**. Click **Declare**.
+</Step>
+<Step>
+Classify each scope.
+
+The **Classification** field offers **Unclassified** (the default), **Read**, **Write**, **Destructive**, **Sensitive**, and **Dangerous**. The classification is metadata you use to filter and reason about scopes.
+</Step>
+<Step>
+Enable the scopes you want to expose.
+
+On the Scopes tab, use the row's **State** toggle, or the **⋯** menu's **Approve** action (which moves a scope to **Enabled**) — and **Disable** to turn one off. You can select multiple scopes and use the **Approve** / **Disable** bulk actions in the footer. The **Pending review (n)** quick filter and the **State / Classification / Source** filters help you work through newly discovered scopes.
+</Step>
+</Steps>
+
+Only enabled scopes can be issued in a token. Scopes are never enabled automatically. Enabling a scope is the ceiling on what C1 will ever put in a token for that server.
+
+## Bundle scopes into access profiles
+
+An access profile is a named bundle of scopes that users request as one item. Manage profiles on the resource server's **Access profiles** tab, where you create a profile and then open it in edit mode to bind scopes in its **Bound scopes** section.
+
+<Steps>
+<Step>
+Create an access profile.
+
+On the **Access profiles** tab, click **Create access profile**, enter a **Display name** and **Description**, and click **Create**. (Scopes are bound in the next step — the create drawer has no scope picker.)
+</Step>
+<Step>
+Bind the scopes you want to include.
+
+Open the profile again (click its name, or **⋯ → Edit**). The edit drawer adds a **Bound scopes** section: use **Add scopes** to search this resource server's scopes, select them, and click **Add**. Remove a bound scope with the trash icon on its row. The drawer also shows a **Requestable via** link to the backing entitlement in the request catalog.
+</Step>
+</Steps>
+
+Users request the profile, and a grant covers every scope bound to it.
+
+## How users get access
+
+Scopes and access profiles move through the standard C1 workflow. Users request access, approvers grant it, and reviewers certify it on a schedule.
+
+- Configure how access is requested and approved in [Access requests](/product/admin/access-requests).
+- Curate the bundles users request in [Access profiles](/product/admin/profiles).
+- Certify access over time with [Campaigns](/product/admin/campaigns).
+
+Once a profile exists and your access request settings are configured, users can request it. There's no further setup step.
+
+## Revoke access
+
+You have several levers to revoke access. Each takes effect at the next token request, not on tokens that are already issued.
+
+<Warning>
+No lever cancels a token that's already been issued before it expires. A revoked grant stops the next token request; any token already in the agent's hands keeps working until it expires. The default token lifetime is 300 seconds (5 minutes), which sets how long in-flight access can persist after you revoke a grant.
+</Warning>
+
+| Lever | Scope | When it takes effect |
+| :--- | :--- | :--- |
+| Revoke a scope or profile grant | One user | The next token request is denied; tokens already issued live until they expire (default 300 seconds) |
+| Disable a resource server | A whole MCP server | The next token request is denied |
+| Disable the user | All of that user's token requests | The next token request is denied |

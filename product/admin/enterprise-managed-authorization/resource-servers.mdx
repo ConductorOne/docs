@@ -1,0 +1,106 @@
+---
+title: Register an MCP server
+description: Register an MCP server (the protocol's "resource server") so C1 can issue scoped, short-lived tokens for it.
+og:title: Register an MCP server - C1 docs
+og:description: Register an MCP server (the protocol's "resource server") so C1 can issue scoped, short-lived tokens for it.
+sidebarTitle: Register an MCP server
+---
+
+{/* Editor Refresh: 2026-06-13 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Registering an MCP server is the core admin task in enterprise-managed authorization. It tells C1 which server to issue tokens for and how those tokens are addressed. This page also carries the full onboarding path, so you can follow a single server from enablement through to a user requesting access.
+
+The full path, end to end:
+
+1. [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable) for your tenant and choose a signing algorithm.
+2. Register the MCP server (this page).
+3. [Enable the server's scopes and bundle them into access profiles](/product/admin/enterprise-managed-authorization/scopes-and-profiles) so users can request them. That page covers both steps: discovering or declaring scopes, and grouping them into profiles.
+4. Users request access through the standard C1 catalog, and approvers grant it. Once a profile exists and your access request settings are configured, there's no further step here.
+
+## What's a resource server?
+
+In the protocol, the MCP server you register is the **resource server** — the system C1 issues tokens for. You register one per server, keyed to that server's authorization server. The token C1 mints is addressed to that authorization server, which verifies C1's signature and exchanges the token for an access token the agent uses to call the server.
+
+## Before you begin
+
+- The [application for this server](/product/admin/applications) already exists in C1.
+- The MCP server's authorization server already trusts C1 as an issuer. The server's owner does this, not you, and not in C1. See [Support enterprise-managed authorization in your MCP server](/product/admin/enterprise-managed-authorization/support-in-your-app).
+
+## Register an MCP server
+
+The MCP server is registered on the C1 application that represents it. Open the application (**Apps** in the left navigation), then open its **Cross-App Access** tab and click **Register resource server**. The **Cross-App Access** tab only appears once enterprise-managed authorization is enabled for your tenant (see [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable)). Clicking **Register resource server** opens the **Register resource server** drawer, where you fill in the fields below.
+
+<Steps>
+<Step>
+On the application, open the **Cross-App Access** tab and click **Register resource server**.
+
+This opens the **Register resource server** drawer. (There is no per-application "enable" toggle — enablement is the tenant-level setting on the [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable) page.)
+</Step>
+<Step>
+Enter a **Display name** (required), and optionally a **Description**.
+</Step>
+<Step>
+Set the **Audience** (required).
+
+The audience is the issuer URL of the MCP server's authorization server. It is fixed once the resource server is created, so set it correctly the first time. The audience must not be your own C1 tenant URL. C1 is the token issuer, not the audience.
+</Step>
+<Step>
+Add the **Resource URIs**.
+
+These are the MCP server URLs the agent will call. Type each URI and press Enter to add it. A token request that names a target outside the configured resource URIs is denied.
+</Step>
+<Step>
+Optionally set a **Maximum grant lifetime** and a **Signing algorithm**.
+
+**Maximum grant lifetime** is a duration picker — leave it on **Indefinite** to inherit the tenant default (which resolves to 300 seconds / 5 minutes if the tenant hasn't set one). **Indefinite** means "inherit the tenant default," not "tokens never expire." **Signing algorithm** defaults to **Inherit (default)** (your tenant's default); the other options are **EdDSA**, **RS256**, and **ES256**. Change it only if this server's authorization server verifies a different algorithm. The algorithm you pick must be maintained at the tenant (have a signing key), or every token request for this server is denied.
+</Step>
+<Step>
+Click **Register**.
+
+The new resource server appears in the table on the **Cross-App Access** tab. Click its name to open its detail page, where you manage **Scopes** and **Access profiles**.
+</Step>
+</Steps>
+
+The drawer also exposes two advanced switches: **Require proof of possession**, and **Disabled (kill switch)** (see [Pause an MCP server](#pause-an-mcp-server)).
+
+## Modify-claims hook (not yet available)
+
+The resource server drawer shows a **Modify-claims hook** field, intended for attaching a [Function](/product/admin/functions) that would run when C1 mints a token for this server. This capability is **not yet functional** — the field is reserved for a future release.
+
+<Warning>
+**Don't configure a modify-claims hook.** It is not implemented yet, and setting one causes C1 to deny every token request for this server. Leave the field unset.
+</Warning>
+
+## Pause an MCP server
+
+To pause a server, **disable** its resource server. In the UI this is the **Disable** action — use the **⋯** menu on the resource server's row (or on its detail page), or toggle **Disabled (kill switch)** in the resource server drawer. Re-enabling is the **Enable** action in the same menu.
+
+Disabling a resource server is a per-server off switch. It denies new token requests for that server without deleting its configuration. The audience, resource URIs, signing algorithm, and scope setup are kept, so re-enabling restores the server as it was.
+
+Disabling a server does not stop a token that has already been minted. An issued token keeps working until it expires, which is a few minutes by default. It affects the next token request, not tokens already in use.
+
+## Troubleshoot resource server errors
+
+If a token request is denied, or a server rejects a token C1 issued, match the symptom below.
+
+<AccordionGroup>
+<Accordion title="The audience isn't registered">
+The token's audience does not match a registered resource server. Confirm the resource server's audience is the issuer URL of the MCP server's authorization server, and that it matches what the agent's client is asking for. The audience is fixed after creation, so a mismatch means re-registering the server with the correct audience.
+</Accordion>
+<Accordion title="A call's target URL isn't in the resource URLs">
+The token request names a target that isn't in the resource server's configured resource URLs, so C1 denies it. Add the URL the agent is calling to the resource URLs for this server.
+</Accordion>
+<Accordion title="The server rejects a token because of a signature-algorithm mismatch">
+C1 minted the token, but the server's authorization server rejected its signature. The server verifies a different algorithm than the one this resource server is signing with. Set this server's signing algorithm to one its authorization server verifies. ES256 is the broadest choice.
+</Accordion>
+</AccordionGroup>
+
+## Where to go from here
+
+- Enable and govern this server's scopes. See [Govern access: scopes & access profiles](/product/admin/enterprise-managed-authorization/scopes-and-profiles).
+- Set up the server to accept C1 tokens. See [Support enterprise-managed authorization in your MCP server](/product/admin/enterprise-managed-authorization/support-in-your-app).
+- Want the full picture? See the [enterprise-managed authorization overview](/product/admin/enterprise-managed-authorization/overview).
