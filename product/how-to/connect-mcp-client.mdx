@@ -1,0 +1,182 @@
+---
+title: Connect your MCP client to C1
+description: Authenticate once to C1, then let your AI agent reach the MCP servers you're entitled to — with short-lived, scoped tokens instead of long-lived API keys.
+og:title: Connect your MCP client to C1 - C1 docs
+og:description: Authenticate once to C1, then let your AI agent reach the MCP servers you're entitled to — with short-lived, scoped tokens instead of long-lived API keys.
+sidebarTitle: Connect your MCP client
+---
+
+{/* Editor Refresh: 2026-06-13 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+With enterprise-managed authorization, you authenticate once to C1, and from then on your AI agent can reach the MCP servers you've been granted access to — no per-tool login, and no long-lived API keys. Your agent signs you in to C1, exchanges your identity for a short-lived token scoped to the server you want, and calls that server directly. This guide covers connecting your MCP client so it can do that.
+
+What this looks like in your client depends on which one you use: in Claude it shows up as "enterprise-managed auth" through connectors, and in VS Code as "enterprise-managed MCP authentication." Either way, it connects to the same enterprise-managed authorization your C1 admin set up.
+
+## Who this is for
+
+You don't need an admin role for this. The setup splits across three people:
+
+- Your C1 admin enables enterprise-managed authorization, registers the MCP servers, and grants you access.
+- The owner of each MCP server configures it to trust C1 as a token issuer. See [Support enterprise-managed authorization in your MCP server](/product/admin/enterprise-managed-authorization/support-in-your-app).
+- You connect your client to C1 and add each server, which is what this guide covers.
+
+If your agent runs as its own identity, a service principal, rather than as you, the connection is set up against that identity instead. See [Service principals](/product/admin/service-principals/overview).
+
+<Note>
+Enterprise-managed authorization in Claude Code is gated by the `CLAUDE_CODE_ENABLE_XAA=1` environment variable and is experimental today. A future Claude Code release may simplify this, but the setup flow described here is not expected to change materially.
+</Note>
+
+## Before you begin
+
+Collect the following from the people who own each piece. Without all of it, the token request fails. The last row is the one people miss most often: if you haven't been granted access in C1, the exchange is denied even when everything else is correct.
+
+| What to collect | Who provides it |
+| :--- | :--- |
+| Your C1 issuer URL | Your C1 admin |
+| The agent client's ID and secret at C1 (your agent's identity at C1, used to sign you in) | Your C1 admin |
+| For each MCP server: its URL, plus a client ID and secret at that server's authorization server (a different credential) | The server owner |
+| Confirmation that the server already trusts C1 as a token issuer | The server owner |
+| Confirmation that your access is already granted, meaning you requested the scope or access profile in C1 | You |
+
+## Set up your client
+
+<Tabs>
+<Tab title="Claude Code">
+
+<Steps>
+<Step>
+**Turn on the feature.** Set `CLAUDE_CODE_ENABLE_XAA=1` in your shell profile so it persists. The gate is checked both when you run the commands below and when your agent connects to a server.
+
+```bash
+export CLAUDE_CODE_ENABLE_XAA=1
+```
+</Step>
+<Step>
+**Connect to C1 once.** This configures the one C1 connection that every server reuses. Put the agent client's secret in the environment variable that `--client-secret` reads, then run setup.
+
+```bash
+export MCP_XAA_IDP_CLIENT_SECRET='<your IdP client secret>'
+claude mcp xaa setup --issuer <your C1 URL> --client-id <your IdP client ID> --client-secret
+```
+
+The `--client-secret` flag takes no inline value. It reads the secret from `MCP_XAA_IDP_CLIENT_SECRET`. Add `--callback-port <port>` only if your C1 connection doesn't allow any loopback port for the browser sign-in.
+</Step>
+<Step>
+**Sign in to C1.** This opens C1 in your browser and caches the session.
+
+```bash
+claude mcp xaa login
+```
+
+If you can't use a browser, pass a C1-issued ID token directly instead: `claude mcp xaa login --id-token <C1 id_token>`.
+</Step>
+<Step>
+**Add an MCP server.** Give Claude Code the server's URL and the client credentials for that server's authorization server. These are different from the C1 credentials in step 2. Repeat this step for each server you want to use.
+
+```bash
+claude mcp add --xaa --transport <http|sse> <name> <url> --client-id <client ID at the server's AS> --client-secret
+```
+
+Set `--transport` to `http` or `sse` to match the server; only HTTP and SSE servers are supported. The `--client-secret` flag takes no inline value — it prompts you for the secret, or reads it from `MCP_CLIENT_SECRET`. This is a different environment variable than the one in step 2.
+</Step>
+<Step>
+**Use the server in Claude Code.** Your agent obtains a token in the background when it calls the server. There's nothing more to run.
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="VS Code">
+
+<Note>
+**Preview.** VS Code's enterprise-managed MCP authentication is a Preview feature, available in VS Code **v1.123 and later**. The steps below reflect that release.
+</Note>
+
+VS Code authenticates to C1 once, then connects to your enterprise-managed MCP servers silently. There are two pieces of configuration: the C1 identity provider, set once in `settings.json`, and each MCP server, listed in `mcp.json`.
+
+In a managed organization, your admin usually delivers the identity-provider settings for you through enterprise policy — Windows Group Policy, macOS managed preferences, or `/etc/vscode/policy.json` on Linux — so you may not need to set them by hand. If you're setting things up individually, put them in your `settings.json`.
+
+<Steps>
+<Step>
+**Configure the C1 identity provider.** In `settings.json`, set `mcp.enterpriseManagedAuth.idp` with the issuer URL and OIDC client credentials your C1 admin gives you.
+
+```jsonc
+"mcp.enterpriseManagedAuth.idp": {
+  "issuer": "<your C1 issuer URL>",
+  "clientId": "<the OIDC client ID your C1 admin gives you>",
+  "clientSecret": "<the client secret>"
+}
+```
+
+If your admin delivers this through enterprise policy, it's already set and you can skip this step.
+</Step>
+<Step>
+**Add each MCP server.** In `mcp.json`, list each server with its URL and an `oauth` block that turns on enterprise-managed authentication.
+
+```jsonc
+{
+  "servers": {
+    "<name>": {
+      "type": "http",
+      "url": "<the MCP server URL>",
+      "oauth": {
+        "clientId": "<the client ID at the system's authorization server>",
+        "enterpriseManaged": true
+      }
+    }
+  }
+}
+```
+
+The `oauth.clientId` here is the client ID at the **MCP server's authorization server** — the credential the server owner gives you, not the C1 identity-provider client ID from the previous step.
+</Step>
+<Step>
+**Set the server's client secret.** Don't put the secret in `mcp.json`. Use the **Set Client Secret** code lens that appears above the `oauth` block to store it; VS Code keeps it in your operating system's secret store, not in the file.
+</Step>
+<Step>
+**Sign in once.** The first time you connect to an enterprise-managed server, VS Code opens a browser to sign you in to C1. After that, every enterprise-managed server connects silently — no per-server prompt.
+</Step>
+</Steps>
+
+### When something doesn't work
+
+Find the error you're seeing below for the cause and who to ask.
+
+| What you see | What it means and who to ask |
+| :--- | :--- |
+| Sign-in never starts, or VS Code reports no identity provider | The C1 identity provider isn't configured. Set `mcp.enterpriseManagedAuth.idp` in `settings.json`, or ask your admin whether it should arrive through enterprise policy. |
+| The server connects without enterprise-managed auth, or VS Code can't discover its authorization server | The MCP server didn't advertise protected-resource metadata or list its `authorization_servers`. Ask the server owner to finish setup. See [Support enterprise-managed authorization in your MCP server](/product/admin/enterprise-managed-authorization/support-in-your-app). |
+| The connection is denied because you don't have the scope | Your access hasn't been granted. Ask your C1 admin to grant you the scope or access profile. |
+| The server rejects the token even though sign-in worked | The token's signature may use an algorithm the server doesn't verify. Ask your C1 admin to check the signing algorithm set for that server. |
+
+</Tab>
+<Tab title="Other clients">
+
+Enterprise-managed authorization is built on an open standard, so any client that implements it follows the same shape: one connection to C1 using its issuer URL and client credentials, plus, for each MCP server, the client's own credentials at that server's authorization server. Claude Code and VS Code support it today, as covered above; other clients will follow the same pattern as they add support.
+
+</Tab>
+</Tabs>
+
+## Manage your connection
+
+Use these commands to check or reset your C1 connection:
+
+- `claude mcp xaa show` checks your current connection.
+- `claude mcp xaa login --force` signs you in to C1 again, for example after your access was reset.
+- `claude mcp xaa clear` clears the connection so you can start over.
+
+## When something doesn't work
+
+Find the error you're seeing below for the cause and who to ask.
+
+| What you see | What it means and who to ask |
+| :--- | :--- |
+| `XAA is not enabled (set CLAUDE_CODE_ENABLE_XAA=1)` | The gate is off. Set `CLAUDE_CODE_ENABLE_XAA=1` in your shell profile and restart your shell. |
+| `XAA: no IdP connection configured` | You haven't connected to C1 yet. Run `claude mcp xaa setup`, then `claude mcp xaa login`. |
+| `XAA: server '<name>' needs an AS client_id` or a missing AS client secret | The server is missing its client ID or secret. Re-run `claude mcp add --xaa` for that server. |
+| `Resource server does not implement OAuth 2.0 Protected Resource Metadata`, `PRM discovery failed`, or `no authorization server supports jwt-bearer` | The server doesn't publish the metadata C1 needs, or doesn't support the JWT bearer grant. Ask the server owner to finish setup. See [Support enterprise-managed authorization in your MCP server](/product/admin/enterprise-managed-authorization/support-in-your-app). |
+| The token request is denied because you don't have the scope | Your access hasn't been granted. Ask your C1 admin to grant you the scope or access profile. |
+| The server rejects the token even though sign-in worked | The token's signature may use an algorithm the server doesn't verify. Ask your C1 admin to check the signing algorithm set for that server. |
