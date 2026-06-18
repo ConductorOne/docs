@@ -16,6 +16,33 @@ Use this skill when:
 - Creating quickstart guides
 - Writing any content intended for conductorone.com/docs
 
+## The docs voice
+
+Documentation has a different job than marketing. Marketing makes a case for C1. Docs assume the reader already chose C1 — they're here to get something done. The voice shifts accordingly: less energetic, more instructive.
+
+**Outside-in framing.** Lead with what the reader is trying to accomplish, not with the feature name or how it works internally. "If you run recurring campaigns, use a template to avoid reconfiguring from scratch each time" is outside-in. "Campaign templates are a feature that allows..." is not. The opening sentence of every page should tell the reader what they can *do* after reading it — not what the feature *is*.
+
+**Declarative, not hedged.** If something is true, say it plainly. Don't write "C1 can help streamline the approval process." Write "C1 auto-approves requests that meet policy." Hedging makes docs feel uncertain; readers lose confidence in the product.
+
+**Peer-level respect.** The reader is a security or IT professional. They know why access reviews matter. They need to know how to run one. Skip context they already have and get to the task.
+
+**Empathy means anticipating friction, not cheerfulness.** Acknowledge what's complex. Offer the shortcut when one exists. Write the "why" for non-obvious steps. Don't celebrate task completion ("That's it!", "You're done!", "You're all set!") — state the outcome instead. The outcome sentence is the reward.
+
+- Do: "New tasks will now be automatically reassigned to your delegate."
+- Don't: "That's it! Tasks will now be assigned to your delegate."
+
+**Active voice, specific verbs.** "C1 sends a notification" not "a notification is sent." "Click **Save**" not "the Save button should be clicked."
+
+**Avoid hedging verbs.** These drain sentences of authority:
+- "helps you to" → use a direct verb
+- "can help" → state what it does
+- "is designed to" → state what it does
+- "allows you to" → "lets you" or just state the action
+
+**No editorializing.** Cut "it's important to note," "it's worth mentioning," "please note," and "from a security perspective." If the information belongs in the doc, put it in the doc without announcing it.
+
+**No promotional language.** "Powerful," "robust," "seamless," "innovative" — cut them. Let the capability speak for itself.
+
 ## File Format
 
 **Always use .mdx format** for C1 documentation files. MDX (Markdown with JSX) is the required format for the docs site. When creating new documentation, save files with the `.mdx` extension.
@@ -49,34 +76,26 @@ Sidebar grouping in `docs.json` is independent of folder structure. You can visu
 
 ## Writing Process
 
-Follow this process when creating C1 documentation:
+1. **Identify the audience.** Admin, end-user, or developer? Admins configure; end-users request and review; developers integrate and extend. The terminology, assumed knowledge, and task framing differ significantly.
 
-1. **Read the style guide first**: Always start by reading `references/style-guide.md` to refresh on the voice, tone, and formatting conventions.
-
-2. **Understand the purpose**: Clarify with the user what the documentation should accomplish:
-   - What feature or task does it cover?
-   - Who is the audience (admin, end-user, developer)?
-   - What should readers be able to do after reading?
+2. **Identify what the reader is trying to accomplish.** This is your outside-in anchor — write it down before drafting. If you can't state it in one sentence, clarify before writing.
 
 3. **Structure the content**:
-   - Start with a clear one-sentence description of the feature/page
-   - Use descriptive H2 headings for major sections
-   - Break procedures into numbered steps
-   - Include a "What's [feature name]?" section if conceptual explanation is needed
+   - Open with a one-sentence description that is action-led, not feature-led
+   - Include a conceptual "What is X?" section only if the feature is genuinely non-obvious or has meaningful prerequisites
+   - Use H2 headings for major sections, H3 for subsections
+   - Break procedures into numbered steps, each starting with an action verb
+   - Put prerequisites before steps, not buried in step 3
 
-4. **Write in C1's voice**:
-   - Direct and helpful, like a knowledgeable colleague
-   - Action-oriented, focused on what users need to do
-   - Use "you" and "your" to address readers
-   - Use contractions naturally (you'll, don't, can't)
+4. **Write, then tighten.** First pass for completeness. Second pass to cut every word that isn't doing work.
 
-5. **Apply formatting conventions**:
-   - Bold UI elements: **Admin** > **Access profiles**
-   - Use sentence case for headings
-   - Start callouts with context: "Want to..." or "Tips for..."
-   - Make link text descriptive
-
-6. **Review against the style guide**: Before finalizing, check that the content follows all style guide conventions.
+5. **Self-check before finishing**:
+   - Does the opening sentence tell the reader what they can do after reading this — not what the feature is?
+   - Is every step action-led?
+   - Are there any hedging verbs, editorializing phrases, or throat-clearing openers?
+   - Does any sentence try to serve too many stakeholders at once? Split it or cut it.
+   - After each procedure, is there an outcome sentence stating what changed?
+   - Is the company name "C1" throughout?
 
 ## Key Style Points
 
@@ -85,8 +104,10 @@ Follow this process when creating C1 documentation:
 - **Voice**: Second person ("you"), active voice, direct language
 - **Tone**: Technical, precise, no marketing speak or promotional language
 - **Headings**: Sentence case only ("Getting started" not "Getting Started"); always include explanatory text after a heading before any subheadings; headings must be descriptive enough to make sense out of context — a reader should understand the section's scope without seeing the rest of the page. For example, "FAQ" is too vague; "Frequently asked questions about automations" is correct. "Related" is too vague; "Features related to automations" is correct.
-- **Procedures**: Numbered steps starting with action verbs
+- **Procedures**: Numbered steps starting with action verbs. One action per step — don't bundle two actions into one step unless they're truly inseparable. A `<Steps>` block must always be preceded by at least one sentence of intro text — never place `<Steps>` directly after a heading. Navigation to a page and clicking Save are steps, not intro prose.
+- **Outcome sentences**: After a procedure, state what changed as a plain sentence ("New tasks will now be automatically reassigned to your delegate."). Don't celebrate ("That's it!", "Done.", "You're all set!") — state the outcome instead.
 - **Optional steps**: Start with **Optional.** (e.g., "**Optional.** Configure advanced settings...")
+- **Callouts**: Start with context, not with the callout type. Don't write "Note that..." inside a `<Note>` or "Warning:" inside a `<Warning>` — the component signals that already. `<Warning>` is for destructive or irreversible actions only; `<Tip>` for helpful shortcuts or best practices; `<Note>` for context that applies in specific situations.
 - **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
 - **UI elements**: Bold formatting (**New profile**)
 - **Navigation paths**: **Admin** > **Access profiles** > **New profile**
@@ -222,15 +243,18 @@ When in doubt: if a user would type it into a terminal or config file, leave it 
 
 ## Common Mistakes to Avoid
 
-- Don't use "bool" (use "Boolean")
-- Don't use promotional language ("amazing", "powerful" unless justified)
-- Don't use excessive conjunctions ("moreover", "furthermore")
-- Don't editorialize ("it's important to note")
-- Don't create duplicate content (update existing docs instead)
-- Don't use title case for headings
-- Don't use context-free headings like "FAQ" or "Related" — always include the subject ("Frequently asked questions about automations", "Features related to automations")
-- Don't use Latin abbreviations (i.e., e.g., etc.)—they're often misunderstood and don't localize well. Use plain English instead: "for example", "such as", "like", "that is", "in other words", "and so on"
-
-## Reference Material
-
-- **references/style-guide.md** - Complete style guide covering voice, tone, language, structure, and common patterns. Read this before writing any documentation.
+- **Hedging verbs**: "helps you to," "can help," "is designed to," "allows you to" — use direct verbs instead ("lets you," "C1 does X")
+- **Feature-first openers**: "Campaign templates are a feature that allows..." → lead with what the reader can do instead
+- **Celebrating task completion**: "That's it!", "Done.", "You're all set!" → state the outcome
+- **Multi-clause sentences serving too many stakeholders at once** — split or cut
+- **Editorializing**: "it's important to note," "it's worth mentioning," "please note"
+- **Promotional language**: "powerful," "robust," "seamless," "innovative"
+- **Excessive conjunctions**: "moreover," "furthermore," "additionally"
+- **Using "ConductorOne"** instead of "C1" in prose
+- **Using "bool"** — use "Boolean"
+- **Title case in headings** — sentence case only
+- **Context-free headings** like "FAQ" or "Related" — always include the subject ("Frequently asked questions about automations")
+- **Latin abbreviations** (i.e., e.g., etc.) — use "for example", "that is", "and so on"
+- **Placing `<Steps>` directly after a heading** with no intro sentence
+- **Putting navigation instructions in intro prose** instead of as steps
+- **Duplicate content** — update an existing page instead of creating a new one
