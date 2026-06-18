@@ -1,0 +1,184 @@
+---
+title: "Set up an xMatters connector"
+og:title: "Set up an xMatters connector"
+description: "C1 provides identity governance for xMatters. Integrate your xMatters instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for xMatters. Integrate your xMatters instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "xMatters"
+---
+
+C1 provides identity governance for xMatters. Integrate your xMatters
+instance with C1 for unified visibility and governance over user access.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Groups|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+## Gather xMatters credentials
+
+<Warning>
+The connector signs in to the xMatters REST API with a user name and
+password (HTTP Basic authentication). The account needs the **REST Web
+Service User** role, or equivalent permissions, and access to the people and
+groups it should read.
+</Warning>
+
+<Steps>
+  <Step>
+    In xMatters, create or choose a user account for the connector and make
+    sure it has the **REST Web Service User** role.
+  </Step>
+
+  <Step>
+    To authenticate with an xMatters API key instead of a password, open the
+    user's profile, create an API key, and copy both the key ID and the key
+    secret. The key ID is entered as the user name prefixed with
+    `x-api-key-` (for example `x-api-key-2249a8e8-...`), and the key secret
+    is entered as the password.
+  </Step>
+
+  <Step>
+    Copy your xMatters API base URL: the host you see in your browser when
+    signed in to xMatters, followed by `/api/xm/1` — for example
+    `https://yourcompany.xmatters.com/api/xm/1`. Some instances include a
+    deployment segment in the hostname, such as
+    `https://yourcompany.cs1.xmatters.com/api/xm/1`; copy the host exactly
+    as it appears.
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Description|
+|-|-|-|
+|`base-url`|Yes|Full base URL of the xMatters REST API, with no trailing slash, for example `https://yourcompany.xmatters.com/api/xm/1`.|
+|`username`|Yes|The xMatters user name to authenticate as. To use an API key, enter the key ID prefixed with `x-api-key-`.|
+|`password`|Yes|The password for the user name above. When using an API key, this is the key's secret.|
+
+## Synced resource types
+
+- **Users**: people from `/people`, including their active or inactive
+  status.
+- **Groups**: groups from `/groups`, with one member entitlement per group.
+- **Group memberships**: person members of each group from
+  `/groups/{id}/members`. Nested groups and device members are listed by
+  xMatters but are not synced as access grants.
+
+## Special notes
+
+- Provisioning is not supported in the current build.
+- The connector is read-only and never modifies xMatters data.
+- Device contact information is not synced; xMatters keeps contact details
+  on device records, which are out of scope for this connector.
+- Membership of nested groups is not expanded: a group inside another group
+  is skipped rather than resolved to its individual members.
+
+## Configure the xMatters connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **xMatters** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new xMatters connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the xMatters credentials:
+
+        - **xMatters API base URL**: The full API base URL, for example
+          `https://yourcompany.xmatters.com/api/xm/1`.
+        - **Username**: The connector account's user name, or an API key ID
+          prefixed with `x-api-key-`.
+        - **Password**: The account's password, or the API key's secret.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by
+        **Connected**. You can view the logs to ensure that information is
+        syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your xMatters connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the xMatters connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new xMatters connector, set the owner, and
+        click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area, click **Edit**, then click **Rotate** to
+        generate a new Client ID and Client Secret. Store these values
+        securely for your deployment.
+      </Step>
+
+      <Step>
+        Configure C1 credentials and xMatters credentials as environment
+        variables:
+
+        ```bash
+        BATON_CLIENT_ID=<C1 client ID>
+        BATON_CLIENT_SECRET=<C1 client secret>
+        BATON_HOST_ID=baton-xmatters
+        BATON_BASE_URL=<Full xMatters API base URL ending in /api/xm/1>
+        BATON_USERNAME=<Connector account user name or x-api-key-prefixed key ID>
+        BATON_PASSWORD=<Account password or API key secret>
+        ```
+      </Step>
+
+      <Step>
+        Deploy the connector using the Public ECR image:
+
+        ```bash
+        public.ecr.aws/conductorone/baton-xmatters:<version>
+        ```
+
+        Use a version tag without the leading `v`, such as `0.0.1`.
+      </Step>
+    </Steps>
+
+    **Done.** Your xMatters connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
