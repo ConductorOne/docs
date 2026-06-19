@@ -420,6 +420,34 @@ c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.id)
 subject.type == UserType.SERVICE || subject.type == UserType.SYSTEM
 ```
 
+### App user status checks
+
+#### Filter by app account status
+
+**Customer scenario:** A company wants to create a dynamic group of users who have active accounts in a critical application, or restrict policy conditions to users whose app account is enabled.
+
+**Business problem:** Users with disabled or deleted accounts in an app should not receive access or be included in certain groups.
+
+**Expected outcome:** Only users with enabled accounts in the target app are matched.
+
+**Condition expressions:**
+
+```go
+// Dynamic group: include users with an enabled account in a specific app
+c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED"
+
+// Policy condition: require an active app account before granting access
+c1.user.v1.HasEntitlement(subject, "app-id", "entitlement-id") &&
+c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED"
+
+// Exclude users with disabled accounts
+c1.user.v1.GetAppUserStatus(subject, "app-id") != "USER_STATUS_DISABLED"
+```
+
+<Info>
+`GetAppUserStatus` returns one of four string values: `"USER_STATUS_ENABLED"`, `"USER_STATUS_DISABLED"`, `"USER_STATUS_DELETED"`, or `"USER_STATUS_UNSPECIFIED"`. If the user has no account in the specified app, the function returns `"USER_STATUS_UNSPECIFIED"`.
+</Info>
+
 ### Time-based access control
 
 Time functions enable sophisticated date and time-based policies. These examples use time functions to implement common temporal access patterns.
