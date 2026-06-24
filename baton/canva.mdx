@@ -1,0 +1,79 @@
+---
+title: "Canva"
+description: "Sync users, groups, roles, and teams from Canva via SCIM v2 and the Canva Admin API. Provision accounts and group memberships."
+---
+
+# Canva
+
+Connector for [Canva](https://www.canva.com) tenants. Pulls identity, group,
+role, and team data via Canva's documented SCIM v2 endpoint and (optionally)
+the Canva Admin API.
+
+## Resources
+
+| Resource | Source | Capabilities |
+| --- | --- | --- |
+| `user` | SCIM v2 `/Users` | Sync, Account Provisioning (create), Resource Delete (PATCH `active=false`) |
+| `group` | SCIM v2 `/Groups` | Sync, Provisioning (grant/revoke membership via PATCH) |
+| `role` | Synthetic catalog (Admin, Member, Guest) derived from SCIM `role` | Sync |
+| `team` | Admin API `/teams` | Sync (requires Admin API credentials) |
+
+## Connectivity
+
+- **SCIM v2** is the primary surface. Base URL: `https://www.canva.com/_scim/v2`.
+  Authenticated with a tenant-scoped bearer token generated in Canva admin
+  settings.
+- **Admin API** is optional. Base URL: `https://api.canva.com/admin/v1`.
+  Uses OAuth 2.0 client credentials. Required only for the `team` resource
+  type.
+
+## Required permissions
+
+- **SCIM Users:Read / Users:Write** — for user sync + account provisioning +
+  deactivation.
+- **SCIM Groups:Read / Groups:Write** — for group sync + membership
+  provisioning.
+- **Admin API Teams:Read** — for team sync (optional).
+
+## Identity field mapping
+
+| IGA field | Canva field |
+| --- | --- |
+| Person ID | SCIM `id` (optional `externalId`) |
+| First name | SCIM `name.givenName` |
+| Last name | SCIM `name.familyName` |
+| Work email | SCIM `emails[type=work].value` |
+| Active/Inactive | SCIM `active` (→ `STATUS_ENABLED`/`STATUS_DISABLED`) |
+| Role | SCIM `role` |
+| Created timestamp | SCIM `meta.created` |
+| Last modified timestamp | SCIM `meta.lastModified` (availability varies) |
+
+Fields **not** exposed by Canva (and therefore not synced): manager chain,
+department, division, cost center, title, employment type, hire date,
+termination date, custom enterprise extensions. Non-work email, locale, phone,
+address, government IDs, and compensation attributes are excluded by design.
+
+## Provisioning
+
+- `createAccount` POSTs a SCIM v2 user with `userName`, `name.givenName`,
+  `name.familyName`, and a work `emails[]` entry. `active` is set to `true`.
+- Group `grant`/`revoke` issue SCIM `PatchOp` with `op: add` / `op: remove`
+  against the group's `members` collection.
+- Deprovisioning (`resourceLifecycle.delete`) issues a SCIM `PatchOp` with
+  `op: replace, path: active, value: false` — the Canva-recommended soft
+  deactivation rather than a hard delete.
+
+## Pagination & rate limits
+
+- SCIM uses standard RFC 7644 `startIndex` + `count` offset pagination,
+  terminated by `totalResults`.
+- Admin API uses an opaque `continuation` token returned in the response.
+- The transport layer retries `rate_limited` and `transient` failures with
+  exponential backoff (5 retries, up to 60s).
+
+## Reserved config fields
+
+`scim-base-url`, `admin-base-url`, and `admin-token-url` are reserved in the
+config schema for future per-tenant overrides but are not currently consumed
+by the JS runtime — Canva's canonical URLs are baked in. Update the connector
+source to override these for development against a non-production endpoint.
