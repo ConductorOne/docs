@@ -22,7 +22,7 @@ Setup has two halves that must match each other:
 ## Before you begin
 
 - Your MCP server must be running and reachable from wherever you'll run `bridge-client`. Have its `host:port`, endpoint path (typically `/mcp`), and transport (`streamable-http` or `sse`) ready.
-- Download the `bridge-client` binary or container image from the C1 download center. Linux and macOS binaries and container images are available.
+- Download `bridge-client` from the [C1 download center](https://dist.conductorone.com/ConductorOne/bridge-client). Linux and macOS binaries and container images are available there.
 - **Creating a bridge** requires the **Connector Administrator** or **Super Administrator** role.
 - **Registering the MCP server** requires the **Editor** role on the destination app.
 
@@ -35,10 +35,10 @@ Creating a bridge issues the credentials that `bridge-client` uses to authentica
 In C1, go to **Settings** > **Bridges**.
 </Step>
 <Step>
-Click **Create bridge**. Give it a display name (for example, `my-laptop` or `prod-vpc-east`) and optionally a description.
+Give it a display name (for example, `my-laptop` or `prod-vpc-east`) and optionally a description, then click **Create bridge**. C1 navigates to the bridge's detail page.
 </Step>
 <Step>
-On the bridge detail page, find the **Credentials** card and click **Create credential**.
+On the bridge detail page, find the **Credentials** card and click **Rotate credential**.
 </Step>
 <Step>
 Copy the **Client ID** and **Client secret** from the dialog.
@@ -88,6 +88,11 @@ You can expose more than one local service by adding more entries under `ports:`
 
 ## Step 3 — Validate and run the bridge
 
+Run `bridge-client` inside the same network as your MCP server. Select your deployment method:
+
+<Tabs>
+<Tab title="Binary">
+
 Validate the config before running to catch typos before anything connects:
 
 ```bash
@@ -101,11 +106,99 @@ Then start the agent. It runs continuously and holds the tunnel open:
 bridge-client --config bridge.yaml
 ```
 
-After a few seconds, the bridge status changes to **Connected** in **Settings** > **Bridges**, and the service you configured appears on the bridge detail page.
+</Tab>
+<Tab title="Docker">
 
-<Note>
-For Docker or Kubernetes deployments, follow the Bridge connector setup guide — the config fields are the same, only the packaging differs.
-</Note>
+Validate the config:
+
+```sh
+docker run --rm \
+  -v /etc/c1/bridge.yaml:/etc/c1/bridge.yaml:ro \
+  --entrypoint /bridge-config-check \
+  public.ecr.aws/conductorone/bridge-client:<version> \
+  --config /etc/c1/bridge.yaml
+```
+
+Then run the agent:
+
+```sh
+docker run --rm \
+  -v /etc/c1/bridge.yaml:/etc/c1/bridge.yaml:ro \
+  public.ecr.aws/conductorone/bridge-client:<version> \
+  --config /etc/c1/bridge.yaml
+```
+
+</Tab>
+<Tab title="Kubernetes">
+
+Create a `Secret` to hold the config (use a `Secret`, not a `ConfigMap`, so the client secret stays encrypted at rest):
+
+```yaml
+# bridge-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bridge-config
+type: Opaque
+stringData:
+  bridge.yaml: |
+    version: 1
+    bridge:
+      client_id:     "<Client ID from Step 1>"
+      client_secret: "<Client secret from Step 1>"
+      ports:
+        - name: my-mcp
+          listen_port: 8080
+          backend: "127.0.0.1:8000"
+          service_type: MCP_NATIVE
+          service_path: /mcp
+          transport_type: streamable-http
+```
+
+Then create the Deployment:
+
+```yaml
+# bridge-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge-client
+  labels:
+    app: bridge-client
+spec:
+  selector:
+    matchLabels:
+      app: bridge-client
+  template:
+    metadata:
+      labels:
+        app: bridge-client
+    spec:
+      containers:
+      - name: bridge-client
+        image: public.ecr.aws/conductorone/bridge-client:<version>
+        args: ["--config", "/etc/c1/bridge.yaml"]
+        volumeMounts:
+        - name: bridge-config
+          mountPath: /etc/c1
+          readOnly: true
+      volumes:
+      - name: bridge-config
+        secret:
+          secretName: bridge-config
+```
+
+Apply both:
+
+```sh
+kubectl apply -f bridge-secret.yaml
+kubectl apply -f bridge-deployment.yaml
+```
+
+</Tab>
+</Tabs>
+
+After a few seconds, the bridge status changes to **Connected** in **Settings** > **Bridges**, and the service you configured appears on the bridge detail page.
 
 ## Step 4 — Register the MCP server in C1
 
@@ -154,12 +247,9 @@ Setting a tool's state to **Enabled** makes it callable only by users who hold a
 - In **Settings** > **Bridges**, the bridge shows **Connected**, with your service listed.
 - On the server's **Tools** tab in C1, the tools appear, and an enabled tool returns a result on a test call.
 
-If something looks off, check the `bridge-client` logs:
+If something looks off, check the `bridge-client` logs. For a binary deployment, logs go to stdout/stderr. For Kubernetes:
 
-```bash
-# binary — logs go to stdout/stderr
-
-# Kubernetes
+```sh
 kubectl logs -l app=bridge-client -f
 ```
 
@@ -187,5 +277,5 @@ Check `service_path` and `transport_type` in `bridge.yaml`. The `service_path` m
 
 From the bridge detail page (**Settings** > **Bridges** > your bridge > **Credentials**):
 
-- **Rotate** — issues a new client ID and secret. The old credential stays valid until you explicitly revoke it. Update `bridge.yaml` with the new credentials, restart `bridge-client`, then revoke the old credential.
-- **Revoke** — invalidates the credential immediately and disconnects any running agent that uses it.
+- **Rotate credential** — issues a new client ID and secret. The old credential stays valid until you explicitly revoke it. Update `bridge.yaml` with the new credentials, restart `bridge-client`, then revoke the old credential.
+- **Revoke credential** — invalidates the credential immediately and disconnects any running agent that uses it.
