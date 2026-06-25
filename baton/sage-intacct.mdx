@@ -1,0 +1,57 @@
+---
+title: "Set up a Sage Intacct connector"
+og:title: "Set up a Sage Intacct connector"
+description: "C1 provides identity governance for Sage Intacct. Integrate your Sage Intacct instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance for Sage Intacct. Integrate your Sage Intacct instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Sage Intacct"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+**Notes:**
+
+- All sync and provisioning goes through the classic XML gateway (`api.intacct.com/ia/xml/xmlgw.phtml`).
+- User provisioning creates users in Sage Intacct. Sage sends a password-reset email on creation; no password is set via the connector. User accounts are persistent and cannot be deleted once they have any history; use the `disable_user` action to deactivate an account.
+- Role provisioning grants and revokes role assignments.
+- User-group membership is sync-only. Sage Intacct does not expose a write path for user-group memberships. Grant role-based access instead.
+
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| disable_user | `user_id` (string, required) | Sets STATUS=inactive on the user. The user can no longer sign in; the record stays for audit. |
+| enable_user | `user_id` (string, required) | Sets STATUS=active on the user, restoring sign-in. |
+
+## Overview
+
+`baton-sage-intacct` connects to Sage Intacct over the classic XML Web Services gateway. Users, user groups, roles, role assignments, and user-group memberships are all sourced from XML objects (`USERINFO`, `USERGROUP`, `ROLES`, `USERROLES`, `MEMBERUSERGROUP`). The connector uses a sender/login envelope with cached session tokens.
+
+## Credentials
+
+| Field | Description |
+|---|---|
+| `sage-intacct-company-id` | Sage Intacct company ID. |
+| `sage-intacct-sender-id` | Partner sender ID for the XML gateway (authorized under Company > Setup > Company > Security > Web Services authorizations). |
+| `sage-intacct-sender-password` | Password matching the sender ID. |
+| `sage-intacct-user-id` | Sage user ID for the `<login>` block. Needs read access to all company objects and read/write access to `MEMBERUSERGROUP` for provisioning. |
+| `sage-intacct-password` | Password for `sage-intacct-user-id`. |
+
+All five fields are required together.
+
+## Permissions
+
+The XML user (`sage-intacct-user-id`) needs at minimum:
+
+- Read access to `USERINFO`, `USERGROUP`, `ROLES`, `USERROLES`, `MEMBERUSERGROUP`.
+- Read/write access to `USERROLES` for Grant/Revoke on `role:assigned`.
+- Read/write access to `USERINFO` for account creation and deactivation.
+
+Assign via Company > Admin > Roles in the Sage Intacct UI.
