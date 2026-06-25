@@ -55,18 +55,20 @@ C1 offers two Workday connectors: Workday and Workday Accounts (WQL). How you wa
 Configuring the connector requires you to pass in credentials generated in Workday. Gather these credentials before you move on. 
 
 <Tip>
-To authenticate with Workday, you can use either a Report-as-a-service (RaaS) **custom report** in CSV or JSON format or an **API client**. 
+To authenticate with Workday, you can use a Report-as-a-service (RaaS) **custom report** in CSV or JSON format (with either Basic Auth or API Client), or directly an **API Client** with OAuth.
 
 **Which authentication method should I use?** 
 
-The **RaaS custom report option** is the more popular option, and is often preferred by Workday Admins and HR teams, as it’s Workday’s preferred integration method. RaaS allows you fine-grained control over what data is sent to C1. Additionally, it allows you to transform the format of Workday attributes as needed before sending them to C1.
+The **Custom Report with Basic Auth** option is the most popular and is often preferred by Workday Admins and HR teams. RaaS allows fine-grained control over what data is sent to C1 and lets you transform attribute formats as needed.
 
-The **API client option** pulls available data about Workday accounts, such as each account's manager and manager email, which can be used as [user attributes](/product/admin/attributes). The custom report method only pulls data that is explicitly named in the report into C1.
+The **Custom Report with API Client** option is a good choice when your security policies require OAuth-based authentication, while still providing the same fine-grained data control as Basic Auth reports. The refresh token for this option must be generated using the credentials of the Workday user who owns the report.
+
+The **API Client** option pulls available data about Workday accounts, such as each account’s manager and manager email, which can be used as [user attributes](/product/admin/attributes). It does not require a custom report.
 
 Follow the relevant set of instructions below to generate your credentials.
 </Tip>
 
-### Option 1: Authenticate using a custom report 
+### Option 1: Authenticate using a custom report with Basic Auth 
 
 <Warning>
 A user with the permission to create a custom report in Workday must perform this task.
@@ -148,7 +150,73 @@ Right-click on the **JSON** or **CSV** (as relevant) URL, then carefully copy an
 </Steps>
 **Done.** Next, move on to the connector configuration instructions.
 
-### Option 2: Authenticate using API client credentials
+### Option 2: Authenticate using a Custom Report with API Client
+
+This option combines a RaaS Custom Report with OAuth authentication. Follow the **Set up the custom report** steps from Option 1 above to create the report and obtain its URL, then set up an API client as described below.
+
+<Warning>
+The refresh token for this option **must be generated using the credentials of the Workday user who owns the custom report**. Tokens generated for a different user will result in authorization errors when the connector attempts to fetch the report.
+</Warning>
+
+<Note>
+Unlike Option 3, this option does **not** require creating an Integration System User (ISU) or an Integration System Security Group (ISSG). The API client is tied directly to the report owner's credentials via the refresh token.
+</Note>
+
+#### Create Workday API Client Credentials for Custom Report
+
+<Warning>
+A user with the permission to create a new API client in Workday must perform this task.
+</Warning>
+
+#### Create a New Workday API Client
+
+<Steps>
+<Step>
+In Workday, use the search bar to look up "Register API Client for Integrations". Make sure to select this name from the results, not the similarly named "Register API Client".
+</Step>
+<Step>
+Give the new API client a name, such as "C1 integration (report OAuth)".
+</Step>
+<Step>
+In the **Scopes** box, select **Tenant Non-Configurable**. Also search for "Staffing" and select **Staffing** and **Organizations and Roles**, then click **OK**.
+
+<Warning>
+The **Tenant Non-Configurable** scope is required for custom report OAuth authentication. Without it, OAuth token requests will be rejected.
+</Warning>
+</Step>
+<Step>
+The newly created client's client ID and client secret are shown. Carefully copy and save these credentials.
+
+    **Do not** click **Done** at the bottom of the page yet.
+</Step>
+</Steps>
+
+#### Create a Refresh Token
+
+<Steps>
+<Step>
+Click the three dots icon next to the client name and navigate to **API Client** > **Manage Refresh Tokens for Integrations**.
+</Step>
+<Step>
+Select the **Workday user who owns the custom report** (not the ISU) and click **OK**.
+
+<Warning>
+This step is critical. The refresh token must be associated with the user who created and owns the custom report, not the ISU. Using the wrong user will result in authorization errors when fetching the report.
+</Warning>
+</Step>
+<Step>
+On the **Delete or Regenerate Refresh Token** page, scroll down and check the **Generate New Refresh Token** box.
+</Step>
+<Step>
+Click **OK**.
+</Step>
+<Step>
+Carefully copy and save the new refresh token.
+</Step>
+</Steps>
+**Done.** Next, move on to the connector configuration instructions.
+
+### Option 3: Authenticate using API client credentials (OAuth)
 
 ### Create Workday API Client Credentials
 
@@ -283,7 +351,7 @@ Give the new API client a name, such as "C1 integration".
 In the **Integration System User** field, select the ISU you created earlier. This is crucial for associating the API client with the correct permissions.
 </Step>
 <Step>
-In the **Scopes** box, select **Custom Objects** and search for "Staffing". Select **Staffing** and **Organizations and Roles** and click **OK**.
+In the **Scopes** box, search for "Staffing". Select **Staffing** and **Organizations and Roles** and click **OK**.
 </Step>
 <Step>
 The newly created client's client ID and client secret are shown. Carefully copy and save these credentials.
@@ -355,7 +423,7 @@ Click **Next**.
 Find the **Settings** area of the page and click **Edit**.
 </Step>
 <Step>
-If using a custom report to authenticate, select **Custom report** and fill out the form:
+If using a custom report with Basic Auth (Option 1), select **Custom Report with Basic Auth** and fill out the form:
 
    1. Enter the **Report URL**, **Report username**, and **Report user password** in the relevant fields.
 
@@ -364,7 +432,18 @@ If using a custom report to authenticate, select **Custom report** and fill out 
       Fields that return multiple values (such as `roles` or `security_groups`) are not supported.
 </Step>
 <Step>
-If using an API client to authenticate, select **API client** and fill out the form:
+If using a custom report with OAuth (Option 2), select **Custom Report with API Client** and fill out the form:
+
+   1. Enter the **Report URL** in the relevant field.
+
+   2. Enter the **Client ID**, **Client secret**, **Refresh token**, and **Tenant Name** from the API client you registered for this report.
+
+   3. **Optional.** Enter any additional field names from the Workday JSON report in the **Additional report fields** field. Press **Enter** between each field name.
+
+      Fields that return multiple values (such as `roles` or `security_groups`) are not supported.
+</Step>
+<Step>
+If using an API client (Option 3), select **API Client** and fill out the form:
 
    1. Enter the **Client ID**, **Client secret**, and **Refresh token** in the relevant fields.
 
@@ -444,14 +523,23 @@ stringData:
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
 
-  # Workday credentials if using a custom report to authenticate
+  # Option 1: Custom report with Basic Auth
   BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: true
   BATON_WORKDAY_REPORT_URL: <Workday custom report URL>
   BATON_WORKDAY_REPORT_USERNAME: <Workday username of the user who created the report>
   BATON_WORKDAY_REPORT_PASSWORD: <Workday password of the user who created the report>
   BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday JSON report to include in user profiles>
 
-  # Workday credentials if using an API client to authenticate
+  # Option 2: Custom report with OAuth (refresh token must belong to the report owner)
+  BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: true
+  BATON_WORKDAY_REPORT_URL: <Workday custom report URL>
+  BATON_WORKDAY_CLIENT_ID: <Workday API client ID>
+  BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret>
+  BATON_WORKDAY_REFRESH_TOKEN: <Refresh token generated for the report owner>
+  BATON_TENANT_NAME: <Workday tenant name>
+  BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday JSON report to include in user profiles>
+
+  # Option 3: API client with OAuth
   BATON_WORKDAY_CLIENT_ID: <Workday API client ID>
   BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret>
   BATON_WORKDAY_REFRESH_TOKEN: <Workday API client refresh token>
@@ -523,4 +611,3 @@ Make sure that **Worker Data: Public Worker Reports** is shown in the **Domain S
 </Steps>
 </Tab>
 </Tabs>
-
