@@ -38,7 +38,7 @@ In C1, go to **Settings** > **Bridges**.
 Give it a display name (for example, `my-laptop` or `prod-vpc-east`) and optionally a description, then click **Create bridge**. C1 navigates to the bridge's detail page.
 </Step>
 <Step>
-On the bridge detail page, find the **Credentials** card and click **Rotate credential**.
+On the bridge detail page, find the **Credentials** card and click **Create credential**. (On a bridge that already has an active credential, this button is labeled **Rotate credential** instead.)
 </Step>
 <Step>
 Copy the **Client ID** and **Client secret** from the dialog.
@@ -78,7 +78,7 @@ bridge:
 | `name` | Recommended | Service name shown in C1. You select this name when registering the MCP server. Must be unique within the config. |
 | `service_type` | No | `MCP_NATIVE` (native MCP server), `HOSTED` (hosted HTTP MCP), or `RAW` (opaque TCP). |
 | `service_path` | No | The MCP endpoint path, for example `/mcp`. |
-| `transport_type` | No | `streamable-http` or `sse`. |
+| `transport_type` | No | `streamable-http` or `sse` for an MCP server, or `http` for a hosted HTTP service. |
 
 <Note>
 The `service_path` and `transport_type` you set here are what C1 uses when routing tool calls. The registration wizard in Step 4 doesn't let you override them, so set them correctly now.
@@ -86,21 +86,50 @@ The `service_path` and `transport_type` you set here are what C1 uses when routi
 
 You can expose more than one local service by adding more entries under `ports:`.
 
-## Step 3 — Validate and run the bridge
+### Other ways to supply config
+
+The YAML literals above aren't the only option. Both are covered in full in the [bridge setup guide](https://dist.conductorone.com/ConductorOne/bridge-client):
+
+- **Environment variables.** Instead of a config file, set `C1_BRIDGE_CLIENT_ID`, `C1_BRIDGE_CLIENT_SECRET`, and a single service via `C1_BRIDGE_SERVICE_LISTEN_PORT` and `C1_BRIDGE_SERVICE_BACKEND` (plus optional `C1_BRIDGE_SERVICE_NAME`, `_TYPE`, `_PATH`, and `_TRANSPORT_TYPE`).
+- **HashiCorp Vault.** Keep non-secret fields in YAML and pull sensitive ones (such as `client_secret`) from a HashiCorp Vault backend, so no secret ever lives in the config file.
+
+#### Resolve secrets from HashiCorp Vault
+
+Add a top-level `secret_backend:` block selecting Vault, and a top-level `secrets:` map that points each sensitive field at a `"<secret-id>:<key>"` locator. At startup `bridge-client` fetches each value and writes it into the matching `bridge:` field before connecting, so a field resolved from Vault doesn't need a literal in the YAML.
+
+```yaml
+version: 1
+bridge:
+  client_id: "<Client ID from Step 1>"
+  # client_secret omitted — resolved from Vault (see secrets: below)
+  ports:
+    - name: my-mcp
+      listen_port: 8080
+      backend: "127.0.0.1:8000"
+      service_type: MCP_NATIVE
+      service_path: /mcp
+      transport_type: streamable-http
+
+secret_backend:
+  type: vault
+  vault:
+    url:   "https://vault.example.com"   # or set VAULT_ADDR in the environment
+    mount: "kv"                          # the KV secrets-engine mount path
+    kvapi: 2                             # KV engine version: 1 or 2
+    token: "hvs.XXXX"                    # or set VAULT_TOKEN in the environment
+
+secrets:
+  client_secret: "bridge-creds:client_secret"
+```
+
+## Step 3 — Run the bridge
 
 Run `bridge-client` inside the same network as your MCP server. Select your deployment method:
 
 <Tabs>
 <Tab title="Binary">
 
-Validate the config before running to catch typos before anything connects:
-
-```bash
-bridge-config-check --config bridge.yaml
-# prints: ok
-```
-
-Then start the agent. It runs continuously and holds the tunnel open:
+Start the agent. It runs continuously and holds the tunnel open:
 
 ```bash
 bridge-client --config bridge.yaml
@@ -109,17 +138,7 @@ bridge-client --config bridge.yaml
 </Tab>
 <Tab title="Docker">
 
-Validate the config:
-
-```sh
-docker run --rm \
-  -v /etc/c1/bridge.yaml:/etc/c1/bridge.yaml:ro \
-  --entrypoint /bridge-config-check \
-  public.ecr.aws/conductorone/bridge-client:<version> \
-  --config /etc/c1/bridge.yaml
-```
-
-Then run the agent:
+Run the agent:
 
 ```sh
 docker run --rm \
@@ -214,21 +233,29 @@ If you're starting from the tenant-wide MCP servers page (**Integrations** > **M
 Under **Choose a server**, select **External MCP server** — "Connect to an external MCP server by URL."
 </Step>
 <Step>
-Under **Connectivity**, select **Private bridge** — "Route through a ConductorOne Bridge running in your network." Then set:
+Under **Connectivity**, select **Private bridge** — "Route through a C1 Bridge running in your network." Then set:
 
 - **Bridge** — the bridge you created in Step 1.
 - **Service** — the service your bridge advertised, which is the `name` field from `bridge.yaml` (`my-mcp` in the example).
 </Step>
 <Step>
-Under **Configure**, enter a display name for the server. The **Server URL** field is read-only — it's resolved automatically from the bridge service you selected. Click **Add server**.
+Under **Configure**, enter a display name for the server. The **Server URL** field is read-only — it's resolved automatically from the bridge service you selected.
+
+In the **Authentication** section, pick the **Authentication method** C1 uses to reach your server — **Bearer token**, **Custom header**, **Basic auth**, or **OAuth2** — and enter the credentials it requires. Then click **Add server**.
 </Step>
 </Steps>
 
 C1 connects to your server over the bridge and begins tool discovery.
 
+<Note>
+A user can only call a tool once they're an **app user** of the app the server is registered under. New external apps start with no app users. When you register from an existing app that has none, the wizard inserts a **Link users** step to populate them by linking an entitlement from another app. When you start from the tenant-wide MCP servers page instead, you get the **Choose app** step (not **Link users**) — populate app users afterward from the app's settings. See [Calling the tools from an AI client](#calling-the-tools-from-an-ai-client) for the full set of ways to do this.
+</Note>
+
 ## Step 5 — Review discovered tools
 
 After you click **Add server**, C1 connects to your MCP server over the bridge and pulls its tool list. The wizard's final step shows these discovered tools.
+
+C1 records each tool's name, description, and input schema exactly as your MCP server advertises them, and surfaces that text to AI clients during discovery. The agent relies on it to decide which tool fits a request — so clear, accurate tool descriptions and schemas on your server directly affect how reliably the right tool gets found and called.
 
 Each tool:
 
@@ -245,7 +272,8 @@ Setting a tool's state to **Enabled** makes it callable only by users who hold a
 ## Step 6 — Verify the connection
 
 - In **Settings** > **Bridges**, the bridge shows **Connected**, with your service listed.
-- On the server's **Tools** tab in C1, the tools appear, and an enabled tool returns a result on a test call.
+- On the server's **Tools** tab in C1, the discovered tools appear.
+- On the server's **Details** tab, **Test credentials** succeeds and reports the number of tools discovered over the bridge.
 
 If something looks off, check the `bridge-client` logs. For a binary deployment, logs go to stdout/stderr. For Kubernetes:
 
@@ -256,6 +284,12 @@ kubectl logs -l app=bridge-client -f
 ## Calling the tools from an AI client
 
 Once the bridge is running and tools are approved, your users reach them from their AI clients (Claude Code, Claude Desktop, Cursor, VS Code) through C1's MCP gateway — not through the bridge directly. C1 authenticates the user, enforces tool governance, and routes each call through the bridge to your local server.
+
+By default, these clients use **code mode**: instead of listing each tool as its own named tool, C1 exposes discovery and execution entrypoints (`describe` and `execute`), and the agent finds the tools it needs and invokes them by writing short code. Your bridged tools won't appear one by one in the client's tool list — that's expected, not a discovery failure. Governance is unchanged: every underlying call still passes the same per-tool enablement and grant checks. Code mode is a tenant-level AI governance setting (on by default); with it off — or for **Service** and **Ephemeral** client types — C1 instead exposes each enabled tool as a directly named tool.
+
+<Note>
+A call only executes when the requesting user is an **app user** of the server's app and holds a grant for the tool. If the caller isn't yet an app user, the call opens an access request instead of running. App users come from the destination app's account sources. Populate them by linking an entitlement from another app (the **Link users** step during registration, or linked entitlements later in the app's settings), by importing a CSV of app users, or — if the app is backed by a connector — by syncing them from the connector.
+</Note>
 
 For end-user setup instructions, see [Connect your MCP client to C1](/product/how-to/connect-mcp-client).
 
