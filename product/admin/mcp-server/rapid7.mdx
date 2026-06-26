@@ -1,0 +1,93 @@
+---
+title: Set up the Rapid7 MCP server
+description: Create a Rapid7 InsightVM API account, then register the Rapid7 MCP server in C1 and govern the tools your AI clients can call.
+og:title: Set up the Rapid7 MCP server
+og:description: Create a Rapid7 InsightVM API account, then register the Rapid7 MCP server in C1 and govern the tools your AI clients can call.
+sidebarTitle: Rapid7
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Rapid7 MCP server lets you govern access to Rapid7 InsightVM — assets, vulnerabilities, scans, sites, and reports exposed by the InsightVM Security Console API — as tools your AI clients can call through C1.
+
+Rapid7 InsightVM authenticates with a console username and password using HTTP basic auth. A single account authenticates every user, so all tool calls reach InsightVM as one shared identity.
+
+## How C1 connects to Rapid7
+
+C1 hosts the Rapid7 MCP server, so your users' AI clients only ever see MCP tools — they never call Rapid7 directly. When an AI client calls one of these tools, C1 makes the matching request to the Rapid7 InsightVM API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Rapid7 on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- An InsightVM Security Console account with the permissions needed to read the assets and vulnerability data you want to govern, and network access to the console's API port (3780 by default).
+
+<Note>
+If you don't see **Rapid7** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a Rapid7 InsightVM API account
+
+The InsightVM API uses Security Console credentials. Create a dedicated console user for C1 so the credential is recognizable and easy to rotate. For more information, see Rapid7's [Managing users and authentication](https://docs.rapid7.com/insightvm/managing-users-and-authentication/) documentation.
+
+<Steps>
+<Step>
+In the InsightVM Security Console, go to **Administration** > **Users** and create a new user with a recognizable name such as `C1`.
+
+</Step>
+<Step>
+Grant the user only the roles and asset-group access needed to read the data you want to govern, such as read access to sites, assets, and vulnerabilities.
+</Step>
+<Step>
+Note the user's **username** and **password**, and confirm the console **host** and **API port** (3780 by default) that C1 will connect to.
+</Step>
+</Steps>
+
+For a shared production setup, use a dedicated service account so activity is attributable to C1 rather than a person.
+
+## How Rapid7 credentials are shared
+
+The console account authenticates every user as one shared InsightVM identity, so InsightVM sees a single identity for all tool calls. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, create the credential from a dedicated service account so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Rapid7 MCP server in C1
+
+With your console account ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Rapid7** from the catalog.
+</Step>
+<Step>
+Enter your InsightVM Security Console **host** (such as `nexpose.example.com`) and **port** (such as `3780`).
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Basic auth** and enter the console **username** and **password**.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Rapid7 server exposes.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Rapid7. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **Settings** > **AI Connections**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Rapid7 tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Rapid7 credentials when an approved user successfully calls a Rapid7 tool from their AI client.
+</Note>
+
+## Manage your Rapid7 credentials
+
+- **Rotate the password** on the InsightVM console user, then update the password on the server's authentication settings in C1.
+- **Adjust access** by editing the roles and asset-group access granted to the console user in InsightVM.

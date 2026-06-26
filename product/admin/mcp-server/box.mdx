@@ -1,0 +1,114 @@
+---
+title: Set up the Box MCP server
+description: Connect Box to C1 with per-user OAuth or a shared OAuth2 service app, then register the Box MCP server and govern its tools.
+og:title: Set up the Box MCP server
+og:description: Connect Box to C1 with per-user OAuth or a shared OAuth2 service app, then register the Box MCP server and govern its tools.
+sidebarTitle: Box
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Box MCP server lets you govern access to Box — files, folders, users, groups, and other content data — as tools your AI clients can call through C1.
+
+Box authenticates with OAuth. You create a Box app, then choose how users connect when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Box account, so every tool call runs under that user's Box identity and permissions.
+- **OAuth2 service mode**. A single shared app authenticates everyone, so all tool calls reach Box as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Box
+
+C1 hosts the Box MCP server, so your users' AI clients only ever see MCP tools — they never call Box directly. When an AI client calls one of these tools, C1 makes the matching request to the Box API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Box on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Box account with permission to create and manage apps in the Box Developer Console, which typically requires an admin role.
+
+<Note>
+If you don't see **Box** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a Box app
+
+Create a Box app in the Developer Console to hold the OAuth credentials C1 uses, whichever connection method you choose below.
+
+<Steps>
+<Step>
+In the Box Developer Console, create a new custom app that uses standard OAuth 2.0 (user authentication). See Box's [Setup with OAuth 2.0](https://developer.box.com/guides/authentication/oauth2/oauth2-setup/) docs for the exact steps.
+</Step>
+<Step>
+Give the app a recognizable name such as `C1`.
+</Step>
+<Step>
+In the app's configuration, set the **redirect URI** exactly to `https://accounts.conductor.one/auth/callback`.
+</Step>
+<Step>
+Grant only the scopes you need, such as read access to the content you plan to govern. Copy the **client ID** and **client secret**.
+</Step>
+</Steps>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one Box app and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Box.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Box** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your app's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Box tool from their AI client, they're prompted to connect their Box account.
+</Step>
+</Steps>
+
+## Option 2: Use a shared OAuth2 service app
+
+A shared OAuth2 service app authenticates every user as one Box identity. Use this when per-user attribution in Box isn't required.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Box** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — service mode** and enter your app's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Box server exposes.
+</Step>
+</Steps>
+
+## How Box credentials are shared
+
+How Box sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Box account, so tool calls run under that user's Box identity and inherit only the access they already have. Box attributes each action to the individual user.
+- **OAuth2 service mode.** Every user's tool calls use the one shared app you provided, so Box sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Box. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **Settings** > **AI Connections**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Box tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Box credentials when an approved user successfully calls a Box tool from their AI client.
+</Note>
+
+## Manage your Box credentials
+
+- **Rotate the client secret** in your Box app in the Developer Console, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by editing the app's scopes in Box.
