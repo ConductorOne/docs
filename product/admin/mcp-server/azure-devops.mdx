@@ -1,0 +1,149 @@
+---
+title: Set up the Azure DevOps MCP server
+description: Connect Azure DevOps to C1 with a personal access token or a Microsoft Entra token, then register the MCP server and govern its tools.
+og:title: Set up the Azure DevOps MCP server
+og:description: Connect Azure DevOps to C1 with a personal access token or a Microsoft Entra token, then register the MCP server and govern its tools.
+sidebarTitle: Azure DevOps
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Azure DevOps MCP server lets you govern access to Azure DevOps — projects, Git repositories, pull requests, builds, pipelines, teams, and work item queries — as tools your AI clients can call through C1.
+
+Azure DevOps is organization-scoped: every API call is rooted at your organization URL. You provide your organization slug — the segment after `https://dev.azure.com/` in your organization URL (for example, `https://dev.azure.com/acme` becomes `acme`) — when you register the server.
+
+Azure DevOps supports two ways to authenticate, and you choose one when you register the server:
+
+- **Personal access token**. A single token authenticates everyone, so all tool calls reach Azure DevOps as one shared identity.
+- **Microsoft Entra token**. A Microsoft Entra access token issued for the Azure DevOps resource authenticates everyone as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Azure DevOps
+
+C1 hosts the Azure DevOps MCP server, so your users' AI clients only ever see MCP tools — they never call Azure DevOps directly. When an AI client calls one of these tools, C1 makes the matching request to the Azure DevOps API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Azure DevOps on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- Your Azure DevOps **organization slug**.
+- For a personal access token, an Azure DevOps account with access to the organization you want to govern.
+- For a Microsoft Entra token, permission to [register an application in Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) and obtain a token for the Azure DevOps resource.
+
+<Note>
+If you don't see **Azure DevOps** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Option 1: Use a personal access token
+
+A personal access token authenticates every user as one shared Azure DevOps identity. Use this when per-user attribution in Azure DevOps isn't required.
+
+### Create a personal access token
+
+For full details, see Microsoft's [Use personal access tokens](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops) documentation.
+
+<Steps>
+<Step>
+Sign in to your Azure DevOps organization at `https://dev.azure.com/{your-organization}`.
+</Step>
+<Step>
+Open **User settings** > **Personal access tokens**, then select **New Token**.
+</Step>
+<Step>
+Give the token a recognizable name such as `C1`, select the **organization** it applies to, and set an **expiration**.
+</Step>
+<Step>
+Under **Scopes**, grant only the read scopes you need for the operations you plan to govern, such as read access to Code, Build, and Work Items.
+</Step>
+<Step>
+Select **Create** and copy the token. Azure DevOps shows the token only once.
+</Step>
+</Steps>
+
+For a shared production setup, create the token from a dedicated service account so activity is attributable to C1 rather than a person.
+
+### Register the server with a token
+
+With your personal access token ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Azure DevOps** from the catalog.
+</Step>
+<Step>
+Enter your **organization** slug when prompted.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Basic auth**. Azure DevOps personal access tokens use basic authentication: enter any value for the username and paste your personal access token as the password.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Azure DevOps server exposes.
+</Step>
+</Steps>
+
+## Option 2: Use a Microsoft Entra token
+
+A Microsoft Entra access token authenticates every user as one shared identity. Use this when your organization standardizes on Microsoft Entra ID for access to Azure DevOps.
+
+### Obtain a Microsoft Entra token
+
+<Steps>
+<Step>
+[Register an application in Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app), or use an existing one.
+</Step>
+<Step>
+Grant the application access to the Azure DevOps resource (`499b84ac-1321-427f-aa17-267ca6975798`) and obtain an access token issued for that resource.
+</Step>
+<Step>
+Copy the access token. Treat it as a high-value credential. Microsoft Entra access tokens are short-lived.
+</Step>
+</Steps>
+
+### Register the server with a Microsoft Entra token
+
+With your Microsoft Entra access token ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Azure DevOps** from the catalog.
+</Step>
+<Step>
+Enter your **organization** slug when prompted.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your Microsoft Entra access token.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Azure DevOps server exposes.
+</Step>
+</Steps>
+
+## How Azure DevOps credentials are shared
+
+Both authentication methods are shared: every user's tool calls use the one credential you provided, so Azure DevOps sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, use a dedicated service account so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Azure DevOps. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **Settings** > **AI Connections**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call an Azure DevOps tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Azure DevOps credentials when an approved user successfully calls an Azure DevOps tool from their AI client.
+</Note>
+
+## Manage your Azure DevOps credentials
+
+- **Rotate a personal access token** by creating a new token in Azure DevOps under **User settings** > **Personal access tokens** and updating it in C1, then revoking the old token. Set an expiration so it rotates on a schedule.
+- **Refresh a Microsoft Entra token** before it expires by obtaining a new access token for the Azure DevOps resource and updating it in C1.
+- **Adjust access** by editing the token's scopes in Azure DevOps or the application's permissions in Microsoft Entra ID.
