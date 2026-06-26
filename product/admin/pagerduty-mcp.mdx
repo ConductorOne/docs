@@ -1,0 +1,146 @@
+---
+title: Set up the PagerDuty MCP server
+description: Connect PagerDuty to C1 with per-user OAuth or a REST API key, then register the PagerDuty MCP server and govern its tools.
+og:title: Set up the PagerDuty MCP server
+og:description: Connect PagerDuty to C1 with per-user OAuth or a REST API key, then register the PagerDuty MCP server and govern its tools.
+sidebarTitle: PagerDuty
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The PagerDuty MCP server lets you govern access to PagerDuty — incidents, services, schedules, escalation policies, and users exposed by the PagerDuty REST API — as tools your AI clients can call through C1.
+
+PagerDuty supports two ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own PagerDuty account, so every tool call runs under that user's PagerDuty identity and permissions.
+- **REST API key**. A single key authenticates everyone, so all tool calls reach PagerDuty as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to PagerDuty
+
+C1 hosts the PagerDuty MCP server, so your users' AI clients only ever see MCP tools — they never call PagerDuty directly. When an AI client calls one of these tools, C1 makes the matching request to the PagerDuty API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call PagerDuty on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- For per-user OAuth, you need permission to register an OAuth app in PagerDuty.
+- For a REST API key, you need a PagerDuty account that can create a REST API key, and the email address of a valid PagerDuty user to record as the actor on write operations.
+
+<Note>
+If you don't see **PagerDuty** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one PagerDuty OAuth app and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in PagerDuty.
+
+### Create a PagerDuty OAuth app
+
+Register an OAuth app in PagerDuty so each user can authorize C1 with their own account.
+
+<Steps>
+<Step>
+In PagerDuty, go to **Integrations** > **Developer Tools** > **App Registration** and create a new app. For the full procedure, see PagerDuty's [OAuth Functionality](https://developer.pagerduty.com/docs/f59fdbd94ceab-o-auth-functionality) developer documentation.
+</Step>
+<Step>
+Add an **OAuth 2.0** functionality to the app and choose the authorization code grant.
+
+</Step>
+<Step>
+Set the **Redirect URL** exactly to `https://accounts.conductor.one/auth/callback`, then choose the scopes the server needs, such as read access to incidents, services, and users.
+</Step>
+<Step>
+Save the app, then copy the **Client ID** and **Client Secret**. PagerDuty shows the secret only once.
+</Step>
+</Steps>
+
+### Register the server with OAuth
+
+With your OAuth app ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **PagerDuty** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth app's **client ID**, **client secret**, and the **scopes** you granted.
+</Step>
+<Step>
+Save your changes. The first time a user calls a PagerDuty tool from their AI client, they're prompted to connect their PagerDuty account.
+</Step>
+</Steps>
+
+## Option 2: Use a REST API key
+
+A REST API key authenticates every user as one shared PagerDuty identity. Use this when per-user attribution in PagerDuty isn't required.
+
+### Create a REST API key
+
+Create a REST API key in PagerDuty for C1 to authenticate with as a single shared identity.
+
+<Steps>
+<Step>
+In PagerDuty, go to **Integrations** > **API Access Keys** and select **Create New API Key**. For details, see PagerDuty's [API Access Keys](https://support.pagerduty.com/main/docs/api-access-keys) documentation.
+</Step>
+<Step>
+Give the key a recognizable description such as `C1`. For least privilege, create a **read-only** key unless the tools you plan to approve need write access.
+</Step>
+<Step>
+Select **Create Key** and copy the key. PagerDuty shows the key only once.
+</Step>
+</Steps>
+
+For a shared production setup, create the key from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+### Register the server with a REST API key
+
+With your REST API key ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **PagerDuty** from the catalog.
+</Step>
+<Step>
+Enter the **actor email** — the email of a valid PagerDuty user to record as the actor on write operations such as acknowledging or resolving incidents.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your REST API key.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the PagerDuty server exposes.
+</Step>
+</Steps>
+
+## How PagerDuty credentials are shared
+
+How PagerDuty sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own PagerDuty account, so tool calls run under that user's PagerDuty identity and inherit only the access they already have. PagerDuty attributes each action to the individual user.
+- **REST API key.** Every user's tool calls use the one key you provided, so PagerDuty sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against PagerDuty. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **Settings** > **AI Connections**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a PagerDuty tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your PagerDuty credentials when an approved user successfully calls a PagerDuty tool from their AI client.
+</Note>
+
+## Manage your PagerDuty credentials
+
+- **Rotate the OAuth client secret** in your PagerDuty app under **Integrations** > **Developer Tools** > **App Registration**, then update the secret on the server's authentication settings in C1.
+- **Rotate a REST API key** by creating a new key in PagerDuty and updating it in C1, then delete the old key.
+- **Adjust access** by editing the OAuth app's scopes or by choosing a read-only versus full-access REST API key in PagerDuty.
