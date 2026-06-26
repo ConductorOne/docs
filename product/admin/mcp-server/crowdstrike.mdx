@@ -1,0 +1,99 @@
+---
+title: Set up the CrowdStrike MCP server
+description: Create a CrowdStrike Falcon API client, then register the CrowdStrike MCP server in C1 and govern the tools your AI clients can call.
+og:title: Set up the CrowdStrike MCP server
+og:description: Create a CrowdStrike Falcon API client, then register the CrowdStrike MCP server in C1 and govern the tools your AI clients can call.
+sidebarTitle: CrowdStrike
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The CrowdStrike MCP server lets you govern access to CrowdStrike Falcon — detections, incidents, hosts, vulnerabilities, and other data exposed by the Falcon API — as tools your AI clients can call through C1.
+
+CrowdStrike authenticates with a Falcon API client using the OAuth2 client credentials flow. The API client's client ID and client secret authenticate every user, so all tool calls reach Falcon as one shared identity.
+
+## How C1 connects to CrowdStrike
+
+C1 hosts the CrowdStrike MCP server, so your users' AI clients only ever see MCP tools — they never call CrowdStrike directly. When an AI client calls one of these tools, C1 makes the matching request to the CrowdStrike API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call CrowdStrike on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A CrowdStrike Falcon account with the **Falcon Administrator** role, or another role that can create API clients.
+
+<Note>
+If you don't see **CrowdStrike** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a CrowdStrike Falcon API client
+
+CrowdStrike issues a client ID and client secret to an API client, which C1 exchanges for an access token using the client credentials flow.
+
+<Steps>
+<Step>
+In the Falcon console, go to **Support and resources** > **API clients and keys** and select **Add new API client**.
+
+{/* REVIEWER NOTE — needs a verified docs link for generating credentials */}
+</Step>
+<Step>
+Give the client a recognizable name such as `C1`, then grant only the **API scopes** you need, such as **Read** access to Detections, Incidents, and Hosts.
+</Step>
+<Step>
+Select **Create**, then copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
+</Step>
+<Step>
+Note your Falcon cloud's API base URL, such as `https://api.crowdstrike.com` or your region-specific endpoint.
+
+{/* REVIEWER NOTE — confirm exact UI labels/path */}
+</Step>
+</Steps>
+
+For a shared production setup, use a dedicated API client so activity is attributable to C1 rather than a person.
+
+## How CrowdStrike credentials are shared
+
+The API client authenticates every user as one shared Falcon identity, so CrowdStrike sees a single identity for all tool calls. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, use a dedicated API client so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the CrowdStrike MCP server in C1
+
+With your API client ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **CrowdStrike** from the catalog.
+</Step>
+<Step>
+Enter your Falcon API base URL, such as `https://api.crowdstrike.com`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — client credentials** and enter the API client's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the CrowdStrike server exposes.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against CrowdStrike. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **Settings** > **AI Connections**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a CrowdStrike tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your CrowdStrike credentials when an approved user successfully calls a CrowdStrike tool from their AI client.
+</Note>
+
+## Manage your CrowdStrike credentials
+
+- **Rotate the client secret** by resetting it on the API client in the Falcon console, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike.
