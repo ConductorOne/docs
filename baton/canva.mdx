@@ -1,79 +1,168 @@
 ---
-title: "Canva"
-description: "Sync users, groups, roles, and teams from Canva via SCIM v2 and the Canva Admin API. Provision accounts and group memberships."
+title: "Set up a Canva connector"
+og:title: "Set up a Canva connector"
+description: "C1 provides identity governance and just-in-time provisioning for Canva. Integrate your Canva tenant with C1 to run user access reviews, enable access requests, and provision accounts and group memberships."
+og:description: "C1 provides identity governance and just-in-time provisioning for Canva. Integrate your Canva tenant with C1 to run user access reviews, enable access requests, and provision accounts and group memberships."
+sidebarTitle: "Canva"
 ---
 
-# Canva
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
 
-Connector for [Canva](https://www.canva.com) tenants. Pulls identity, group,
-role, and team data via Canva's documented SCIM v2 endpoint and (optionally)
-the Canva Admin API.
+## Capabilities
 
-## Resources
+The Canva connector syncs the following resources:
 
-| Resource | Source | Capabilities |
-| --- | --- | --- |
-| `user` | SCIM v2 `/Users` | Sync, Account Provisioning (create), Resource Delete (PATCH `active=false`) |
-| `group` | SCIM v2 `/Groups` | Sync, Provisioning (grant/revoke membership via PATCH) |
-| `role` | Synthetic catalog (Admin, Member, Guest) derived from SCIM `role` | Sync |
-| `team` | Admin API `/teams` | Sync (requires Admin API credentials) |
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> Create, Delete |
+| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> Grant, Revoke |
+| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
+| Teams | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
 
-## Connectivity
+{/* AUTO-GENERATED:END - capabilities */}
 
-- **SCIM v2** is the primary surface. Base URL: `https://www.canva.com/_scim/v2`.
-  Authenticated with a tenant-scoped bearer token generated in Canva admin
-  settings.
-- **Admin API** is optional. Base URL: `https://api.canva.com/admin/v1`.
-  Uses OAuth 2.0 client credentials. Required only for the `team` resource
-  type.
+Accounts sync from Canva SCIM v2. Groups sync with membership grants. Roles are
+a synthetic catalog (Admin, Member, Guest) derived from each user's SCIM role.
+Teams sync from the Canva Admin API when optional Admin API credentials are
+configured.
 
-## Required permissions
+## Gather Canva credentials
 
-- **SCIM Users:Read / Users:Write** — for user sync + account provisioning +
-  deactivation.
-- **SCIM Groups:Read / Groups:Write** — for group sync + membership
-  provisioning.
-- **Admin API Teams:Read** — for team sync (optional).
+<Warning>
+You need a Canva **SCIM bearer token** with user and group read/write access.
+Team sync also requires **Admin API** OAuth client credentials. Treat all
+secrets as sensitive.
+</Warning>
 
-## Identity field mapping
+<Steps>
+  <Step>
+    Sign in to your Canva enterprise admin console as a user who can manage SCIM
+    provisioning.
+  </Step>
 
-| IGA field | Canva field |
-| --- | --- |
-| Person ID | SCIM `id` (optional `externalId`) |
-| First name | SCIM `name.givenName` |
-| Last name | SCIM `name.familyName` |
-| Work email | SCIM `emails[type=work].value` |
-| Active/Inactive | SCIM `active` (→ `STATUS_ENABLED`/`STATUS_DISABLED`) |
-| Role | SCIM `role` |
-| Created timestamp | SCIM `meta.created` |
-| Last modified timestamp | SCIM `meta.lastModified` (availability varies) |
+  <Step>
+    Generate a **SCIM bearer token** for your tenant. Canva documents SCIM v2 at
+    `https://www.canva.com/_scim/v2`.
+  </Step>
 
-Fields **not** exposed by Canva (and therefore not synced): manager chain,
-department, division, cost center, title, employment type, hire date,
-termination date, custom enterprise extensions. Non-work email, locale, phone,
-address, government IDs, and compensation attributes are excluded by design.
+  <Step>
+    Confirm the token has the permissions required for this connector:
 
-## Provisioning
+    - **SCIM Users:Read** and **SCIM Users:Write**
+    - **SCIM Groups:Read** and **SCIM Groups:Write**
+  </Step>
 
-- `createAccount` POSTs a SCIM v2 user with `userName`, `name.givenName`,
-  `name.familyName`, and a work `emails[]` entry. `active` is set to `true`.
-- Group `grant`/`revoke` issue SCIM `PatchOp` with `op: add` / `op: remove`
-  against the group's `members` collection.
-- Deprovisioning (`resourceLifecycle.delete`) issues a SCIM `PatchOp` with
-  `op: replace, path: active, value: false` — the Canva-recommended soft
-  deactivation rather than a hard delete.
+  <Step>
+    Optional: to sync **Teams**, create an OAuth 2.0 client in Canva for the
+    Admin API and copy the **client ID** and **client secret**. Team sync
+    requires **Admin API Teams:Read**.
+  </Step>
+</Steps>
 
-## Pagination & rate limits
+<Info>
+SCIM is the primary surface for users, groups, roles, and provisioning. The
+Admin API is optional and is only required for the `team` resource type.
+</Info>
 
-- SCIM uses standard RFC 7644 `startIndex` + `count` offset pagination,
-  terminated by `totalResults`.
-- Admin API uses an opaque `continuation` token returned in the response.
-- The transport layer retries `rate_limited` and `transient` failures with
-  exponential backoff (5 retries, up to 60s).
+## Configure the Canva connector
 
-## Reserved config fields
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
 
-`scim-base-url`, `admin-base-url`, and `admin-token-url` are reserved in the
-config schema for future per-tenant overrides but are not currently consumed
-by the JS runtime — Canva's canonical URLs are baked in. Update the connector
-source to override these for development against a non-production endpoint.
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Canva** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Canva connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **SCIM bearer token** (required): SCIM token generated in Canva admin settings
+        - **Admin API client ID** (optional): OAuth client ID for team sync
+        - **Admin API client secret** (optional): OAuth client secret for team sync
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Canva connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Canva connector in your own environment.
+
+    <Steps>
+      <Step>
+        Create secrets for the Canva SCIM token and, if needed, Admin API OAuth
+        credentials.
+      </Step>
+
+      <Step>
+        Configure the connector environment variables:
+
+        - **BATON_SCIM_TOKEN**: SCIM bearer token (required)
+        - **BATON_ADMIN_CLIENT_ID**: Admin API client ID (optional; enables team sync)
+        - **BATON_ADMIN_CLIENT_SECRET**: Admin API client secret (optional; enables team sync)
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your Canva connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+## Provisioning behavior
+
+- **Create account** creates a SCIM v2 user with work email, given name, family
+  name, and `active` set to true.
+- **Group grant/revoke** updates group membership with SCIM `PatchOp` add/remove
+  operations.
+- **Delete account** deactivates the user with a SCIM `PatchOp` that sets
+  `active` to false (Canva's recommended soft deactivation).
+
+## Fields not synced
+
+Canva does not expose manager chain, department, division, cost center, title,
+employment type, hire date, termination date, or custom enterprise extensions.
+Non-work email, locale, phone, address, government IDs, and compensation
+attributes are excluded by design.
