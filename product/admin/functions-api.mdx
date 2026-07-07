@@ -1,0 +1,260 @@
+---
+title: "Manage functions via the API"
+og:title: "Manage functions via the API"
+description: "Use the C1 REST API to create, edit, and publish functions programmatically without the web UI."
+og:description: "Use the C1 REST API to create, edit, and publish functions programmatically without the web UI."
+sidebarTitle: "Functions API"
+---
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+This guide covers managing functions through the C1 REST API. For the web UI workflow, see [Create and test functions](/product/admin/functions-create).
+
+## Authentication
+
+All API calls require a bearer token from a personal API key or service principal credential. See [C1 API and keys](/conductorone-api/api) for setup.
+
+```bash
+export C1_TENANT="https://your-tenant.conductor.one"
+export C1_TOKEN="your-bearer-token"
+```
+
+## Create a function
+
+Create a new function with optional inline code.
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "My Function",
+    "description": "Checks user access",
+    "functionType": "FUNCTION_TYPE_DEFAULT"
+  }'
+```
+
+The response includes the new function's `id`.
+
+To include initial code at creation time, pass an `initialContent` map with base64-encoded file contents:
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "My Function",
+    "description": "Checks user access",
+    "functionType": "FUNCTION_TYPE_DEFAULT",
+    "initialContent": {
+      "main.ts": "'$(base64 -w0 main.ts)'"
+    },
+    "commitMessage": "Initial commit"
+  }'
+```
+
+The response includes both the `function` and a `commit` with the initial commit details.
+
+## Edit function code
+
+Updating code on an existing function uses a three-step commit flow:
+
+1. **Create an initial commit** to declare the files you want to upload and receive signed upload URLs.
+2. **Upload each file** to its signed URL.
+3. **Finalize the commit** to mark the upload as complete.
+
+### Step 1: Create an initial commit
+
+Send the list of filenames you want to commit. The response includes a `commitId` and a map of `uploadUrls` — one signed URL per file.
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions/$FUNCTION_ID/commits" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filenames": ["main.ts"],
+    "commitMessage": "Update main handler"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "commitId": "abc123...",
+  "uploadUrls": {
+    "main.ts": "/file/signed-token..."
+  }
+}
+```
+
+<Note>
+Upload URLs are **relative paths** on the same tenant host. Prepend your tenant URL to form the full upload URL.
+</Note>
+
+### Step 2: Upload files
+
+Upload each file's contents to its signed URL using an HTTP PUT request. The signed URL is self-authenticating — no bearer token is needed.
+
+```bash
+curl -X PUT "$C1_TENANT/file/signed-token..." \
+  --data-binary @main.ts
+```
+
+A successful upload returns HTTP `204 No Content`.
+
+### Step 3: Finalize the commit
+
+After all files are uploaded, finalize the commit to make it available.
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions/$FUNCTION_ID/commits/$COMMIT_ID/finalize" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+The response includes the finalized `commit` object.
+
+## Publish a commit
+
+Committing code creates a new draft. To make the commit the live published version, update the function's `publishedCommitId`:
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions/update" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function": {
+      "id": "'$FUNCTION_ID'",
+      "publishedCommitId": "'$COMMIT_ID'"
+    },
+    "updateMask": {
+      "paths": ["published_commit_id"]
+    }
+  }'
+```
+
+## Complete example
+
+This script creates a commit, uploads a file, finalizes, and publishes — all in one sequence:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+C1_TENANT="https://your-tenant.conductor.one"
+C1_TOKEN="your-bearer-token"
+FUNCTION_ID="your-function-id"
+
+# Step 1: Create initial commit
+RESPONSE=$(curl -s -X POST "$C1_TENANT/api/v1/functions/$FUNCTION_ID/commits" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filenames": ["main.ts"],
+    "commitMessage": "Automated deploy"
+  }')
+
+COMMIT_ID=$(echo "$RESPONSE" | jq -r '.commitId')
+UPLOAD_URL=$(echo "$RESPONSE" | jq -r '.uploadUrls["main.ts"]')
+
+echo "Commit ID: $COMMIT_ID"
+
+# Step 2: Upload file
+curl -s -X PUT "$C1_TENANT$UPLOAD_URL" \
+  --data-binary @main.ts
+
+# Step 3: Finalize commit
+curl -s -X POST "$C1_TENANT/api/v1/functions/$FUNCTION_ID/commits/$COMMIT_ID/finalize" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Step 4: Publish
+curl -s -X POST "$C1_TENANT/api/v1/functions/update" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function": {
+      "id": "'"$FUNCTION_ID"'",
+      "publishedCommitId": "'"$COMMIT_ID"'"
+    },
+    "updateMask": {
+      "paths": ["published_commit_id"]
+    }
+  }'
+
+echo "Published commit $COMMIT_ID"
+```
+
+## List commits
+
+Retrieve the commit history for a function:
+
+```bash
+curl -X GET "$C1_TENANT/api/v1/functions/$FUNCTION_ID/commits" \
+  -H "Authorization: Bearer $C1_TOKEN"
+```
+
+## Get commit content
+
+Retrieve a specific commit and its file contents:
+
+```bash
+curl -X GET "$C1_TENANT/api/v1/functions/$FUNCTION_ID/commits/$COMMIT_ID" \
+  -H "Authorization: Bearer $C1_TOKEN"
+```
+
+## Other function operations
+
+### List functions
+
+```bash
+curl -X GET "$C1_TENANT/api/v1/functions" \
+  -H "Authorization: Bearer $C1_TOKEN"
+```
+
+### Get a function
+
+```bash
+curl -X GET "$C1_TENANT/api/v1/functions/$FUNCTION_ID" \
+  -H "Authorization: Bearer $C1_TOKEN"
+```
+
+### Delete a function
+
+```bash
+curl -X DELETE "$C1_TENANT/api/v1/functions/$FUNCTION_ID" \
+  -H "Authorization: Bearer $C1_TOKEN"
+```
+
+<Warning>
+A function cannot be deleted if it is referenced by a hook. Remove or update any referencing hooks first.
+</Warning>
+
+### Invoke a function
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions/$FUNCTION_ID/invoke" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "json": "{\"key\": \"value\"}"
+  }'
+```
+
+If `commitId` is omitted, the published commit is used.
+
+### Run tests
+
+```bash
+curl -X POST "$C1_TENANT/api/v1/functions/$FUNCTION_ID/test" \
+  -H "Authorization: Bearer $C1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+If `commitId` is omitted, the published commit is used.
