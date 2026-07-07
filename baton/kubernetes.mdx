@@ -1,0 +1,282 @@
+---
+title: "Set up a Kubernetes connector"
+description: "C1 provides identity governance for Kubernetes. Integrate your Kubernetes cluster with C1 to run user access reviews (UARs) and gain visibility into RBAC permissions across your cluster."
+og:title: "Set up a Kubernetes connector"
+og:description: "C1 provides identity governance for Kubernetes. Integrate your Kubernetes cluster with C1 to run user access reviews (UARs) and gain visibility into RBAC permissions across your cluster."
+sidebarTitle: "Kubernetes"
+---
+
+<Note>
+This connector requires network access to your Kubernetes API server. If your cluster API endpoint is not publicly accessible, run the connector in self-hosted mode, deployed inside the cluster itself.
+</Note>
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Namespaces | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Service accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Kubernetes users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Kubernetes groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Cluster roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Nodes | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Pods | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Deployments | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| StatefulSets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| DaemonSets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Secrets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| ConfigMaps | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+## Before you begin
+
+You'll need:
+- A running Kubernetes cluster
+- `kubectl` configured to connect to the cluster
+- Permissions to create namespaces, service accounts, and RBAC resources in the cluster
+
+## Set up RBAC permissions in your cluster
+
+The connector uses a Kubernetes service account to read cluster state. Apply the following manifest to create the namespace, service account, and the read-only RBAC permissions it needs.
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: baton
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: baton-kubernetes
+  namespace: baton
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: baton-kubernetes-reader
+rules:
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - pods
+      - secrets
+      - configmaps
+      - serviceaccounts
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: baton-kubernetes-reader
+subjects:
+  - kind: ServiceAccount
+    name: baton-kubernetes
+    namespace: baton
+roleRef:
+  kind: ClusterRole
+  name: baton-kubernetes-reader
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Save this as `baton-rbac.yaml` and apply it:
+
+```bash
+kubectl apply -f baton-rbac.yaml
+```
+
+## Configure the Kubernetes connector
+
+<Note>
+**To complete this task, you'll need:**
+
+- The **Connector Administrator** or **Super Administrator** role in C1
+</Note>
+
+<Tabs>
+<Tab title="Self-hosted">
+**Follow these instructions to deploy the Kubernetes connector inside your cluster.**
+
+When running in service mode, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+### Resources
+
+* [GitHub repository](https://github.com/conductorone/baton-kubernetes): Access the source code, report issues, or contribute to the project.
+
+### Step 1: Set up a new Kubernetes connector in C1
+
+Navigate to **Integrations** in C1 to register a new connector and generate credentials.
+
+<Steps>
+    <Step>
+    In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+    </Step>
+    <Step>
+    Search for **Baton** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new connector:
+
+    - Add the connector to a currently unmanaged app
+    - Add the connector to a managed app
+    - Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector and click **Next**.
+    </Step>
+    <Step>
+    In the **Settings** area of the page, click **Edit**.
+    </Step>
+    <Step>
+    Click **Rotate** to generate a new Client ID and Secret. Copy and save these credentials — you'll need them in the next step.
+    </Step>
+</Steps>
+
+### Step 2: Deploy the connector to your cluster
+
+Create a secret with your C1 credentials and deploy the connector using the service account created earlier.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-conductorone-creds
+  namespace: baton
+type: Opaque
+stringData:
+  BATON_CLIENT_ID: "<C1 client ID>"
+  BATON_CLIENT_SECRET: "<C1 client secret>"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-kubernetes
+  namespace: baton
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: baton-kubernetes
+  template:
+    metadata:
+      labels:
+        app: baton-kubernetes
+    spec:
+      serviceAccountName: baton-kubernetes
+      containers:
+        - name: baton-kubernetes
+          image: ghcr.io/conductorone/baton-kubernetes:latest
+          envFrom:
+            - secretRef:
+                name: baton-conductorone-creds
+```
+
+Save this as `baton-kubernetes.yaml`, fill in your C1 credentials, and apply it:
+
+```bash
+kubectl apply -f baton-kubernetes.yaml
+```
+
+### Step 3: Verify the connector is running
+
+Confirm the pod is healthy and that C1 is receiving data from the cluster.
+
+<Steps>
+    <Step>
+    Check that the pod started successfully:
+
+    ```bash
+    kubectl get pods -n baton
+    kubectl logs -n baton deployment/baton-kubernetes
+    ```
+    </Step>
+    <Step>
+    In C1, click **Apps**. On the **Managed apps** tab, locate the application you added the connector to. Kubernetes data should appear on the **Entitlements** and **Accounts** tabs after the first sync completes.
+    </Step>
+</Steps>
+
+**Done.** Your Kubernetes connector is now pulling access data into C1.
+</Tab>
+<Tab title="Cloud-hosted">
+**Follow these instructions to use a built-in, no-code connector hosted by C1.**
+
+<Warning>
+Cloud-hosted mode requires your Kubernetes API server to be publicly accessible. You'll need a bearer token and the public API server URL.
+</Warning>
+
+### Step 1: Generate a long-lived bearer token
+
+Create a service account token secret in your cluster:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-kubernetes-token
+  namespace: baton
+  annotations:
+    kubernetes.io/service-account.name: baton-kubernetes
+type: kubernetes.io/service-account-token
+```
+
+```bash
+kubectl apply -f token-secret.yaml
+kubectl get secret baton-kubernetes-token -n baton -o jsonpath='{.data.token}' | base64 -d
+```
+
+Copy the decoded token — you'll need it when configuring the connector.
+
+### Step 2: Get your API server URL
+
+```bash
+kubectl cluster-info | grep "Kubernetes control plane"
+```
+
+### Step 3: Configure the connector in C1
+
+Add the connector in C1 and enter the credentials you collected in the previous steps.
+
+<Steps>
+    <Step>
+    In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+    </Step>
+    <Step>
+    Search for **Kubernetes** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new connector:
+
+    - Add the connector to a currently unmanaged app
+    - Add the connector to a managed app
+    - Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector and click **Next**.
+    </Step>
+    <Step>
+    In the **Settings** area, click **Edit** and enter:
+    - **Server**: your API server URL
+    - **Token**: the bearer token generated above
+    </Step>
+    <Step>
+    Click **Save**. The connector's label changes to **Syncing**, then **Connected**.
+    </Step>
+</Steps>
+
+**Done.** Your Kubernetes connector is now pulling access data into C1.
+</Tab>
+</Tabs>
