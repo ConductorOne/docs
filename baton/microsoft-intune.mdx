@@ -1,0 +1,148 @@
+---
+title: "Set up a Microsoft Intune connector"
+og:title: "Set up a Microsoft Intune connector"
+description: "C1 provides identity governance for Microsoft Intune. Integrate your Microsoft Intune instance with C1 for unified visibility and governance over device and access data."
+og:description: "C1 provides identity governance for Microsoft Intune. Integrate your Microsoft Intune instance with C1 for unified visibility and governance over device and access data."
+sidebarTitle: "Microsoft Intune"
+---
+
+C1 provides identity governance for Microsoft Intune. Integrate your Microsoft Intune instance with C1 for unified visibility and governance over managed devices and Intune role-based access.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Devices|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Roles|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Scope Tags|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Compliance Policies|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Configuration Profiles|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+The connector reads Intune-native objects through the Microsoft Graph device management API: managed devices (with their hardware, operating system, compliance, and management-state details), RBAC role definitions, scope tags, compliance policies, and configuration profiles. Each managed device is linked to its primary user, and roles, compliance policies, and configuration profiles are linked to the security groups they are assigned to.
+
+Microsoft Intune does not own the identity directory. The users and groups that Intune references live in Microsoft Entra ID and are supplied by a separate Microsoft Entra connector. Add that connector so C1 can resolve device owners and assignment groups to the people and groups behind them.
+
+## Prerequisites
+
+<Warning>
+The connector uses application-only (client credentials) access to Microsoft Graph. You need an administrator who can register an application in Microsoft Entra ID and grant it admin-consented application permissions.
+</Warning>
+
+<Steps>
+  <Step>
+    In the Microsoft Entra admin center, register a new **application** dedicated to C1 (or reuse an existing one).
+  </Step>
+
+  <Step>
+    Add a **client secret** to the application and record its value. You will not be able to view it again after you leave the page.
+  </Step>
+
+  <Step>
+    Under **API permissions**, add the following Microsoft Graph **application** permissions and grant admin consent: `DeviceManagementManagedDevices.Read.All`, `DeviceManagementConfiguration.Read.All`, and `DeviceManagementRBAC.Read.All`.
+  </Step>
+
+  <Step>
+    Confirm the application is registered in the same tenant that owns your Microsoft Intune subscription.
+  </Step>
+</Steps>
+
+## Gather Microsoft Intune credentials
+
+<Steps>
+  <Step>
+    Note your **Tenant ID** (the directory GUID) from the Microsoft Entra admin center overview.
+  </Step>
+
+  <Step>
+    Note the application's **Client ID** (the application/client ID of the registration you created above).
+  </Step>
+
+  <Step>
+    Use the **Client secret** value you recorded when you added the secret to the application.
+  </Step>
+
+  <Step>
+    Note the **Entra authority host** for your cloud. For the commercial Microsoft cloud this is `https://login.microsoftonline.com`; for a sovereign or national cloud (for example US Government) use that cloud's login host, such as `https://login.microsoftonline.us`. This value is required. If you are on a sovereign or national cloud, also note the Microsoft Graph base URL for that cloud (for example `https://graph.microsoft.us/v1.0`); commercial-cloud tenants can leave the Graph base URL blank.
+  </Step>
+</Steps>
+
+## Configure the Microsoft Intune connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Microsoft Intune** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Microsoft Intune connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the Microsoft Intune credentials:
+
+        - **Tenant ID**: the directory GUID that owns your Intune subscription.
+        - **Entra client ID**: the application (client) ID of the app registration.
+        - **Entra client secret**: the client secret value for the app registration.
+        - **Authority host**: the Entra login host for your cloud. Use `https://login.microsoftonline.com` for the commercial Microsoft cloud, or your sovereign-cloud login host (for example `https://login.microsoftonline.us`).
+        - **Graph base URL** (optional): only for sovereign clouds, for example `https://graph.microsoft.us/v1.0`. Leave blank for the commercial cloud.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Microsoft Intune connector is now pulling device and access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Microsoft Intune connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        Create secrets for the Entra app registration's client secret.
+      </Step>
+
+      <Step>
+        Configure the connector environment variables:
+
+        - **BATON_TENANT_ID**: the directory GUID that owns your Intune subscription.
+        - **BATON_ENTRA_CLIENT_ID**: the application (client) ID of the app registration.
+        - **BATON_ENTRA_CLIENT_SECRET**: the client secret value for the app registration.
+        - **BATON_AUTHORITY_HOST**: the Entra login host for your cloud. Use `https://login.microsoftonline.com` for the commercial Microsoft cloud, or your sovereign-cloud login host (for example `https://login.microsoftonline.us`).
+        - **BATON_GRAPH_DOMAIN** (optional): only for sovereign clouds. Leave unset for the commercial cloud.
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your Microsoft Intune connector is now pulling device and access data into C1.
+  </Tab>
+</Tabs>
