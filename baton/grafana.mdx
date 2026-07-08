@@ -35,6 +35,25 @@ Once this is enabled, Grafana stops overriding org roles on login and C1 becomes
 This step is not required for self-hosted Grafana instances using basic (username/password) authentication.
 </Note>
 
+### User profile attributes
+
+The Grafana connector adds the following fields to each account's profile attributes in C1. These fields help identify whether a user's access originates from an external identity provider during access reviews.
+
+| Attribute | Type | Present | Description |
+| :--- | :--- | :--- | :--- |
+| `is_externally_synced` | Boolean | Always | Indicates whether the user's access is externally managed. See [mode-dependent behavior](#mode-dependent-behavior) below. |
+| `auth_labels` | String | Only when the user has external auth labels | The authentication providers associated with the user (for example, `OAuth` or `SAML`). Multiple values are separated by `; `. Absent (not empty) for users without external auth labels. |
+
+#### Mode-dependent behavior
+
+The meaning of `is_externally_synced` differs between Grafana Cloud and self-hosted deployments:
+
+- **Grafana Cloud:** The value reflects Grafana's native `isExternallySynced` flag from the org-users API. It is `true` when the user's organization role is managed by an external identity provider (such as Grafana.com SSO, Okta, Azure AD, or any OAuth/SAML provider). A value of `false` means the role is managed locally within Grafana.
+
+- **Self-hosted Grafana:** The org-users API does not return the `isExternallySynced` flag, so the connector derives the value from the user's authentication labels. It is `true` when the user has authenticated via an external module (SSO, LDAP, or OAuth). This is broader than the Cloud definition — a user whose org role is managed locally but who logs in through SSO will still show `is_externally_synced = true` on a self-hosted instance.
+
+If you are comparing this field across Cloud and self-hosted Grafana instances, keep this difference in mind: Cloud reports on external **role management**, while self-hosted reports on external **authentication**.
+
 ## Gather Grafana credentials
 
 Configuring the connector requires credentials obtained in your Grafana instance. The credentials you need depend on whether you are connecting to **Grafana Cloud** or a **self-hosted Grafana** instance.
