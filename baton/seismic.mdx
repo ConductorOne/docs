@@ -34,23 +34,90 @@ The Seismic connector syncs the following resources:
 
 <Steps>
   <Step>
-    Go to the [Seismic Developer Portal](https://developer.seismic.com) and log in with your admin account. Alternatively, navigate to **System Settings** > **App Registration** in the Seismic admin portal.
+    Go to the [Seismic App Registration Portal](https://apps.seismic.com) and log in with your tenant admin credentials.
   </Step>
 
-<Step>Click **My Apps**, then **Create New App**.</Step>
-
-<Step>
-  Fill in the app details (name, description) and select **Client Credentials**
-  as the authentication flow. Seismic implements this as the [Client Credentials
-  with User Delegation flow](https://developer.seismic.com/seismicsoftware/reference/login-with-client-credentials-user-delegation-flow) —
-  it is the only client-credentials variant Seismic documents.
-</Step>
+  <Step>
+    Click **+ Create an App**, enter an app name, then click **Create app**.
+  </Step>
 
   <Step>
-    Configure the **Delegation user selected callback** URL on your app. When a
-    tenant admin enables the app and selects the delegated user, Seismic will
-    `POST` a payload containing `delegationUserId` to this URL. **Your system
-    must store this value** — the connector sends it on every token request.
+    On the app details page, toggle **Authentication** on (it is disabled by
+    default). Select **OAuth2 - Client Credentials** as the authentication flow.
+    Seismic implements this as the [Client Credentials with User Delegation
+    flow](https://developer.seismic.com/seismicsoftware/reference/login-with-client-credentials-user-delegation-flow) —
+    it is the only client-credentials variant Seismic documents.
+  </Step>
+
+  <Step>
+    In the **Delegation user selected callback** field, enter an HTTPS URL that
+    can receive a one-time POST from Seismic. The connector itself does **not**
+    run a callback server — this URL is triggered only once, when a tenant admin
+    enables the app and selects the delegated user. Seismic POSTs a JSON payload
+    containing `delegationUserId` to it at that moment.
+
+    <Note>
+      **Seismic requires a valid HTTPS callback URL before it will generate your
+      Client ID and Client Secret.**
+
+      The script below starts a local receiver and exposes it over HTTPS with no
+      account or deployment required. Requirements: **Python 3** and **SSH**
+      (both available by default on macOS and Linux; on Windows use WSL or Git
+      Bash).
+
+      **Terminal 1 — start the local receiver:**
+
+      ```python callback_receiver.py
+      import http.server, json, sys
+
+      class Handler(http.server.BaseHTTPRequestHandler):
+          def do_POST(self):
+              length = int(self.headers.get("Content-Length", 0))
+              body = json.loads(self.rfile.read(length))
+              user_id = body.get("delegationUserId", "(not found)")
+              print(f"\n  delegationUserId: {user_id}\n")
+              print("  Copy the value above into the Seismic Delegation User ID field.")
+              self.send_response(202)
+              self.end_headers()
+              sys.exit(0)
+
+          def log_message(self, *args):
+              pass
+
+      print("Waiting for Seismic callback on port 8080 ...")
+      http.server.HTTPServer(("", 8080), Handler).serve_forever()
+      ```
+
+      ```bash
+      python3 callback_receiver.py
+      ```
+
+      **Terminal 2 — expose it over HTTPS:**
+
+      ```bash
+      ssh -R 80:localhost:8080 nokey@localhost.run
+      ```
+
+      `localhost.run` prints an HTTPS URL such as
+      `https://xxxxxxxx.lhr.life`. Paste that URL into the Seismic callback
+      field and proceed to the next step. When Seismic fires the callback,
+      Terminal 1 prints the `delegationUserId` and exits.
+
+      <Warning>
+        Do **not** use public webhook inspection services (e.g. webhook.site,
+        requestbin.com). The `delegationUserId` is a credential — combined with
+        your client ID and secret it can be used to generate API tokens.
+        Sending it to a service that stores and displays payloads publicly
+        exposes it to anyone who obtains the URL.
+
+        Note that `localhost.run` is a third-party SSH tunnel: traffic transits
+        their servers in transit but is not stored or displayed publicly.
+        For security-sensitive environments, use a self-hosted endpoint (e.g.
+        an AWS Lambda function URL or Cloudflare Worker on infrastructure you
+        control) instead.
+      </Warning>
+
+    </Note>
   </Step>
 
   <Step>
@@ -63,21 +130,35 @@ The Seismic connector syncs the following resources:
     For **sync-only** deployments, assign `seismic.user.view` and `seismic.reporting`.
     For **sync + provisioning** deployments, assign all three scopes.
 
-  </Step>
-
-<Step>
-  Save the app registration. Copy the **Client ID** and **Client Secret** and
-  save them securely. The Client Secret is only shown once.
-</Step>
-
-  <Step>
-    Have the tenant admin install/enable the app and select the delegated user.
-    Capture the `delegationUserId` your callback receives — that exact value
-    becomes the connector's **Seismic Delegation User ID** configuration field.
+    <Warning>
+      Adding or removing scopes after saving generates a new app version with a
+      new **Client ID**. Finalize your scope selection before copying credentials.
+    </Warning>
   </Step>
 
   <Step>
-    Identify your **Seismic tenant** name (the subdomain from your login URL, e.g., `acme` if you access `acme.seismic.com`). The connector uses this to build the OAuth2 token endpoint URL automatically: `https://auth.seismic.com/tenants/{tenant}/connect/token`.
+    Click **Generate** in the credentials section to create the **Client
+    Secret**. Copy both the **Client ID** and **Client Secret** and store them
+    securely. The Client Secret cannot be retrieved again after you leave this
+    page.
+  </Step>
+
+  <Step>
+    In the Seismic web app, navigate to **Admin Settings** > **My Apps**,
+    locate your app, and click **Enable App in Seismic**. A consent modal
+    appears — select the user who will act as the delegated user, then confirm.
+    Seismic will POST a JSON payload to the callback URL you entered earlier.
+
+    Check the endpoint you set up — the incoming POST body contains
+    `delegationUserId`. Copy that exact value; it becomes the connector's
+    **Seismic Delegation User ID** configuration field.
+  </Step>
+
+  <Step>
+    Identify your **Seismic tenant** name (the subdomain from your login URL,
+    e.g., `acme` if you access `acme.seismic.com`). The connector uses this to
+    build the OAuth2 token endpoint URL automatically:
+    `https://auth.seismic.com/tenants/{tenant}/connect/token`.
   </Step>
 </Steps>
 
@@ -142,6 +223,13 @@ The Seismic connector syncs the following resources:
     Follow these instructions to use the [Seismic](https://github.com/conductorone/baton-seismic) connector, hosted and run in your own environment.
 
     When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    
+    ### Resources
+
+    * [Official download center](https://dist.conductorone.com/ConductorOne/baton-seismic): For stable binaries (Windows/Linux/macOS) and container images.
+
+    * [GitHub repository](https://github.com/conductorone/baton-seismic): Access the source code, report issues, or contribute to the project.
 
     ### Step 1: Set up a new Seismic connector
 
