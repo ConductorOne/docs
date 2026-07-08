@@ -1,0 +1,315 @@
+---
+title: Connect a private MCP server through a bridge
+description: Route AI tool calls to an MCP server running in your private network — no inbound firewall rules needed.
+og:title: Connect a private MCP server through a bridge - C1 docs
+og:description: Route AI tool calls to an MCP server running in your private network — no inbound firewall rules needed.
+sidebarTitle: Private bridge
+---
+
+{/* Editor Refresh: 2026-06-25 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant, and private bridge connectivity must be turned on separately. To get started, [contact the C1 support team](mailto:support@c1.ai).
+</Note>
+
+If your MCP server runs in a private network — a laptop, a VM, or a cluster — and you can't or don't want to open inbound firewall rules, you can reach it through a **bridge**. You run a small agent (`bridge-client`) next to your server; it dials out to C1 and holds a tunnel open. C1 sends incoming tool calls back down that tunnel, so nothing in your network needs to listen for inbound connections.
+
+Setup has two halves that must match each other:
+
+1. A **bridge config** (YAML) that tells `bridge-client` where your MCP server is and what to advertise to C1.
+2. An **MCP server registration** in C1 that points C1 at the advertised service over the bridge.
+
+## Before you begin
+
+- Your MCP server must be running and reachable from wherever you'll run `bridge-client`. Have its `host:port`, endpoint path (typically `/mcp`), and transport (`streamable-http` or `sse`) ready.
+- Download `bridge-client` from the [C1 download center](https://dist.conductorone.com/ConductorOne/bridge-client). Linux and macOS binaries and container images are available there.
+- **Creating a bridge** requires the **Connector Administrator** or **Super Administrator** role.
+- **Registering the MCP server** requires the **Editor** role on the destination app.
+
+## Step 1 — Create a bridge in C1
+
+Creating a bridge issues the credentials that `bridge-client` uses to authenticate to C1.
+
+<Steps>
+<Step>
+In C1, go to **Settings** > **Bridges**.
+</Step>
+<Step>
+Give it a display name (for example, `my-laptop` or `prod-vpc-east`) and optionally a description, then click **Create bridge**. C1 navigates to the bridge's detail page.
+</Step>
+<Step>
+On the bridge detail page, find the **Credentials** card and click **Create credential**. (On a bridge that already has an active credential, this button is labeled **Rotate credential** instead.)
+</Step>
+<Step>
+Copy the **Client ID** and **Client secret** from the dialog.
+</Step>
+</Steps>
+
+The bridge is created in C1. You'll add the credentials to your config in the next step.
+
+<Warning>
+The client secret is shown only once. Copy it now — you'll paste it into the bridge config in the next step.
+</Warning>
+
+## Step 2 — Write the bridge config
+
+Create a file called `bridge.yaml`. Set the credentials from Step 1, and add a port entry that points to your local MCP server.
+
+```yaml
+version: 1
+bridge:
+  client_id:     "<Client ID from Step 1>"
+  client_secret: "<Client secret from Step 1>"
+  ports:
+    - name: my-mcp                    # service name — you'll select this in C1
+      listen_port: 8080               # port advertised on the bridge (any free port 1–65535)
+      backend: "127.0.0.1:8000"       # where your MCP server actually listens
+      service_type: MCP_NATIVE        # MCP_NATIVE for a native MCP server
+      service_path: /mcp              # your MCP server's endpoint path
+      transport_type: streamable-http # streamable-http or sse
+```
+
+### Port field reference
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `listen_port` | Yes | Port advertised on the bridge (1–65535). Must be unique within the config. |
+| `backend` | Yes | Local `host:port` that `bridge-client` dials — where your MCP server listens. |
+| `name` | Recommended | Service name shown in C1. You select this name when registering the MCP server. Must be unique within the config. |
+| `service_type` | No | `MCP_NATIVE` (native MCP server), `HOSTED` (hosted HTTP MCP), or `RAW` (opaque TCP). |
+| `service_path` | No | The MCP endpoint path, for example `/mcp`. |
+| `transport_type` | No | `streamable-http` or `sse` for an MCP server, or `http` for a hosted HTTP service. |
+
+<Note>
+The `service_path` and `transport_type` you set here are what C1 uses when routing tool calls. The registration wizard in Step 4 doesn't let you override them, so set them correctly now.
+</Note>
+
+You can expose more than one local service by adding more entries under `ports:`.
+
+### Other ways to supply config
+
+The YAML literals above aren't the only option. Both are covered in full in the [bridge setup guide](https://dist.conductorone.com/ConductorOne/bridge-client):
+
+- **Environment variables.** Instead of a config file, set `C1_BRIDGE_CLIENT_ID`, `C1_BRIDGE_CLIENT_SECRET`, and a single service via `C1_BRIDGE_SERVICE_LISTEN_PORT` and `C1_BRIDGE_SERVICE_BACKEND` (plus optional `C1_BRIDGE_SERVICE_NAME`, `_TYPE`, `_PATH`, and `_TRANSPORT_TYPE`).
+- **HashiCorp Vault.** Keep non-secret fields in YAML and pull sensitive ones (such as `client_secret`) from a HashiCorp Vault backend, so no secret ever lives in the config file.
+
+#### Resolve secrets from HashiCorp Vault
+
+Add a top-level `secret_backend:` block selecting Vault, and a top-level `secrets:` map that points each sensitive field at a `"<secret-id>:<key>"` locator. At startup `bridge-client` fetches each value and writes it into the matching `bridge:` field before connecting, so a field resolved from Vault doesn't need a literal in the YAML.
+
+```yaml
+version: 1
+bridge:
+  client_id: "<Client ID from Step 1>"
+  # client_secret omitted — resolved from Vault (see secrets: below)
+  ports:
+    - name: my-mcp
+      listen_port: 8080
+      backend: "127.0.0.1:8000"
+      service_type: MCP_NATIVE
+      service_path: /mcp
+      transport_type: streamable-http
+
+secret_backend:
+  type: vault
+  vault:
+    url:   "https://vault.example.com"   # or set VAULT_ADDR in the environment
+    mount: "kv"                          # the KV secrets-engine mount path
+    kvapi: 2                             # KV engine version: 1 or 2
+    token: "hvs.XXXX"                    # or set VAULT_TOKEN in the environment
+
+secrets:
+  client_secret: "bridge-creds:client_secret"
+```
+
+## Step 3 — Run the bridge
+
+Run `bridge-client` inside the same network as your MCP server. Select your deployment method:
+
+<Tabs>
+<Tab title="Binary">
+
+Start the agent. It runs continuously and holds the tunnel open:
+
+```bash
+bridge-client --config bridge.yaml
+```
+
+</Tab>
+<Tab title="Docker">
+
+Run the agent:
+
+```sh
+docker run --rm \
+  -v /etc/c1/bridge.yaml:/etc/c1/bridge.yaml:ro \
+  public.ecr.aws/conductorone/bridge-client:<version> \
+  --config /etc/c1/bridge.yaml
+```
+
+</Tab>
+<Tab title="Kubernetes">
+
+Create a `Secret` to hold the config (use a `Secret`, not a `ConfigMap`, so the client secret stays encrypted at rest):
+
+```yaml
+# bridge-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bridge-config
+type: Opaque
+stringData:
+  bridge.yaml: |
+    version: 1
+    bridge:
+      client_id:     "<Client ID from Step 1>"
+      client_secret: "<Client secret from Step 1>"
+      ports:
+        - name: my-mcp
+          listen_port: 8080
+          backend: "127.0.0.1:8000"
+          service_type: MCP_NATIVE
+          service_path: /mcp
+          transport_type: streamable-http
+```
+
+Then create the Deployment:
+
+```yaml
+# bridge-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge-client
+  labels:
+    app: bridge-client
+spec:
+  selector:
+    matchLabels:
+      app: bridge-client
+  template:
+    metadata:
+      labels:
+        app: bridge-client
+    spec:
+      containers:
+      - name: bridge-client
+        image: public.ecr.aws/conductorone/bridge-client:<version>
+        args: ["--config", "/etc/c1/bridge.yaml"]
+        volumeMounts:
+        - name: bridge-config
+          mountPath: /etc/c1
+          readOnly: true
+      volumes:
+      - name: bridge-config
+        secret:
+          secretName: bridge-config
+```
+
+Apply both:
+
+```sh
+kubectl apply -f bridge-secret.yaml
+kubectl apply -f bridge-deployment.yaml
+```
+
+</Tab>
+</Tabs>
+
+After a few seconds, the bridge status changes to **Connected** in **Settings** > **Bridges**, and the service you configured appears on the bridge detail page.
+
+## Step 4 — Register the MCP server in C1
+
+With the bridge running, register the server in C1 so its tools are available for governance.
+
+<Steps>
+<Step>
+Open the app you want the MCP server registered under, go to its **MCP servers** tab, and click **Add MCP server**.
+
+If you're starting from the tenant-wide MCP servers page (**Integrations** > **MCP servers**) instead, the wizard adds a **Choose app** step so you can pick or create the destination app.
+</Step>
+<Step>
+Under **Choose a server**, select **External MCP server** — "Connect to an external MCP server by URL."
+</Step>
+<Step>
+Under **Connectivity**, select **Private bridge** — "Route through a C1 Bridge running in your network." Then set:
+
+- **Bridge** — the bridge you created in Step 1.
+- **Service** — the service your bridge advertised, which is the `name` field from `bridge.yaml` (`my-mcp` in the example).
+</Step>
+<Step>
+Under **Configure**, enter a display name for the server. The **Server URL** field is read-only — it's resolved automatically from the bridge service you selected.
+
+In the **Authentication** section, pick the **Authentication method** C1 uses to reach your server — **Bearer token**, **Custom header**, **Basic auth**, or **OAuth2** — and enter the credentials it requires. Then click **Add server**.
+</Step>
+</Steps>
+
+C1 connects to your server over the bridge and begins tool discovery.
+
+<Note>
+A user can only call a tool once they're an **app user** of the app the server is registered under. New external apps start with no app users. When you register from an existing app that has none, the wizard inserts a **Link users** step to populate them by linking an entitlement from another app. When you start from the tenant-wide MCP servers page instead, you get the **Choose app** step (not **Link users**) — populate app users afterward from the app's settings. See [Calling the tools from an AI client](#calling-the-tools-from-an-ai-client) for the full set of ways to do this.
+</Note>
+
+## Step 5 — Review discovered tools
+
+After you click **Add server**, C1 connects to your MCP server over the bridge and pulls its tool list. The wizard's final step shows these discovered tools.
+
+C1 records each tool's name, description, and input schema exactly as your MCP server advertises them, and surfaces that text to AI clients during discovery. The agent relies on it to decide which tool fits a request — so clear, accurate tool descriptions and schemas on your server directly affect how reliably the right tool gets found and called.
+
+Each tool:
+
+- Becomes its own **entitlement** in C1 — access is requested, granted, and reviewed like any other entitlement.
+- Is **auto-classified** in the **Classification** column; you can change the classification.
+- Starts with **State** set to **Unset**. Flip the toggle to **Enabled** to allow calls to that tool, or **Disabled** to block it for everyone.
+
+You don't need to finish reviewing tools in the wizard. Click **Done** to close it, or **Open server** to go to the server detail page. New tools added to the server appear there automatically after discovery — there's no manual sync button, so if a tool isn't showing yet, wait a moment and refresh.
+
+<Note>
+Setting a tool's state to **Enabled** makes it callable only by users who hold a grant for it — it doesn't grant access on its own. To grant access, add the tool to an MCP access profile and assign that profile to users. See [Govern tools and toolsets](/product/admin/tools-and-toolsets).
+</Note>
+
+## Step 6 — Verify the connection
+
+- In **Settings** > **Bridges**, the bridge shows **Connected**, with your service listed.
+- On the server's **Tools** tab in C1, the discovered tools appear.
+- On the server's **Details** tab, **Test credentials** succeeds and reports the number of tools discovered over the bridge.
+
+If something looks off, check the `bridge-client` logs. For a binary deployment, logs go to stdout/stderr. For Kubernetes:
+
+```sh
+kubectl logs -l app=bridge-client -f
+```
+
+## Calling the tools from an AI client
+
+Once the bridge is running and tools are approved, your users reach them from their AI clients (Claude Code, Claude Desktop, Cursor, VS Code) through C1's MCP gateway — not through the bridge directly. C1 authenticates the user, enforces tool governance, and routes each call through the bridge to your local server.
+
+By default, these clients use **code mode**: instead of listing each tool as its own named tool, C1 exposes discovery and execution entrypoints (`describe` and `execute`), and the agent finds the tools it needs and invokes them by writing short code. Your bridged tools won't appear one by one in the client's tool list — that's expected, not a discovery failure. Governance is unchanged: every underlying call still runs the same per-tool checks — the tool must be **Enabled** and the caller must hold a grant. Code mode is a tenant-level AI governance setting (on by default); with it off — or for **Service** and **Ephemeral** client types — C1 instead exposes each enabled tool as a directly named tool.
+
+<Note>
+A call only executes when the requesting user is an **app user** of the server's app and holds a grant for the tool. If the caller isn't yet an app user, the call opens an access request instead of running. App users come from the destination app's account sources. Populate them by linking an entitlement from another app (the **Link users** step during registration, or linked entitlements later in the app's settings), by importing a CSV of app users, or — if the app is backed by a connector — by syncing them from the connector.
+</Note>
+
+For end-user setup instructions, see [Connect your MCP client to C1](/product/how-to/connect-mcp-client).
+
+## Troubleshooting
+
+**Bridge never reaches Connected**
+Re-check `client_id` and `client_secret`. The secret is shown only once — if you didn't capture it, rotate the credential and try again. Check the `bridge-client` logs for an authentication error.
+
+**First tool call right after connecting fails with EOF or "failed to connect to external MCP server"**
+The connection can be slow on the very first call while the path warms up. Retry once — subsequent calls succeed.
+
+**Tool calls fail with connection refused or timeout**
+The `backend` `host:port` in your config is wrong, or the MCP server isn't running there. Confirm the server is up and reachable from wherever `bridge-client` is running.
+
+**Connected, but tool calls return errors**
+Check `service_path` and `transport_type` in `bridge.yaml`. The `service_path` must match the actual endpoint path your MCP server serves (for example, `/mcp`), and `transport_type` must match its transport. These values come from the config — the registration wizard doesn't let you override them. Also confirm you selected the right service in Step 4.
+
+## Rotate or revoke bridge credentials
+
+From the bridge detail page (**Settings** > **Bridges** > your bridge > **Credentials**):
+
+- **Rotate credential** — issues a new client ID and secret. The old credential stays valid until you explicitly revoke it. Update `bridge.yaml` with the new credentials, restart `bridge-client`, then revoke the old credential.
+- **Revoke credential** — invalidates the credential immediately and disconnects any running agent that uses it.
