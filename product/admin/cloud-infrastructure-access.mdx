@@ -1,0 +1,57 @@
+---
+title: Cloud infrastructure governance
+og:title: Cloud infrastructure governance - C1 docs
+og:description: Govern cloud infrastructure access at enterprise scale. C1 stores Azure access as role-scope bindings and computes effective access on demand, so access requests, access reviews, and lifecycle automation all work with the hierarchy natively.
+description: Govern cloud infrastructure access at enterprise scale. C1 stores Azure access as role-scope bindings and computes effective access on demand, so access requests, access reviews, and lifecycle automation all work with the hierarchy natively.
+sidebarTitle: Govern cloud infrastructure access
+---
+{/* Editor Refresh: 2026-06-10 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Cloud Infrastructure Access is C1's approach to governing access in hierarchical cloud environments like Azure. It introduces a new data model and set of governance workflows designed for the way cloud platforms actually define access — as a role assigned at a scope, with inheritance flowing through the resource hierarchy beneath it.
+
+## The problem with flat access models in cloud environments
+
+In a SaaS app, access is a finite list: "Salesforce Admin," "Jira Reporter on Project X." You can sync every entitlement upfront and review them all in a campaign.
+
+Consider two real requests: a developer who needs Contributor access on one resource group for a four-hour deploy, and an AI agent that needs read access to a single Key Vault for one pipeline run. In a governance tool that flattens cloud entitlements into a list of identical-looking rows, neither request can be expressed precisely. The tool grants Contributor on the subscription, Reader on the management group. The blast radius of every grant grows because the tool can't express anything narrower.
+
+Azure defines access as a **(role, scope) pair**, where a role assigned at a parent scope automatically flows down to every resource beneath it. Tools cope in one of two ways: materialize every inherited combination upfront (which produces thousands of identical entries and breaks at enterprise scale), or sync less and accept ungoverned blind spots. Neither option solves the problem.
+
+Representing this as a flat list causes real problems:
+
+- **Sync failures and database bloat** from trying to materialize every combination
+- **Unusable UIs** where end users and reviewers face thousands of identical-looking entries with no hierarchy context
+- **Rubber-stamp access reviews** where reviewers bulk-approve because the volume is unmanageable
+- **Governance blind spots** from workarounds that restrict which resources get synced
+
+## How cloud infrastructure access works
+
+Instead of pre-materializing every role-scope combination, C1 now stores access as **bindings** — one record per role assignment, at the scope it was granted. The resource hierarchy (management groups → subscriptions → resource groups → resources) is stored with parent-child relationships intact. Effective access is computed on demand rather than enumerated upfront.
+
+This means:
+
+- A role assigned at a subscription scope covers every resource beneath it, and C1 knows this — without creating millions of pre-materialized rows
+- End users navigate a resource tree to select the scope and role they need, with breadcrumb navigation showing where they are in the hierarchy
+- Reviewers evaluate the bindings that actually exist, not an explosion of inherited copies — a review that might have produced tens of thousands of identical line items now shows the handful of bindings that matter, each with its scope and inherited reach visible
+
+## How cloud infrastructure access works across C1
+
+Cloud Infrastructure Access is launching on [**Microsoft Azure**](/baton/azure), with support for GCP, AWS, and other hierarchical platforms on the roadmap.
+
+The following governance capabilities all work on the hierarchical model:
+
+**Access requests** — End users navigate the Azure resource hierarchy to select the scope (for example, a specific resource group or subscription) and role they're requesting. C1 constructs the request at the right level and routes it through your normal request and approval workflow.
+
+**Access reviews** — The new [By inheritance](/product/admin/campaign-scope-by-inheritance) campaign scope type lets reviewers work through role bindings with full hierarchy context, rather than reviewing every inherited downstream grant individually.
+
+**Entitlement configuration rules** — [Configuration rules](/product/admin/entitlement-config-rules) can now match on the role and scope of a cloud infrastructure entitlement, so you can automatically apply the right request policy and access settings to entitlements as they come in, without configuring each one by hand.
+
+**Lifecycle automation** — JML rules apply to cloud infrastructure access. When someone joins, changes roles, or leaves, their Azure permissions update automatically across the resource tree.
+
+**Provisioning** — C1 grants and revokes access at the specific scope it was requested or assigned, not at a flat entitlement level.
+
+

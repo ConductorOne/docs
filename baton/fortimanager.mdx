@@ -1,0 +1,78 @@
+---
+title: "Set up a Fortinet FortiManager connector"
+og:title: "Set up a Fortinet FortiManager connector"
+description: "C1 provides read-only identity governance for Fortinet FortiManager management administrator accounts and admin profiles."
+og:description: "C1 provides read-only identity governance for Fortinet FortiManager management administrator accounts and admin profiles."
+sidebarTitle: "Fortinet FortiManager"
+---
+
+C1 provides read-only identity governance for Fortinet FortiManager. Integrate
+your FortiManager instance with C1 for unified visibility over privileged
+management administrator accounts and the admin profiles they are assigned.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Users (management admins)|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Admin profiles (roles)|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+This connector is **read-only**. It syncs FortiManager management administrator
+accounts as users, admin profiles as roles, and each admin's assigned profile
+as a role-membership grant. It does not provision changes back to FortiManager.
+This covers privileged management access -- not end-user identities.
+
+## Gather FortiManager credentials
+
+The connector talks to the FortiManager JSON-RPC API at `<base-url>/jsonrpc`.
+It supports two authentication modes; configure one.
+
+<Note>
+API-token auth (FortiManager 7.2.2+) sends the token as an HTTP
+`Authorization: Bearer` header and stores it as a masked secret in C1.
+Session auth sends the username and password to `/sys/login/user` to
+obtain a session key; the password field is not masked. Prefer API-token
+auth when possible.
+</Note>
+
+### Option 1 -- API token (FortiManager 7.2.2+)
+
+<Steps>
+  <Step title="Create an API user">
+    In FortiManager, create an administrator with **RPC Permit (JSON API
+    Access)** enabled and Trusted Hosts restricted to the C1 egress range.
+  </Step>
+  <Step title="Generate the token">
+    Generate the API token for that admin and copy it.
+  </Step>
+</Steps>
+
+### Option 2 -- Username and password (session auth)
+
+<Steps>
+  <Step title="Use a read-only admin">
+    Provide the login name and password of a FortiManager administrator with
+    read access to system admin settings. The connector calls
+    `exec /sys/login/user` to obtain a session key.
+  </Step>
+</Steps>
+
+## Configure the connector
+
+|Field|Required|Description|
+|-|-|-|
+|Base URL|Yes|FortiManager host origin, e.g. `https://fortimanager.example.com`.|
+|API token|One of|API token for token auth (7.2.2+).|
+|Username|One of|Admin login name for session auth.|
+|Password|One of|Admin password for session auth.|
+
+Set either the API token, or both username and password. When the API token is
+set it takes precedence.
+
+## Notes
+
+- ADOM mode does not change the global admin scope; the connector reads
+  `/cli/global/system/admin/user` and `/cli/global/system/admin/profile`.
+- FortiManager often uses a self-signed certificate. The JSON-RPC transport has
+  no insecure-TLS toggle; add the FortiManager CA to the trust store of the
+  environment running the connector.

@@ -1,0 +1,98 @@
+---
+title: Set up the Gong MCP server
+description: Generate Gong API credentials, then register the Gong MCP server in C1 and govern the tools your AI clients can call.
+og:title: Set up the Gong MCP server
+og:description: Generate Gong API credentials, then register the Gong MCP server in C1 and govern the tools your AI clients can call.
+sidebarTitle: Gong
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Gong MCP server lets you govern access to Gong — calls, transcripts, users, scorecards, deals, sequences, and permission profiles — as tools your AI clients can call through C1.
+
+Gong authenticates with a generated Access Key and Access Key Secret pair that C1 sends as HTTP basic auth. A single credential pair authenticates everyone, so all tool calls reach Gong as one shared identity.
+
+## How C1 connects to Gong
+
+C1 hosts the Gong MCP server, so your users' AI clients only ever see MCP tools — they never call Gong directly. When an AI client calls one of these tools, C1 makes the matching request to the Gong API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Gong on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Gong **Technical Administrator** account. Only a Technical Administrator can generate API credentials. If you don't have that role, find your Gong tech admin in Gong's [Find your Technical or Business Admin](https://help.gong.io/v1/docs/find-your-technical-or-business-admin) help article.
+
+<Note>
+If you don't see **Gong** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Generate Gong API credentials
+
+Generate an Access Key and Access Key Secret in Gong so C1 can authenticate to the Gong API. For Gong's own walkthrough, see [Receive access to the API](https://help.gong.io/docs/receive-access-to-the-api).
+
+<Steps>
+<Step>
+Sign in to Gong as a Technical Administrator.
+</Step>
+<Step>
+Open the Gong admin and go to **Company Settings** > **Ecosystem** > **API**.
+</Step>
+<Step>
+Select **Get API Key** (or **Create** if a key already exists).
+</Step>
+<Step>
+Copy both the **Access Key** and the **Access Key Secret** immediately. Gong shows the Access Key Secret only at creation time and it cannot be recovered later. If you lose it, revoke the pair and generate a new one.
+</Step>
+<Step>
+Note your Gong API base URL. Gong runs each customer's API on a regional subdomain of `api.gong.io`, such as `https://acme.api.gong.io`. The base URL is shown on the API page in **Company Settings** > **Ecosystem** > **API** alongside your key. For details, see Gong's [Receive access to the API](https://help.gong.io/docs/receive-access-to-the-api) help article.
+</Step>
+</Steps>
+
+For a shared production setup, generate the credentials under a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+## How Gong credentials are shared
+
+Every user's tool calls use the one Access Key and Access Key Secret pair you provided, so Gong sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared production setup, generate the credentials from a dedicated service-account user so Gong activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Gong MCP server in C1
+
+With your credential pair ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Gong** from the catalog.
+</Step>
+<Step>
+Enter your Gong instance URL, such as `https://acme.api.gong.io`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Basic auth** and enter your **Access Key** as the username and your **Access Key Secret** as the password.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Gong server exposes.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Gong. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Gong tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Gong credentials when an approved user successfully calls a Gong tool from their AI client.
+</Note>
+
+## Manage your Gong credentials
+
+- **Rotate the credential pair** in **Company Settings** > **Ecosystem** > **API**: revoke the existing key, select **Get API Key** to issue a fresh pair, then update the credentials in C1. Gong emails the technical administrator before a key expires so you can rotate proactively.
+- **Watch your rate limits.** By default Gong allows 3 requests per second and 10,000 requests per day per company. To request more headroom, contact Gong support.

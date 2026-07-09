@@ -1,8 +1,8 @@
 ---
 title: Set up a Ramp connector
-og:title: Set up a Ramp connector - C1 docs
-og:description: Integrate your Ramp instance with C1 to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
-description: C1 provides identity governance for Ramp. Integrate your Ramp instance with C1 to run user access reviews (UARs) and enable just-in-time access requests.
+og:title: Set up a Ramp connector
+description: C1 provides identity governance and just-in-time provisioning for Ramp. Integrate your Ramp instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access.
+og:description: C1 provides identity governance and just-in-time provisioning for Ramp. Integrate your Ramp instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access.
 sidebarTitle: Ramp
 ---
 
@@ -12,11 +12,16 @@ sidebarTitle: Ramp
 
 ## Capabilities
 
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
 | Resource     | Sync | Provision |
 | :----------- | :--- | :-------- |
 | Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |       
 | Roles        | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   |
 | Vendors      | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |
+
+{/* AUTO-GENERATED:END - capabilities */}
 
 <Note>
 **Vendor owner is single-assignee.** Each Ramp vendor can have only one owner at a time. Granting the vendor owner entitlement to a new user overwrites the previous owner in Ramp — the prior owner is silently removed. Revoking the entitlement clears the owner only when the principal being revoked is the current owner.
@@ -32,6 +37,70 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 |-------------|-------------------|-------------|
 | disable_user | `user_id` (string, required) | Deactivate a Ramp user. The user will no longer be able to log in, spend on cards, or receive notifications. |
 | enable_user | `user_id` (string, required) | Reactivate a Ramp user. The user can log in to Ramp again, spend on their previously issued cards, and resume receiving notifications. |
+
+## Gather Ramp credentials
+
+<Warning>
+To configure the Ramp connector, you need the **Administrator** role in Ramp.
+</Warning>
+
+The Ramp connector supports two authentication methods. Choose the one that fits your setup:
+
+### Option 1: Use an access token
+
+<Steps>
+  <Step>
+    In Ramp, navigate to **Settings** > **Developers** > **API tokens**.
+  </Step>
+  <Step>
+    Click **Create a token**, give it a name (for example, `ConductorOne`), and select the following scopes:
+
+    - `users:read` — sync users
+    - `users:write` — provision and deprovision users
+    - `vendors:read` — sync vendors
+    - `vendors:write` — grant and revoke vendor ownership
+
+    <Warning>
+    The **users:write** and **vendors:write** scopes are used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, do not grant these scopes.**
+    </Warning>
+  </Step>
+  <Step>
+    Click **Create** and copy the token. Save it somewhere secure — you won't be able to view it again.
+  </Step>
+</Steps>
+
+For more information, see the [Ramp API token documentation](https://docs.ramp.com/developer-api/v1/authorization).
+
+### Option 2: Use OAuth 2.0 client credentials
+
+<Steps>
+  <Step>
+    In Ramp, navigate to **Settings** > **Developers** > **OAuth apps**.
+  </Step>
+  <Step>
+    Click **Create OAuth app** and configure the following:
+
+    1. Enter a name: `ConductorOne`
+    2. Set the grant type to **Client Credentials**
+    3. Select the following scopes:
+
+       - `users:read` — sync users
+       - `users:write` — provision and deprovision users
+       - `vendors:read` — sync vendors
+       - `vendors:write` — grant and revoke vendor ownership
+
+    <Warning>
+    The **users:write** and **vendors:write** scopes are used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, do not grant these scopes.**
+    </Warning>
+
+    4. Click **Create**
+  </Step>
+  <Step>
+    Copy and save the **Client ID** and **Client Secret**. Save them somewhere secure — the secret won't be shown again.
+  </Step>
+</Steps>
+
+For more information, see the [Ramp authorization documentation](https://docs.ramp.com/developer-api/v1/authorization).
 
 ## Configure the Ramp connector
 
@@ -74,13 +143,13 @@ Click **Next**.
 Find the **Settings** area of the page and click **Edit**.
 </Step>
 <Step>
-Click **Login with OAuth**.
+Select your authentication method and enter the credentials you gathered earlier:
+
+- **Access Token**: paste your Ramp API access token into the **Ramp Access Token** field.
+- **OAuth 2.0 Client Credentials**: paste your Ramp OAuth client ID and client secret into the **Ramp OAuth Client ID** and **Ramp OAuth Client Secret** fields.
 </Step>
 <Step>
-Log in and authorize C1 with your Ramp instance.
-</Step>
-<Step>
-You will then be redirected back to the Ramp setup page in C1, where you'll see an authorization message.
+Click **Save**.
 </Step>
 <Step>
 The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
@@ -139,20 +208,13 @@ Carefully copy and save these credentials. We'll use them in Step 2.
 
 Create two Kubernetes manifest files for your Ramp connector deployment.
 
-The Ramp connector supports two authentication methods — pick one when populating the secret:
-
-- **Access Token** — a long-lived Ramp API access token.
-- **OAuth 2.0 Client Credentials** — a Ramp OAuth client ID and secret (the connector exchanges them for a short-lived access token automatically, via `https://api.ramp.com/developer/v1/token`).
-
-See the [Ramp authorization docs](https://docs.ramp.com/developer-api/v1/authorization) for how to create an OAuth app with the `Client Credentials` grant type and `users:read` / `users:write` scopes.
-
-The connector points at `https://api.ramp.com` by default. Set `BATON_RAMP_BASE_URL` to `https://demo-api.ramp.com` (or another Ramp environment) to override.
+Use the credentials you gathered earlier and pick the secret template that matches your chosen authentication method.
 
 #### Secrets configuration
 
 **Option A — Access Token:**
 
-```yaml
+```yaml expandable
 # baton-ramp-secrets.yaml
 apiVersion: v1
 kind: Secret
@@ -165,7 +227,7 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
 
   # Ramp credentials
-  BATON_TOKEN: <Ramp API token>
+  BATON_TOKEN: <Ramp API access token>
 
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
@@ -173,7 +235,7 @@ stringData:
 
 **Option B — OAuth 2.0 Client Credentials:**
 
-```yaml
+```yaml expandable
 # baton-ramp-secrets.yaml
 apiVersion: v1
 kind: Secret
@@ -218,7 +280,7 @@ spec:
     spec:
       containers:
       - name: baton-ramp
-        image: ghcr.io/conductorone/baton-ramp:latest
+        image: public.ecr.aws/conductorone/baton-ramp:latest
         imagePullPolicy: IfNotPresent
         env:
         - name: BATON_HOST_ID
@@ -242,4 +304,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your Ramp connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-

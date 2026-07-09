@@ -1,0 +1,149 @@
+---
+title: Set up the GitHub MCP server
+description: Connect GitHub to C1 with per-user OAuth or a personal access token, then register the GitHub MCP server and govern its tools.
+og:title: Set up the GitHub MCP server
+og:description: Connect GitHub to C1 with per-user OAuth or a personal access token, then register the GitHub MCP server and govern its tools.
+sidebarTitle: GitHub
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The GitHub MCP server lets you govern access to GitHub — repositories, pull requests, issues, Actions, and organization data — as tools your AI clients can call through C1.
+
+GitHub supports two ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own GitHub account, so every tool call runs under that user's GitHub identity and permissions.
+- **Personal access token**. A single token authenticates everyone, so all tool calls reach GitHub as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to GitHub
+
+C1 hosts the GitHub MCP server, so your users' AI clients only ever see MCP tools — they never call GitHub directly. When an AI client calls one of these tools, C1 makes the matching request to the GitHub API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call GitHub on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- For per-user OAuth, you need permission to create an OAuth app on your GitHub user account or organization.
+- For a personal access token, you need the GitHub account whose access the token should carry.
+
+<Note>
+If you don't see **GitHub** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one GitHub OAuth app and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in GitHub.
+
+### Create a GitHub OAuth app
+
+Register an OAuth app in GitHub so C1 can prompt each user to authorize with their own account. For the full walkthrough, see GitHub's [latest guide to creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+
+<Steps>
+<Step>
+In GitHub, go to **Settings** > **Developer settings** > **OAuth Apps** and select **New OAuth App**.
+</Step>
+<Step>
+Fill in the registration form:
+
+- **Application name** — a recognizable name such as `C1`.
+- **Homepage URL** — your C1 tenant URL, or `https://www.c1.ai`.
+- **Authorization callback URL** — set this exactly to `https://accounts.conductor.one/auth/callback`. GitHub OAuth apps allow only one callback URL.
+</Step>
+<Step>
+Select **Register application**.
+</Step>
+<Step>
+Copy the **Client ID**, then select **Generate a new client secret** and copy the secret. GitHub shows the secret only once.
+</Step>
+</Steps>
+
+### Register the server with OAuth
+
+With your OAuth app ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth app's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. The first time a user calls a GitHub tool from their AI client, they're prompted to connect their GitHub account.
+</Step>
+</Steps>
+
+## Option 2: Use a personal access token
+
+A personal access token authenticates every user as one shared GitHub identity. Use this when per-user attribution in GitHub isn't required. GitHub offers fine-grained tokens, which are recommended because you can limit them to specific repositories and permissions.
+
+### Create a personal access token
+
+Generate a fine-grained personal access token in GitHub for C1 to authenticate with. For the full walkthrough, see GitHub's [guide to managing personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+
+<Steps>
+<Step>
+In GitHub, go to **Settings** > **Developer settings** > **Personal access tokens** > **Fine-grained tokens**, then select **Generate new token**.
+</Step>
+<Step>
+Set a **token name**, an **expiration**, and a **resource owner** (your account or an organization).
+</Step>
+<Step>
+Under **Repository access**, choose which repositories the token can reach, then grant only the **repository permissions** you need, such as read access to Contents, Issues, and Pull requests.
+</Step>
+<Step>
+Select **Generate token** and copy it. GitHub shows the token only once.
+</Step>
+</Steps>
+
+For a shared production setup, create the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+### Register the server with a token
+
+With your token ready, register the server and provide it as the credential.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your personal access token.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the GitHub server exposes.
+</Step>
+</Steps>
+
+## How GitHub credentials are shared
+
+How GitHub sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own GitHub account, so tool calls run under that user's GitHub identity and inherit only the access they already have. GitHub attributes each action to the individual user.
+- **Personal access token.** Every user's tool calls use the one token you provided, so GitHub sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against GitHub. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a GitHub tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your GitHub credentials when an approved user successfully calls a GitHub tool from their AI client.
+</Note>
+
+## Manage your GitHub credentials
+
+- **Rotate the OAuth client secret** in your GitHub OAuth app under **Settings** > **Developer settings** > **OAuth Apps**, then update the secret on the server's authentication settings in C1.
+- **Rotate a personal access token** by generating a new one in GitHub and updating it in C1. Set an expiration on the token so it rotates on a schedule.
+- **Adjust access** by editing the OAuth app's scopes or the token's repository permissions in GitHub.

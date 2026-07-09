@@ -1,0 +1,114 @@
+---
+title: Set up the Ramp MCP server
+description: Connect Ramp to C1 with per-user OAuth or a shared OAuth2 service app, then register the Ramp MCP server and govern its tools.
+og:title: Set up the Ramp MCP server
+og:description: Connect Ramp to C1 with per-user OAuth or a shared OAuth2 service app, then register the Ramp MCP server and govern its tools.
+sidebarTitle: Ramp
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Ramp MCP server lets you govern access to Ramp — users, departments, cards, transactions, reimbursements, bills, and other spend data — as tools your AI clients can call through C1.
+
+Ramp authenticates with OAuth. You create a Ramp developer app, then choose how users connect when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Ramp account, so every tool call runs under that user's Ramp identity and permissions.
+- **OAuth2 service mode**. A single shared app authenticates everyone, so all tool calls reach Ramp as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Ramp
+
+C1 hosts the Ramp MCP server, so your users' AI clients only ever see MCP tools — they never call Ramp directly. When an AI client calls one of these tools, C1 makes the matching request to the Ramp API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Ramp on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Ramp account with permission to create developer apps, which typically requires an admin role.
+
+<Note>
+If you don't see **Ramp** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a Ramp developer app
+
+Create a developer app in Ramp so C1 can authenticate with the Ramp API.
+
+<Steps>
+<Step>
+In Ramp, open **Settings** > **Developer** and create a new app. See Ramp's [Accessing the Developer API](https://support.ramp.com/hc/en-us/articles/46681939909907-Accessing-the-Developer-API) docs for the navigation path and required admin access.
+</Step>
+<Step>
+Give the app a recognizable name such as `C1`. 
+</Step>
+<Step>
+For per-user OAuth, set the **redirect URI** exactly to `https://accounts.conductor.one/auth/callback`.
+</Step>
+<Step>
+Grant only the scopes you need, such as read access to the resources you plan to govern. Copy the **client ID** and **client secret**. Ramp may show the secret only once.
+</Step>
+</Steps>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one Ramp app and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Ramp.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Ramp** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your app's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Ramp tool from their AI client, they're prompted to connect their Ramp account.
+</Step>
+</Steps>
+
+## Option 2: Use a shared OAuth2 service app
+
+A shared OAuth2 service app authenticates every user as one Ramp identity. Use this when per-user attribution in Ramp isn't required.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Ramp** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — service mode** and enter your app's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Ramp server exposes.
+</Step>
+</Steps>
+
+## How Ramp credentials are shared
+
+How Ramp sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Ramp account, so tool calls run under that user's Ramp identity and inherit only the access they already have. Ramp attributes each action to the individual user.
+- **OAuth2 service mode.** Every user's tool calls use the one shared app you provided, so Ramp sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Ramp. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Ramp tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Ramp credentials when an approved user successfully calls a Ramp tool from their AI client.
+</Note>
+
+## Manage your Ramp credentials
+
+- **Rotate the client secret** in your Ramp developer app, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by editing the app's scopes in Ramp.

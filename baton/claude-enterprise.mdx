@@ -34,17 +34,35 @@ When provisioning a new Claude Enterprise user account, C1 prompts for the follo
 
 The user's email address is provided automatically by C1 and is used as the SCIM username. No password is required — Claude Enterprise authenticates users through SSO, so accounts are created without credentials.
 
-## SCIM-only connector
+## How this connector connects to Claude Enterprise
 
-This connector uses the SCIM 2.0 API exclusively. Claude Enterprise does not currently offer an Admin API for managing users and groups, so SCIM is the only programmatic interface available.
+The connector runs in one of two modes depending on which credentials you provide. **At least one** of a Compliance Access Key or SCIM credentials is required.
 
-### What this means in practice
+- **Compliance API mode (recommended).** When a **Compliance Access Key** is configured, Anthropic's **Compliance API** (`/v1/compliance/*`) is the source of truth — it sees every user and group across all linked organizations under your parent, **both SCIM-synced and console-invited identities**. **SCIM 2.0** credentials (implemented by WorkOS) are optional here and enable provisioning of SCIM-managed users and groups.
+- **SCIM-only mode (fallback).** When no Compliance Access Key is set, the connector syncs users and groups directly from SCIM and provisions natively. Only SCIM-provisioned identities are visible — console-invited users and console-created groups will not appear. Adding a Compliance Access Key later is non-disruptive: SCIM-managed identities keep their SCIM ids, and console-only identities simply become visible for the first time.
 
-- **Only SCIM-managed users and groups are visible.** Users or groups created directly through the Claude Enterprise UI will not appear in syncs. To get full visibility, all user management should flow through SCIM.
-- **Groups are managed through SCIM only.** The connector can sync groups and grant or revoke group membership, but it cannot create or delete groups. Groups must be created outside of C1 (e.g., through your identity provider or directly via the SCIM API).
-- **Claude Enterprise uses WorkOS under the hood** for its SCIM implementation. The SCIM endpoint URL provided during setup points to the WorkOS SCIM service.
+<Warning>
+  **Add SCIM credentials freely, but don't remove them from an install that has them.** Whenever SCIM credentials are configured, SCIM-managed users and groups are keyed by their SCIM id — adding a Compliance Access Key on top is safe and changes no existing ids. If you instead *drop* the SCIM credentials and run Compliance-only, those identities re-key to their email address, and ConductorOne treats them as brand-new resources — resetting grant history, access-review trails, and account links.
+</Warning>
 
-### What SCIM provides
+### Compliance API mode (recommended — source of truth)
+
+The connector lists and reconciles directory data entirely from the Compliance API, so a console-invited user — or a group created directly in claude.ai — is synced just like a SCIM-provisioned one:
+
+| Synced | From |
+| :--- | :--- |
+| Users (every org member, SCIM- or console-provisioned) | `organizations/{id}/users` |
+| Organizations + built-in org-role grants (`owner` / `admin` / `developer` / …) | `organizations`, `organizations/{id}/users` |
+| RBAC roles + group→role grants | `organizations/{id}/roles`, `groups` |
+| Groups (both `direct` and `scim`) + membership | `groups`, `groups/{id}/members` |
+
+### Activity feed (Compliance mode)
+
+In Compliance mode the connector also streams Anthropic's audit/activity feed (`/v1/compliance/activities`) as C1 **usage events** — each event records a user acting within an organization (for example, viewing a chat or file). These power last-active and dormant-access signals for access reviews, alongside the access state from the directory sync. The feed reads only when a Compliance Access Key is configured (it is absent in SCIM-only mode) and requires the `read:compliance_activities` scope on the key.
+
+### SCIM 2.0 (optional — provisioning only)
+
+When SCIM credentials are configured, the connector can provision **SCIM-managed** resources:
 
 | Capability | Supported |
 | :--- | :--- |
@@ -52,23 +70,50 @@ This connector uses the SCIM 2.0 API exclusively. Claude Enterprise does not cur
 | Deprovision (delete) user | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 | Add user to group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 | Remove user from group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
-| Sync all users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
-| Sync all groups and memberships | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
-| Create or delete groups | |
-| Assign roles | |
-| Manage workspace settings | |
 
-<Note>
-If Anthropic adds an Admin API in the future, the connector can be extended to support additional capabilities such as role management.
-</Note>
+Provisioning resolves the target's SCIM id by email (users) or name (groups) at write time. **Console-native identities have no SCIM record and are read-only** — they sync, but cannot be created, deleted, or have membership changed through this connector. In Compliance mode without SCIM credentials the connector is sync-only.
+
+### SCIM-only mode (fallback)
+
+If you cannot yet obtain a Compliance Access Key (the Compliance API is enabled on request and is in beta), configure **only** the SCIM credentials. The connector then syncs and provisions users and groups entirely through SCIM, keyed by their SCIM ids — the connector's original behavior. Note this mode does **not** see console-invited identities; switch to Compliance mode once a key is available for full coverage.
 
 ## Gather Claude Enterprise credentials
 
-Configuring the connector requires you to generate SCIM credentials in Claude Enterprise. Gather these credentials before you move on.
+Provide **at least one** of a Compliance Access Key (recommended) or SCIM credentials. Configuring both enables Compliance-canonical sync *and* provisioning.
 
 <Warning>
-The **Primary Owner** of the Claude Enterprise organization must perform this task. SCIM provisioning is only available on Enterprise plans.
+The **Primary Owner** of the Claude Enterprise organization must perform these tasks. The Compliance API and SCIM are Enterprise-plan features, and the Compliance API is enabled on request.
 </Warning>
+
+### Compliance Access Key (recommended)
+
+<Steps>
+  <Step>
+    Request access to the Compliance API for your parent organization (it is enabled on request). Follow Anthropic's guide at [Get access to the Compliance API](https://platform.claude.com/docs/en/manage-claude/compliance-api-access).
+  </Step>
+
+  <Step>
+    As the Primary Owner, go to **claude.ai > Organization settings > Data and privacy**, find **Compliance access keys**, and create a key with these scopes:
+
+    - `read:compliance_org_data` (required)
+    - `read:compliance_user_data` (required)
+    - `read:compliance_activities` (for the activity feed)
+
+    <Warning>
+    `read:compliance_user_data` is required — listing org users and group members depends on it — and it also grants read access to chat, file, and project content across all linked organizations. Treat the key like a production database credential.
+    </Warning>
+
+    `read:compliance_activities` is needed only for the [activity feed](#activity-feed-compliance-mode); directory sync and provisioning work without it.
+  </Step>
+
+  <Step>
+    Copy the **Compliance Access Key** (`sk-ant-api01-…`) and store it securely. Provide it as the `compliance-api-key` field during configuration.
+  </Step>
+</Steps>
+
+### SCIM credentials (provisioning, or the SCIM-only fallback)
+
+Configure these if you want provisioning in Compliance mode, or if you have no Compliance Access Key and want to run the connector in SCIM-only mode. Skip them only when you have a Compliance Access Key and don't need provisioning.
 
 <Steps>
   <Step>
@@ -80,7 +125,7 @@ The **Primary Owner** of the Claude Enterprise organization must perform this ta
   </Step>
 
   <Step>
-    Copy the **SCIM Endpoint URL** and **Bearer Token** and save them securely. You will need both to configure the connector.
+    Copy the **SCIM Endpoint URL** and **Bearer Token**. Provide both as the `scim-url` and `scim-token` fields (they are required together).
   </Step>
 </Steps>
 
@@ -92,7 +137,7 @@ The **Primary Owner** of the Claude Enterprise organization must perform this ta
 To complete this task, you'll need:
 
 - The **Connector Administrator** or **Super Administrator** role in C1
-- Access to the Claude Enterprise SCIM credentials generated by following the instructions above
+- At least one of the Claude Enterprise **Compliance Access Key** (recommended) or the **SCIM credentials** generated above (both, if you want Compliance-canonical sync plus provisioning)
 </Warning>
 
 <Tabs>
@@ -135,10 +180,11 @@ To complete this task, you'll need:
      Generated from config_schema.json. Do not edit manually. */}
 
     <Step>
-      Enter the required configuration:
+      Enter the configuration. Provide at least one of the Compliance Access Key or the SCIM credentials:
 
-      - **SCIM Token** (required): The SCIM bearer token for Claude Enterprise (from claude.ai > Settings > Identity and access).
-      - **SCIM URL** (required): The SCIM endpoint URL provided during SCIM setup (from claude.ai > Settings > Identity and access). This is the WorkOS SCIM endpoint generated for your organization.
+      - **SCIM Token** (optional): Optional SCIM bearer token (claude.ai → Settings → Identity and access). Only needed to enable provisioning of SCIM-managed users and groups.
+      - **SCIM URL** (optional): Optional WorkOS SCIM endpoint URL (claude.ai > Settings > Identity and access). Only needed for provisioning; required together with scim-token.
+      - **Compliance Access Key** (optional): Anthropic Compliance Access Key (read:compliance_org_data + read:compliance_user_data). Source of truth when set; otherwise the connector syncs SCIM-only.
     </Step>
 
 {/* AUTO-GENERATED:END - config-params */}
@@ -166,7 +212,7 @@ To complete this task, you'll need:
 
   * [Official download center](https://dist.conductorone.com/ConductorOne/baton-claude-enterprise): For stable binaries (Windows/Linux/macOS) and container images.
 
-  * [GitHub repository](https://github.com/ConductorOne/baton-claude-enterprise): Access the source code, report issues, or contribute to the project.
+  * [GitHub repository](https://github.com/conductorone/baton-claude-enterprise): Access the source code, report issues, or contribute to the project.
 
   ### Step 1: Set up a new Claude Enterprise connector
 
@@ -226,7 +272,12 @@ To complete this task, you'll need:
     BATON_CLIENT_ID: <C1 client ID>
     BATON_CLIENT_SECRET: <C1 client secret>
 
-    # Claude Enterprise SCIM credentials
+    # Provide at least one mode. Compliance Access Key (recommended) — when set,
+    # it is the source of truth; otherwise the connector runs SCIM-only.
+    BATON_COMPLIANCE_API_KEY: <sk-ant-api01-… Compliance Access Key>
+
+    # SCIM credentials — provisioning in Compliance mode, or the SCIM-only fallback
+    # (required together). At least one of the key above or this pair must be set.
     BATON_SCIM_TOKEN: <SCIM bearer token>
     BATON_SCIM_URL: <SCIM endpoint URL>
   ```

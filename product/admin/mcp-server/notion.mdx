@@ -1,0 +1,155 @@
+---
+title: Set up the Notion MCP server
+description: Connect Notion to C1 with per-user OAuth or an internal integration secret, then register the Notion MCP server and govern its tools.
+og:title: Set up the Notion MCP server
+og:description: Connect Notion to C1 with per-user OAuth or an internal integration secret, then register the Notion MCP server and govern its tools.
+sidebarTitle: Notion
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Notion MCP server lets you govern access to Notion — pages, databases, blocks, comments, and users — as tools your AI clients can call through C1.
+
+Notion supports two ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Notion account, so every tool call runs under that user's Notion identity and permissions.
+- **Internal integration secret**. A single token authenticates everyone, so all tool calls reach Notion as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Notion
+
+C1 hosts the Notion MCP server, so your users' AI clients only ever see MCP tools — they never call Notion directly. When an AI client calls one of these tools, C1 makes the matching request to the Notion API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Notion on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- For per-user OAuth, you need permission to create a public integration. See Notion's [Create integrations with the Notion API](https://www.notion.com/help/create-integrations-with-the-notion-api) documentation.
+- For an internal integration secret, you need to be a **Workspace Owner** of the Notion workspace.
+
+<Note>
+If you don't see **Notion** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one Notion public integration and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Notion.
+
+### Create a Notion public integration
+
+Create a public integration in Notion that users will authorize through.
+
+<Steps>
+<Step>
+In Notion's developer portal, select **New integration**. See Notion's [Create integrations with the Notion API](https://www.notion.com/help/create-integrations-with-the-notion-api) documentation.
+</Step>
+<Step>
+Enter a recognizable name such as `C1`, select the associated workspace, and set **Type** to **Public**.
+</Step>
+<Step>
+Set the **Redirect URI** exactly to:
+
+```
+https://accounts.conductor.one/auth/callback
+```
+</Step>
+<Step>
+On the **Capabilities** tab, enable only what C1 needs: **Read content** for read operations, plus **Update content** or **Insert content** if C1 should edit or create pages, and the comment and user-information capabilities you need.
+</Step>
+<Step>
+Copy the integration's **Client ID** and **Client Secret**.
+</Step>
+</Steps>
+
+### Register the server with OAuth
+
+With your public integration ready, register the server and provide its credentials to C1.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Notion** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your integration's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Notion tool from their AI client, they're prompted to connect their Notion account.
+</Step>
+</Steps>
+
+## Option 2: Use an internal integration secret
+
+An internal integration secret authenticates every user as one shared Notion identity. Use this when per-user attribution in Notion isn't required.
+
+### Create an internal integration
+
+Create an internal integration in Notion and connect it to the pages C1 should reach.
+
+<Steps>
+<Step>
+In Notion's developer portal, select **New integration**. See Notion's [Create integrations with the Notion API](https://www.notion.com/help/create-integrations-with-the-notion-api) documentation.
+</Step>
+<Step>
+Enter a recognizable name such as `C1`, select the associated workspace, and set **Type** to **Internal**, then select **Save**.
+</Step>
+<Step>
+On the **Capabilities** tab, enable only what C1 needs: **Read content** for read operations, plus **Update content** or **Insert content** if C1 should edit or create pages, and the comment and user-information capabilities you need.
+</Step>
+<Step>
+On the **Configuration** tab, under **Internal Integration Secret**, select **Show** and copy the token. Treat it as a high-value credential.
+</Step>
+<Step>
+Connect the integration to the pages it should reach. An internal integration sees only pages explicitly connected to it. For each page or page tree, open the page in Notion, select **•••** > **Connections** > **Connect to**, and select your integration. Child pages inherit access from their parent.
+</Step>
+</Steps>
+
+For a shared production setup, create the integration from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+### Register the server with a secret
+
+With your internal integration secret ready, register the server and provide it to C1.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Notion** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your internal integration secret.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Notion server exposes.
+</Step>
+</Steps>
+
+## How Notion credentials are shared
+
+How Notion sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Notion account, so tool calls run under that user's Notion identity and inherit only the access they already have. Notion attributes each action to the individual user.
+- **Internal integration secret.** Every user's tool calls use the one secret you provided, so Notion sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Notion. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Notion tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Notion credentials when an approved user successfully calls a Notion tool from their AI client.
+</Note>
+
+## Manage your Notion credentials
+
+- **Rotate the OAuth client secret** on your public integration's **Configuration** tab in Notion, then update the secret on the server's authentication settings in C1.
+- **Rotate the internal integration secret** by regenerating it on the integration's **Configuration** tab in Notion and updating it in C1.
+- **Adjust access** by editing the integration's capabilities, and for an internal integration, the set of pages it's connected to.

@@ -1,0 +1,92 @@
+---
+title: Set up the Metabase MCP server
+description: Create a Metabase API key, then register the Metabase MCP server in C1 and govern the tools it exposes.
+og:title: Set up the Metabase MCP server
+og:description: Create a Metabase API key, then register the Metabase MCP server in C1 and govern the tools it exposes.
+sidebarTitle: Metabase
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Metabase MCP server lets you govern access to Metabase — dashboards, questions, collections, databases, and users — as tools your AI clients can call through C1.
+
+Metabase authenticates with an API key that C1 sends in a request header. A single key authenticates everyone, so all tool calls reach Metabase as one shared identity.
+
+## How C1 connects to Metabase
+
+C1 hosts the Metabase MCP server, so your users' AI clients only ever see MCP tools — they never call Metabase directly. When an AI client calls one of these tools, C1 makes the matching request to the Metabase API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Metabase on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Metabase admin account that can create API keys. An API key inherits the permissions of the group you assign it to, so assign a group that has the access you want this integration to have.
+
+<Note>
+If you don't see **Metabase** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a Metabase API key
+
+Create an API key in Metabase and assign it to the group whose permissions it should carry. For more information, see Metabase's [API keys](https://www.metabase.com/docs/latest/people-and-groups/api-keys) documentation.
+
+<Steps>
+<Step>
+Sign in to your Metabase instance as an admin and go to **Settings** > **Admin settings** > **Authentication** > **API Keys**.
+</Step>
+<Step>
+Select **Create API Key**.
+</Step>
+<Step>
+Give the key a recognizable name such as `C1`, then choose the **group** whose permissions the key should carry.
+</Step>
+<Step>
+Create the key and copy it. Metabase shows the key only once.
+</Step>
+</Steps>
+
+For a shared production setup, assign the key to a dedicated group so activity is attributable to C1 rather than a person, and scope that group to only the data you want to govern.
+
+## How Metabase credentials are shared
+
+Every user's tool calls use the one API key you provided, so Metabase sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, assign the key to a dedicated group so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Metabase MCP server in C1
+
+With your API key ready, register the server and provide it to C1.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Metabase** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Custom header**. Set the header name to `X-Api-Key` and the value to your Metabase API key. Enter your Metabase instance URL when prompted.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Metabase server exposes.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Metabase. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Metabase tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Metabase credentials when an approved user successfully calls a Metabase tool from their AI client.
+</Note>
+
+## Manage your Metabase credentials
+
+- **Rotate the API key** by creating a new key under **Admin settings** > **Authentication** > **API Keys**, updating it in C1, then deleting the old key.
+- **Adjust access** by changing the group the key belongs to, or by editing that group's permissions in Metabase.

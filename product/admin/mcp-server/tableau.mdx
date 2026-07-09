@@ -1,0 +1,125 @@
+---
+title: Set up the Tableau MCP server
+description: Create a Tableau session token from a personal access token, then register the Tableau MCP server in C1 and govern its tools.
+og:title: Set up the Tableau MCP server
+og:description: Create a Tableau session token from a personal access token, then register the Tableau MCP server in C1 and govern its tools.
+sidebarTitle: Tableau
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Tableau MCP server lets you govern access to Tableau Cloud and Tableau Server — workbooks, data sources, projects, users, groups, sites, schedules, and subscriptions — as tools your AI clients can call through C1.
+
+Tableau authenticates with a session token that C1 sends in the `X-Tableau-Auth` header. You generate the session token from a Tableau personal access token (PAT). A single token authenticates everyone, so all tool calls reach Tableau as one shared identity.
+
+## How C1 connects to Tableau
+
+C1 hosts the Tableau MCP server, so your users' AI clients only ever see MCP tools — they never call Tableau directly. When an AI client calls one of these tools, C1 makes the matching request to the Tableau API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Tableau on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Tableau user with the site role needed for the operations C1 should perform. Use a **Site Administrator Creator** for full admin coverage, or a narrower Explorer or Viewer role for reads only. For a shared production setup, create a dedicated Tableau service-account user and generate the PAT from that account.
+
+<Note>
+If you don't see **Tableau** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Generate a Tableau personal access token
+
+Create a personal access token for the Tableau user C1 should run as. For Tableau's own walkthrough, see [Manage Your Account Settings](https://help.tableau.com/current/pro/desktop/en-us/useracct.htm) and [Personal Access Tokens](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm).
+
+<Steps>
+<Step>
+Sign in to Tableau Cloud or Tableau Server as the user C1 should run as.
+</Step>
+<Step>
+Select your profile picture, then **My Account Settings**, and scroll to **Personal Access Tokens**.
+</Step>
+<Step>
+Enter a **Token Name** such as `C1`, then select **Create Token**.
+</Step>
+<Step>
+Copy the **Token Secret** immediately. Tableau shows it only once and you cannot view it again after you dismiss the dialog.
+</Step>
+</Steps>
+
+## Find your instance URL and site
+
+C1 needs your Tableau instance URL and site to scope its requests. Find both while you're signed in to Tableau.
+
+<Steps>
+<Step>
+Your **instance URL** is your Tableau Cloud pod host, such as `https://10ay.online.tableau.com`, or your Tableau Server URL. Use the host without a trailing slash. Look at the URL while you're signed in: the host before `.online.tableau.com` is your pod.
+</Step>
+<Step>
+Your **site content URL** is the path segment after `/#/site/` in the browser, such as `MarketingTeam`. For a default site, the content URL is an empty string.
+</Step>
+</Steps>
+
+## Create a session token
+
+Tableau's REST API uses a two-step flow: you exchange a personal access token for a short-lived session token, then send that session token on every request. The value C1 stores in the `X-Tableau-Auth` header is the **session token**, not the raw PAT.
+
+<Steps>
+<Step>
+Sign in to the Tableau REST API by sending a `POST` request to `https://<your-pod>.online.tableau.com/api/3.21/auth/signin` with your personal access token name, token secret, and site content URL in the JSON body.
+</Step>
+<Step>
+Copy the `credentials.token` value from the response. This is your session token.
+</Step>
+<Step>
+Copy the `credentials.site.id` value from the response. This is your **site LUID**, which C1 needs to scope requests to your site.
+</Step>
+</Steps>
+
+A session token expires after about 4 hours, or 15 days of inactivity. The PAT itself expires after 15 days of inactivity or 1 year of active use, whichever comes first. When the session token expires, sign in again to mint a new one and update it in C1.
+
+## How Tableau credentials are shared
+
+Every user's tool calls use the one session token you provided, so Tableau sees a single shared identity, scoped to the site role of the user whose PAT produced the token. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared production setup, generate the PAT from a dedicated service-account user so Tableau activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Tableau MCP server in C1
+
+With your session token and site details ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Tableau** from the catalog.
+</Step>
+<Step>
+Enter your **instance URL**, such as `https://10ay.online.tableau.com`, and your **site LUID** from the sign-in response.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Custom header**, set the header name to `X-Tableau-Auth`, and paste your session token as the value.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Tableau server exposes.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Tableau. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Tableau tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Tableau credentials when an approved user successfully calls a Tableau tool from their AI client.
+</Note>
+
+## Manage your Tableau credentials
+
+- **Refresh the session token** by signing in to the Tableau REST API again before the token expires, then updating the `X-Tableau-Auth` value in C1. Because the session token is short-lived, plan to refresh it on a schedule.
+- **Rotate the personal access token** by generating a new PAT in **My Account Settings** before the old one expires, using it to mint a fresh session token, then updating C1. Each user can have up to 10 active PATs.
+- **Adjust access** by changing the site role of the user whose PAT you use, or by switching to a PAT from a user with the role you need.

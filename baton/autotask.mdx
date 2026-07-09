@@ -1,0 +1,233 @@
+---
+title: "Set up an Autotask connector"
+og:title: "Set up an Autotask connector"
+description: "C1 provides identity governance for Autotask. Integrate your Autotask instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for Autotask. Integrate your Autotask instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "Autotask"
+---
+
+C1 provides identity governance for Autotask PSA (by Datto/Kaseya). Integrate
+your Autotask instance with C1 for unified visibility and governance over
+resource and contact access.
+
+This connector can also be configured to automatically create Autotask tickets
+to track manual provisioning assignments. Go to [Configure an external ticketing
+provider](/product/admin/external-ticketing) to learn more.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Resources (users)|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Contacts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Roles|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Departments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Security levels|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+External ticket provisioning is also supported. When enabled, the connector
+creates Autotask `Tickets` records for C1 provisioning tasks.
+
+The connector also emits the following access grants:
+
+- **Role assignments** — which resources are assigned to each role (from the
+  `ResourceRoles` join entity).
+- **Department membership** — which resources belong to each department (from the
+  `ResourceRoles` join entity).
+- **Security-level assignments** — which resources hold each security level (from
+  the `Resources.userType` field).
+
+Roles and security levels are modeled as role resources; departments are modeled
+as groups; resources and contacts are modeled as users.
+
+## Gather Autotask credentials
+
+<Warning>
+The connector requires an Autotask **API User (API-only)** account. This
+security level provides API access with no Autotask UI access and incurs no
+per-seat charge. See Autotask's "REST API security and authentication" help
+article for details.
+</Warning>
+
+<Steps>
+  <Step>
+    In Autotask, create (or copy) a resource with the **API User (API-only)**
+    security level. Note its **user name** (an email address such as
+    `apiuser@example.com`) and **password (secret)**.
+  </Step>
+
+  <Step>
+    On the API user's **Resource Management > Security** tab, assign or generate
+    an **API tracking identifier** (integration code). API-only users cannot log
+    in to the UI, so have an HR-security-level user retrieve it for you.
+  </Step>
+
+  <Step>
+    Determine your zone-specific REST API base URL. Autotask hosts each tenant
+    in a geographic zone with its own host name. Issue the unauthenticated
+    zone-discovery request (replace the user with your API user name):
+
+    ```
+    GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user=apiuser@example.com
+    ```
+
+    The response includes a `url` field, for example:
+
+    ```json
+    {
+      "zoneName": "America East",
+      "url": "https://webservices3.autotask.net/atservicesrest/",
+      "webUrl": "https://ww3.autotask.net/",
+      "ci": 20264
+    }
+    ```
+
+    Use the `url` value as the connector **Base URL** (the connector trims any
+    trailing slash automatically).
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Secret|Description|
+|-|-|-|-|
+|**API User Name**|Yes|No|The API-only user name (email), sent in the `Username` header and used for zone discovery.|
+|**API Secret**|Yes|Yes|The API-only user's secret (password), sent in the `Secret` header.|
+|**API Integration Code**|Yes|No|The API tracking identifier, sent in the `ApiIntegrationCode` header.|
+|**Base URL**|Yes|No|The zone-specific REST base URL discovered above (e.g. `https://webservices3.autotask.net/atservicesrest`).|
+
+The connector authenticates with Autotask's three custom HTTP headers
+(`Username`, `Secret`, `ApiIntegrationCode`). Only the secret rides the
+encrypted auth slot; the user name and integration code are non-secret
+identifiers.
+
+## Configure the Autotask connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Autotask** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Autotask connector and set the owner.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the Autotask credentials:
+
+        - **API User Name**: the API-only user's email.
+        - **API Secret**: the API-only user's secret.
+        - **API Integration Code**: the API tracking identifier.
+        - **Base URL**: the zone-specific REST base URL from zone discovery.
+      </Step>
+
+      <Step>
+        **Optional.** If you want C1 to create Autotask tickets for manual
+        provisioning tasks, click **Enable external ticket provisioning**.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Autotask connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Autotask connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        Create secrets for the Autotask credentials.
+      </Step>
+
+      <Step>
+        Configure the connector with the API user name, API secret, API
+        integration code, and the zone-specific base URL.
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your Autotask connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+## Configure external ticketing
+
+After enabling external ticket provisioning on the connector, configure Autotask
+as an external ticketing provider in C1.
+
+<Steps>
+  <Step>
+    In C1, navigate to **Integrations** > **External ticketing**.
+  </Step>
+
+  <Step>
+    Select the Autotask connector and choose the **Autotask Ticket** schema.
+  </Step>
+
+  <Step>
+    Map the required **Company ID** field to the Autotask company that should own
+    tickets created by C1.
+  </Step>
+
+  <Step>
+    Optionally map tenant-specific fields such as **Priority**, **Status**,
+    **Ticket Type**, **Ticket Category**, **Queue**, **Assigned Resource ID**,
+    **Assigned Resource Role ID**, **Contact ID**, **Due Date**, and
+    **External ID**. Picklist fields are loaded from Autotask's
+    `Tickets/entityInformation/fields` endpoint, so their available values match
+    the configured tenant.
+  </Step>
+
+  <Step>
+    Configure the completion and error state mappings using your Autotask ticket
+    statuses.
+  </Step>
+</Steps>
+
+## Limitations and notes
+
+- **No self-serve sandbox.** Autotask does not offer a self-serve developer
+  sandbox, so live validation requires real tenant credentials.
+- **Pagination and rate limits.** Query responses return at most 500 records per
+  page; the connector follows the `pageDetails.nextPageUrl` link until it is
+  null. Autotask enforces a tenant-wide limit of 10,000 API calls per hour
+  shared across all integrations, so the connector retries transient and
+  rate-limited responses with backoff.
+- **Security levels.** Autotask has no queryable `SecurityLevels` entity.
+  Security levels are synced from the picklist values of the `Resources.userType`
+  field (retrieved via `Resources/entityInformation/fields`), and security-level
+  assignments are derived from each resource's `userType` value. (The original
+  request referred to this field as `securityLevelID`; the official REST field
+  name is `userType`.)
+- **Ticket creation.** External ticket provisioning creates Autotask `Tickets`
+  records. The connector does not update or close Autotask tickets directly; C1
+  tracks provider state through the configured external-ticketing status
+  mappings.
+- **Read-only access sync.** This connector syncs identity and access data and
+  can create external tickets. It does not provision grants or accounts directly.

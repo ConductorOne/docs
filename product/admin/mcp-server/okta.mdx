@@ -1,0 +1,102 @@
+---
+title: Set up the Okta MCP server
+description: Create an Okta OAuth app, then register the Okta MCP server in C1 with per-user OAuth and govern the tools your AI clients can call.
+og:title: Set up the Okta MCP server
+og:description: Create an Okta OAuth app, then register the Okta MCP server in C1 with per-user OAuth and govern the tools your AI clients can call.
+sidebarTitle: Okta
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Okta MCP server lets you govern access to Okta — users, groups, applications, and other directory data exposed by the Okta Management APIs — as tools your AI clients can call through C1.
+
+Okta authenticates with per-user OAuth (recommended). Each person authorizes with their own Okta account, so every tool call runs under that user's Okta identity and permissions. You can also set it up as a shared service mode, where an administrator authorizes once and all tool calls reach Okta as one identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Okta
+
+C1 hosts the Okta MCP server, so your users' AI clients only ever see MCP tools — they never call Okta directly. When an AI client calls one of these tools, C1 makes the matching request to the Okta API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Okta on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- An Okta account with administrator permission to create an OAuth app in the Okta admin console.
+- Your Okta instance URL, such as `https://acme.okta.com`.
+
+<Note>
+If you don't see **Okta** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create an Okta OAuth app
+
+You register one Okta OAuth app, and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Okta. For full details, see Okta's [Create OpenID Connect app integrations](https://help.okta.com/en-us/content/topics/apps/apps_app_integration_wizard_oidc.htm) documentation.
+
+<Steps>
+<Step>
+In the Okta admin console, go to **Applications** > **Applications** and select **Create App Integration**.
+</Step>
+<Step>
+Choose **OIDC - OpenID Connect** as the sign-in method and **Web Application** as the application type, then continue.
+</Step>
+<Step>
+Give the app a recognizable name such as `C1`, and set the **Sign-in redirect URI** exactly to `https://accounts.conductor.one/auth/callback`.
+</Step>
+<Step>
+Grant the Okta API scopes the server needs, such as read access to users, groups, and apps (for example `okta.users.read` and `okta.groups.read`). Add management scopes only if you need write access.
+</Step>
+<Step>
+Save the app, then copy the **Client ID** and **Client Secret**. Okta shows the secret only once.
+</Step>
+</Steps>
+
+## How Okta credentials are shared
+
+How Okta sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Okta account, so tool calls run under that user's Okta identity and inherit only the access they already have. Okta attributes each action to the individual user.
+- **Service mode.** An administrator authorizes once, so every user's tool calls reach Okta as one shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, authorize from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Okta MCP server in C1
+
+With your OAuth app ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Okta** from the catalog.
+</Step>
+<Step>
+Enter your Okta instance URL, such as `https://acme.okta.com`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth app's **client ID**, **client secret**, and the **scopes** you granted. To use a single shared identity instead, choose **OAuth2 — service mode** and authorize once as an administrator.
+</Step>
+<Step>
+Save your changes. With per-user OAuth, the first time a user calls an Okta tool from their AI client, they're prompted to connect their Okta account.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Okta. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call an Okta tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Okta credentials when an approved user successfully calls an Okta tool from their AI client.
+</Note>
+
+## Manage your Okta credentials
+
+- **Rotate the OAuth client secret** in your Okta OAuth app under **Applications** > **Applications**, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by editing the Okta API scopes granted to the OAuth app in Okta.

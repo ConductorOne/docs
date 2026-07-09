@@ -1,0 +1,64 @@
+---
+title: "Descope"
+description: "Sync Descope users, tenants, roles, and permissions into ConductorOne and manage access."
+---
+
+# Descope
+
+The Descope connector reads identity and access data from a Descope project
+(https://www.descope.com) via the Descope Management API and surfaces it to
+ConductorOne. It syncs users, tenants, roles, and permissions, and can grant
+and revoke role assignments and tenant memberships.
+
+## Supported Resources
+
+| Resource | Descope object | Notes |
+|---|---|---|
+| `user` | User | From `/v2/mgmt/user/search`. Stable id is the Descope `userId`. |
+| `tenant` | Tenant | From `/v1/mgmt/tenant/all`. Has a `member` entitlement granted to users. |
+| `role` | Role | From `/v1/mgmt/role/all`. Both project-level and tenant-scoped roles. Has an `assigned` entitlement granted to users. |
+| `permission` | Permission | From `/v1/mgmt/permission/all`. Has a `granted` entitlement showing which roles confer the permission (read-only). |
+
+## Setup
+
+1. Log in to the Descope console as a project admin.
+2. Find your **Project ID** under **Project → Settings → Project ID** (it
+   starts with `P`).
+3. Create a **Management Key** under **Company → Management Keys**, scoped to
+   the project you want to connect. Copy it — Descope shows it only once.
+4. In ConductorOne, add the Descope integration and provide:
+   - **Project ID** — the `P…` value above.
+   - **Management Key** — the key you just created.
+   - **Base URL** — use `https://api.descope.com` unless you are on a
+     non-default Descope deployment.
+
+The connector authenticates with a bearer token of the form
+`ProjectID:ManagementKey`.
+
+## Required Permissions
+
+The management key needs read access to users, tenants, roles, and
+permissions, plus user-management write access for provisioning
+(role assignment and tenant membership). A project-scoped management key with
+the project admin role covers all of these.
+
+## Sync Behavior
+
+- Paginates `/v2/mgmt/user/search` via the request-body `offset`/`limit`
+  fields (page size 100), terminating on the response `total`.
+- Lists tenants, roles, and permissions in single unpaginated calls.
+- Resolves role and permission grants from the inline `roleNames`,
+  `userTenants[].roleNames`, and `permissionNames` fields on the synced
+  records (cached once per sync).
+- Treats HTTP 429 and 5xx as transient and retries with exponential back-off.
+- Caps concurrency at `maxParallelFetches: 6`.
+
+## Provisioning
+
+- **Role assignment** (`role` → `assigned`): grants and revokes project-level
+  and tenant-scoped roles via `/v1/mgmt/user/update/role/add` and
+  `/remove` (tenant-scoped roles include the `tenantId`).
+- **Tenant membership** (`tenant` → `member`): adds and removes users via
+  `/v1/mgmt/user/update/tenant/add` and `/remove`.
+- Permission → role grants are read-only; manage them by editing roles in
+  Descope.

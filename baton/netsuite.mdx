@@ -1,9 +1,9 @@
 ---
-title: "Set up a NetSuite connector"
-og:title: "Set up a NetSuite connector"
-description: "C1 provides identity governance for Oracle NetSuite. Integrate your NetSuite instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
-og:description: "C1 provides identity governance for Oracle NetSuite. Integrate your NetSuite instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
-sidebarTitle: "NetSuite"
+title: "Set up an Oracle NetSuite connector"
+og:title: "Set up an Oracle NetSuite connector"
+description: "C1 provides identity governance for Oracle NetSuite. Integrate your Oracle NetSuite instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
+og:description: "C1 provides identity governance for Oracle NetSuite. Integrate your Oracle NetSuite instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
+sidebarTitle: "Oracle NetSuite"
 ---
 
 ## Capabilities
@@ -12,20 +12,71 @@ sidebarTitle: "NetSuite"
 | :--- | :--- | :--- |
 | Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Login Access | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 The NetSuite connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
 This connector does not support account deprovisioning. You must deprovision accounts directly in NetSuite.
 
+## Account provisioning
+
+The NetSuite connector supports creating new employee accounts directly from C1. When configuring an account provisioning policy, you can map the following fields.
+
+### Required fields
+
+| Field | Description |
+| :--- | :--- |
+| `email` | The employee's email address. Used as the login identifier in NetSuite. |
+| `firstName` | The employee's first name. |
+| `lastName` | The employee's last name. |
+
+### Optional fields
+
+| Field | Description | Default |
+| :--- | :--- | :--- |
+| `subsidiary` | Name or internal ID of the NetSuite subsidiary to assign to the employee. | None |
+| `entityId` | Custom entity ID for the employee record. If omitted, NetSuite auto-generates one. | Auto-generated |
+| `roleID` | Internal ID of the NetSuite role to assign to the employee at creation time. | Employee Center |
+| `giveAccess` | Whether the employee should have login access to NetSuite (`true` or `false`). | `true` |
+| `skipDefaultRole` | When `true`, skips assigning the default Employee Center role if no `roleID` is provided. Use this when the role will be assigned separately via a grant step. | `false` |
+
+### Role assignment and login access
+
+`giveAccess` controls whether the employee can log into NetSuite. `skipDefaultRole` controls whether the connector assigns the Employee Center role when no `roleID` is provided.
+
+**If `roleID` is provided**, the specified role is always assigned. `skipDefaultRole` is ignored. Login access is determined by `giveAccess`.
+
+**If `roleID` is not provided, `skipDefaultRole` is `false`** (default), **and `giveAccess` is `true`** (default), the connector assigns the Employee Center role automatically. This requires the Employee Center role to exist and be assignable in your NetSuite tenant.
+
+**If `roleID` is not provided and `skipDefaultRole` is `true`**, no role is included in the create request.
+
+**If `roleID` is not provided and `giveAccess` is `false`**, no role is included in the create request regardless of `skipDefaultRole`.
+
+<Note>
+To add `giveAccess` or `skipDefaultRole` to your mapping, click **Add mapping** in the **Optional mappings** section of the provisioning policy configuration.
+</Note>
+
 <Warning>
 **Administrator roles cannot be granted or revoked via the connector.** NetSuite's API does not allow modifications to employee records that have the Administrator role assigned, regardless of the permissions granted to the integration. Attempting to grant or revoke the Administrator role through C1 will result in an error. To assign or remove the Administrator role, make the change directly in NetSuite.
 </Warning>
 
-### Actions
+## Login Access
 
-| Action | Description |
-| :--- | :--- |
-| `update_giveaccess` | Update the `giveAccess` attribute on a NetSuite employee, controlling whether the employee has login access to NetSuite. Requires the employee's internal ID and a boolean value. |
+The connector surfaces whether an employee can sign in to NetSuite as a dedicated **Login Access** entitlement. Employees who have login access receive a grant on this entitlement.
+
+<Note>
+Login Access only controls whether an employee can sign in. It does not assign or remove roles. Use role grants to control what an employee can do once they can log in.
+</Note>
+
+### Revoking the last role
+
+NetSuite does not allow removing the last role from an employee while `giveAccess` is `true`. If you attempt to do so, the API returns an error.
+
+By default, the connector does not override this restriction. To allow the connector to automatically set `giveAccess = false` before revoking an employee's last role, enable the `revoke-access-with-last-role` flag.
+
+<Warning>
+When this flag is enabled, revoking an employee's last role will also remove their login access. Only enable it if that is the intended behavior for your deprovisioning policy.
+</Warning>
 
 ## Gather NetSuite credentials 
 
@@ -280,6 +331,12 @@ stringData:
 
   # Optional: comma-separated custom employee field IDs
   # BATON_CUSTOM_EMPLOYEE_FIELDS: custentity_zone,custentity_cost_center
+
+  # Optional: set to true to allow revoking the last role even when the employee has login access
+  # BATON_REVOKE_ACCESS_WITH_LAST_ROLE: true
+
+  # Optional: include if you want C1 to provision access using this connector
+  BATON_PROVISIONING: true
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -307,7 +364,7 @@ spec:
     spec:
       containers:
       - name: baton-netsuite
-        image: ghcr.io/conductorone/baton-netsuite:latest
+        image: public.ecr.aws/conductorone/baton-netsuite:latest
         imagePullPolicy: IfNotPresent
         env:
         - name: BATON_HOST_ID
@@ -354,5 +411,3 @@ Field access is configured per-field in NetSuite:
 <Tip>
 The connector validates access to each custom field at startup. If a field is not accessible, the connector will report a clear error message indicating which field could not be accessed.
 </Tip>
-
-

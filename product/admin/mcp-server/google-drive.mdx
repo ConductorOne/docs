@@ -1,0 +1,151 @@
+---
+title: Set up the Google Drive MCP server
+description: Connect Google Drive to C1 with per-user OAuth or a service account, then register the Google Drive MCP server and govern its tools.
+og:title: Set up the Google Drive MCP server
+og:description: Connect Google Drive to C1 with per-user OAuth or a service account, then register the Google Drive MCP server and govern its tools.
+sidebarTitle: Google Drive
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Google Drive MCP server lets you govern access to Google Drive — files, folders, shared drives, permissions, comments, and revisions — as tools your AI clients can call through C1.
+
+Google Drive supports two ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Google account, so every tool call runs under that user's Drive identity and permissions.
+- **Service account (Workspace only)**. A single Google service account with domain-wide delegation authenticates everyone, so all tool calls reach Drive as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Google Drive
+
+C1 hosts the Google Drive MCP server, so your users' AI clients only ever see MCP tools — they never call Google Drive directly. When an AI client calls one of these tools, C1 makes the matching request to the Google Drive API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Google Drive on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Google Cloud project where you can enable the Google Drive API and create credentials.
+- For the service-account option, a Google Workspace administrator to set up [domain-wide delegation](https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation).
+
+<Note>
+If you don't see **Google Drive** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one Google OAuth client and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Drive.
+
+### Create a Google OAuth client
+
+Create an OAuth client in your Google Cloud project so users can authorize C1 with their own Google accounts.
+
+<Steps>
+<Step>
+Sign in to the Google Cloud console and create or select a project for C1.
+</Step>
+<Step>
+Go to **APIs & Services** > **Library**, search for **Google Drive API**, and select **Enable**.
+</Step>
+<Step>
+Go to **APIs & Services** > **OAuth consent screen**. Choose **Internal** for a Workspace-only app or **External** for any Google account, and add the Drive scopes your deployment needs. Broad Drive scopes are restricted and require Google verification before an **External** app can be used outside your Workspace organization.
+</Step>
+<Step>
+Go to **APIs & Services** > **Credentials** > **Create Client** > **Web application**. For full details, see Google's [Manage OAuth Clients](https://support.google.com/cloud/answer/15549257) documentation.
+</Step>
+<Step>
+Under **Authorized redirect URIs**, add exactly `https://accounts.conductor.one/auth/callback`.
+</Step>
+<Step>
+Select **Create**, then copy the **Client ID** and **Client secret**. Google shows the client secret only once.
+</Step>
+</Steps>
+
+For least privilege, request only the scopes you need. Read-only deployments can use `drive.readonly` and `drive.metadata.readonly`. If your users are on Google Workspace, a Workspace administrator may need to allow the OAuth client in **Admin Console** > **Security** > **Access and data control** > **API controls** > **App access control**.
+
+### Register the server with OAuth
+
+With your OAuth client ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Google Drive** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth client's **client ID** and **client secret**, plus the scopes you configured.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Google Drive tool from their AI client, they're prompted to connect their Google account.
+</Step>
+</Steps>
+
+## Option 2: Use a service account (Workspace only)
+
+A Google service account with domain-wide delegation authenticates every user as one shared identity. C1 signs a JWT with the service account's key to obtain access tokens. Use this for Workspace tenants that want C1 to reach Drive without per-user consent.
+
+### Create a service account and grant delegation
+
+Create a service account, then grant it domain-wide delegation so it can act on behalf of your users.
+
+<Steps>
+<Step>
+In the Google Cloud console, go to **APIs & Services** > **Library** and enable the **Google Drive API** for your project.
+</Step>
+<Step>
+Go to **APIs & Services** > **Credentials** > **Create credentials** > **Service account**, create the service account, then generate and download a JSON key. For full details, see Google's [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create) documentation.
+</Step>
+<Step>
+Note the service account's **Unique ID** (numeric).
+</Step>
+<Step>
+As a Workspace administrator, go to **Admin Console** > **Security** > **Access and data control** > **API controls** > **Domain-wide delegation**, select **Add new**, and enter the service account's Unique ID along with the Drive scopes you need. For least privilege, grant narrow scopes such as `drive.readonly` and `drive.metadata.readonly`.
+</Step>
+</Steps>
+
+### Register the server with a service account
+
+With your service account ready, register the server and provide its key.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Google Drive** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — JWT bearer** and provide the service account's JSON key and the scopes you delegated.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Google Drive server exposes.
+</Step>
+</Steps>
+
+## How Google Drive credentials are shared
+
+How Google Drive sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Google account, so tool calls run under that user's Drive identity and inherit only the access they already have. Google attributes each action to the individual user.
+- **Service account.** Every user's tool calls use the one service account you configured, so Drive sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Google Drive. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Google Drive tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Google Drive credentials when an approved user successfully calls a Google Drive tool from their AI client.
+</Note>
+
+## Manage your Google Drive credentials
+
+- **Rotate the OAuth client secret** in your Google Cloud project under **APIs & Services** > **Credentials**, then update the secret on the server's authentication settings in C1.
+- **Rotate the service account key** by generating a new JSON key in the Cloud Console, updating it in C1, then deleting the old key.
+- **Adjust access** by editing the OAuth client's scopes, or the scopes granted to the service account in domain-wide delegation.

@@ -1,0 +1,186 @@
+---
+title: "Set up a Personio connector"
+og:title: "Set up a Personio connector"
+description: "C1 provides identity governance for Personio. Integrate your Personio instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for Personio. Integrate your Personio instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "Personio"
+---
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Persons|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+## Gather Personio credentials
+
+<Warning>
+The Personio connector is identity and attribute sync only. Personio does not
+expose a roles or permissions API for this connector to model as grants. API
+access is controlled on the Personio integration credential, not by employee
+role permissions.
+</Warning>
+
+<Steps>
+  <Step>
+    In Personio, open **Marketplace** > **Connected integrations** and create
+    or select a custom integration for C1.
+  </Step>
+
+  <Step>
+    Grant the integration Employee read access. For the v2 API, the credential
+    must include `personio:persons:read`.
+  </Step>
+
+  <Step>
+    Select the readable employee attributes that C1 should sync. Personio only
+    returns attributes allowed on the API credential.
+  </Step>
+
+  <Step>
+    Copy the OAuth 2.0 client ID.
+  </Step>
+
+  <Step>
+    Copy the OAuth 2.0 client secret.
+  </Step>
+
+  <Step>
+    Confirm the Personio API base URL. For most tenants this is
+    `https://api.personio.de`.
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Description|
+|-|-|-|
+|`personio-client-id`|Yes|OAuth 2.0 client ID for the Personio API.|
+|`personio-client-secret`|Yes|OAuth 2.0 client secret for the Personio API.|
+|`personio-base-url`|Yes|Personio API base URL without a trailing slash.|
+
+## Synced resource types
+
+- **Persons**: Personio persons mapped as C1 users. Primary employment details
+  are joined from the person's employments endpoint and added to the user
+  profile.
+
+## Special notes
+
+- The connector authenticates with OAuth 2.0 client credentials at
+  `${personio-base-url}/v2/auth/token`. The token request uses
+  `grant_type=client_credentials`, `client_id`, and `client_secret`, then sends
+  the returned access token as a bearer token.
+- Each person is enriched with the active employment when present, otherwise
+  the newest employment by start date.
+- If employment enrichment fails for one person, the person is still emitted
+  with person-level fields.
+- Standard PII fields such as address, phone, national identifiers, date of
+  birth, gender, salary, bank details, and tax information are not mapped.
+- Custom attributes are filtered before they are emitted.
+
+## Configure the Personio connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Personio** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Personio connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Paste the Personio credentials into the relevant fields:
+
+        - **Client ID**: The Personio OAuth 2.0 client ID.
+        - **Client secret**: The Personio OAuth 2.0 client secret.
+        - **API base URL**: The Personio API base URL.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by
+        **Connected**. You can view the logs to ensure that information is
+        syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Personio connector is now pulling identity data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Personio connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Personio connector, set the owner, and
+        click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area, click **Edit**, then click **Rotate** to
+        generate a new Client ID and Client Secret. Store these values
+        securely for your deployment.
+      </Step>
+
+      <Step>
+        Configure C1 credentials and Personio credentials as environment
+        variables:
+
+        ```bash
+        BATON_CLIENT_ID=<C1 client ID>
+        BATON_CLIENT_SECRET=<C1 client secret>
+        BATON_HOST_ID=baton-personio
+        BATON_PERSONIO_CLIENT_ID=<Personio OAuth 2.0 client ID>
+        BATON_PERSONIO_CLIENT_SECRET=<Personio OAuth 2.0 client secret>
+        BATON_PERSONIO_BASE_URL=https://api.personio.de
+        ```
+      </Step>
+
+      <Step>
+        Deploy the connector using the Public ECR image:
+
+        ```bash
+        public.ecr.aws/conductorone/baton-personio:<version>
+        ```
+
+        Use a version tag without the leading `v`, such as `0.0.3`.
+      </Step>
+    </Steps>
+
+    **Done.** Your Personio connector is now pulling identity data into C1.
+  </Tab>
+</Tabs>

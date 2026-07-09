@@ -1,0 +1,89 @@
+---
+title: Set up the Opsgenie MCP server
+description: Create an Opsgenie API key, then register the Opsgenie MCP server in C1 and govern the tools it exposes.
+og:title: Set up the Opsgenie MCP server
+og:description: Create an Opsgenie API key, then register the Opsgenie MCP server in C1 and govern the tools it exposes.
+sidebarTitle: Opsgenie
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Opsgenie MCP server lets you govern access to Opsgenie — alerts, escalations, schedules, on-call data, teams, and users — as tools your AI clients can call through C1.
+
+Opsgenie authenticates with an API key. A single key authenticates everyone, so all tool calls reach Opsgenie as one shared identity.
+
+## How C1 connects to Opsgenie
+
+C1 hosts the Opsgenie MCP server, so your users' AI clients only ever see MCP tools — they never call Opsgenie directly. When an AI client calls one of these tools, C1 makes the matching request to the Opsgenie API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Opsgenie on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- An Opsgenie account with permission to create an API integration or API key for the operations you plan to govern.
+
+<Note>
+If you don't see **Opsgenie** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create an Opsgenie API key
+
+Create an API integration in Opsgenie to authenticate C1 to the Opsgenie API.
+
+<Steps>
+<Step>
+Sign in to Opsgenie and open **Settings** > **API key management** (or add an **API** integration under **Settings** > **Integrations**). For details, see Opsgenie's [API key management](https://support.atlassian.com/opsgenie/docs/api-key-management/) and [Create an API integration](https://support.atlassian.com/opsgenie/docs/create-a-default-api-integration/) documentation.
+</Step>
+<Step>
+Create a new API integration with a recognizable name such as `C1`, and grant it the access it needs for the operations you plan to govern, such as read access to alerts and schedules.
+</Step>
+<Step>
+Copy the generated **API key**. Treat it as a high-value credential.
+</Step>
+</Steps>
+
+For a shared production setup, create the API key from a dedicated service account so activity is attributable to C1 rather than a person.
+
+## How Opsgenie credentials are shared
+
+Every user's tool calls use the one API key you provided, so Opsgenie sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, use a dedicated service account so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Opsgenie MCP server in C1
+
+With your API key ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Opsgenie** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Custom header**. Set the header name to `Authorization` and the value to `GenieKey ` followed by your API key (for example, `GenieKey abc123`).
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Opsgenie server exposes.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Opsgenie. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call an Opsgenie tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Opsgenie credentials when an approved user successfully calls an Opsgenie tool from their AI client.
+</Note>
+
+## Manage your Opsgenie credentials
+
+- **Rotate the API key** by creating a new API integration or key in Opsgenie and updating it in C1, then removing the old one.
+- **Adjust access** by editing the integration's permissions in Opsgenie.

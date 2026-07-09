@@ -1,0 +1,166 @@
+---
+title: "Set up a ZITADEL connector"
+og:title: "Set up a ZITADEL connector"
+description: "C1 provides identity governance for ZITADEL. Integrate your ZITADEL instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for ZITADEL. Integrate your ZITADEL instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "ZITADEL"
+---
+
+C1 provides identity governance for ZITADEL. Integrate your ZITADEL instance
+with C1 for unified visibility and governance over user access.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Projects|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+
+The connector models ZITADEL **Projects** as groups, each project's **roles**
+as entitlements on that group, and **user grants** (a user's assigned roles in
+a project) as the grant edges.
+
+## Gather ZITADEL credentials
+
+<Warning>
+The connector authenticates with a ZITADEL **Personal Access Token (PAT)**
+issued to a service user that holds Management API read access. Add an instance
+IAM read role only if you want the connector to auto-detect the organization.
+</Warning>
+
+<Steps>
+  <Step>
+    In the ZITADEL console, create a **service user** (a machine user) in the
+    organization you want to sync.
+  </Step>
+
+  <Step>
+    Grant the service user a **Management read role** on that organization — an
+    Org Owner Viewer manager role, or a custom role covering `project.read`,
+    `user.read`, `project.role.read`, and `user.grant.read`.
+
+    If you plan to leave the **Organization ID** empty so the connector
+    auto-detects the org, also grant the service user an instance-level **IAM
+    read role** (for example IAM Owner Viewer / `iam.read`).
+  </Step>
+
+  <Step>
+    Generate a **Personal Access Token** for the service user. PATs are opaque
+    bearer tokens and automatically carry the reserved ZITADEL audience, so no
+    additional scope plumbing is required. Copy the token value.
+  </Step>
+
+  <Step>
+    Copy your ZITADEL **instance URL** (for ZITADEL Cloud, this is
+    `https://<instance>.zitadel.cloud`; for self-hosted, use your custom
+    domain). If your instance hosts more than one organization, also note the
+    **organization ID** you want to sync.
+  </Step>
+</Steps>
+
+## Configuration fields
+
+|Field|Required|Description|
+|-|-|-|
+|`instance-url`|Yes|Your ZITADEL instance base URL, with scheme and no trailing path (for example `https://acme.zitadel.cloud`).|
+|`pat`|Yes|A ZITADEL Personal Access Token for a service user with Management API read roles.|
+|`org-id`|No|Organization ID to scope the sync to. Leave empty for single-organization instances (auto-detected). Required only when the instance hosts more than one organization.|
+
+## Synced resource types
+
+- **Users**: ZITADEL users (human and machine) from
+  `POST /management/v1/users/_search`.
+- **Projects** (as groups): ZITADEL projects from
+  `POST /management/v1/projects/_search`.
+- **Project roles** (as entitlements): each project's roles from
+  `POST /management/v1/projects/{projectId}/roles/_search`.
+- **Role assignments** (as grants): user grants from
+  `POST /management/v1/users/grants/_search`, filtered per project.
+
+## Special notes
+
+- Provisioning is not supported in the current build; the connector is
+  read-only.
+- The connector scopes a sync to a single organization. For an instance with
+  one organization, leave **Organization ID** empty and it is auto-detected.
+  For an instance with more than one organization, set **Organization ID** to
+  the org you want to sync.
+- Project grants (inter-organization project delegation) are not synced.
+
+## Configure the ZITADEL connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **ZITADEL** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new ZITADEL connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the ZITADEL credentials:
+
+        - **Instance URL**: Your ZITADEL instance base URL.
+        - **Personal Access Token**: The PAT for the service user.
+        - **Organization ID**: Leave empty for single-org instances; set it for
+          multi-org instances.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your ZITADEL connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the ZITADEL connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        Create secrets for the ZITADEL credentials.
+      </Step>
+
+      <Step>
+        Configure the connector environment variables:
+
+        - **`BATON_INSTANCE_URL`**: Your ZITADEL instance base URL.
+        - **`BATON_PAT`**: The Personal Access Token for the service user.
+        - **`BATON_ORG_ID`**: Optional organization ID (multi-org instances only).
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your ZITADEL connector is now pulling access data into C1.
+  </Tab>
+</Tabs>

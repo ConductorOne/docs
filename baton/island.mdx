@@ -1,0 +1,80 @@
+---
+title: "Set up an Island connector"
+og:title: "Set up an Island connector"
+description: "C1 provides identity governance for Island Enterprise Browser. Integrate your Island tenant with C1 for unified visibility and governance over user and group access."
+og:description: "C1 provides identity governance for Island Enterprise Browser. Integrate your Island tenant with C1 for unified visibility and governance over user and group access."
+sidebarTitle: "Island"
+---
+
+## Capabilities
+
+| Resource    | Sync | Provision |
+| ----------- | ---- | --------- |
+| Users       | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Groups      | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Memberships | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+The connector syncs Island users and groups and the user → group memberships derived from them. See **Synced resource types** below for how each set is fetched.
+
+## Gather Island credentials
+
+<Warning>
+Mint the Island API key with the **Read-Only** role. The connector performs read-only API calls and does not require any write scopes.
+</Warning>
+
+<Steps>
+  <Step>
+    Sign in to the Island Management Console for your tenant's region.
+  </Step>
+
+  <Step>
+    Navigate to **Modules → Platform Settings → System Settings → Integrations → API**.
+  </Step>
+
+  <Step>
+    Mint a new API key with the **Read-Only** role.
+  </Step>
+
+  <Step>
+    Store the key securely. The connector sends it verbatim as the lowercase HTTP header `api-key: <key>` (no `Bearer` prefix).
+  </Step>
+</Steps>
+
+## Regions
+
+Island operates five public regions. Set `base-url` to the regional console URL for your tenant; the connector does not auto-detect region.
+
+| Region | Console URL                       |
+| ------ | --------------------------------- |
+| US     | `https://management.island.io`    |
+| EU     | `https://eu.management.island.io` |
+| UK     | `https://uk.management.island.io` |
+| CA     | `https://ca.management.island.io` |
+| AU     | `https://au.management.island.io` |
+
+The US and EU URLs are verified against public Island documentation. The UK, CA, and AU subdomain pattern is plausible but unconfirmed at the time of this PR — the field is free-form on purpose so operators can configure the exact URL their tenant uses.
+
+## Configuration fields
+
+| Field      | Required | Description                                                                                              |
+| ---------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `base-url` | Yes      | Base URL of the Island Management Console API for your region. Default: `https://management.island.io`.  |
+| `api-key`  | Yes      | Island API key with the Read-Only role. Sent as the lowercase HTTP header `api-key: <key>`.              |
+
+## Synced resource types
+
+- **Users**: Island users from `GET /api/external/v1/users`. PII surface includes `user_source`, `email_verified`, `expiration_date`, `last_seen`, `connection_name`, `invitation_date`, and `allowed_tenants_ids`.
+- **Groups**: derived from distinct `user.groups[]` values across the Users walker. Island does not expose a public `/groups` list endpoint; the connector materializes the Group resource set in-walker.
+- **Memberships**: emitted as user → group grants, one row per `(user.id, groups[i])` pair.
+
+## Special notes
+
+- **Pagination is PascalCase on the wire.** Island Users paginate via `?Offset=<n>&Limit=<n>&SortBy=CreatedDate&SortDirection=Asc`. The connector defines a dedicated `islandPagination` constant — it does not reuse Clerk's lowercase offset/limit helper.
+- **Cross-tenant scope guard.** Island Users carry an `allowed_tenants_ids` array. The connector verifies tenant-scope at startup and falls back to a composite `(tenant_id, group_name)` Group stable id if the API key spans multiple tenants.
+- **Empty `groups[]` degrades silently.** `null`, missing, or `[]` produces zero memberships and contributes zero entries to the derived Group set, with no warning or error logged. This is the normal state for SCIM-provisioned users with no group assignments.
+- **Group names are not normalized.** Stable ids are the literal byte-for-byte string from `user.groups[]`. The connector does not apply `.toLowerCase()`, `.trim()`, or Unicode NFC.
+- **Rate limits are undocumented.** The connector honors HTTP 429 responses with exponential backoff (1s → 30s, jittered) and honors `Retry-After` when present.
+
+## Configure the Island connector
+
+Follow your organization's standard connector setup flow for cloud-hosted or self-hosted runtime. Supply the `base-url` for your region and the read-only `api-key` minted in the steps above.

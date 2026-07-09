@@ -1,0 +1,113 @@
+---
+title: Set up the Salesforce MCP server
+description: Connect Salesforce to C1 with per-user OAuth, then register the Salesforce MCP server and govern the tools it exposes.
+og:title: Set up the Salesforce MCP server
+og:description: Connect Salesforce to C1 with per-user OAuth, then register the Salesforce MCP server and govern the tools it exposes.
+sidebarTitle: Salesforce
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Salesforce MCP server lets you govern access to the Salesforce Customer Platform — accounts, contacts, opportunities, custom objects, and the rest of the Salesforce data model — as tools your AI clients can call through C1.
+
+Salesforce uses per-user OAuth, which is recommended: each person authorizes with their own Salesforce account, so every tool call runs under that user's identity and permissions.
+
+## How C1 connects to Salesforce
+
+C1 hosts the Salesforce MCP server, so your users' AI clients only ever see MCP tools — they never call Salesforce directly. When an AI client calls one of these tools, C1 makes the matching request to the Salesforce API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Salesforce on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Salesforce admin account that can create a connected app, typically the **System Administrator** profile or the **Customize Application** and **Modify All Data** permissions.
+
+<Note>
+If you don't see **Salesforce** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a Salesforce connected app
+
+With per-user OAuth, you register one Salesforce connected app and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Salesforce. For the full walkthrough, see Salesforce's [guide to enabling OAuth settings for API integration](https://help.salesforce.com/s/articleView?id=xcloud.connected_app_create_api_integration.htm&language=en_US&type=5).
+
+<Steps>
+<Step>
+From Salesforce **Setup**, enter `App Manager` in the **Quick Find** box, select **App Manager**, then select **New Connected App**.
+</Step>
+<Step>
+Fill in **Basic Information**:
+
+- **Connected App Name** — a recognizable name such as `C1`.
+- **API Name** — auto-fills from the connected app name.
+- **Contact Email** — your team's email.
+</Step>
+<Step>
+Under **API (Enable OAuth Settings)**, select **Enable OAuth Settings**, then set the **Callback URL** exactly to:
+
+```
+https://accounts.conductor.one/auth/callback
+```
+
+The URL must match character for character, including any trailing slash.
+</Step>
+<Step>
+Under **Selected OAuth Scopes**, add:
+
+- **Manage user data via APIs (`api`)** — grants Salesforce REST API access on behalf of the user.
+- **Perform requests at any time (`refresh_token`, `offline_access`)** — issues a refresh token so C1 can renew access without prompting the user again.
+</Step>
+<Step>
+Select **Save**. The new connected app can take up to ten minutes to propagate.
+</Step>
+<Step>
+From the connected app's detail page, select **Manage Consumer Details** and complete identity verification. Copy the **Consumer Key** (your client ID) and the **Consumer Secret** (your client secret).
+</Step>
+</Steps>
+
+<Note>
+If your Salesforce org is a sandbox, use the sandbox login host when you authorize. Refresh tokens issued for a sandbox don't work against production, and the reverse.
+</Note>
+
+## How Salesforce credentials are shared
+
+With per-user OAuth, each user authorizes with their own Salesforce account, so tool calls run under that user's Salesforce identity and inherit only the access they already have. Salesforce attributes each action to the individual user.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the Salesforce MCP server in C1
+
+With your connected app ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Salesforce** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your connected app's **client ID** (Consumer Key) and **client secret** (Consumer Secret).
+</Step>
+<Step>
+Save your changes. The first time a user calls a Salesforce tool from their AI client, they're prompted to connect their Salesforce account.
+</Step>
+</Steps>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Salesforce. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Salesforce tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Salesforce credentials when an approved user successfully calls a Salesforce tool from their AI client.
+</Note>
+
+## Manage your Salesforce credentials
+
+- **Rotate the consumer secret** in **App Manager** by opening your connected app and re-fetching its consumer details, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by editing the connected app's OAuth scopes in Salesforce.

@@ -28,6 +28,7 @@ These files document where CEL expressions are used and what variables/functions
 | `env-workflow.md` | Workflow templates, step data flow, ctx object, interpolation |
 | `env-account-provisioning.md` | Account attribute mapping, provisioning expressions |
 | `env-user-attribute.md` | Derived user attributes, computed attribute values |
+| `env-app-entitlement-routing.md` | Entitlement configuration rules, applying request policies/settings by condition, matching a sparse app's role and scope |
 
 ### Functions
 

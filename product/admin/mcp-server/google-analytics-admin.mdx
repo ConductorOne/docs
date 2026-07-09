@@ -1,0 +1,152 @@
+---
+title: Set up the Google Analytics Admin MCP server
+description: Connect Google Analytics Admin to C1 with per-user OAuth or a service account, then register the MCP server and govern its tools.
+og:title: Set up the Google Analytics Admin MCP server
+og:description: Connect Google Analytics Admin to C1 with per-user OAuth or a service account, then register the MCP server and govern its tools.
+sidebarTitle: Google Analytics Admin
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Google Analytics Admin MCP server lets you govern access to Google Analytics 4 configuration — accounts, properties, data streams, custom dimensions, conversions, and account-level user permissions — as tools your AI clients can call through C1.
+
+Google Analytics Admin supports two ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Google account, so every tool call runs under that user's Analytics identity and permissions.
+- **Service account**. A single Google service account authenticates everyone, so all tool calls reach Analytics as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Google Analytics Admin
+
+C1 hosts the Google Analytics Admin MCP server, so your users' AI clients only ever see MCP tools — they never call Google Analytics Admin directly. When an AI client calls one of these tools, C1 makes the matching request to the Google Analytics Admin API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Google Analytics Admin on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Google Cloud project where you can enable the Google Analytics Admin API and create credentials.
+- The right GA4 role for the operations you need. Reads need at least **Viewer**, edits and creates need **Editor** at the property level or **Administrator** at the account level, and managing GA4 user permissions needs **Administrator** at the account level.
+
+<Note>
+If you don't see **Google Analytics Admin** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+<Note>
+The Cloud Console setup is the same as the Google Analytics MCP server. Most deployments register a single OAuth client or service account and grant it both the Data API and Admin API scopes, so you don't need separate Cloud projects.
+</Note>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one Google OAuth client and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Analytics.
+
+### Create a Google OAuth client
+
+Create an OAuth client in Google Cloud so C1 can prompt each user to authorize with their own Google account.
+
+<Steps>
+<Step>
+Sign in to the Google Cloud console and create or select a project for C1.
+</Step>
+<Step>
+Go to **APIs & Services** > **Library**, search for **Google Analytics Admin API**, and select **Enable**.
+</Step>
+<Step>
+Go to **APIs & Services** > **OAuth consent screen**. Choose **Internal** for a Workspace-only app or **External** for any Google account, and add the Analytics scopes. Add `analytics.readonly` for reads, and `analytics.edit` for any operation that creates, updates, or deletes configuration.
+</Step>
+<Step>
+Go to **APIs & Services** > **Credentials** > **Create Client** > **Web application**. For full details, see Google's [Manage OAuth Clients](https://support.google.com/cloud/answer/15549257) documentation.
+</Step>
+<Step>
+Under **Authorized redirect URIs**, add exactly `https://accounts.conductor.one/auth/callback`.
+</Step>
+<Step>
+Select **Create**, then copy the **Client ID** and **Client secret**. Google shows the client secret only once.
+</Step>
+</Steps>
+
+Confirm that each user who authorizes has the GA4 role needed for the operations C1 should perform, in the GA4 Admin UI under **Account Access Management** or **Property Access Management**.
+
+### Register the server with OAuth
+
+With your OAuth client ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Google Analytics Admin** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth client's **client ID** and **client secret**, plus the scopes you configured.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Google Analytics Admin tool from their AI client, they're prompted to connect their Google account.
+</Step>
+</Steps>
+
+## Option 2: Use a service account
+
+A Google service account authenticates every user as one shared identity. C1 signs a JWT with the service account's key to obtain access tokens. Use this for automated administration where per-user attribution in Analytics isn't required.
+
+### Create a service account and grant property access
+
+Create a Google service account, download its key, and grant it the GA4 access C1 will use.
+
+<Steps>
+<Step>
+In the Google Cloud console, go to **APIs & Services** > **Library** and enable the **Google Analytics Admin API** for your project.
+</Step>
+<Step>
+Go to **IAM & Admin** > **Service Accounts**, create the service account, then generate and download a JSON key. For full details, see Google's [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create) documentation.
+</Step>
+<Step>
+In each GA4 property's **Admin** > **Property Access Management**, add the service account's email address with the role it needs — **Editor** for property-level changes, or **Administrator** at the account level for managing user permissions.
+</Step>
+</Steps>
+
+### Register the server with a service account
+
+With your service account key ready, register the server and provide it as the credential.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Google Analytics Admin** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — JWT bearer** and provide the service account's JSON key and the scopes you need, such as `analytics.readonly` and `analytics.edit`.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Google Analytics Admin server exposes.
+</Step>
+</Steps>
+
+## How Google Analytics Admin credentials are shared
+
+How Google Analytics sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Google account, so tool calls run under that user's Analytics identity and inherit only the access they already have. Google attributes each action to the individual user.
+- **Service account.** Every user's tool calls use the one service account you configured, so Analytics sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Google Analytics Admin. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Google Analytics Admin tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Google Analytics Admin credentials when an approved user successfully calls a Google Analytics Admin tool from their AI client.
+</Note>
+
+## Manage your Google Analytics Admin credentials
+
+- **Rotate the OAuth client secret** in your Google Cloud project under **APIs & Services** > **Credentials**, then update the secret on the server's authentication settings in C1.
+- **Rotate the service account key** by generating a new JSON key in the Cloud Console, updating it in C1, then deleting the old key.
+- **Adjust access** by editing the OAuth client's scopes, or by changing the service account's role in **Account Access Management** or **Property Access Management**.

@@ -74,7 +74,7 @@ grep -n "^\s*- \[" baton/intro.mdx | grep -i "<nearby name>"
 
 #### B) New this month tab
 
-Add the connector to the `<Tab title="New this month">` list. No fixed order required — just add it.
+Add the connector to the **top** of the `<Tab title="New this month">` list — newest connector always goes first.
 
 #### C) By category — pick one section
 
@@ -99,11 +99,24 @@ Find the right alphabetical position within the chosen section.
 
 If the connector clearly fits a second category (e.g., a tool that is both a developer tool and a security tool), add it there too. When in doubt, skip.
 
-### 5. Commit and open a PR
+### 5. Add to docs.json nav
+
+Find the connectors section and insert the slug alphabetically (same rules as above):
+
+```bash
+grep -n "baton/<nearby-slug>" docs.json
+```
+
+Add the entry:
+```json
+"baton/<connector-slug>",
+```
+
+### 6. Commit and open a PR
 
 ```bash
 git checkout -b docs/index-<connector-slug>
-git add baton/capabilities.mdx baton/intro.mdx
+git add baton/capabilities.mdx baton/intro.mdx docs.json
 git commit -m "docs: add <Display Name> to connector indexes"
 git push -u origin docs/index-<connector-slug>
 gh pr create --title "docs: add <Display Name> to connector indexes" \

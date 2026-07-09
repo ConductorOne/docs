@@ -1,0 +1,182 @@
+---
+title: Set up the Bitbucket MCP server
+description: Connect Bitbucket to C1 with per-user OAuth, an app password, or an API token, then register the MCP server and govern its tools.
+og:title: Set up the Bitbucket MCP server
+og:description: Connect Bitbucket to C1 with per-user OAuth, an app password, or an API token, then register the MCP server and govern its tools.
+sidebarTitle: Bitbucket
+---
+
+{/* Editor Refresh: 2026-06-11 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Bitbucket MCP server lets you govern access to Bitbucket Cloud — repositories, pull requests, issues, pipelines, projects, and workspace data — as tools your AI clients can call through C1.
+
+Bitbucket supports three ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Bitbucket account, so every tool call runs under that user's identity and permissions.
+- **App password**. A single app password authenticates everyone, so all tool calls reach Bitbucket as one shared identity.
+- **API token**. A single API token authenticates everyone as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## How C1 connects to Bitbucket
+
+C1 hosts the Bitbucket MCP server, so your users' AI clients only ever see MCP tools — they never call Bitbucket directly. When an AI client calls one of these tools, C1 makes the matching request to the Bitbucket API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Bitbucket on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- For per-user OAuth, permission to create an OAuth consumer in your Bitbucket workspace settings.
+- For an app password or API token, a Bitbucket account whose access the credential should carry.
+
+<Note>
+If you don't see **Bitbucket** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one Bitbucket OAuth consumer and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Bitbucket.
+
+### Create a Bitbucket OAuth consumer
+
+Create an OAuth consumer in your Bitbucket workspace so C1 can prompt each user to authorize their own account.
+
+<Steps>
+<Step>
+In Bitbucket, go to your **Workspace settings** > **OAuth consumers** and select **Add consumer**. For the full procedure, see Bitbucket's [Use OAuth on Bitbucket Cloud](https://support.atlassian.com/bitbucket-cloud/docs/use-oauth-on-bitbucket-cloud/) documentation.
+</Step>
+<Step>
+Fill in the registration form:
+
+- **Name** — a recognizable name such as `C1`.
+- **Callback URL** — set this exactly to `https://accounts.conductor.one/auth/callback`.
+</Step>
+<Step>
+Under **Permissions**, grant only the scopes you need for the operations you plan to govern, such as read access to Account, Repositories, Pull requests, and Issues.
+</Step>
+<Step>
+Save the consumer, then open it to copy the **Key** (client ID) and **Secret** (client secret).
+</Step>
+</Steps>
+
+### Register the server with OAuth
+
+With your OAuth consumer ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Bitbucket** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your consumer's **client ID** (key) and **client secret**.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Bitbucket tool from their AI client, they're prompted to connect their Bitbucket account.
+</Step>
+</Steps>
+
+## Option 2: Use an app password
+
+An app password authenticates every user as one shared Bitbucket identity. Use this when per-user attribution in Bitbucket isn't required.
+
+### Create an app password
+
+Create an app password in Bitbucket so C1 can authenticate to the Bitbucket API.
+
+<Steps>
+<Step>
+In Bitbucket, go to **Personal settings** > **App passwords** and select **Create app password**. For details, see Bitbucket's [Using app passwords](https://support.atlassian.com/bitbucket-cloud/docs/using-app-passwords/) documentation.
+</Step>
+<Step>
+Give it a recognizable label such as `C1`, then grant only the **permissions** you need for the operations you plan to govern, such as read access to Repositories, Pull requests, and Issues.
+</Step>
+<Step>
+Create the app password and copy it. Bitbucket shows it only once.
+</Step>
+</Steps>
+
+For a shared production setup, create the app password from a dedicated service account so activity is attributable to C1 rather than a person.
+
+### Register the server with an app password
+
+With your app password ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Bitbucket** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Basic auth**. Enter your Bitbucket **username** and paste the **app password** as the password.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Bitbucket server exposes.
+</Step>
+</Steps>
+
+## Option 3: Use an API token
+
+An API token authenticates every user as one shared identity. Use this when you prefer a token over an app password.
+
+### Create an API token
+
+Create an API token in your Atlassian account so C1 can authenticate to the Bitbucket API.
+
+<Steps>
+<Step>
+In your Atlassian account settings, create an **API token** scoped for Bitbucket access. For details, see Bitbucket's [API tokens](https://support.atlassian.com/bitbucket-cloud/docs/api-tokens/) documentation.
+</Step>
+<Step>
+Copy the generated token. Treat it as a high-value credential.
+</Step>
+</Steps>
+
+For a shared production setup, create the API token from a dedicated service account so activity is attributable to C1 rather than a person.
+
+### Register the server with an API token
+
+With your API token ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Bitbucket** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Custom header**. Set the header name to `Authorization` and the value to `Bearer ` followed by your API token (for example, `Bearer abc123`).
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Bitbucket server exposes.
+</Step>
+</Steps>
+
+## How Bitbucket credentials are shared
+
+How Bitbucket sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Bitbucket account, so tool calls run under that user's Bitbucket identity and inherit only the access they already have. Bitbucket attributes each action to the individual user.
+- **App password or API token.** Every user's tool calls use the one credential you provided, so Bitbucket sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Bitbucket. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Bitbucket tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Bitbucket credentials when an approved user successfully calls a Bitbucket tool from their AI client.
+</Note>
+
+## Manage your Bitbucket credentials
+
+- **Rotate the OAuth client secret** by regenerating the secret on your Bitbucket OAuth consumer under **Workspace settings** > **OAuth consumers**, then update it on the server's authentication settings in C1.
+- **Rotate an app password** by creating a new app password in Bitbucket and updating it in C1, then deleting the old one.
+- **Rotate an API token** by generating a new token and updating it in C1, then revoking the old one.
+- **Adjust access** by editing the consumer's permissions, the app password's permissions, or the token's scope in Bitbucket.

@@ -12,14 +12,25 @@ C1 currently only integrates with Notion Enterprise. You cannot use this connect
 
 ## Capabilities
 
-| Resource | Sync | Provision |
-| :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  | 
+{/* AUTO-GENERATED:START - capabilities */}
 
-The Notion connector supports [automatic account provisioning](/product/admin/account-provisioning).
+| Resource | Sync                                                         | Provision                                                    |
+| :------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Groups   | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |                                                              |
+| Roles    | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 
-This connector does not support account deprovisioning. You must deprovision accounts directly in Notion.
+{/* AUTO-GENERATED:END - capabilities */}
+
+The Notion connector supports [automatic account provisioning](/product/admin/account-provisioning), account deprovisioning (removal from the workspace), and role provisioning. All operations are performed against the [Notion SCIM API](https://www.notion.com/help/provision-users-and-groups-with-scim).
+
+Role resources model the four workspace role values Notion exposes through the SCIM extension (`owner`, `membership_admin`, `member`, `restricted_member`) — see the ["Provision restricted members through SCIM"](https://www.notion.com/help/provision-users-and-groups-with-scim) section of the Notion help center for the value enum. Notion users must always carry a role, so revoking a role is modelled as a downgrade to `restricted_member`. To fully remove a user from the workspace, deprovision the account.
+
+Account deprovisioning removes the user from the workspace and revokes their active sessions. As [documented by Notion](https://www.notion.com/help/provision-users-and-groups-with-scim), this does not permanently delete the underlying user account — that step must be performed manually in Notion.
+
+<Note>
+"License" in Notion product terminology means **paid seat** — i.e. one workspace member — and is binary (member vs. guest), not tiered. See the [Notion billing help center](https://www.notion.com/help/billing) for details. The Notion SCIM API does not expose a `/Licenses` endpoint, which is why this connector models the workspace role (rather than a "license") as a first-class resource.
+</Note>
 
 ## Gather Notion credentials 
 
@@ -44,9 +55,9 @@ Follow the prompts to generate a SCIM API token.
 <Step>
 Carefully copy and save the SCIM API token.
 </Step>
-</Steps> 
+</Steps>
 
-**Done.** Next, move on to the connector configuration instructions. 
+For more information, see [Provision users & groups with SCIM](https://www.notion.com/help/provision-users-and-groups-with-scim).
 
 ## Configure the Notion connector 
 
@@ -149,7 +160,15 @@ Click **Rotate** to generate a new Client ID and Secret.
 
 ### Step 2: Create Kubernetes configuration files
 
-Create two Kubernetes manifest files for your Notion connector deployment:
+Create two Kubernetes manifest files for your Notion connector deployment.
+
+The Secret carries the credentials the connector needs at runtime:
+
+{/* AUTO-GENERATED:START - config-params */}
+
+- **scim-token** (required): The Notion SCIM token used to connect to the Notion SCIM API.
+
+{/* AUTO-GENERATED:END - config-params */}
 
 #### Secrets configuration
 
@@ -164,12 +183,13 @@ stringData:
   # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-  
+
   # Notion credentials
   BATON_SCIM_TOKEN: <Token used to connect to the Notion SCIM API>
-```
 
-See the connector's README or run `--help` to see all available configuration flags and environment variables.
+  # Optional: include if you want C1 to provision access using this connector
+  BATON_PROVISIONING: true
+```
 
 #### Deployment configuration
 
@@ -218,4 +238,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your Notion connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-

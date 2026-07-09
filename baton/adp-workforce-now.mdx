@@ -25,6 +25,72 @@ The ADP Workforce Now connector syncs the following resources:
 
 *ADP Workforce Now has internal portal security roles (Security Administrator, User Master, etc.), but the ADP API does not expose security role assignments. These roles are managed exclusively through the ADP portal UI and cannot be synced.*
 
+## Worker profile fields
+
+Each synced worker is exposed as a user resource. The following keys are written to the user profile when the corresponding ADP field is populated. Empty values are omitted.
+
+| Profile key | ADP source | Notes |
+| :--- | :--- | :--- |
+| `associate_oid` | `worker.associateOID` | Always set. Also used as the user's `ExternalID`. |
+| `worker_id` | `worker.workerID.idValue` | The displayed worker number. |
+| `original_hire_date` | `worker.workerDates.originalHireDate` | |
+| `adjusted_service_date` | `worker.workerDates.adjustedServiceDate` | |
+| `raw_status` | `worker.workerStatus.statusCode.codeValue` | Literal status (`Active`, `Inactive`, `Terminated`). The SDK enabled/disabled mapping collapses `Inactive` and `Terminated` together; this field preserves the distinction. |
+| `reports_to_worker_id` | `workAssignments[<active>].reportsTo[0].workerID.idValue` | Manager's worker number. |
+| `manager_id` | `workAssignments[<active>].reportsTo[0].associateOID` | Manager's ADP `associateOID`. C1's directory manager mapper resolves this against the manager user's `ExternalID`, so the manager relationship is automatically populated in the C1 user graph. Both this field and `reports_to_worker_id` are derived from the same `reportsTo` entry. |
+| `job_title` | `workAssignments[<active>].jobTitle` | |
+| `job_title_code` | `workAssignments[<active>].jobCode` | Prefers `codeValue`, falls back to `shortName`. |
+| `department` | `workAssignments[<active>].homeOrganizationalUnits[<Department>].nameCode` | |
+| `department_code` | `workAssignments[<active>].homeOrganizationalUnits[<Department>].nameCode.codeValue` | The literal department `codeValue` (no `shortName`/`longName` fallback). |
+| `location` | `workAssignments[<active>].homeWorkLocation.nameCode` | Assigned work location. Prefers `shortName`, falls back to `codeValue`. |
+| `start_date` | `workAssignments[<active>].actualStartDate` | Assignment actual start date. |
+| `termination_date` | `worker.workerDates.terminationDate` | Falls back to `workAssignments[].terminationDate` when the worker-level date is absent. |
+| `file_number` | `workAssignments[<active>].payrollFileNumber` | ADP payroll File Number. Distinct from `worker_id` and `associate_oid`. |
+
+When a worker has multiple work assignments, fields drawn from `workAssignments[]` come from the first non-terminated assignment, falling back to any assignment if all are terminated.
+
+## Custom worker attributes
+
+ADP Workforce Now tenants can define custom fields on workers via the ADP admin UI. These appear in the `customFieldGroup` object on the worker record and are **not synced by default** — you must explicitly map the fields you want using the `worker-custom-fields` configuration option.
+
+### Configuration format
+
+Each entry maps an ADP custom field to a profile key using the format `"<fieldType>/<codeValue>"="<profileKey>"`:
+
+```
+"amountFields/Rate"    → profile key "pay_rate"
+"stringFields/PR code" → profile key "pr_code"
+```
+
+The `fieldType` must be one of: `stringFields`, `numberFields`, `dateFields`, `indicatorFields`, `codeFields`, `amountFields`, `percentFields`, `telephoneFields`.
+
+The `codeValue` must match the field's `nameCode.codeValue` **exactly** as it appears in ADP, including spaces and capitalisation.
+
+### Amount fields
+
+Amount fields emit two profile keys: the numeric value under `<profileKey>` and the ISO currency code under `<profileKey>_currency_code`. For example, mapping `"amountFields/Rate"="pay_rate"` produces:
+
+| Profile key | Value |
+| :--- | :--- |
+| `pay_rate` | `23.0` (number) |
+| `pay_rate_currency_code` | `"AUD"` |
+
+### Example
+
+```bash
+baton-adp-workforce-now \
+  --worker-custom-fields="amountFields/Rate"="pay_rate" \
+  --worker-custom-fields="stringFields/PR code"="pr_code" \
+  --worker-custom-fields="indicatorFields/Emp radio"="is_senior_emp" \
+  --worker-custom-fields="dateFields/Emp Date"="emp_custom_date"
+```
+
+Or via environment variable (comma-separated):
+
+```bash
+BATON_WORKER_CUSTOM_FIELDS="amountFields/Rate=pay_rate,stringFields/PR code=pr_code"
+```
+
 ## Gather ADP Workforce Now credentials
 
 <Warning>
@@ -92,6 +158,7 @@ To configure the ADP Workforce Now connector, you need administrator permissions
         - **SSL Certificate** (`adp-workforce-now-ssl-cert`): PEM-encoded SSL client certificate for mTLS
         - **SSL Key** (`adp-workforce-now-ssl-key`): PEM-encoded SSL client private key for mTLS
         - **Base URL** (`adp-workforce-now-base-url`): The ADP API base URL (default: `https://api.adp.com`)
+        - **Worker Custom Fields** (`worker-custom-fields`): Optional. Map worker custom attributes to profile keys. See [Custom worker attributes](#custom-worker-attributes) for format details.
       </Step>
 
 {/* AUTO-GENERATED:END - config-params */}
@@ -112,6 +179,13 @@ To configure the ADP Workforce Now connector, you need administrator permissions
     Follow these instructions to use the [ADP Workforce Now](https://dist.conductorone.com/ConductorOne/baton-adp-workforce-now) connector, hosted and run in your own environment.
 
     When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    
+    ### Resources
+
+    * [Official download center](https://dist.conductorone.com/ConductorOne/baton-adp-workforce-now): For stable binaries (Windows/Linux/macOS) and container images.
+
+    * [GitHub repository](https://github.com/conductorone/baton-adp-workforce-now): Access the source code, report issues, or contribute to the project.
 
     ### Step 1: Set up a new ADP Workforce Now connector
 
@@ -232,4 +306,3 @@ To configure the ADP Workforce Now connector, you need administrator permissions
 <Tip>
 All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-adp-workforce-now).
 </Tip>
-

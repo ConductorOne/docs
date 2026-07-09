@@ -74,15 +74,29 @@ Click **+ Add permissions** > **Microsoft Graph**.
 Click **Application permissions** and select `Sites.Read.All`. 
 </Step>
 <Step>
-Click **+ Add permissions** > **Microsoft SharePoint**. 
-</Step>
-<Step>
-Click **Application permissions** and select `Sites.FullControl.All`. (You can use `Sites.Read.All` here if you do not need to sync special SharePoint groups such as "SharePointHome Org Links".)
+Click **+ Add permissions** > **Microsoft SharePoint** > **Application permissions**, then choose **one** of the following based on your security requirements:
+
+   * **`Sites.FullControl.All`** (recommended) — lets the connector read the membership of **every** SharePoint group, including groups that restrict membership visibility. Choose this for complete access data.
+
+   * **`Sites.Read.All`** (least privilege) — use this if your security policy doesn't allow `Sites.FullControl.All`. With this permission the connector **cannot** read the membership of groups that restrict membership visibility, so you must also enable the skip-membership-restricted-groups flag. See the note below.
 </Step>
 <Step>
 Save your changes. 
 </Step>
 </Steps>
+
+<Info>
+**About groups that restrict membership visibility**
+
+Some SharePoint groups have *"Who can view the membership of the group"* set to **Group Members** instead of **Everyone**. Only members of such a group (or an administrator) can list its members.
+
+- With **`Sites.FullControl.All`**: the connector reads these groups normally. Leave skip-membership-restricted-groups **off** — turning it on would skip those groups unnecessarily and you'd lose memberships you could otherwise sync.
+- With **`Sites.Read.All`**: the connector **cannot** read these groups. You **must** enable the **skip-membership-restricted-groups** flag (or set `BATON_SKIP_MEMBERSHIP_RESTRICTED_GROUPS=true`). The connector then skips those groups and the sync completes normally. **Without the flag, the sync fails** when it reaches the first such group.
+
+**What the flag does:** when enabled, it skips any SharePoint group whose membership visibility is restricted (regardless of the permission you granted), so those groups and their memberships are excluded from the sync.
+
+**Enabling it on an existing connector:** if the connector previously synced these groups (for example, while using `Sites.FullControl.All`), enabling the flag will remove those groups and their grants from C1 on the next sync, since they're now excluded.
+</Info>
 
 ### Create and upload a self-signed certificate
 
@@ -266,6 +280,7 @@ stringData:
   BATON_PEM_CERTIFICATE: <Base-64 encoded PEM certificate>
   BATON_PEM_CERTIFICATE_KEY: <Base-64 encoded private key>
   BATON_SHAREPOINT_DOMAIN: <SharePoint subdomain (for example, "subdomain" in "subdomain.sharepoint.com")>
+  BATON_SKIP_MEMBERSHIP_RESTRICTED_GROUPS: <Optional. Set to "true" when using Sites.Read.All to skip groups that restrict membership visibility. Leave unset/false when using Sites.FullControl.All.>
   BATON_EXTERNAL_SYNC_MODE: true
   BATON_EXTERNAL_RESOURCE_C1Z: <The path to the c1z file to sync external Baton resources with>
   BATON_EXTERNAL_RESOURCE_ENTITLEMENT_ID_FILTER: <Optional. The entitlement that external users, groups must have access to sync external Baton resources>
@@ -296,7 +311,7 @@ spec:
     spec:
       containers:
       - name: baton-sharepoint
-        image: ghcr.io/conductorone/baton-sharepoint:latest
+        image: public.ecr.aws/conductorone/baton-sharepoint:latest
         imagePullPolicy: IfNotPresent
         env:
         - name: BATON_HOST_ID
@@ -319,4 +334,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your SharePoint connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
