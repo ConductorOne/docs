@@ -422,22 +422,37 @@ subject.type == UserType.SERVICE || subject.type == UserType.SYSTEM
 
 ### App user status checks
 
-#### Set directory status based on app account status
+#### Filter by app account status
 
-**Customer scenario:** A company uses Okta as its identity source but wants ConductorOne to reflect a user's status based on their account status in a specific downstream app.
+**Customer scenario:** A company wants to create a dynamic group of users who have active accounts in a critical application, or restrict policy conditions to users whose app account is enabled.
 
-**Business problem:** The source app may mark accounts disabled or deleted in ways that should cascade to a user's ConductorOne directory status.
+**Business problem:** Users with disabled or deleted accounts in an app should not receive access or be included in certain groups.
 
-**Expected outcome:** The user's Directory Status attribute in ConductorOne reflects the status of their account in the source app.
+**Expected outcome:** Only users with enabled accounts in the target app are matched.
+
+**Condition expressions:**
+
+```go
+// Dynamic group: include users with an enabled account in a specific app
+c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED"
+
+// Policy condition: require an active app account before granting access
+c1.user.v1.HasEntitlement(subject, "app-id", "entitlement-id") &&
+c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED"
+
+// Exclude users with disabled accounts
+c1.user.v1.GetAppUserStatus(subject, "app-id") != "USER_STATUS_DISABLED"
+```
 
 **User attribute mapping expression (Directory Status):**
 
 ```cel
+// Set Directory Status based on account status in a source app
 c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED" ? [UserStatus.USER_STATUS_ENABLED] : [UserStatus.USER_STATUS_DISABLED]
 ```
 
 <Info>
-`GetAppUserStatus` is available in user attribute mapping expressions for the **Directory Status** and **Manager Email** attribute types. It returns one of four string values: `"USER_STATUS_ENABLED"`, `"USER_STATUS_DISABLED"`, `"USER_STATUS_DELETED"`, or `"USER_STATUS_UNSPECIFIED"`. If the user has no account in the specified app, the function returns `"USER_STATUS_UNSPECIFIED"`.
+`GetAppUserStatus` returns one of four string values: `"USER_STATUS_ENABLED"`, `"USER_STATUS_DISABLED"`, `"USER_STATUS_DELETED"`, or `"USER_STATUS_UNSPECIFIED"`. If the user has no account in the specified app, the function returns `"USER_STATUS_UNSPECIFIED"`. When used in a Directory Status user attribute mapping, the expression must return a `UserStatus` enum value rather than a string.
 </Info>
 
 ### Time-based access control
