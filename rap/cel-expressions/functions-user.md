@@ -51,17 +51,12 @@ Returns a string representing the user's status in the specified app. Possible r
 - `"USER_STATUS_DELETED"` — the user's account in the app is deleted
 - `"USER_STATUS_UNSPECIFIED"` — the status is unknown or the user has no account in the app
 
+Available in user attribute mapping expressions for the **Directory Status** and **Manager Email** attribute types only.
+
 **Example:**
 ```cel
-// Include only users with an enabled account in a specific app
-c1.user.v1.GetAppUserStatus(subject, "okta-app-id") == "USER_STATUS_ENABLED"
-
-// Combine with other conditions
-c1.user.v1.HasEntitlement(subject, "app-id", "entitlement-id") &&
-c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED"
-
-// Exclude disabled accounts
-c1.user.v1.GetAppUserStatus(subject, "app-id") != "USER_STATUS_DISABLED"
+// Set Directory Status based on account status in a source app
+c1.user.v1.GetAppUserStatus(subject, "app-id") == "USER_STATUS_ENABLED" ? [UserStatus.USER_STATUS_ENABLED] : [UserStatus.USER_STATUS_DISABLED]
 ```
 
 ---
