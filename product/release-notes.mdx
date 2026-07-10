@@ -6,7 +6,121 @@ description: Here are the latest new features, enhancements, and resolved issues
 rss: true
 sidebarTitle: Release notes
 ---
-{/* Editor Refresh: 2026-06-25 */}
+{/* Editor Refresh: 2026-07-10 */}
+
+<Update label="July 10, 2026">
+
+## Product digest: July 10, 2026
+
+### Access profile changes apply in real time
+
+Access profile grants and removals now stream through to your connected apps and infrastructure continuously, instead of waiting for the next hourly sync.
+
+We also strengthened the safety net that pauses automations before removing an unusually large number of members. The anomaly detector now tracks removals over a rolling hour rather than evaluating one update at a time, catching situations where smaller removals add up to something risky. You can now view and adjust the threshold in your access profile membership automation's settings. 
+
+{/* DOCS: Check the automations docs to see if the rolling-hour safety cap and the new threshold setting need to be documented. */}
+
+### Search for what you need, see what grants it
+
+{/* TODO: This feature is SKU_MANUAL on the Platform SKU (promoted July 2). Confirm how to qualify it — e.g. "available on [plan name]" or a separate callout. */}
+{/* DOCS: New feature — request catalog indirect access search likely needs a docs page or section. */}
+
+Searching the request catalog for a specific resource — a repo, a folder, a project — now surfaces the role, team, or group that grants access to it, even when the granting entitlement doesn't match the search term by name. Users can now find the right thing to request without knowing which group owns the resource they're after.
+
+### Bulk revoke access from the app account page
+
+App owners can now revoke access directly from their app in C1. On the app's **Accounts** page, select one or more accounts and revoke specific entitlements or remove all access at once. You can also click into a specific app account, find the **Grants** tab and revoke entitlements individually or in bulk. 
+
+### Condition builder for Directory sources
+
+{/* DOCS: New feature — Directory source import conditions need to be documented. The engineer provided these steps as a starting point: go to Directory sources settings, select the three-dot menu to the right of the directory, select Condition, build the condition, then use Preview to verify the count and spot-check individual users. */}
+
+Configuring which accounts from a Directory source get imported into C1 previously required a raw CEL expression — difficult to write correctly and impossible to validate before saving. The import configuration now uses the same visual condition builder available elsewhere in C1. A built-in **Data preview** shows how many accounts match and lets you spot-check individual accounts before saving. Custom CEL is still available for complex conditions.
+
+### Navigation updates
+
+We've reorganized parts of the C1 navigation to better reflect how the product has grown:
+
+- **AI** is now a top-level section. MCP server configuration lives under **AI > MCP**, and C1 Gateway settings, connected clients, and hooks are under **AI > C1 Gateway**.
+
+- **Identity security** is a new top-level section. Inventory has moved here from Explore.
+
+- In the **Directory** section, **User data sources** is now **Directory sources**, and **Groups** is now **Dynamic groups**.
+
+### Agentic AI and MCP improvements
+
+- **Richer AI assistant responses in Slack**: The C1 AI assistant in Slack now uses rich interactive responses — buttons, forms, and pickers — so users can complete tasks without leaving the conversation.
+
+- **Slack conversations in the admin console**: The Agentic AI **Conversations** page now has separate **Web** and **Slack** tabs with full visibility of agent activity across both surfaces. 
+
+- **MCP server setup without client credentials**: Hosted and external MCP servers that support OAuth Dynamic Client Registration (DCR) can now be connected without entering a client ID or secret. Enable **Use dynamic client registration** when adding the server and C1 handles registration automatically.
+
+{/* DOCS: The MCP server setup guides will need to cover the DCR option for both hosted and external servers. */}
+
+- **Per-user authentication for external MCP servers**: Admins can now require each user to authenticate with their own credential — OAuth2, bearer token, custom header, or basic auth — instead of sharing a single admin credential.
+
+{/* TODO: This feature is SKU_MANUAL. Confirm with dev team how to qualify it — e.g. "available on [plan name]" or behind a separate callout. */}
+
+- **Toolset contents visible on hover**: Reviewers can see which tools a toolset includes by hovering over it in the task view, without navigating into entitlement detail pages.
+
+{/* TODO: PR #20754 removed the Toolsets column from the MCP servers list and server Tools tab. No release note added since it's a removal, but check if the MCP server docs reference this column and need updating. */}
+
+### Usability improvements
+
+- **More flexible access conflict conditions**: Conflict monitors now support an **Is not in** condition for Group B — flag users who hold sensitive access without the compensating entitlement that should go with it.
+
+{/* DOCS: Check the conflict monitor docs to see if the Is not in condition option needs to be documented. */}
+
+- **Customizable columns on more pages**: The column configurator is now available on 23 additional pages — including Findings, Automations, Policies, MCP Servers, Secrets, Webhooks, and more — with preferences saved across sessions.
+
+- **Entitlement owners in the table and exports**: Each application's **Entitlements** table now includes an **Owners** column, also reflected in the CSV export.
+
+- **Row-by-row drawer navigation**: Drawers opened from list views, such as your list of open requests, now include next/previous controls in the header, so you can move through rows without repeatedly closing and reopening the drawer.
+
+- **Markdown supported in requestable form field helper text**: Admins can now use markdown — links, bold, lists — in the guidance shown to requesters on form fields.
+
+{/* DOCS: Check whether the requestable items / form configuration docs need to mention markdown support. */}
+
+- **Disable connector anomaly pauses tenant-wide**: A new **System management** setting lets admins disable connector anomaly pauses across all connectors at once.
+
+{/* DOCS: This likely needs a new entry or section in the connector management / system settings docs. */}
+
+- **Expiring API credentials in the daily digest**: System Owners now see service principal credentials expiring within 30 days — or already expired — in their daily digest email, with a countdown and a direct link.
+
+{/* DOCS: Check the daily digest / notifications docs to see if expiring credential alerts need to be documented. */}
+
+- **Edit built-in certification policy post actions in the UI**: Admins can now edit the post actions on the built-in "App owner certification" policy in the UI, without using the API.
+
+{/* DOCS: Check the policy configuration docs to see if UI steps for editing post actions need to be added. */}
+
+### Terraform: connector ownership resources replacing `user_ids` field
+
+<Warning>
+This change may impact your CI/CD pipelines if you manage connectors with Terraform.
+</Warning>
+
+The `user_ids` field on all `conductorone_integration_*` resources will no longer be returned by the Terraform provider. If `user_ids` is configured in your Terraform files, this will cause drift.
+
+Starting in **[provider v1.4.0](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs)**, connector ownership is managed through two new resources:
+
+- `conductorone_connector_owner_user`
+- `conductorone_connector_owner_entitlement`
+
+**If you use `user_ids` on any `conductorone_integration_*` resource:**
+
+1. Upgrade to provider v1.4.0 or later.
+2. Migrate connector ownership to the new resources.
+3. Remove the `user_ids` field from your Terraform configuration.
+
+If you cannot migrate right away, remove or comment out the `user_ids` field to prevent Terraform drift after this change takes effect.
+
+Contact the C1 support team if you have questions or run into issues.
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
 
 <Update label="Private bridge for MCP servers">
 
