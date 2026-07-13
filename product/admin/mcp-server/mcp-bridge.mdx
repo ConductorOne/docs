@@ -12,12 +12,12 @@ sidebarTitle: Private bridge
 **Activation required.** AI access management must be enabled for your tenant, and private bridge connectivity must be turned on separately. To get started, [contact the C1 support team](mailto:support@c1.ai).
 </Note>
 
-If your MCP server runs in a private network — a laptop, a VM, or a cluster — and you can't or don't want to open inbound firewall rules, you can reach it through a **bridge**. You run a small agent (`bridge-client`) next to your server; it dials out to C1 and holds a tunnel open. C1 sends incoming tool calls back down that tunnel, so nothing in your network needs to listen for inbound connections.
+If your MCP server runs in a private network — a laptop, a VM, or a cluster — and you can't or don't want to open inbound firewall rules, you can reach it through a **bridge**. You run a small agent (`bridge-client`) next to your server; it dials out to C1 and holds a tunnel open. C1 sends incoming tool calls back down that tunnel, so nothing in your network needs to listen for inbound connections. A single bridge isn't limited to one server: it can expose multiple MCP servers at once, each as its own named service (see [Expose multiple MCP servers on one bridge](#expose-multiple-mcp-servers-on-one-bridge)). Note the distinction: multiple *services* run through one `bridge-client`, not through multiple copies of it — a credential holds only one session, so run exactly one `bridge-client` instance per credential. Multiple instances sharing a credential evict each other continuously (see [Troubleshooting](#troubleshooting-bridge-connection-issues)).
 
 Setup has two halves that must match each other:
 
-1. A **bridge config** (YAML) that tells `bridge-client` where your MCP server is and what to advertise to C1.
-2. An **MCP server registration** in C1 that points C1 at the advertised service over the bridge.
+1. A **bridge config** (YAML) that tells `bridge-client` where your MCP servers are and what to advertise to C1.
+2. An **MCP server registration** in C1, one per advertised service, that points C1 at that service over the bridge.
 
 ## Before you begin
 
@@ -84,7 +84,31 @@ bridge:
 The `service_path` and `transport_type` you set here are what C1 uses when routing tool calls. The registration wizard in Step 4 doesn't let you override them, so set them correctly now.
 </Note>
 
-You can expose more than one local service by adding more entries under `ports:`.
+### Expose multiple MCP servers on one bridge
+
+To expose more than one local service, add more entries under `ports:`. Each entry needs its own unique `name` and `listen_port`; everything else is per-service, so different servers can use different paths and transports:
+
+```yaml
+version: 1
+bridge:
+  client_id:     "<Client ID from Step 1>"
+  client_secret: "<Client secret from Step 1>"
+  ports:
+    - name: my-mcp                    # first MCP server
+      listen_port: 8080
+      backend: "127.0.0.1:8000"
+      service_type: MCP_NATIVE
+      service_path: /mcp
+      transport_type: streamable-http
+    - name: docs-mcp                  # second MCP server, same bridge
+      listen_port: 8081
+      backend: "127.0.0.1:9000"
+      service_type: MCP_NATIVE
+      service_path: /mcp
+      transport_type: streamable-http
+```
+
+Each service appears separately on the bridge detail page, and you register each one as its own MCP server in C1 (Step 4), selecting it by its `name`.
 
 ### Other ways to supply config
 
