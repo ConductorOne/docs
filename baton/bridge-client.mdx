@@ -1,0 +1,330 @@
+---
+title: "Set up a C1 bridge"
+og:title: "Set up a C1 bridge"
+description: "Connect on-prem appliances to C1 over a secure tunnel. The bridge agent dials out from your environment to C1 and forwards incoming connections to local TCP backends, so self-hosted services can be reached without inbound network exposure."
+og:description: "Connect on-prem appliances to C1 over a secure tunnel. The bridge agent dials out from your environment to C1 and forwards incoming connections to local TCP backends, so self-hosted services can be reached without inbound network exposure."
+sidebarTitle: "Bridge"
+---
+
+<Tip>
+The bridge is a long-running agent, not a sync connector. It dials *out*
+from your environment to C1 and relays incoming connections
+from C1 to one or more local TCP backends. Use it when a self-hosted
+service needs to be reachable from C1 without opening inbound firewall
+rules or publishing the service to the public internet.
+
+Bridges are configured in C1 under **Settings > Bridges**.
+</Tip>
+
+## Capabilities
+
+| Capability | Supported |
+| :--- | :--- |
+| Outbound tunnel from your network to C1 | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| OAuth 2.0 Client Credentials (`private_key_jwt`) authentication | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Multiple local services per bridge (up to 32) | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| External secrets via HashiCorp Vault (KV v1 / v2) | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| YAML or env-only configuration | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+
+The bridge authenticates to C1 via OAuth 2.0 Client Credentials
+with `private_key_jwt`. It periodically refreshes the bearer token and
+pushes the new token into the tunnel's keepalive metadata so the
+C1 relay re-authenticates on every ping. Services advertised
+by the bridge appear on the bridge's detail page in the C1 UI
+once the agent connects.
+
+## Create a bridge in C1
+
+<Warning>
+To complete this task, you'll need the **Connector Administrator** or **Super Administrator** role in C1 (specifically the `IamV1TunnelCredentialsServiceCreateBridge` and `IamV1TunnelCredentialsServiceCreateBridgeCredential` capabilities — the first creates the bridge, the second issues its credentials).
+</Warning>
+
+<Steps>
+<Step>
+In C1, navigate to **Settings** > **Bridges**.
+</Step>
+<Step>
+Click **Create bridge**.
+</Step>
+<Step>
+Enter a **Display name** for the bridge (required, 512 characters or fewer). For example, **prod-vpc-east** or **finance-appliance**. Optionally add a **Description** (up to 4096 characters) explaining what the bridge connects to.
+</Step>
+<Step>
+Click **Create bridge**. The browser navigates to the bridge's detail page.
+</Step>
+<Step>
+On the bridge detail page, find the **Credentials** card and click **Create credential**. (On a bridge that already has an active credential, this button is labeled **Rotate credential** instead.)
+</Step>
+<Step>
+A **Credential created** dialog opens with the **Client ID** and **Client secret**. **Copy and save the client secret immediately — it is only visible once.** Click **Done** to close the dialog.
+
+   These credentials are what the bridge agent uses to authenticate back to C1. You'll paste them into the agent's configuration in the next section.
+</Step>
+</Steps>
+
+**That's it!** Next, deploy the bridge agent.
+
+## Deploy the bridge agent
+
+The bridge agent (`bridge-client`) is a self-hosted, long-running process. Run it inside the network where your local backend services live. The image bakes no configuration — the YAML (or `C1_BRIDGE_*` env vars) is supplied at runtime.
+
+<Warning>
+To complete this task, you'll need:
+
+- The **Client ID** and **Client secret** generated above
+- A host inside the network where the local backend services run (Kubernetes cluster, VM, or container host)
+</Warning>
+
+### Resources
+
+* [Official download center](https://dist.conductorone.com/ConductorOne/bridge-client): For stable binaries (Linux/macOS) and container images.
+
+<Tabs>
+<Tab title="Kubernetes">
+**Follow these instructions to run the bridge as a Deployment on Kubernetes.**
+
+When running on Kubernetes, the bridge maintains an ongoing connection with C1. The YAML is supplied at runtime via a `Secret` volume (use a `Secret` rather than a `ConfigMap` so the client secret stays encrypted at rest).
+
+#### Step 1: Create the Secret
+
+```yaml expandable
+# bridge-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bridge-config
+type: Opaque
+stringData:
+  bridge.yaml: |
+    version: 1
+    bridge:
+      client_id:     "<Client ID from the dialog above>"
+      client_secret: "<Client secret from the dialog above>"
+      ports:
+        - name: http                      # unique service name (optional)
+          listen_port: 80                 # port advertised on the bridge
+          backend: "127.0.0.1:8080"       # local target the bridge dials
+          service_type: HOSTED            # MCP_NATIVE | HOSTED | RAW
+          service_path: /                 # service URL path (e.g. /mcp)
+          transport_type: http            # streamable-http | sse | http
+```
+
+<Note>
+Each entry under `ports:` accepts the following fields:
+
+| Field            | Required | Description                                                                                                                   |
+| :--------------- | :------- | :---------------------------------------------------------------------------------------------------------------------------- |
+| `listen_port`    | yes      | Port advertised on the bridge (1–65535). Must be unique within the config.                                                    |
+| `backend`        | yes      | Local `host:port` the bridge dials for this service.                                                                          |
+| `name`           | no       | Service name shown in C1. Must be unique when set.                                                                            |
+| `service_type`   | metadata | Describes the kind of service so C1 can identify and classify it: `MCP_NATIVE` (a native MCP server), `HOSTED` (a hosted MCP server or other hosted HTTP service), or `RAW` (an opaque TCP service). |
+| `service_path`   | metadata | The service's URL path — for example, `/mcp` for an MCP server.                                                               |
+| `transport_type` | metadata | The service transport — for example, `streamable-http` or `sse` for an MCP server, or `http` for a plain hosted HTTP service. |
+
+`service_type`, `service_path`, and `transport_type` are descriptive metadata: C1 records them and uses them to identify and classify the service you advertise — for example, to recognize an MCP server and its endpoint when you connect it in C1. Set them to match the service you're exposing.
+
+`api_host` is derived automatically from `client_id` and does not need to be set; specify it only for a non-standard C1 host or port.
+</Note>
+
+#### Step 2: Create the Deployment
+
+```yaml expandable
+# bridge.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge-client
+  labels:
+    app: bridge-client
+spec:
+  selector:
+    matchLabels:
+      app: bridge-client
+  template:
+    metadata:
+      labels:
+        app: bridge-client
+    spec:
+      containers:
+      - name: bridge-client
+        image: public.ecr.aws/conductorone/bridge-client:<version>
+        args: ["--config", "/etc/c1/bridge.yaml"]
+        volumeMounts:
+        - name: bridge-config
+          mountPath: /etc/c1
+          readOnly: true
+      volumes:
+      - name: bridge-config
+        secret:
+          secretName: bridge-config
+```
+
+<Tip>
+The bridge also supports env-only mode: skip the `Secret` volume mount and set the same fields via `C1_BRIDGE_*` env vars on the container instead. See the [Environment variables](#environment-variables) section below for the full list.
+</Tip>
+
+#### Step 3: Deploy
+
+<Steps>
+<Step>
+Apply both manifests:
+
+```sh
+kubectl apply -f bridge-secret.yaml
+kubectl apply -f bridge.yaml
+```
+</Step>
+<Step>
+Back in C1, refresh the bridge's detail page under **Settings** > **Bridges**. The bridge's status changes to **Connected** within a few seconds of the pod starting, and any services it advertises appear in the **Services** section.
+
+You can also tail the bridge's logs locally:
+
+```sh
+kubectl logs -l app=bridge-client -f
+```
+</Step>
+</Steps>
+
+**That's it!** Your bridge is now relaying traffic between C1 and your local services.
+</Tab>
+
+<Tab title="Docker">
+**Follow these instructions to run the bridge as a Docker container.**
+
+The bridge image bakes no configuration. Supply the YAML at runtime via a bind mount.
+
+#### Step 1: Create the bridge configuration
+
+Create a YAML config on the host that points at one or more local TCP backends:
+
+```yaml expandable
+# /etc/c1/bridge.yaml
+version: 1
+bridge:
+  client_id:     "<Client ID from the dialog above>"
+  client_secret: "<Client secret from the dialog above>"
+  ports:
+    - name: http
+      listen_port: 80
+      backend: "127.0.0.1:8080"
+```
+
+#### Step 2: Start the bridge
+
+```sh
+docker run --rm \
+  -v /etc/c1/bridge.yaml:/etc/c1/bridge.yaml:ro \
+  public.ecr.aws/conductorone/bridge-client:<version> \
+  --config /etc/c1/bridge.yaml
+```
+
+<Tip>
+For pure env-only mode (no YAML on disk), drop the `-v` bind mount and pass the equivalent `C1_BRIDGE_*` vars with `-e`. See the [Environment variables](#environment-variables) section below for the full list.
+</Tip>
+
+Back in C1, refresh the bridge's detail page under **Settings** > **Bridges**. The bridge's status changes to **Connected** within a few seconds of the container starting.
+
+**That's it!** Your bridge is now relaying traffic between C1 and your local services.
+</Tab>
+</Tabs>
+
+## Environment variables
+
+The fields most commonly varied per deployment can be supplied via `C1_BRIDGE_*` environment variables instead of (or alongside) a YAML config. Env values take precedence over their YAML counterparts; empty env values are ignored (they do not zero out a non-empty YAML field). Two forms are supported: **scalar** vars carry the value directly, and **locator** vars carry a `"<secret-id>:<key>"` string that the configured `secret_backend` resolves at startup.
+
+### Scalar overrides
+
+|          Env var          |    YAML field   |
+| :------------------------ | :-------------- |
+| `C1_BRIDGE_CLIENT_ID`     | `client_id`     |
+| `C1_BRIDGE_CLIENT_SECRET` | `client_secret` |
+| `C1_BRIDGE_API_HOST`      | `api_host`      |
+| `C1_BRIDGE_CA_PATH`       | `ca_path`       |
+
+### Secret-locator overrides
+
+For each scalar above, a sibling `C1_BRIDGE_SECRET_<FIELD>` env var accepts a `"<secret-id>:<key>"` locator instead of a literal value. At startup the bridge fetches the value from the configured `secret_backend` and writes it into the corresponding field — the same shape as the YAML `secrets:` map but from the environment. Setting both the scalar AND the locator for the same field is an error.
+
+|              Env var             |    YAML field   |
+| :------------------------------- | :-------------- |
+| `C1_BRIDGE_SECRET_CLIENT_ID`     | `client_id`     |
+| `C1_BRIDGE_SECRET_CLIENT_SECRET` | `client_secret` |
+| `C1_BRIDGE_SECRET_API_HOST`      | `api_host`      |
+| `C1_BRIDGE_SECRET_CA_PATH`       | `ca_path`       |
+| `C1_BRIDGE_SECRET_CA_PEM`        | `ca_pem`        |
+
+`ca_pem` has no scalar form (`C1_BRIDGE_CA_PEM` doesn't exist) — multi-line PEM data doesn't round-trip cleanly through shell envs, so it lives in YAML or comes from a secret backend.
+
+### Single-service env mode
+
+For deployments that don't want to ship a YAML config at all, a single service mapping can be defined entirely in the environment. When both `C1_BRIDGE_SERVICE_LISTEN_PORT` and `C1_BRIDGE_SERVICE_BACKEND` are set, a single port is constructed from the `C1_BRIDGE_SERVICE_*` vars and **replaces** any `ports:` block loaded from YAML.
+
+|               Env var              |         YAML field        | Required |
+| :--------------------------------- | :------------------------ | :------- |
+| `C1_BRIDGE_SERVICE_LISTEN_PORT`    | `ports[0].listen_port`    | yes      |
+| `C1_BRIDGE_SERVICE_BACKEND`        | `ports[0].backend`        | yes      |
+| `C1_BRIDGE_SERVICE_NAME`           | `ports[0].name`           | no       |
+| `C1_BRIDGE_SERVICE_TYPE`           | `ports[0].service_type`   | no       |
+| `C1_BRIDGE_SERVICE_PATH`           | `ports[0].service_path`   | no       |
+| `C1_BRIDGE_SERVICE_TRANSPORT_TYPE` | `ports[0].transport_type` | no       |
+
+Setting only one of the required pair (`LISTEN_PORT` without `BACKEND`, or vice versa) is an error — almost always a typo. With both unset, the service env vars are ignored entirely and YAML's `ports:` block is used as-is.
+
+### Log verbosity
+
+`bridge-client` logs JSON to stdout at `info` by default. Raise or lower it with the `--log-level` flag or the `C1_BRIDGE_LOG_LEVEL` env var (`debug`, `info`, `warn`, or `error`); the env var takes precedence if both are set. `debug` adds per-connection detail that helps when a backend is reachable but calls fail. Each backend connection also logs its outcome, and a backend that accepts the connection but returns nothing before closing is flagged at `warn`.
+
+## Resolve sensitive fields from HashiCorp Vault
+
+The bridge can pull values for sensitive fields (most commonly `client_secret`, `ca_pem`, `ca_path`) from a HashiCorp Vault backend instead of carrying them as YAML literals. Configure a `secret_backend:` block with `type: vault` and a `secrets:` map that names the field-to-locator mappings; the bridge fetches each value at startup and writes it into the corresponding `bridge:` field before validation.
+
+Vault auth: exactly one of `token`, `credsfile`, or `userpass` in YAML. Setting `VAULT_TOKEN` in the environment overrides whichever auth source the YAML specifies. The standard `VAULT_*` env vars (`VAULT_ADDR`, `VAULT_CACERT`, and the others) are still honored when `secret_backend.vault.url` is empty.
+
+```yaml expandable
+# bridge.yaml — same shape as before, but client_secret is fetched from Vault.
+version: 1
+bridge:
+  client_id: "<Client ID from the dialog above>"
+  ports:
+    - name: http
+      listen_port: 80
+      backend: "127.0.0.1:8080"
+
+secret_backend:
+  type: vault
+  vault:
+    url:   "https://vault.example.com"
+    mount: "kv"
+    kvapi: 2
+    token: "hvs.XXXX"                # or set VAULT_TOKEN at runtime
+    # credsfile: /var/run/secrets/vault-token
+    # userpass:
+    #   username: alice
+    #   password: hunter2
+
+# client_secret (and any other supported field) is resolved at startup.
+secrets:
+  client_secret: "bridge-creds:client_secret"
+```
+
+Supported fields in the `secrets:` map: `client_id`, `client_secret`, `api_host`, `ca_path`, `ca_pem`. Each entry has an environment-variable equivalent (`C1_BRIDGE_SECRET_<FIELD>`) so the same locator can be supplied without editing the YAML. Setting a field both as a YAML literal under `bridge:` AND in `secrets:` (or its env equivalent) is an error — pick one source per field.
+
+## Manage credentials
+
+To rotate or revoke a bridge's credentials later:
+
+<Steps>
+<Step>
+In C1, navigate to **Settings** > **Bridges** and click the bridge.
+</Step>
+<Step>
+On the bridge's detail page, find the **Credentials** card.
+
+   - **Rotate credential** issues a new Client ID and Client secret. The new credential dialog opens with the freshly-generated values — copy the secret immediately, since it is only visible once. Update the agent's configuration with the new values; old credentials continue to work until you revoke them.
+   - **Revoke credential** invalidates a credential immediately. Any bridge agent still using that credential will be disconnected.
+</Step>
+</Steps>
+
+## MCP servers: tool-call access
+
+When the bridge fronts an MCP server, you register that server in C1 separately — selecting this bridge and its advertised service — so C1 can discover and govern its tools. C1 records each tool's name, description, and input schema exactly as your server advertises them and surfaces that text to AI clients during discovery, so clear tool descriptions and schemas on your server determine how reliably an agent finds and calls them. Reaching those tools through C1 then has one more requirement beyond connectivity: the requesting user must be an **app user** of the app the server is registered under, and must hold a grant for the tool. New external apps start with no app users, so a call from an identity that isn't an app user opens an access request instead of executing. App users come from the destination app's account sources. Populate them by linking an entitlement from another app (during registration, or via linked entitlements later in the app's settings), by importing a CSV of app users, or — if the app is backed by a connector — by syncing them from the connector.
