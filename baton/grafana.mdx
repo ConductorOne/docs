@@ -35,6 +35,20 @@ Once this is enabled, Grafana stops overriding org roles on login and C1 becomes
 This step is not required for self-hosted Grafana instances using basic (username/password) authentication.
 </Note>
 
+## Account access origin
+
+Starting with connector version 0.2.3, each synced account's profile includes two attributes that identify how the user's access originated. They appear in the account's **Profile attributes** in C1 and support access reviews where the origin of access matters:
+
+| Attribute | Type | Present | Meaning |
+| :--- | :--- | :--- | :--- |
+| `is_externally_synced` | Boolean | Always | `true` when the user's access originates from an external identity provider; `false` for users managed locally in Grafana. |
+| `auth_labels` | String | Externally authenticated users only | The external authentication provider(s) associated with the user (for example, `grafana.com` or an OAuth/SAML provider name), joined with `; ` when there is more than one. Absent — not an empty string — for local users. |
+
+The exact meaning of `is_externally_synced` depends on the connector mode:
+
+* **Grafana Cloud:** the value is Grafana's native `isExternallySynced` flag, meaning the user's organization role is managed by an external identity provider (such as Entra ID or grafana.com SSO).
+* **Self-hosted Grafana:** Grafana's API does not return that flag for the global user list, so the connector derives the value from the user's authentication labels. `true` means the user authenticated through an external module (SSO, LDAP, or OAuth) — slightly broader than role management: a user whose role is managed locally but who signs in through SSO also reports `true`.
+
 ## Gather Grafana credentials
 
 Configuring the connector requires credentials obtained in your Grafana instance. The credentials you need depend on whether you are connecting to **Grafana Cloud** or a **self-hosted Grafana** instance.
