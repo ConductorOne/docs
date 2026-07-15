@@ -1,0 +1,264 @@
+---
+title: "Set up a FIS IBS connector"
+og:title: "Set up a FIS IBS connector"
+description: "C1 provides identity governance and just-in-time provisioning for FIS IBS. Integrate your FIS IBS instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for FIS IBS. Integrate your FIS IBS instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "FIS IBS"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The FIS IBS connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+**Provisioning operations supported:**
+
+- Grant or revoke role membership
+- Create and delete user accounts
+- Update user profile (first name, last name, email)
+- Enable or disable user accounts
+
+## Gather FIS IBS credentials
+
+<Warning>
+To configure the FIS IBS connector, you need administrator access to the FIS Code Connect developer portal and your institution's FIS IBS identifiers (FiId, sourceId, appId, prcsGrpId).
+</Warning>
+
+<Steps>
+  <Step>
+    Log in to the [FIS Code Connect developer portal](https://developer.fisglobal.com).
+  </Step>
+
+  <Step>
+    Create a new application and subscribe it to the **IBS Entitlement API**:
+
+    1. Navigate to **My Apps** and click **Create Application**.
+    2. Name the application (for example, `ConductorOne`).
+    3. Subscribe the application to the **IBS Entitlement API**.
+    4. Copy the **Consumer Key** (client ID) and **Consumer Secret** (client secret) shown on the application page.
+  </Step>
+
+  <Step>
+    Obtain your institution's FIS IBS identifiers from your FIS account representative or system administrator:
+
+    - **FiId** — the financial institution organization ID (for example, `BADEFAULT-241`)
+    - **sourceId** — the IBS data source identifier (for example, `E1ANY0`)
+    - **appId** — the IBS application identifier (for example, `ET`)
+    - **prcsGrpId** — the processing group ID to scope roles (for example, `547`)
+  </Step>
+
+  <Step>
+    Note the **API base URL** for your environment. For FIS Code Connect (cloud gateway) it follows the pattern `https://api-gw-<env>.fisglobal.com/rest/IBSET/v4`. For a direct VPN connection, use the internal FIS host URL provided by your FIS representative.
+  </Step>
+</Steps>
+
+## Configure the FIS IBS connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **FIS IBS** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new FIS IBS connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **FIS IBS Base URL**: The Entitlement API base URL (for example, `https://api-gw-uat.fisglobal.com/rest/IBSET/v4`)
+        - **OAuth Client ID**: The Consumer Key from the FIS Code Connect portal
+        - **OAuth Client Secret**: The Consumer Secret from the FIS Code Connect portal
+        - **Organization ID (FiId)**: Your financial institution identifier (for example, `BADEFAULT-241`)
+        - **Source ID**: Your IBS source identifier (for example, `E1ANY0`)
+        - **Application ID**: Your IBS application identifier (for example, `ET`)
+        - **Processing Group ID**: The processing group to scope roles (for example, `547`)
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your FIS IBS connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [FIS IBS](https://github.com/conductorone/baton-fis-ibs) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new FIS IBS connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new FIS IBS connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your FIS IBS connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-fis-ibs-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-fis-ibs-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # FIS IBS credentials
+      BATON_FIS_IBS_BASE_URL: https://api-gw-<env>.fisglobal.com/rest/IBSET/v4
+      BATON_FIS_IBS_CLIENT_ID: <FIS Code Connect Consumer Key>
+      BATON_FIS_IBS_CLIENT_SECRET: <FIS Code Connect Consumer Secret>
+      BATON_FIS_IBS_ORG_ID: <FiId, e.g. BADEFAULT-241>
+      BATON_FIS_IBS_SOURCE_ID: <sourceId, e.g. E1ANY0>
+      BATON_FIS_IBS_APP_ID: <appId, e.g. ET>
+      BATON_FIS_IBS_PRCS_GRP_ID: <prcsGrpId, e.g. 547>
+    ```
+
+    See the connector's [README](https://github.com/conductorone/baton-fis-ibs) or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-fis-ibs.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-fis-ibs
+      labels:
+        app: baton-fis-ibs
+    spec:
+      selector:
+        matchLabels:
+          app: baton-fis-ibs
+      template:
+        metadata:
+          labels:
+            app: baton-fis-ibs
+            baton: "true"
+            baton-app: fis-ibs
+        spec:
+          containers:
+          - name: baton-fis-ibs
+            image: public.ecr.aws/conductorone/baton-fis-ibs:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-fis-ibs
+            envFrom:
+            - secretRef:
+                name: baton-fis-ibs-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the FIS IBS connector to. FIS IBS data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your FIS IBS connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+## Notes
+
+**FIS Code Connect vs. direct VPN**
+
+The connector works with both connection methods. Responses from the FIS Code Connect cloud gateway are double-encoded JSON; the connector detects and unwraps this automatically. No configuration change is required.
+
+**Multiple processing groups**
+
+The connector is scoped to a single processing group (`prcsGrpId`). If your institution has roles or users spread across multiple processing groups, run one connector instance per group.
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-fis-ibs).
+</Tip>
