@@ -16,13 +16,17 @@ We recommend closely monitoring workflows that use this connector and contacting
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Group | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Role | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
 **Additional functionality:**
 
-_None._
+- **User lifecycle actions:** `enable_user` and `disable_user`, which reactivate or deactivate a Looker user by toggling `is_disabled`.
+
+<Note>
+Account creation follows Looker's official provisioning flow: the connector creates the user record, sets the login email via an email credential, and sends the user a password-setup email. No password is ever generated or transmitted by the connector — the user sets one through the emailed link, or signs in through SSO (SAML, OIDC, LDAP) where the identity provider owns the login.
+</Note>
 
 ## Gather Looker configuration information
 
@@ -30,9 +34,11 @@ Configuring the connector requires you to pass in information from Looker. Gathe
 
 Here's the information you'll need:
 
-- Base URL
+- Base URL (e.g. `https://your.looker.com:19999`)
 - Client ID
 - Client Secret
+
+The Client ID and Client Secret come from an **API3 key**, generated in the Looker Admin UI (**Admin** > **Users** > **Edit Keys**). The key inherits the permissions of the user it belongs to: syncing requires the `see_users`, `see_groups`, and `see_roles` permissions; provisioning (account create/delete and lifecycle actions) requires the **Admin** role.
 
 See the Looker docs for information on how to acquire credentials: [View the documentation](https://cloud.google.com/looker/docs/looker-core-create-oauth#generate_the_oauth_client_id_and_client_secret)
 
@@ -154,9 +160,12 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
 
   # Looker config
-  BATON_BATON_LOOKER_BASE_URL: <The base URL for the Looker API. This is required to connect to the Looker API.>
-  BATON_BATON_LOOKER_CLIENT_ID: <The Client ID for the Looker API. This is required to authenticate with the Looker API.>
-  BATON_BATON_LOOKER_CLIENT_SECRET: <The Client Secret for the Looker API. This is required to authenticate with the Looker API.>
+  BATON_LOOKER_BASE_URL: <The base URL for the Looker API, e.g. https://your.looker.com:19999>
+  BATON_LOOKER_CLIENT_ID: <The Client ID for the Looker API>
+  BATON_LOOKER_CLIENT_SECRET: <The Client Secret for the Looker API>
+
+  # Enable provisioning (account create/delete and lifecycle actions)
+  BATON_PROVISIONING: "true"
 
 ```
 
@@ -202,7 +211,7 @@ spec:
 Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
 </Step>
 <Step>
-Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the looker connector to. looker data should be found on the **Entitlements** and **Accounts** tabs.
+Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Looker connector to. Looker data should be found on the **Entitlements** and **Accounts** tabs.
 </Step>
 </Steps>
 

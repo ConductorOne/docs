@@ -277,14 +277,27 @@ The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` 
 <Steps>
   <Step>
     Download the latest Windows MSI from the [C1 download center](https://dist.conductorone.com/ConductorOne/baton-active-directory).
+
+    <Note>
+    **Security prompts during download and install.** The Windows MSI and `.exe` are not yet code-signed, so Microsoft Defender SmartScreen and some antivirus products may warn that the publisher is unknown or quarantine the download. This is expected for unsigned binaries — it is not an indication of tampering. To proceed safely:
+
+    - On the SmartScreen prompt, click **More info → Run anyway**.
+    - Verify you downloaded from `dist.conductorone.com` and, if your security policy requires it, confirm the file hash with ConductorOne support before running.
+
+    Authenticode signing of the Windows artifacts is on the roadmap and will remove these prompts.
+    </Note>
   </Step>
 
   <Step>
-    Run the MSI on the host designated to run the connector. The installer prompts for your AD domain, C1 credentials, and connection settings, then writes the YAML config (with DPAPI-encrypted secrets by default) and registers the Windows service with auto-restart recovery.
+    Run the MSI on the host designated to run the connector. The MSI installs `baton-active-directory.exe` to `C:\Program Files\ConductorOne\baton-active-directory` and adds it to the system `PATH`.
+
+    <Note>
+    The MSI **only installs the binary** — it does not collect your configuration, write a config file, or register the Windows service, and there is no post-install configuration pop-up. All of that happens in the next step, when you run `setup`.
+    </Note>
   </Step>
 
   <Step>
-    After install, a **Configuration Editor** shortcut is available from the Start Menu if you need to change settings later. See [GUI Configuration Editor](#gui-configuration-editor) below.
+    From an elevated **Command Prompt** (`cmd.exe`), run `baton-active-directory.exe setup` to create the configuration and register the service. This is the same command described in [Option 2](#option-2-cli-setup-command) below — follow it from the `setup` step onward (the config editor opens automatically on this first run because no config exists yet).
   </Step>
 </Steps>
 
@@ -312,7 +325,11 @@ The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` 
 
     The setup command checks for a config file, offers to copy the binary to Program Files, optionally configures a service account, and registers the Windows service with auto-start and recovery.
 
-    **First-run behavior:** if no config exists, `setup` launches the [GUI Configuration Editor](#gui-configuration-editor) in a separate window. Fill in your domain, base DN, and C1 credentials, click **Save**, and close the editor — `setup` resumes in `cmd.exe` and finishes registering the service.
+    **First-run behavior:** the [GUI Configuration Editor](#gui-configuration-editor) launches automatically **only on the first run, when no config file exists yet**. Fill in your domain, base DN, and C1 credentials, click **Save**, and close the editor — `setup` resumes in `cmd.exe` and finishes registering the service. On subsequent runs the editor does **not** reappear; `setup` reuses the existing config.
+
+    <Note>
+    To review or change an existing config, either run `baton-active-directory.exe config-editor` directly, or run `baton-active-directory.exe setup --reconfigure` to open the editor and then re-register the service in one step.
+    </Note>
 
     For non-interactive setup (no prompts, LocalSystem account, no editor), use: `baton-active-directory.exe setup -y`
   </Step>
@@ -336,11 +353,26 @@ The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` 
     2. Change the **Startup type** to **Automatic**
     3. Navigate to the **Log On** tab and click **This account**
     4. Click **Browse**, enter your service account name, and click **Check Names**
-    5. Enter the service account password and confirm it
+    5. Enter the service account password and confirm it. **For a gMSA**, append `$` to the account name (e.g. `DOMAIN\svc-baton-ad$`) and leave **both password fields blank** — Windows retrieves the managed password from the domain.
     6. Click **Apply**
     7. Navigate back to the **General** tab and click **Start**
+
+    <Tip>
+    Configuring the account through `baton-active-directory.exe setup --service-account="DOMAIN\svc-baton-ad$"` (gMSA) or `--service-account="DOMAIN\user" --service-password="..."` (named user) is recommended over editing the service manually: `setup` grants the **Log on as a service** right, grants the account **Read** on the config file, and grants **Modify** on the log directory automatically. If you configure the account by hand in `services.msc`, you must grant those rights yourself (see the warning below) — otherwise the service fails to start.
+    </Tip>
   </Step>
 </Steps>
+
+<Warning>
+**gMSA / custom service account "service won't start".** When the service runs as any account other than Local System, that account must be able to **read the config file**. The connector locks the config down to SYSTEM and Administrators, so if you change the service account by hand without granting it read, the service exits at startup before it can load its config. `setup` and the MSI installer apply this grant automatically; to apply it manually, run from an elevated prompt:
+
+```console
+icacls "C:\ProgramData\ConductorOne\baton-active-directory\config.yaml" /grant "DOMAIN\svc-baton-ad$:(R)"
+icacls "C:\ProgramData\ConductorOne" /grant "DOMAIN\svc-baton-ad$:(OI)(CI)(M)"
+```
+
+Secrets encrypted with DPAPI use **machine scope**, so a gMSA on the same host can decrypt them once it can read the file — no re-encryption needed.
+</Warning>
 
 ### Step 3: Manage the Windows service
 
@@ -360,6 +392,34 @@ The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` 
 
   <Step>
     Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Active Directory connector to. Active Directory data should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
+
+### Validate the connector is working
+
+A **Connected** status in C1 means the connector has registered and is sending heartbeats — it does **not** by itself confirm that the connector can reach a domain controller, bind, and sync. Use these checks to confirm it is actually functioning:
+
+<Steps>
+  <Step>
+    **Test LDAP connectivity.** From an elevated `cmd.exe`, run:
+
+    ```console
+    baton-active-directory.exe test-ldaps
+    ```
+
+    This exercises the full path the connector uses — DC resolution, TCP connect, TLS handshake and certificate validation (for LDAPS), and the LDAP bind — for every configured domain, and prints actionable diagnostics for any step that fails. `setup` runs this check automatically at the end of installation (skip it with `--no-verify`).
+  </Step>
+
+  <Step>
+    **Confirm the service is running.** Run `baton-active-directory.exe status` and verify the state is **Running** and the account/binary/config paths are what you expect.
+  </Step>
+
+  <Step>
+    **Check the log.** The connector writes to `C:\ProgramData\ConductorOne\baton-active-directory\baton.log`. A healthy run logs sync progress and a completion message; an empty or error-filled log (for example `open sink ".../baton.log": Access is denied`) points to the permission issues described above.
+  </Step>
+
+  <Step>
+    **Confirm data in C1.** In C1 → **Apps** → your AD app, the **Accounts** and **Entitlements** tabs should populate after the first successful sync. Counts that match your directory confirm an end-to-end working connector.
   </Step>
 </Steps>
 
@@ -704,16 +764,18 @@ Synced user profiles carry the standard AD attributes (display name, email, mana
 
 #### Read-only state attributes
 
-Four booleans are surfaced on every user profile:
+Six booleans are surfaced on every user profile:
 
 | Field | Source | Meaning |
 |---|---|---|
 | `password_never_expires` | stored `userAccountControl` | Static admin config (`DONT_EXPIRE_PASSWD` bit) |
 | `password_not_required` | stored `userAccountControl` | Static admin config (`PASSWD_NOTREQD` bit) |
+| `trusted_for_delegation` | stored `userAccountControl` | Static admin config (`TRUSTED_FOR_DELEGATION` bit) — a discriminating service-account signal |
+| `trusted_to_auth_for_delegation` | stored `userAccountControl` | Static admin config (`TRUSTED_TO_AUTH_FOR_DELEGATION` bit) — a discriminating service-account signal |
 | `account_locked` | computed `msDS-User-Account-Control-Computed` | Live state — matches what ADUC and `Get-ADUser` show, accounting for `lockoutDuration` |
 | `password_expired` | computed `msDS-User-Account-Control-Computed` | Live state — accounts for max-password-age policy |
 
-The two static flags come from the stored UAC bits set by an admin. The two live-state flags come from AD's server-computed UAC attribute, which is re-evaluated each time the connector reads the user.
+The four static flags come from the stored UAC bits set by an admin. The two live-state flags come from AD's server-computed UAC attribute, which is re-evaluated each time the connector reads the user.
 
 By default, locked-out accounts also map to `STATUS_DISABLED` in C1 (backwards-compatible). To keep locked accounts as `STATUS_ENABLED` and report lockout state solely via the `account_locked` field above, set:
 
@@ -852,7 +914,7 @@ For multi-domain setups, `test-ldaps` checks every entry in `additional-domains`
 
 ### DPAPI secrets encryption
 
-On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, and `bind-password`) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup. The installer encrypts by default; you can also encrypt an existing config manually:
+On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, and `bind-password`) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup. The GUI Configuration Editor encrypts secrets by default when you save; you can also encrypt an existing config manually:
 
 ```console
 baton-active-directory.exe encrypt-config
@@ -865,8 +927,6 @@ The connector includes a native Windows GUI for managing configuration without e
 ```console
 baton-active-directory.exe config-editor
 ```
-
-If installed via the MSI installer, a **Configuration Editor** shortcut is also available in the Start Menu.
 
 The editor exposes every YAML config field across a tabbed layout (Connection, Authentication, Sync Scope, Multi-Domain, gMSA, Advanced). Notable toggles on the Advanced tab include `Lockout Status Behavior` (`locked-account-is-disabled`), `Sync Extension Attributes` (`sync-extension-attributes`), and `Use displayName as Resource Label` (`use-display-name`). Secret fields (bind passwords, client secret) are write-only — entering a new value encrypts it via DPAPI on save; leaving a field blank preserves the existing encrypted value.
 
