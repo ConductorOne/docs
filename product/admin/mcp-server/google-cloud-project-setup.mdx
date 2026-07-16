@@ -1,0 +1,195 @@
+---
+title: Set up a Google Cloud project for MCP servers
+description: Create and configure the Google Cloud project that every Google MCP server shares — enable APIs, grant users permission to use the project, and create OAuth credentials.
+og:title: Set up a Google Cloud project for MCP servers
+og:description: Create and configure the Google Cloud project that every Google MCP server shares — enable APIs, grant users permission to use the project, and create OAuth credentials.
+sidebarTitle: Google Cloud project setup
+---
+
+{/* Editor Refresh: 2026-07-16 */}
+
+Set up one Google Cloud project and reuse it for every Google MCP server — Google Drive, Docs, Sheets, Slides, Gmail, Calendar, and the rest. Each Google server connects through a **Google Cloud project** that you own, and a single project can back all of them.
+
+You'll do this from the [Google Cloud console](https://console.cloud.google.com/), and some steps need a **Google Workspace administrator** or a project **Owner**/**IAM Admin**.
+
+## What the project provides
+
+When a user's AI client calls a Google tool, C1 makes the matching request to the Google API. Your Google Cloud project supplies three things that request depends on:
+
+| What | Why it matters |
+| :--- | :--- |
+| **Enabled APIs** | Each connector calls a specific Google API (for example, the Gmail API). That API must be enabled in your project. |
+| **OAuth client** | The client ID and secret C1 uses to let each user authorize with their own Google account. |
+| **Quota project** | The project that Google attributes each request's quota and billing to. You enter this as the **Google Cloud Quota Project ID** when you register the server, and every caller must be allowed to use it. |
+
+The third item is the one most often missed — see [Grant users permission to use the project](#grant-users-permission-to-use-the-project). Skipping it is the most common cause of a failed Google connection.
+
+## Create or select a project
+
+Pick the project that will own your OAuth credentials and receive API quota. It can be a new project or an existing one.
+
+<Steps>
+<Step>
+Sign in to the [Google Cloud console](https://console.cloud.google.com/).
+</Step>
+<Step>
+Create a new project for C1, or select an existing one. Note its **Project ID** (for example, `acme-c1-mcp`) — you'll enter this exact value when you register each Google server.
+</Step>
+<Step>
+Make sure the project has billing enabled. Some Google APIs reject requests from a project without an active billing account.
+</Step>
+</Steps>
+
+## Enable the APIs for your connectors
+
+Enable one API per Google connector you plan to use. In the console, go to **APIs & Services** > **Library**, search for the API, and select **Enable**.
+
+| Connector | API to enable |
+| :--- | :--- |
+| Google Drive | Google Drive API |
+| Google Docs | Google Docs API |
+| Google Sheets | Google Sheets API |
+| Google Slides | Google Slides API |
+| Gmail | Gmail API |
+| Google Calendar | Google Calendar API |
+| Google Contacts | People API |
+| Google Tasks | Google Tasks API |
+| Google Chat | Google Chat API |
+| Google Meet | Google Meet API |
+| Google Forms | Google Forms API |
+| Drive Activity | Drive Activity API |
+
+<Note>
+Enable only the APIs for the connectors you actually register. If a connector's API isn't enabled, its tool calls fail with a `SERVICE_DISABLED` error telling you to enable that API in the project.
+</Note>
+
+## Grant users permission to use the project
+
+When you register a Google server with **per-user OAuth**, each person authenticates as themselves — so *each user* is the caller Google checks. Because you set a **Quota Project ID**, every request carries that project as its quota project, and Google requires the caller to hold the `serviceusage.services.use` permission on it.
+
+If a user doesn't have it, their tool calls fail with:
+
+```
+PERMISSION_DENIED: Caller does not have required permission to use project
+<your-project-id>. Grant the caller the roles/serviceusage.serviceUsageConsumer
+role, or a custom role with the serviceusage.services.use permission ...
+```
+
+The `serviceusage.services.use` permission comes with the **Service Usage Consumer** role (`roles/serviceusage.serviceUsageConsumer`). It only allows using APIs already enabled in the project and attributing quota to it — it grants **no access to any data** in the project.
+
+Because every user needs this, grant it to a **Google group** that contains all of your MCP users rather than to individuals. New users then inherit access automatically when they join the group.
+
+<Steps>
+<Step>
+Create (or choose) a Google group that contains everyone who will use your Google MCP servers — for example, an all-employees group.
+</Step>
+<Step>
+In the Google Cloud console, go to **IAM & Admin** > **IAM**, select **Grant access**, enter the group's email as the principal, and assign the **Service Usage Consumer** role. See Google's [Grant a role](https://cloud.google.com/iam/docs/grant-role-console) documentation.
+</Step>
+</Steps>
+
+If you prefer the command line:
+
+```bash
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="group:your-mcp-users-group@yourdomain.com" \
+  --role="roles/serviceusage.serviceUsageConsumer"
+```
+
+<Note>
+IAM changes usually take effect within a minute but can take a few. If a user still sees `PERMISSION_DENIED` right after you grant access, have them retry shortly and reconnect their Google account so C1 mints a fresh token.
+</Note>
+
+For the service-account option (see [Use a service account instead](#optional-use-a-service-account-instead)), the caller is the service account rather than each user — grant the Service Usage Consumer role to the service account instead of a user group.
+
+## Create an OAuth client
+
+Per-user OAuth needs one OAuth client in your project. Its client ID and secret let each user authorize C1 with their own Google account.
+
+### Configure the OAuth consent screen
+
+The consent screen defines who can authorize the app and which scopes they grant.
+
+<Steps>
+<Step>
+Go to **APIs & Services** > **OAuth consent screen**.
+</Step>
+<Step>
+Choose the audience:
+- **Internal** — only accounts in your Google Workspace organization. Recommended when all your users are in one Workspace, because it avoids Google's app-verification review.
+- **External** — any Google account. Broad Google Workspace scopes are **restricted** and require Google verification before an External app can be used outside your organization.
+</Step>
+<Step>
+Add the scopes your connectors need. Each connector page lists the exact scopes it requests — request only the scopes you need (for read-only use, prefer the narrower `*.readonly` scopes). See Google's [Configure the OAuth consent screen](https://developers.google.com/workspace/guides/configure-oauth-consent) documentation.
+</Step>
+</Steps>
+
+### Create the client credentials
+
+Create the OAuth client, then capture its ID and secret.
+
+<Steps>
+<Step>
+Go to **APIs & Services** > **Credentials** > **Create Client** > **Web application**. For details, see Google's [Manage OAuth Clients](https://support.google.com/cloud/answer/15549257) documentation.
+</Step>
+<Step>
+Under **Authorized redirect URIs**, add exactly:
+
+```
+https://accounts.conductor.one/auth/callback
+```
+
+The value must match exactly — even a trailing-slash difference fails the authorization flow.
+</Step>
+<Step>
+Select **Create**, then copy the **Client ID** and **Client secret**. Google shows the client secret only once.
+</Step>
+</Steps>
+
+If your users are on Google Workspace, an administrator may also need to allow the OAuth client under **Admin Console** > **Security** > **Access and data control** > **API controls** > **App access control**.
+
+## Optional: Use a service account instead
+
+Instead of per-user OAuth, a Google Workspace tenant can authenticate everyone through a single **service account** with domain-wide delegation. All tool calls then reach Google as one shared identity.
+
+<Steps>
+<Step>
+In the Google Cloud console, go to **APIs & Services** > **Credentials** > **Create credentials** > **Service account**, create the account, and generate a JSON key. See Google's [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create) documentation.
+</Step>
+<Step>
+Note the service account's numeric **Unique ID**.
+</Step>
+<Step>
+As a Workspace administrator, go to **Admin Console** > **Security** > **Access and data control** > **API controls** > **Domain-wide delegation**, select **Add new**, and enter the Unique ID along with the scopes your connectors need.
+</Step>
+<Step>
+Grant the service account the **Service Usage Consumer** role on your project (see [Grant users permission to use the project](#grant-users-permission-to-use-the-project)) so its requests can use the quota project.
+</Step>
+</Steps>
+
+## Register your Google servers
+
+With the project ready, register each Google MCP server. During [authentication setup](/product/admin/mcp-servers#configure-authentication), you provide:
+
+- The **Google Cloud Quota Project ID** — the Project ID from [Create or select a project](#create-or-select-a-project).
+- For per-user OAuth: the **client ID**, **client secret**, and the **scopes** you configured.
+- For a service account: the **JSON key** and the scopes you delegated.
+
+Then follow the connector-specific page for anything unique to that server:
+
+- [Google Drive](/product/admin/mcp-server/google-drive)
+- [Google Analytics](/product/admin/mcp-server/google-analytics)
+- [Google Analytics Admin](/product/admin/mcp-server/google-analytics-admin)
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| :--- | :--- | :--- |
+| `PERMISSION_DENIED: Caller does not have required permission to use project ...` | The caller lacks `serviceusage.services.use` on the quota project. | Grant the **Service Usage Consumer** role — see [Grant users permission to use the project](#grant-users-permission-to-use-the-project). |
+| `SERVICE_DISABLED` / "API has not been used in project ... before or it is disabled" | The connector's API isn't enabled in the quota project. | Enable it — see [Enable the APIs for your connectors](#enable-the-apis-for-your-connectors). |
+| Authorization flow fails after the user consents | The redirect URI doesn't match. | Set it to exactly `https://accounts.conductor.one/auth/callback` — see [Create the client credentials](#create-the-client-credentials). |
+| A restricted-scope warning blocks External users | The app needs Google verification for restricted scopes. | Use an **Internal** consent screen for Workspace-only use, or complete Google's verification for External use. |
+
+<Note>
+Tool discovery runs even before authentication works, so seeing discovered tools doesn't confirm your credentials are correct. You confirm the setup only when an approved user successfully calls a Google tool from their AI client.
+</Note>
