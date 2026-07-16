@@ -10,7 +10,11 @@ sidebarTitle: Google Cloud project setup
 
 Set up one Google Cloud project and reuse it for every Google MCP server — Google Drive, Docs, Sheets, Slides, Gmail, Calendar, and the rest. Each Google server connects through a **Google Cloud project** that you own, and a single project can back all of them.
 
-You'll do this from the [Google Cloud console](https://console.cloud.google.com/), and some steps need a **Google Workspace administrator** or a project **Owner**/**IAM Admin**.
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- Access to the [Google Cloud console](https://console.cloud.google.com/) with permission to create or select a project, enable APIs, and edit IAM — a project **Owner**, or **Editor** plus a role that grants IAM admin.
+- A **Google Workspace administrator** for the steps that allowlist the OAuth client or configure domain-wide delegation.
 
 ## What the project provides
 
@@ -36,7 +40,7 @@ Sign in to the [Google Cloud console](https://console.cloud.google.com/).
 Create a new project for C1, or select an existing one. Note its **Project ID** (for example, `acme-c1-mcp`) — you'll enter this exact value when you register each Google server.
 </Step>
 <Step>
-Make sure the project has billing enabled. Some Google APIs reject requests from a project without an active billing account.
+The Workspace APIs in this guide don't require a billing account. If you plan to use a billing-gated Google API or need higher quota limits, link a billing account to the project.
 </Step>
 </Steps>
 
@@ -58,6 +62,8 @@ Enable one API per Google connector you plan to use. In the console, go to **API
 | Google Meet | Google Meet API | `meet.googleapis.com` |
 | Google Forms | Google Forms API | `forms.googleapis.com` |
 | Drive Activity | Drive Activity API | `driveactivity.googleapis.com` |
+| Google Analytics | Google Analytics Data API | `analyticsdata.googleapis.com` |
+| Google Analytics Admin | Google Analytics Admin API | `analyticsadmin.googleapis.com` |
 
 <Note>
 Enable only the APIs for the connectors you actually register. If a connector's API isn't enabled, its tool calls fail with a `SERVICE_DISABLED` error telling you to enable that API in the project.
@@ -79,6 +85,8 @@ gcloud services enable \
   meet.googleapis.com \
   forms.googleapis.com \
   driveactivity.googleapis.com \
+  analyticsdata.googleapis.com \
+  analyticsadmin.googleapis.com \
   --project=YOUR_PROJECT_ID
 ```
 
@@ -94,7 +102,7 @@ When you register a Google server with **per-user OAuth**, each person authentic
 
 If a user doesn't have it, their tool calls fail with:
 
-```
+```text
 PERMISSION_DENIED: Caller does not have required permission to use project
 <your-project-id>. Grant the caller the roles/serviceusage.serviceUsageConsumer
 role, or a custom role with the serviceusage.services.use permission ...
@@ -137,7 +145,7 @@ The consent screen defines who can authorize the app and which scopes they grant
 
 <Steps>
 <Step>
-Go to **APIs & Services** > **OAuth consent screen**.
+Go to **APIs & Services** > **OAuth consent screen** (labeled **Google Auth Platform** on newer projects).
 </Step>
 <Step>
 Choose the audience:
@@ -148,6 +156,10 @@ Choose the audience:
 Add the scopes your connectors need — see [OAuth scopes by connector](#oauth-scopes-by-connector) for the full list per connector. Request only the scopes you need; for read-only use, prefer the narrower `.readonly` scopes. See Google's [Configure the OAuth consent screen](https://developers.google.com/workspace/guides/configure-oauth-consent) documentation.
 </Step>
 </Steps>
+
+<Note>
+For an **External** app that hasn't completed Google verification, add each person as a **test user** on the consent screen. Otherwise they hit a "Google hasn't verified this app" screen and can't authorize. Publishing and verifying the app removes that limit.
+</Note>
 
 ### Create the client credentials
 
@@ -160,7 +172,7 @@ Go to **APIs & Services** > **Credentials** > **Create Client** > **Web applicat
 <Step>
 Under **Authorized redirect URIs**, add exactly:
 
-```
+```text
 https://accounts.conductor.one/auth/callback
 ```
 
@@ -344,10 +356,22 @@ https://www.googleapis.com/auth/chat.users.sections.readonly
 https://www.googleapis.com/auth/chat.users.spacesettings
 ```
 </Accordion>
+<Accordion title="Google Analytics">
+```text
+https://www.googleapis.com/auth/analytics
+https://www.googleapis.com/auth/analytics.readonly
+```
+</Accordion>
+<Accordion title="Google Analytics Admin">
+```text
+https://www.googleapis.com/auth/analytics.edit
+https://www.googleapis.com/auth/analytics.readonly
+```
+</Accordion>
 </AccordionGroup>
 
 <Note>
-Broad Google Workspace scopes are **restricted** or **sensitive** and require Google verification before an **External** app can use them outside your organization. **Internal** (Workspace-only) apps skip that review. See Google's [OAuth API verification FAQs](https://support.google.com/cloud/answer/9110914).
+Broad Google Workspace scopes are **restricted** or **sensitive** and require Google verification before an **External** app can use them outside your organization. **Internal** (Workspace-only) apps skip that review. See Google's [OAuth API verification FAQs](https://support.google.com/cloud/answer/9110914). If you add scopes after users have connected, they must reconnect their Google account to grant the new scopes.
 </Note>
 
 ## Optional: Use a service account instead
@@ -383,7 +407,11 @@ Then follow the connector-specific page for anything unique to that server:
 - [Google Analytics](/product/admin/mcp-server/google-analytics)
 - [Google Analytics Admin](/product/admin/mcp-server/google-analytics-admin)
 
-## Troubleshooting
+<Note>
+Connectors without a dedicated page above use the same [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) flow. If a Google connector you want isn't in your catalog yet, [contact the C1 support team](mailto:support@c1.ai).
+</Note>
+
+## Troubleshoot Google Cloud project errors
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
@@ -391,6 +419,7 @@ Then follow the connector-specific page for anything unique to that server:
 | `SERVICE_DISABLED` / "API has not been used in project ... before or it is disabled" | The connector's API isn't enabled in the quota project. | Enable it — see [Enable the APIs for your connectors](#enable-the-apis-for-your-connectors). |
 | Authorization flow fails after the user consents | The redirect URI doesn't match. | Set it to exactly `https://accounts.conductor.one/auth/callback` — see [Create the client credentials](#create-the-client-credentials). |
 | A restricted-scope warning blocks External users | The app needs Google verification for restricted scopes. | Use an **Internal** consent screen for Workspace-only use, or complete Google's verification for External use. |
+| "Google hasn't verified this app" blocks sign-in | The External app isn't verified and the user isn't a test user. | Add the user as a **test user** on the consent screen, or complete Google's verification. |
 
 <Note>
 Tool discovery runs even before authentication works, so seeing discovered tools doesn't confirm your credentials are correct. You confirm the setup only when an approved user successfully calls a Google tool from their AI client.
