@@ -27,6 +27,7 @@ The Active Directory connector supports [automatic account provisioning and depr
 - gMSA sync is opt-in via `enable-gmsa-sync`; provisioning modifies the `msDS-GroupMSAMembership` security descriptor ACL.
 - Two connection modes: **LDAP** (default on Linux) and **WinLDAP** (default on Windows; uses `wldap32.dll` for Kerberos/GSSAPI).
 - Account provisioning (create/delete) requires LDAPS (`ldaps: true`).
+- Provisioning is idempotent: re-granting a group membership a user already holds, revoking one they don't have, or creating an account or group that already exists is treated as success rather than an error — so overlapping grants during a role change don't fail. An account that already exists is returned unchanged (its password is not reset).
 
 User profiles include UAC-derived state booleans, FILETIME timestamps, and configurable extension attributes — see [User profile attributes](#user-profile-attributes) under Reference.
 
@@ -757,6 +758,8 @@ powershell-actions:
 ```
 
 Each custom action appears alongside the built-in connector actions and can be used in C1 automations. Argument types can be `string`, `int`, or `bool`.
+
+Arguments are delivered to the script's `param()` block with their declared types — a `bool` binds a real boolean (works for `[bool]` and `[switch]`), an `int` binds a number, and a `string` binds a literal value. String values are passed as data (not spliced into the command line), so content such as quotes, `$(...)`, or `;` is inert and cannot inject PowerShell. Write your script with a `param()` block matching the declared argument names, and signal the outcome with an explicit exit code (`exit 0` for success, a non-zero `exit N` for failure) — the connector reports that exit code back to C1.
 
 ### User profile attributes
 
