@@ -41,6 +41,13 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | create_group | `email` (string, required)<br/>`name` (string, required)<br/>`description` (string, optional) | Creates a new Google Workspace group |
 | modify_group_settings | `group_key` (string, required)<br/>`allow_external_members` (boolean, optional)<br/>`allow_web_posting` (boolean, optional)<br/>`who_can_post_message` (string, optional)<br/>`message_moderation_level` (string, optional) | Update settings for an existing Google Group |
 | update_user_manager | `user_id` (string, required)<br/> `manager_email` (string, required) | Updates the manager relation for a user in Google Workspace. Updates the 'manager' entry in the user's Relations field |
+| update_user_profile | `user_id` (resource ID, required)<br/>`given_name` (string, optional)<br/>`family_name` (string, optional)<br/>`recovery_email` (string, optional)<br/>`recovery_phone` (string, optional)<br/>`custom_schemas` (JSON string, optional) | Applies a partial update to a user's profile using patch semantics (only the provided fields change). Supports name fields, recovery details, and custom-schema attribute values. Custom-schema definitions must already exist in the Workspace tenant. At least one updatable field is required. |
+| update_user | `user_id` (resource ID, required)<br/>`user_profile` (JSON string, required) | Updates a user's profile from a `user_profile` JSON object (keys: `given_name`, `family_name`, `recovery_email`, `recovery_phone`, `custom_schemas`). Consumed by C1 push rules for automated profile sync. |
+| make_admin | `user_id` (resource ID, required)<br/>`status` (boolean, required) | Promotes (`status=true`) or demotes (`status=false`) a user to/from super administrator |
+
+<Warning>
+**Custom-schema limitation:** The `update_user_profile` and `update_user` actions can set custom-schema attribute values, but **deleting a field by sending a `null` value is not supported**. The Google Directory API `users.patch` endpoint silently ignores `null` values in the `customSchemas` payload — the field is not removed. To clear a custom-schema field, update it to an empty string or a sentinel value instead.
+</Warning>
 
 ## Gather Google Workspace credentials 
 
@@ -212,7 +219,7 @@ Click **Add new** and fill out the form:
         Purpose: (Write) To manage role assignments (grant or revoke roles).
 
       - Scope:   https://www.googleapis.com/auth/admin.directory.user <br/>
-        Purpose: (Write) To provision/deprovision accounts.
+        Purpose: (Write) To provision/deprovision accounts, update user profiles and custom-schema values, and promote/demote super administrators.
 
       - Scope:   https://www.googleapis.com/auth/admin.reports.audit.readonly <br/>
         Purpose: To sync usage events and admin events (used in conjunction with continuous sync).
