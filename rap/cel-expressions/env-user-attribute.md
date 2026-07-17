@@ -110,7 +110,7 @@ c1.user.v1.HasEntitlement(subject, "app-id", "admin-role")
 | Profile field missing | Empty string | Use `has()` check |
 | Array index out of bounds | Runtime error | Check `size()` first |
 | String split with no delimiter | Single-element array | Handle single-element case |
-| Wrong return type | Conversion error | Ensure string or list<string> |
+| Wrong return type | Conversion error | Ensure string or `list<string>` |
 
 ## Best Practice
 
