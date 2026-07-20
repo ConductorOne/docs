@@ -157,6 +157,61 @@ Copy and save the **Role ARN** for the newly created policy. The Role ARN is for
 </Step>
 </Steps>
 
+### Cross-account S3 buckets
+
+<Tip>
+This section is only required when the S3 bucket is in a **different AWS account** than the C1Integration role you created in Step 2. If the bucket and role are in the same account, skip to Step 4.
+</Tip>
+
+When the S3 bucket lives in a different AWS account than the C1Integration role, the identity policy on the role (Step 3) is not sufficient on its own. The account that owns the bucket must also grant the C1Integration role access via a **bucket policy**. Without it, connecting a cross-account bucket fails with `AccessDenied`.
+
+<Steps>
+<Step>
+Sign into the AWS account that **owns the S3 bucket**.
+</Step>
+<Step>
+Navigate to the **S3** console and open the target bucket.
+</Step>
+<Step>
+Click the **Permissions** tab, then under **Bucket policy** click **Edit**.
+</Step>
+<Step>
+Add the following policy, replacing `<ROLE ACCOUNT ID>` with the AWS account ID where you created the C1Integration role and `<BUCKET NAME>` with the name of your bucket:
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "AWS": "arn:aws:iam::<ROLE ACCOUNT ID>:role/C1Integration"
+          },
+          "Action": [
+            "s3:GetObject",
+            "s3:GetObjectAttributes",
+            "s3:ListBucket",
+            "s3:GetBucketLocation",
+            "s3:PutObject"
+          ],
+          "Resource": [
+            "arn:aws:s3:::<BUCKET NAME>",
+            "arn:aws:s3:::<BUCKET NAME>/*"
+          ]
+        }
+      ]
+    }
+    ```
+
+    <Tip>
+    **If you plan to only use this s3 bucket for application data syncs** and therefore need only be read only, you can safely omit `"s3:PutObject"` from the policy.
+    </Tip>
+</Step>
+<Step>
+Click **Save changes**.
+</Step>
+</Steps>
+
 ### Step 4: Configure the external data source in C1
 
 <Steps>
@@ -164,10 +219,13 @@ Copy and save the **Role ARN** for the newly created policy. The Role ARN is for
 Return to the C1 **Integrations** > **External data sources** page if necessary and navigate to your newly created external data source.
 </Step>
 <Step>
-Paste the Role ARN you generated in Step 2 into the **Role ARN** field.
+Paste the Role ARN you copied in Step 3 into the **Role ARN** field.
 </Step>
 <Step>
 Enter the name of the S3 bucket that contains the files you want to use in C1 in the **S3 bucket** field.
+</Step>
+<Step>
+**Optional.** Enter the AWS region of the S3 bucket in the **S3 bucket region** field (for example, `us-east-1`). If left blank, C1 auto-detects the bucket's region.
 </Step>
 <Step>
 Click **Save**.
