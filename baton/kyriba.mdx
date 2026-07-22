@@ -30,10 +30,14 @@ To configure the Kyriba connector, you need administrator access to the Kyriba D
 
 The connector authenticates using OAuth2 client credentials. You will need:
 
-- **Kyriba URL** — the base URL of your Kyriba instance (for example, `https://api.kyriba.com`)
-- **Token URL** — the OAuth2 token endpoint (for example, `https://api.kyriba.com/gateway/oauth/token`)
+- **Kyriba URL** — the base URL of your Kyriba instance, including the tenant-specific gateway path (for example, `https://api.<tenant>.kyriba.com/api`). This is **not** the bare host — it must include the gateway path prefix that your tenant uses (such as `/api` or `/gateway/api`).
+- **Token URL** — the OAuth2 token endpoint (for example, `https://auth.<tenant>.kyriba.com/oauth/token`)
 - **Client ID** — your OAuth2 client identifier
 - **Client Secret** — your OAuth2 client secret
+
+<Info>
+The exact host and gateway path vary by Kyriba tenant. Check your Kyriba Developer Portal or Kyriba administrator for the correct API base URL and token endpoint for your environment.
+</Info>
 
 <Steps>
   <Step>
@@ -49,11 +53,25 @@ The connector authenticates using OAuth2 client credentials. You will need:
 
     | Scope | Used for |
     | :--- | :--- |
-    | `user-scope` | Sync users and access profiles; create and delete users; assign data permission profiles |
+    | `user-scope` | Sync users and access profiles; create, update, and delete users; assign data permission profiles |
     | `user-group-scope` | Sync user groups; add and remove members |
     | `data-permission-profile-scope` | Sync data permission profiles |
 
-    For sync-only (read) access, all three scopes are still required. Provisioning requires write permissions on the relevant scopes: `user-scope` for account creation/deletion and data permission profile assignment; `user-group-scope` for group membership changes.
+    Within each scope, make sure the OAuth2 client has both **read** and **write** permissions enabled. The table below shows which API permissions are required for each ConductorOne capability:
+
+    | ConductorOne capability | Kyriba API endpoint | Required scope | Permission level |
+    | :--- | :--- | :--- | :--- |
+    | Sync users and access profiles | `GET /v1/users` | `user-scope` | Read |
+    | Sync data permission profiles | `GET /v1/data-permission-profiles` | `data-permission-profile-scope` | Read |
+    | Sync user groups | `GET /v1/user-groups` | `user-group-scope` | Read |
+    | Create user | `POST /v1/users` | `user-scope` | Write |
+    | Update user (data permission profile assignment) | `PUT /v1/users/{ref}` | `user-scope` | Write |
+    | Delete user | `DELETE /v1/users/{ref}` | `user-scope` | Write |
+    | Add/remove user group members | `POST/DELETE /v1/user-groups/{ref}/users` | `user-group-scope` | Write |
+
+    <Warning>
+    If the OAuth2 client has read-only permissions on `user-scope`, sync and account creation may succeed but user update (used for data permission profile assignment) and user delete will fail with `403 Forbidden`. Ensure **write** permissions are enabled for all scopes that correspond to provisioning capabilities you intend to use.
+    </Warning>
   </Step>
 
   <Step>
@@ -102,8 +120,8 @@ The connector authenticates using OAuth2 client credentials. You will need:
       <Step>
         Enter the required configuration:
 
-        - **Kyriba URL**: The base URL of your Kyriba instance (for example, `https://api.kyriba.com`)
-        - **Token URL**: The OAuth2 token endpoint URL (for example, `https://api.kyriba.com/gateway/oauth/token`)
+        - **Kyriba URL**: The base URL of your Kyriba instance, including the gateway path prefix (for example, `https://api.<tenant>.kyriba.com/api`)
+        - **Token URL**: The OAuth2 token endpoint URL (for example, `https://auth.<tenant>.kyriba.com/oauth/token`)
         - **Kyriba Client ID**: Your OAuth2 client ID from the Kyriba Developer Portal
         - **Kyriba Client Secret**: Your OAuth2 client secret from the Kyriba Developer Portal
       </Step>
@@ -191,8 +209,8 @@ The connector authenticates using OAuth2 client credentials. You will need:
       BATON_CLIENT_SECRET: <C1 client secret>
 
       # Kyriba credentials
-      BATON_KYRIBA_URL: https://api.kyriba.com
-      BATON_TOKEN_URL: https://api.kyriba.com/gateway/oauth/token
+      BATON_KYRIBA_URL: https://api.<tenant>.kyriba.com/api
+      BATON_TOKEN_URL: https://auth.<tenant>.kyriba.com/oauth/token
       BATON_KYRIBA_CLIENT_ID: <Kyriba OAuth2 client ID>
       BATON_KYRIBA_CLIENT_SECRET: <Kyriba OAuth2 client secret>
     ```
@@ -247,6 +265,15 @@ The connector authenticates using OAuth2 client credentials. You will need:
     **Done.** Your Kyriba connector is now pulling access data into C1.
   </Tab>
 </Tabs>
+
+## Troubleshooting
+
+**"expected a JSON response but received something else"** — This error means the connector received an HTML page instead of a JSON API response. It almost always indicates that the **Kyriba URL** is misconfigured. Verify that:
+- The URL includes your tenant's gateway path prefix (for example, `/api` or `/gateway/api`) — a bare host without the path prefix will return an HTML page.
+- The hostname resolves and is correct for your Kyriba environment.
+- You can reach `<your-kyriba-url>/v1/users` from the connector's network and receive a JSON response.
+
+**`403 Forbidden` on user update or delete** — Sync and user creation may succeed while update (`PUT /v1/users/{ref}`) and delete (`DELETE /v1/users/{ref}`) operations fail with `403`. This means the OAuth2 client has read-only permissions on the `user-scope`. In the Kyriba Developer Portal, ensure the client has **write** permissions on `user-scope` to enable all provisioning capabilities.
 
 ## Known Limitations
 
