@@ -19,6 +19,25 @@ The Grafana connector supports [automatic account provisioning and deprovisionin
 
 For self-hosted Grafana, when a new account is created by C1, the account's password is sent to a [vault](/product/admin/vaults).
 For Grafana Cloud, account creation is invite-based and no connector-generated password is returned.
+<Warning>
+**Grafana Cloud: enabling the basic login form is a prerequisite for creating brand-new users**
+
+Grafana Cloud instances ship with the basic login form **disabled** by default (users authenticate through grafana.com / SSO). While it is disabled, Grafana rejects instance-level invites for users who do not yet exist in the instance, and account creation fails with:
+
+```
+Cannot invite external user when login is disabled.
+```
+
+With the service-account token the connector uses, this means:
+
+* **Users who already exist in the instance** (provisioned earlier via SSO, SCIM, or grafana.com) are added to the organization normally — account provisioning works for them without any change.
+* **Brand-new users** cannot be created until you either:
+  * enable [SCIM provisioning](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-scim-provisioning/) (Grafana's recommended path for automatic user lifecycle in Cloud), so users are provisioned by your identity provider before C1 assigns organization roles; or
+  * enable the basic login form on the instance (set `disable_login_form = false`), which permits instance-level invites for external users.
+
+Managing membership directly through the grafana.com portal is a separate API and credential (a Grafana Cloud Access Policy token) that the connector's instance service-account token cannot use.
+</Warning>
+
 <Note>
 **Grafana Cloud: provisioning organization roles for externally synced users**
 
@@ -37,17 +56,17 @@ This step is not required for self-hosted Grafana instances using basic (usernam
 
 ## Account access origin
 
-Starting with connector version 0.2.3, each synced account's profile includes two attributes that identify how the user's access originated. They appear in the account's **Profile attributes** in C1 and support access reviews where the origin of access matters:
+Starting with connector version 0.2.3, each synced account's profile includes attributes that identify how the user's access originated. They appear in the account's **Profile attributes** in C1 and support access reviews where the origin of access matters:
 
 | Attribute | Type | Present | Meaning |
 | :--- | :--- | :--- | :--- |
-| `is_externally_synced` | Boolean | Always | `true` when the user's access originates from an external identity provider; `false` for users managed locally in Grafana. |
+| `is_externally_synced` | Boolean | Only when Grafana returns the flag (Grafana Cloud) | `true` when the user's **organization role** is managed by an external identity provider (role sync), taken verbatim from Grafana's native `isExternallySynced` flag; `false` when the role is managed locally. Omitted entirely when Grafana does not return the flag (see below). |
 | `auth_labels` | String | Externally authenticated users only | The external authentication provider(s) associated with the user (for example, `grafana.com` or an OAuth/SAML provider name), joined with `; ` when there is more than one. Absent — not an empty string — for local users. |
 
-The exact meaning of `is_externally_synced` depends on the connector mode:
+`is_externally_synced` surfaces Grafana's native `isExternallySynced` flag verbatim and only when Grafana actually returns it. Whether the flag is returned depends on the endpoint the connector reads, which differs by mode:
 
-* **Grafana Cloud:** the value is Grafana's native `isExternallySynced` flag, meaning the user's organization role is managed by an external identity provider (such as Entra ID or grafana.com SSO).
-* **Self-hosted Grafana:** Grafana's API does not return that flag for the global user list, so the connector derives the value from the user's authentication labels. `true` means the user authenticated through an external module (SSO, LDAP, or OAuth) — slightly broader than role management: a user whose role is managed locally but who signs in through SSO also reports `true`.
+* **Grafana Cloud** reads the organization users endpoint (`/api/org/users`), which always returns the flag, so `is_externally_synced` is present and mirrors Grafana's value exactly. It reflects **only** whether the user's organization role is managed by an external identity provider (role sync) — it is **not** derived from `auth_labels`, which is a different concept (how the user authenticated). In Grafana Cloud every user authenticates through grafana.com, so `auth_labels` is effectively always `grafana.com`; an admin whose role is managed locally therefore reports `is_externally_synced: false` even though their `auth_labels` show `grafana.com`.
+* **Self-hosted Grafana** reads the global users endpoint (`/api/users`), which does not return the flag. Rather than derive a value from a different concept, the connector omits `is_externally_synced` from the profile entirely. Use `auth_labels` to reason about authentication provenance in this mode.
 
 ## Gather Grafana credentials
 

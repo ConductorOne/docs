@@ -14,11 +14,30 @@ sidebarTitle: "Dropbox"
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Licenses | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| Apps | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
 The Dropbox connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
 **Notes:**
 - The Licenses resource reflects each Dropbox Team member's seat type (full vs. limited access to the shared quota). It's read-only: Dropbox does not expose an API to change a member's license type, so this resource does not support provisioning.
+
+### Last-login usage events (optional)
+
+Dropbox has no `last_login` field on team members. When the connector's `sync-user-last-login`
+option is enabled, it instead derives last-login activity from the Dropbox team event log,
+recording a usage event on the "Dropbox" app resource for each successful sign-in. This requires
+the `events.read` scope (see below) and is off by default, since the event log can be high-volume
+on active teams.
+
+<Note>
+  These usage events target a single **Dropbox** app resource. For last-login to appear in C1, the
+  **App** resource type must be enabled in the connector's **Capabilities & configuration** in C1 —
+  this is separate from the `sync-user-last-login` connector option. On a connector **upgraded** from
+  an earlier version that predates the App resource type, the App resource type can default to **off**,
+  and last-login will not surface until it is enabled. After enabling the App resource type (along with
+  the `sync-user-last-login` option and the `events.read` scope), re-sync the connector; last-login then
+  appears in the **Last login** column on the app's **Accounts** tab.
+</Note>
 
 ### Connector actions
 
@@ -96,6 +115,12 @@ A user with the **Team Admin** role in Dropbox must perform this task.
     - members.write - Create new team members, suspend/unsuspend accounts, and assign roles
     - members.delete - Remove team members from the organization
     - groups.write - Add/remove users from groups
+
+  Optional, only if enabling last-login usage events (`sync-user-last-login`):
+    - events.read - Read the team event log to derive last-login usage events. If you add this
+      scope after the app was first authorized, re-authorize the app (re-run `--configure`, or
+      re-authorize via OAuth) to mint a token that carries it — an existing refresh token will
+      not gain the scope automatically.
   </Step>
   <Step>
   Click **Submit** to save the permissions.
