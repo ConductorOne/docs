@@ -6,10 +6,6 @@ og:description: "Add custom function steps to C1 automations to implement comple
 sidebarTitle: "Use functions in automations"
 ---
 
-<Warning>
-**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
-</Warning>
-
 Functions work as steps in automation workflows, allowing you to add custom logic between other automation actions. When configured as a function step, the automation engine:
 
 1. Evaluates argument expressions (CEL) against the automation context
@@ -21,7 +17,7 @@ Functions work as steps in automation workflows, allowing you to add custom logi
 
 - Your function doesn't need to know it's called from an automation. It receives JSON in, returns JSON out.
 - The **automation UI** defines which CEL expressions map to which input keys.
-- Your **return value** becomes available to subsequent automation steps via the step name (such as `checkTraining.approved`).
+- Your **return value** becomes available to subsequent automation steps via `ctx.<step_name>` (such as `ctx.checkTraining.approved`).
 - The function runs with the same security model regardless of trigger source: pre-authenticated SDK, egress allowlist, no filesystem.
 </Tip>
 
@@ -55,10 +51,10 @@ In the automation UI, each argument is a CEL expression evaluated against the wo
 
 | Variable | Description |
 |----------|-------------|
-| `trigger.user_id` | User ID from the automation trigger |
-| `trigger.app_id` | App ID from the trigger event |
-| `trigger.entitlement_id` | Entitlement ID from the trigger |
-| `previous_step_name.field` | Output field from a previously completed step |
+| `ctx.trigger.user_id` | User ID from the automation trigger |
+| `ctx.trigger.app_id` | App ID from the trigger event |
+| `ctx.trigger.entitlement_id` | Entitlement ID from the trigger |
+| `ctx.previous_step_name.field` | Output field from a previously completed step |
 
 ### Example inputs
 
@@ -68,8 +64,8 @@ The examples below show how you configure arguments in the automation UI. The le
 
 | Key | CEL Expression |
 |-----|----------------|
-| `userId` | `trigger.user_id` |
-| `appId` | `trigger.app_id` |
+| `userId` | `ctx.trigger.user_id` |
+| `appId` | `ctx.trigger.app_id` |
 | `action` | `"verify"` (literal string) |
 
 Your function receives the evaluated values:
@@ -86,8 +82,8 @@ Your function receives the evaluated values:
 
 | Key | CEL Expression |
 |-----|----------------|
-| `userId` | `steps.getUser.output.id` |
-| `department` | `steps.getUser.output.profile.department` |
+| `userId` | `ctx.getUser.id` |
+| `department` | `ctx.getUser.profile.department` |
 | `timestamp` | `now()` |
 
 **Static values:**
@@ -104,9 +100,9 @@ For literal values, wrap strings in quotes within the CEL expression:
 The output of your function is available in subsequent steps via the step context. If your function step is named `checkTraining`, access its output like this:
 
 ```
-steps.checkTraining.output.trainingCompleted
-steps.checkTraining.output.eligible
-steps.checkTraining.output.userId
+ctx.checkTraining.trainingCompleted
+ctx.checkTraining.eligible
+ctx.checkTraining.userId
 ```
 
 ## Example: Training verification workflow
@@ -151,12 +147,12 @@ export default async function main(input: JSONObject): Promise<JSONObject> {
 
 ### Automation workflow
 
-1. **Trigger:** Access request created
+1. **Trigger:** Grant found (fires when a user is granted access to the app)
 2. **Step 1: Run Function** `checkTraining`
-    - Input: `{ "userId": "trigger.user_id" }`
+    - Input: `{ "userId": "ctx.trigger.user_id" }`
 3. **Step 2: Conditional** - Check if training is completed
-    - Condition: `steps.checkTraining.output.eligible == true`
-    - **If true:** Approve the access request
+    - Condition: `ctx.checkTraining.eligible == true`
+    - **If true:** No further action needed
     - **If false:** Send notification to user with training link
 
 ## Best practices

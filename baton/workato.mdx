@@ -6,15 +6,49 @@ description: C1 provides identity governance and just-in-time provisioning for W
 sidebarTitle: Workato
 ---
 
+## Provision accounts
+
+When provisioning a new collaborator account, the following fields are available on the account creation form:
+
+| Field | Required | Description |
+| :---- | :------- | :---------- |
+| **Email** | Yes | Email address of the collaborator to invite. |
+| **Name** | Yes | Full name of the collaborator. |
+| **Environment Roles** | Yes | List of environment + role assignments. Each entry must be in `env:role` format (e.g. `dev:Admin`, `prod:Analyst`). At least one entry is required. |
+| **User Group IDs** | No | Comma-separated list of Workato user group IDs to add the collaborator to. |
+
+### Environment Roles format
+
+Each entry in **Environment Roles** encodes the target environment and the role name separated by a colon:
+
+```
+<environment>:<role name>
+```
+
+Allowed environment values are `dev`, `test`, and `prod`. The role name must match an existing role (privilege-group or environment role) in your Workato workspace.
+
+Examples:
+
+- `dev:Admin` — assign the Admin role in the Development environment
+- `prod:Analyst` — assign the Analyst role in the Production environment
+- `test:Operator` — assign the Operator role in the Test environment
+
+<Warning>
+The role must target an environment that the workspace has provisioned. If the workspace does not have the specified environment, the invitation fails with `Environment <env> not found`.
+</Warning>
+
 ## Capabilities
 
 | Resource     | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |       
+| Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>        | 
 | Privileges   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           | 
 | Roles        | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>        | 
+| Environment roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>        | 
 | Folders      | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           | 
 | Projects     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           | 
+
+**Environment roles (RBAC v2):** Workato allows exactly one environment role per collaborator per environment. ConductorOne models environment roles as mutually exclusive entitlements: granting a new role for an environment supersedes the collaborator's existing role there. Directly revoking an environment role is not supported by the connector; to change a collaborator's access, grant the replacement role instead.
 
 ## Gather Workato credentials 
 
@@ -38,10 +72,21 @@ Select the following endpoints:
     |              | Projects & Folders   | List folders                | `GET /api/folders`                 |
     | **Admin**    | Collaborators        | Get collaborators           | `GET /api/members`                 |
     |              | Collaborators        | Get collaborator            | `GET /api/members/:id`             |
-    |              | Collaborators        | Update collaborators' roles* | `PUT /api/members/:id`             |
+    |              | Collaborators        | Update collaborators’ roles* | `PUT /api/members/:id`             |
+    |              | Collaborators        | Invite collaborator         | `POST /api/member_invitations`     |
+    |              | Collaborators        | Add existing collaborator   | `POST /api/members`                |
+    |              | Collaborators        | Remove collaborator         | `DELETE /api/members/:id`          |
     |              | Collaborators        | Get collaborator privileges | `GET /api/members/:id/privileges`  |
-    |              | Collaborator roles   | List non-system roles       | `GET /api/roles`                   |
-    *If you don't want to use C1 to provision role assignments, you can skip **Update collaborator’s roles**.
+    |              | Collaborator roles   | List non-system roles§      | `GET /api/roles`                   |
+    |              | Environment roles    | List environment roles†     | `GET /api/environment_roles`       |
+    |              | Environment roles    | Get environment role†‡      | `GET /api/environment_roles/:id`   |
+    *If you don’t want to use C1 to provision role assignments, you can skip **Update collaborator’s roles** and **Get environment role**.
+
+    †**List environment roles** and **Get environment role** are only available in workspaces that use the new RBAC v2 model (environment roles). If your workspace uses the legacy role model, these permissions do not appear in the UI and you can skip them.
+
+    ‡**Get environment role** is required only if you want C1 to provision environment role assignments.
+
+    §**The Collaborator roles section** (including **List non-system roles**) only appears in the UI if your workspace uses the legacy roles model. If this section is not visible, your workspace has migrated to the new RBAC v2 model and legacy custom roles are no longer accessible via the API. In that case, migrate your legacy custom roles to environment roles using the [Role migration API](https://docs.workato.com/workato-api/role-migration.html), or enable **Disable custom roles sync** to skip legacy custom role sync.
 </Step>
 <Step>
 Save the new role.  
@@ -86,6 +131,8 @@ You'll also need to specify the location of your Workato data center. Workato di
 * JP Data Center: https://app.jp.workato.com/api/
 * SG Data Center: https://app.sg.workato.com/api/
 * AU Data Center: https://app.au.workato.com/api/
+* IL Data Center: https://app.il.workato.com/api/
+* Developer Sandbox: https://app.trial.workato.com/api/
 
 **Done.** Next, move on to the connector configuration instructions. 
 
@@ -134,7 +181,7 @@ Find the **Settings** area of the page and click **Edit**.
 Enter the API token in the **API key** field. 
 </Step>
 <Step>
-In the **Data center** field, enter one of `us`, `eu`, `jp`, `sg`, or `au` to identify the location of your Workato data center. The default is `us`. 
+In the **Data center** field, enter one of `us`, `eu`, `jp`, `sg`, `au`, `il`, or `sandbox` (developer sandbox) to identify the location of your Workato data center. The default is `us`. 
 </Step>
 <Step>
 In the **Environment** field, enter one of `dev`, `test`, or `prod` to identify your Workato environment. The default is `dev`. 
@@ -220,10 +267,11 @@ stringData:
   
   # Workato credentials
   BATON_WORKATO_API_KEY: <Workato API key>
-  BATON_WORKATO_DATA_CENTER: <Your Workato data center (one of us, eu, jp, sg, or au). Default is us.>
+  BATON_WORKATO_DATA_CENTER: <Your Workato data center (one of us, eu, jp, sg, au, il, or sandbox). Default is us.>
   BATON_WORKATO_ENV: <Your Workato environment (one of dev, test, or prod). Default is 'dev'>
 
-  # Optional: include if you don't want to sync custom Workato roles
+  # Optional: set to true to skip legacy custom role sync (required if your workspace
+  # has migrated to RBAC v2 and the 'Collaborator roles' section does not appear in the API client UI)
   BATON_DISABLE_CUSTOM_ROLES_SYNC: true
 
   # Optional: include if you want C1 to provision access using this connector
@@ -280,5 +328,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 
 </Tab>
 </Tabs>
-
-

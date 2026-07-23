@@ -1,16 +1,31 @@
 ---
 title: Configure webhooks
 og:title: Configure webhooks - C1
-og:description: Set up webhooks in C1 to extend workflows across multiple tools, such as creating a ticket or making an API call. 
-description: Set up webhooks in C1 to extend workflows across multiple tools, such as creating a ticket or making an API call.
+og:description: Set up outbound webhooks in C1 to extend workflows across multiple tools, and learn how to respond to webhooks synchronously or asynchronously.
+description: Set up outbound webhooks in C1 to extend workflows across multiple tools, and learn how to respond to webhooks synchronously or asynchronously.
 sidebarTitle: Webhooks
 ---
-{/* Editor Refresh: 2026-01-07 */}
+{/* Editor Refresh: 2026-07-20 */}
+
+Use webhooks to extend your access control workflows across the tools your organization uses — create service desk tickets, call internal APIs, send notifications, or drive custom provisioning and approval logic. C1 sends each webhook as an authenticated HTTP POST request to a URL you configure, and your endpoint can answer immediately or complete the work later using a callback.
+
+C1 fires outbound webhooks in these situations:
+
+* **Provisioning:** An entitlement uses a webhook as its [provisioning strategy](/product/admin/provisioning), and access was approved.
+
+* **Policies:** A [policy](/product/admin/policies) includes a webhook step, which can drive notifications or even approve, deny, or reassign the request.
+
+* **Automations:** An automation runs a [Run webhook step](/product/admin/automations-steps-reference#run-webhook).
+
+* **Testing:** You manually send a test webhook.
+
+<Note>
+This page covers *outbound* webhooks (C1 calling your systems). To let external systems trigger C1 automations instead, see [Inbound webhooks](/product/admin/webhooks-inbound).
+</Note>
 
 ## Add a new webhook
 
-Set up a webhook in C1 to extend your access control workflows across multiple tools. 
-
+Create the webhook in C1 first, then reference it from a provisioning policy, policy step, or automation.
 
 <Steps>
 <Step>
@@ -23,33 +38,91 @@ Click **Add webhook**.
 Give the webhook a name and description so that you and your colleagues can easily identify its purpose.
 </Step>
 <Step>
-Enter the URL for the webhook.
+Enter the URL for the webhook. See [Webhook URL requirements](#webhook-url-requirements).
 </Step>
 <Step>
-Click **Save**. The new webhook is set up and assigned an ID. Click **View history** to see the webhook's activity in the past eight days.
+**Optional.** Set **Callback timeout (days)**, which controls how long C1 waits for an [asynchronous callback](#respond-asynchronously-202-and-callback) before failing the webhook. Choose from 1 to 30 days. The default is 8 days.
+</Step>
+<Step>
+Click **Save**. The new webhook is set up and assigned an ID. Click **View history** to see the webhook's recent activity.
 </Step>
 </Steps>
+
+### Webhook URL requirements
+
+* The URL must use HTTPS on the default port (443). Other schemes and ports are rejected.
+
+* The URL must not contain a username or password.
+
+* The URL must resolve to a publicly routable address. C1 blocks requests to private, loopback, and link-local IP ranges, including after redirects.
 
 ### Test a webhook
 
-Here's how to test a webhook once you've set it up in C1: 
+Here's how to test a webhook once you've set it up in C1:
 
 <Steps>
 <Step>
-On the **Webhooks** tab, click the more actions (**...**) menu and select **Test webhook**. The webhook fires with an empty payload.
+On the **Webhooks** tab, click the more actions (**...**) menu and select **Test webhook**. C1 sends a `c1.webhooks.v1.PayloadTest` event with an empty payload through the same signed delivery pipeline as production events.
 </Step>
 <Step>
-Click **View history** to see details of the webhook's payload and status. 
+Click **View history** to see details of the webhook's payload and status.
 </Step>
 </Steps>
 
+## Webhook requests
+
+Every webhook is delivered as an HTTP POST request with a JSON body and these headers:
+
+| Header                 | Description                                                                 |
+| :--- | :--- |
+| `Authorization`        | `bearer <JWT>` — a signed token you can use to [authenticate the request](#webhook-authentication). |
+| `Content-Digest`       | `sha-256=<checksum>` — the base64-encoded SHA-256 checksum of the request body. |
+| `Content-Type`         | `application/json`                                                          |
+| `Webhook-Version`      | The version of the webhook body format. Currently `v1`.                     |
+| `Webhook-Id`           | The unique ID of the webhook.                                               |
+| `Webhook-Event`        | The event type, such as `c1.webhooks.v1.PayloadProvisionStep`.              |
+| `Webhook-Callback-Url` | The callback URL for [asynchronous responses](#respond-asynchronously-202-and-callback). |
+
+The request body is an envelope with a set of common fields, plus a payload that varies by event type. The most basic request is a test webhook, and it looks like this:
+
+```json
+{
+  "version": "v1",
+  "webhookId": "2fCjgK8tYJxV9u8d1wupBMeXZ45",
+  "callbackUrl": "https://test-domain.conductor.one/api/v1/webhooks/callback/ChsyNVR0dHZXSWhpQVYwT0N5ZWwwQTJiTVdGN1ISfXKaBFUxiS0r42OpH-ppdtxyUjkn1ExnOotjVEgk4p2bouIM8oSOvhcVDSEJLtIqhzTetQ-ckH3JbnS6k0nHefQhVTeZmmmW2KpIMUiaJooDgQ4Yyti5dTNduxNmI7kjlNff5XXZU1aw4QSv3vdKe0dD4KKjP5PGwL1x9nN9",
+  "event": "c1.webhooks.v1.PayloadTest",
+  "payload": {
+    "@type": "type.googleapis.com/c1.webhooks.v1.PayloadTest"
+  }
+}
+```
+
+Here's an explanation of the fields in the envelope:
+
+| Field         | Description                                                                              |
+| :--- | :--- |
+| `version`     | The version of the webhook body format. Currently `v1`.                                  |
+| `webhookId`   | The unique ID of the webhook.                                                            |
+| `callbackUrl` | A URL that a delayed response can be sent to. The callback URL is included in every request, but should only be used if your endpoint responds with HTTP status code 202. |
+| `event`       | The type of the event the webhook was dispatched for (see below).                        |
+| `payload`     | The contextual payload of the webhook based on the event type.                           |
+
+### Event types
+
+| Event type                                | Fired when                                             | Payload contents                                                                            |
+| :--- | :--- | :--- |
+| `c1.webhooks.v1.PayloadTest`              | You send a test webhook                                | Empty.                                                                                      |
+| `c1.webhooks.v1.PayloadProvisionStep`     | A webhook provisioning step runs                       | The same task data that is returned from the [GetTask API endpoint](https://www.conductorone.com/docs/api-reference/task/get), plus expanded related objects. |
+| `c1.webhooks.v1.PayloadPolicyApprovalStep`| A webhook step in a policy runs                        | The same task data that is returned from the [GetTask API endpoint](https://www.conductorone.com/docs/api-reference/task/get), plus expanded related objects. |
+| `c1.webhooks.v1.PayloadWorkflowStep`      | An automation runs a **Run webhook** step              | The automation's ID, execution ID, and a `context` object containing the automation's context data. |
+
 ## Webhook authentication
 
-Webhooks include the `Authorization` header set with a bearer token that can be used to authenticate that the webhook came from C1. This bearer token is a JWT that can be authenticated using the JWKS available at `https://<YOUR DOMAIN>.conductor.one/auth/v1/jwks`. After the token is authenticated, you can validate the request body using the `htb_s256` claim included in the token.
+Webhooks include the `Authorization` header set with a bearer token that can be used to authenticate that the webhook came from C1. This bearer token is a JWT that can be verified using the JWKS available at `https://<YOUR DOMAIN>.conductor.one/auth/v1/jwks`. Tokens are signed with RS256, ES256, or EdDSA, depending on your tenant's signing key. After the token is verified, you can validate the request body by comparing its SHA-256 checksum against the `htb_s256` claim included in the token.
 
-The payload of the JWT looks like this: 
+The payload of the JWT looks like this:
 
-```bash
+```json
 {
   "aud": "webhook.site",
   "c1typ": "wh",
@@ -64,83 +137,193 @@ The payload of the JWT looks like this:
 }
 ```
 
-| Claim    | Description                                                          |
+| Claim      | Description                                                          |
 | :--- | :--- |
-| `aud`      | The domain that the webhook was delivered to.                        |
-| `c1typ`    | The type of token from C1. This will be ‘wh’ for webhooks. |
-| `exp`      | The expiration time.                                                 |
-| `htb_s256` | The sha256 checksum of the request body for the webhook.             |
-| `htm`      | The HTTP method that the webhook was delivered with.                 |
-| `htu`      | The target URL of the webhook.                                       |
+| `aud`      | The hostname of the webhook's destination URL.                       |
+| `c1typ`    | The type of token from C1. This will be `wh` for webhooks.           |
+| `exp`      | The expiration time. Webhook tokens are short-lived: they expire two minutes after they are issued. |
+| `htb_s256` | The base64-encoded SHA-256 checksum of the request body. This matches the `Content-Digest` header. |
+| `htm`      | The HTTP method that the webhook was delivered with. Always `POST`.  |
+| `htu`      | The target URL of the webhook, with any query string removed.        |
 | `iat`      | The time that the token was issued.                                  |
 | `iss`      | The tenant domain that the token was issued for.                     |
-| `jti`      | The ID of the token                                                  |
-| `nbf`      | The earliest time the token should be accepted.                      |
+| `jti`      | The unique ID of the token.                                          |
+| `nbf`      | The earliest time the token should be accepted (one minute before `iat`, to allow for clock skew). |
 
-## Webhook payload
+## Responding to webhooks
 
-The contents of a webhook request vary based on the context of the webhook that is delivered. Each request includes a set of common fields that act as webhook metadata. Additionally, a payload is defined based on the event type of the webhook.
+Your endpoint's HTTP status code tells C1 whether you're answering the webhook immediately or completing it later:
 
-The most basic request is a test webhook, and it looks like this:
+* **Respond synchronously** by returning any 2xx status code *except* 202 (typically 200) with a [response document](#webhook-response-formats) as the response body. C1 processes your response right away, and the webhook is complete.
+
+* **Respond asynchronously** by returning HTTP status code **202 Accepted**. This tells C1 that you've received the webhook and will finish the work later. C1 ignores the response body and waits for you to POST a response document to the webhook's callback URL.
+
+Synchronous responses are the simplest option when your endpoint can decide immediately — for example, a service that auto-approves requests based on your own business rules. Asynchronous responses are the right choice when the outcome depends on work that takes longer than a single HTTP request, such as waiting for a service desk ticket to be closed or for a human to act in another tool.
+
+### Respond synchronously (200)
+
+Return a 2xx status code (other than 202) and include a response document appropriate to the event type as the response body. For example, an endpoint handling a webhook policy step can approve the request immediately:
 
 ```json
 {
   "version": "v1",
-  "webhookId": "2fCjgK8tYJxV9u8d1wupBMeXZ45",
-  "callbackUrl": "https://test-domain.conductor.one/api/v1/webhooks/callback/ChsyNVR0dHZXSWhpQVYwT0N5ZWwwQTJiTVdGN1ISfXKaBFUxiS0r42OpH-ppdtxyUjkn1ExnOotjVEgk4p2bouIM8oSOvhcVDSEJLtIqhzTetQ-ckH3JbnS6k0nHefQhVTeZmmmW2KpIMUiaJooDgQ4Yyti5dTNduxNmI7kjlNff5XXZU1aw4QSv3vdKe0dD4KKjP5PGwL1x9nN9",
-  "event": "c1.webhooks.v1.PayloadTest",
-  "payload": {
-    "@type": "type.googleapis.com/c1.webhooks.v1.PayloadTest"
+  "approve": {
+    "comment": "Auto-approved: requester is in the Engineering group."
   }
 }
 ```
 
-Here's an explanation of the fields in the test webhook:
+The response body must be valid JSON, no larger than 250 KB, and must match the [response format](#webhook-response-formats) for the event type.
 
-| Field       | Description                                                                              |
+### Respond asynchronously (202 and callback)
+
+Return HTTP status code 202, then later send your response document as an HTTP POST to the `callbackUrl` from the webhook request (also available in the `Webhook-Callback-Url` header).
+
+When sending the callback:
+
+* The callback URL contains an encrypted token that identifies the webhook delivery, so no additional authentication or session token is required.
+
+* The POST body must be a non-empty JSON response document matching the [response format](#webhook-response-formats) for the event type. An empty request body is rejected.
+
+* Each callback URL can be used only once. After a successful callback, or after the webhook expires, further POSTs to the URL are rejected with HTTP status code 400.
+
+* C1 responds to a successful callback with HTTP status code 200.
+
+You must send the callback before the webhook's **callback timeout** elapses (8 days by default, configurable per webhook up to 30 days). The timeout countdown starts when the webhook first fires. If no callback arrives in time, the webhook fails, and the originating task or automation step is treated as failed.
+
+### How C1 interprets your response status
+
+| Your endpoint's response | What C1 does |
 | :--- | :--- |
-| `version`     | The version of the webhook.                                                              |
-| `webhookId`   | The unique ID of the webhook.                                                            |
-| `callbackUrl` | A URL that a delayed response can be sent to after responding with HTTP status code 202. |
-| `event`       | The type of the event the webhook was dispatched for (see below).                        |
-| `payload`     | The contextual payload of the webhook based on the type.                                 |
+| 2xx (except 202) | Delivery succeeded. C1 parses the response body as a synchronous response document. |
+| 202 | Delivery succeeded. C1 waits for a response at the callback URL. |
+| 410 | C1 treats the destination as permanently gone, and stops delivery immediately without retrying. |
+| Any other status code | Delivery failed. C1 retries. |
+| Timeout or connection error | Delivery failed. C1 retries. Each delivery attempt times out after 30 seconds. |
 
-### Payload types 
+## Webhook response formats
 
-| Event type                          | Description                                                                                                                                   |
-| :--- | :--- |
-| `c1.webhooks.v1.PayloadTest`          | An empty payload.                                                                                                                             |
-| `c1.webhooks.v1.PayloadProvisionStep` | The same payload that is returned from the [GetTask API endpoint](https://www.conductorone.com/docs/api-reference/task/get). |
+Whether you respond synchronously or through the callback URL, the response document format is the same, and depends on the webhook's event type. Every response document must include `"version": "v1"`.
 
-## Configuring callback URL responses 
+### Provisioning webhooks
 
-When setting up callback URLs for use with C1, remember: 
+Report the outcome of the provisioning work using either `complete` or `errored`. Comments are optional and appear in the task's audit trail.
 
-* The POST to the callback URL must respond with HTTP status code 202. 
+To report that provisioning succeeded:
 
-* You don't need to include session tokens. A blank POST call to the callback URL is enough. 
+```json
+{
+  "version": "v1",
+  "complete": {
+    "comment": "Created account and granted access."
+  }
+}
+```
 
-### Callback URLs for request policies 
+To report that provisioning could not be completed:
 
-When configuring a callback URL to respond to a request policy, here's what to include in the webhook body:  
+```json
+{
+  "version": "v1",
+  "errored": {
+    "comment": "User not found in the target system."
+  }
+}
+```
 
-To approve a request and add a comment:
-`{"version": "v1", "approve": {"comment": "This is approved."}}`
+### Policy step webhooks
 
-To deny a request and add a comment:
-`{"version": "v1", "deny": {"comment": "This is denied. Please reach out to IT."}}`
+A webhook step in a policy can act on the request using one of these actions. Comments are optional, up to 1024 characters, and appear in the request's audit trail.
 
-To reassign a request and add a comment:
+To approve a request:
 
-```bash
+```json
+{
+  "version": "v1",
+  "approve": {
+    "comment": "This is approved."
+  }
+}
+```
+
+To deny a request:
+
+```json
+{
+  "version": "v1",
+  "deny": {
+    "comment": "This is denied. Please reach out to IT."
+  }
+}
+```
+
+To reassign the step to different users (up to 32 user IDs):
+
+```json
 {
   "version": "v1",
   "reassign": {
-      "comment": "Reassigning to Alice Rodriguez",
-      "newStepUserIds": ["2mqg9IILyNefQ6oMTvolM4FjDTS"]
+    "comment": "Reassigning to Alice Rodriguez",
+    "newStepUserIds": ["2mqg9IILyNefQ6oMTvolM4FjDTS"]
   }
 }
 ```
+
+To replace the remaining steps of the policy with new steps:
+
+```json
+{
+  "version": "v1",
+  "replacePolicy": {
+    "comment": "Escalating to the security review policy.",
+    "policySteps": [ ... ]
+  }
+}
+```
+
+The `policySteps` field uses the same policy step format as the [Policy API](https://www.conductorone.com/docs/api-reference/policy/get), and must contain at least one step.
+
+### Automation webhooks
+
+For webhooks fired by an automation's **Run webhook** step, return a `context` object. Its contents are made available to downstream automation steps — see the [Run webhook step reference](/product/admin/automations-steps-reference#run-webhook) for how to access the response data.
+
+```json
+{
+  "version": "v1",
+  "context": {
+    "ticketId": "INC-4212",
+    "assignee": "alice@example.com"
+  }
+}
+```
+
+### Test webhooks
+
+Test webhooks don't require a meaningful response — returning any 2xx status code marks the test as delivered. A minimal valid response document is:
+
+```json
+{"version": "v1"}
+```
+
+## Delivery retries and failures
+
+If a delivery attempt fails — the connection fails, the request times out after 30 seconds, or your endpoint returns a status code that isn't 2xx — C1 retries with a short randomized delay (3 to 15 seconds) between attempts, up to 50 attempts. Two situations stop delivery early:
+
+* Your endpoint returns **410 Gone**, which C1 treats as a permanent signal to stop.
+
+* The webhook's callback timeout window elapses.
+
+When a webhook fails permanently, the failure is recorded and the originating work is handled based on its source:
+
+* **Provisioning:** The task falls back to manual provisioning, and the fallback is noted in the task's audit trail.
+
+* **Policy steps:** The failure is recorded in the request's audit trail, and the policy continues processing.
+
+* **Automations:** The step fails, and the error is visible in the automation's execution log.
+
+## Webhook history
+
+Click **View history** on a webhook to see its recent deliveries, including each delivery's event type, status, payload, and per-attempt details such as the response status code. History is retained for the webhook's callback timeout window — 8 days by default, or up to 30 days if you've configured a longer callback timeout.
 
 ## Using a webhook to trigger a C1 automation
 
@@ -150,11 +333,11 @@ For complete setup instructions, authentication details, code examples, and trou
 
 ## Using webhooks for provisioning in C1
 
-You configure an entitlement to use a webhook as its [provisioning strategy](/product/admin/access-requests#set-how-an-entitlement-is-provisioned), meaning that when access to the entitlement is approved, the webhook will automatically fire. The webhook can perform a wide variety of work to automate the provisioning process, such as: 
+You can configure an entitlement to use a webhook as its [provisioning strategy](/product/admin/access-requests#set-how-an-entitlement-is-provisioned), meaning that when access to the entitlement is approved, the webhook will automatically fire. The webhook can perform a wide variety of work to automate the provisioning process, such as:
 
-* Automatically creating a Jira, ServiceNow, or other service desk ticket 
+* Automatically creating a Jira, ServiceNow, or other service desk ticket
 
-* Making a public API call to a tool your organization uses 
+* Making a public API call to a tool your organization uses
 
 * Calling the internal API of a backoffice, homegrown, or airgapped tool
 
@@ -162,12 +345,10 @@ You configure an entitlement to use a webhook as its [provisioning strategy](/pr
 
 * Adding an entry to an audit log
 
+Because provisioning webhooks support [asynchronous responses](#respond-asynchronously-202-and-callback), the provisioning task stays open until your system reports the outcome — for example, when the service desk ticket created by the webhook is resolved, your middleware can send `{"version": "v1", "complete": {}}` to the callback URL to complete the task.
+
 <Tip>
 **Middleware for webhooks.**
 
-Configuring a webhook for use between C1 and another tool often requires the creation of some middleware code. Integration Platform as a Service (iPaaS) tools such as Celigo, MuleSoft, or Zapier can help you to create this code. 
+Configuring a webhook for use between C1 and another tool often requires the creation of some middleware code. Integration Platform as a Service (iPaaS) tools such as Celigo, MuleSoft, or Zapier can help you to create this code.
 </Tip>
-
-
-
-
