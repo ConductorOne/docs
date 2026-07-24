@@ -1,18 +1,139 @@
 ---
 title: Set up the n8n MCP server
-description: Create an n8n API key on your instance, then register the n8n MCP server in C1 and govern the tools it exposes.
+description: Connect n8n to C1 through n8n's own hosted MCP server (n8n Cloud only) or the n8n API, then register the server and govern its tools.
 og:title: Set up the n8n MCP server
-og:description: Create an n8n API key on your instance, then register the n8n MCP server in C1 and govern the tools it exposes.
+og:description: Connect n8n to C1 through n8n's own hosted MCP server (n8n Cloud only) or the n8n API, then register the server and govern its tools.
 sidebarTitle: n8n
 ---
 
-{/* Editor Refresh: 2026-06-11 */}
+{/* Editor Refresh: 2026-07-24 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-The n8n MCP server lets you govern access to n8n — workflows, executions, credentials, tags, and users — as tools your AI clients can call through C1. n8n is self-hosted, so the server connects to your own n8n instance.
+C1 can govern n8n access two ways. Both let your AI clients read from and act on n8n through governed MCP tools, but they support different n8n deployments and appear as two separate entries in your MCP server catalog:
+
+- **n8n MCP** — listed as plain **n8n** in your catalog. C1 registers n8n's own hosted MCP server as a downstream server C1 governs. **This option works with n8n Cloud only.** Authentication is per-user OAuth 2.1 (dynamic client registration recommended), or a personal access token as a bearer credential fallback.
+- **n8n API** — C1 hosts its own MCP server that translates n8n's REST API into tools. A single API key authenticates every user as one shared identity. This works with **either n8n Cloud or a self-hosted n8n instance**.
+
+**Use n8n MCP only if you're on n8n Cloud.** Self-hosted n8n instances can't use this option — use **n8n API** instead, or, if your self-hosted instance exposes its own MCP server, connect it to C1 as an external MCP server.
+
+| | n8n MCP | n8n API |
+| :--- | :--- | :--- |
+| **n8n deployment supported** | n8n Cloud only | n8n Cloud or self-hosted |
+| **Who hosts the MCP server** | n8n | C1 |
+| **Authentication** | Per-user OAuth 2.1 with dynamic client registration (recommended), or a personal access token (bearer) | A single shared API key (custom header) |
+| **Access scoping** | The connected user's own n8n permissions in that workspace, or the token owner's permissions if using a personal access token | Whatever the API key's owning n8n user account can access |
+| **Tool surface** | n8n's own instance-level MCP tools: workflow search, execution, testing, and publishing; execution history; credential listing; workflow building and validation; data tables | Workflows, executions, credentials, tags, and users, mapped to n8n API endpoints |
+| **Setup effort** | Register in C1 and authorize — nothing to create in n8n first (unless you choose a personal access token) | Create an n8n API key first, then register it in C1 |
+
+Use the native **n8n MCP** option (listed as plain **n8n** in your catalog) if you're on n8n Cloud and want n8n's own broader tool set with per-user OAuth. Use **n8n API** if you're on a self-hosted instance, or you need a shared service-account credential.
+
+<Tabs>
+
+<Tab title="n8n MCP">
+
+C1 registers as a client of n8n's own hosted MCP server rather than translating n8n's REST API itself. Your users' AI clients still only ever see C1-governed MCP tools, but C1 proxies each tool call straight through to your n8n Cloud workspace under the connected user's (or token's) authorized session, then returns the result. The tools available are exactly the ones n8n's own MCP server exposes — C1 doesn't reshape or add to them. See n8n's [MCP server tools reference](https://docs.n8n.io/connect/connect-to-n8n-mcp-server/mcp-server-tools-reference) for the full list.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- **This option is n8n Cloud only.** If you run a self-hosted n8n instance, use the **n8n API** option instead, or, if your instance has its own MCP server enabled, register it in C1 as an external MCP server.
+- Your n8n Cloud workspace name — the subdomain in `<workspace>.app.n8n.cloud` (for example, enter `c1-mcp` for a workspace at `https://c1-mcp.app.n8n.cloud`). You'll enter this when you register the server.
+- A user account on the n8n Cloud workspace (for per-user OAuth), or a personal access token (for the bearer fallback).
+
+<Note>
+In your MCP server catalog, this option is listed as **n8n** — distinct from the **n8n API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Set up per-user OAuth (recommended)
+
+Per-user OAuth 2.1 with dynamic client registration (DCR) is the recommended way to connect n8n MCP. Each user authorizes individually, and C1 registers itself with your workspace's authorization server automatically, so there's nothing to create in n8n first. See n8n's [Connect to n8n MCP server](https://docs.n8n.io/connect/connect-to-n8n-mcp-server) documentation for background on n8n's MCP authentication options.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **n8n** from the catalog.
+</Step>
+<Step>
+Enter your n8n Cloud workspace name when prompted.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enable **Use dynamic client registration**. Leave the authorize and token URL fields blank — C1 auto-discovers them from your workspace.
+</Step>
+<Step>
+Save your changes. The first time a user calls an n8n tool from their AI client, they're redirected to n8n to sign in (if they aren't already) and approve the connection, then returned to C1.
+</Step>
+</Steps>
+
+## Use a personal access token instead
+
+If per-user OAuth isn't an option for your tenant, n8n MCP also accepts a personal MCP access token as a bearer credential. Every user's tool calls then run under the token owner's n8n identity rather than each person's own.
+
+First, get a personal access token from n8n:
+
+<Steps>
+<Step>
+Sign in to your n8n Cloud workspace and go to **Settings** > **Instance-level MCP**. See n8n's [Connect to n8n MCP server](https://docs.n8n.io/connect/connect-to-n8n-mcp-server) documentation.
+</Step>
+<Step>
+Open **Connection details**, then switch to the **Access Token** tab. n8n generates a personal MCP access token the first time you view this tab — copy it now, since later visits only show a redacted value.
+</Step>
+</Steps>
+
+For a shared production setup, generate the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+Then register the server with that token:
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **n8n** from the catalog.
+</Step>
+<Step>
+Enter your n8n Cloud workspace name.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your personal access token.
+</Step>
+<Step>
+Save your changes.
+</Step>
+</Steps>
+
+## What access is granted
+
+Access depends on the authentication method you chose:
+
+- **Per-user OAuth.** Tool calls run with the connected user's own n8n permissions in that workspace — they can access what that user can already access in n8n.
+- **Personal access token.** Every tool call runs with the token owner's n8n permissions, regardless of which C1 user made the request.
+
+## How n8n MCP credentials are shared
+
+- **Per-user OAuth.** Every tool call runs under the calling user's own n8n identity, and n8n attributes each action to that individual.
+- **Personal access token.** Every user's tool calls use the one token you provided, so n8n sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against n8n's MCP server. Discovered tools appear on the server's **Tools** tab and include n8n's own workflow search, execution, testing, and publishing tools; execution history lookups; credential listing; workflow building and validation; and data table management.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call an n8n tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized or that a token is valid. You confirm access when an approved user successfully calls an n8n tool from their AI client.
+</Note>
+
+## Manage access to n8n MCP
+
+- **Rotate or revoke a personal access token.** Go to **Settings** > **Instance-level MCP** in n8n, open **Connection details**, switch to the **Access Token** tab, and generate a new token. n8n automatically revokes the previous one. Update the new token in C1's authentication settings.
+- **Revoke an individual user's OAuth authorization.** Manage this from your n8n Cloud workspace's own account and security settings; see n8n's [Connect to n8n MCP server](https://docs.n8n.io/connect/connect-to-n8n-mcp-server) documentation for current steps, since exact menu locations can change.
+
+</Tab>
+
+<Tab title="n8n API">
+
+The n8n MCP server lets you govern access to n8n — workflows, executions, credentials, tags, and users — as tools your AI clients can call through C1. This option connects to a self-hosted n8n instance, or to an n8n Cloud workspace, through n8n's REST API.
 
 n8n authenticates with an API key that C1 sends in a request header. A single key authenticates everyone, so all tool calls reach n8n as one shared identity.
 
@@ -29,7 +150,7 @@ The credentials you set up below are what C1 uses to call n8n on your users' beh
 - The base URL of your n8n instance, reachable from C1.
 
 <Note>
-If you don't see **n8n** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+If you don't see **n8n API** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
 ## Create an n8n API key
@@ -62,7 +183,7 @@ With your API key ready, register the server and provide it to C1.
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **n8n** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **n8n API** from the catalog.
 </Step>
 <Step>
 Enter the base URL of your n8n instance when prompted.
@@ -91,3 +212,7 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 - **Rotate the API key** by creating a new key under **Settings** > **n8n API**, updating it in C1, then deleting the old key.
 - **Adjust access** by changing the permissions of the user the key belongs to on your n8n instance.
+
+</Tab>
+
+</Tabs>
