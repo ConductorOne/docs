@@ -1,0 +1,157 @@
+---
+title: Set up the Pylon MCP server
+description: Connect Pylon to C1 through the Pylon API or Pylon's own hosted MCP server, then register the server and govern its tools.
+og:title: Set up the Pylon MCP server
+og:description: Connect Pylon to C1 through the Pylon API or Pylon's own hosted MCP server, then register the server and govern its tools.
+sidebarTitle: Pylon
+---
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+C1 can govern [Pylon](https://www.usepylon.com/) access two ways. Both let your AI clients read from and act on Pylon through governed MCP tools, but they come from different places and appear as two separate entries in your MCP server catalog:
+
+- **Pylon MCP** — listed as plain **Pylon** in your catalog. C1 registers Pylon's own hosted MCP server (`mcp.usepylon.com`) as a downstream server C1 governs. Authentication is always per-user OAuth using dynamic client registration (DCR) — Pylon's hosted MCP server doesn't support a bearer token or API key, so there's no integration to create in Pylon first. Tool calls run with the connected user's own Pylon seat permissions.
+- **Pylon API** — C1 hosts its own MCP server that translates Pylon's REST API into tools. Authentication is a single shared bearer token (an API token generated in Pylon), so every tool call reaches Pylon as one shared identity.
+
+| | Pylon MCP | Pylon API |
+| :--- | :--- | :--- |
+| **Who hosts the MCP server** | Pylon | C1 |
+| **Authentication** | Per-user OAuth with dynamic client registration (DCR) only — no bearer token or API key option | Bearer token (API token) only — no OAuth option |
+| **Access scoping** | The connected user's own Pylon seat and role permissions — not independently scoped | Whatever the API token's seat can reach in Pylon |
+| **Tool surface** | Pylon's own tool set: search, read, create, and update issues, accounts, and contacts | Issues, accounts, contacts, teams, users, knowledge bases, and tags, mapped to Pylon API endpoints |
+| **Setup effort** | Register in C1 and authorize — nothing to create in Pylon first | Generate an API token in Pylon, then register it in C1 |
+
+Use the native **Pylon MCP** option (listed as plain **Pylon** in your catalog) if per-user OAuth is acceptable for your tenant and Pylon's own agentic tool set is enough. Use **Pylon API** if you need a shared service-account credential (bearer token) instead.
+
+<Tabs>
+
+<Tab title="Pylon MCP">
+
+C1 registers as a client of Pylon's own hosted MCP server ([Pylon MCP](https://docs.usepylon.com/pylon-docs/integrations/pylon-mcp)) rather than translating Pylon's REST API itself. Your users' AI clients still only ever see C1-governed MCP tools, but C1 proxies each tool call straight through to `mcp.usepylon.com` under the connected user's authorized session, then returns the result. The tools available are exactly the ones Pylon's own MCP server exposes — C1 doesn't reshape or add to them.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- Nothing to create in Pylon ahead of time. This option only supports per-user OAuth with dynamic client registration — Pylon's hosted MCP server doesn't offer a bearer token or API key mode, so there's no client ID, secret, or integration to register.
+- A Pylon admin must first turn on the MCP server from **Settings → AI Controls → MCP Server** in the Pylon dashboard ([Pylon MCP](https://docs.usepylon.com/pylon-docs/integrations/pylon-mcp)). Each person who will connect needs a **Member** or **Admin** seat with the **MCP Access** role enabled; **Viewer** and **Integration** seats can't authenticate and see an "Authorization failed" error ([Connecting to the Pylon MCP Server](https://support.usepylon.com/articles/2407390554-connecting-to-the-pylon-mcp-server)).
+
+<Note>
+In your MCP server catalog, this option is listed as **Pylon** — distinct from the **Pylon API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Set up per-user OAuth
+
+Per-user OAuth with dynamic client registration (DCR) is the only authentication method this option supports — there's no bearer token or API key fallback. Each user authorizes individually, and C1 registers itself with Pylon's authorization server automatically, so there's no app to create in Pylon first.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Pylon** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enable **Use dynamic client registration**. There's no client ID or secret to enter.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Pylon tool from their AI client, they're redirected to Pylon to sign in (if they aren't already) and approve the connection, then returned to C1.
+</Step>
+</Steps>
+
+## What access is granted
+
+Once a user authorizes, tool calls run with that user's own Pylon seat permissions — they can search for and read issues, accounts, and contacts they can already see in Pylon, and create or update them on the same terms as in the Pylon dashboard ([Pylon MCP](https://docs.usepylon.com/pylon-docs/integrations/pylon-mcp)). The MCP server never returns data the user can't already see, or performs a write the user can't already make, in Pylon.
+
+## How Pylon MCP credentials are shared
+
+This option only supports per-user OAuth — there's no shared, service-account, or bearer-token mode. Every tool call runs under the calling user's own Pylon identity, and Pylon attributes each action to that individual. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Pylon's MCP server. Discovered tools appear on the server's **Tools** tab and include Pylon's own search, read, create, and update tools for issues, accounts, and contacts.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Pylon tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized. You confirm access when an approved user successfully calls a Pylon tool from their AI client.
+</Note>
+
+## Manage access to Pylon MCP
+
+Because this option uses per-user OAuth, there's no shared secret in C1 to rotate. Users and admins manage access from Pylon itself:
+
+- **An individual user's session expires periodically** — some sessions last a few hours, others several days ([Connecting to the Pylon MCP Server](https://support.usepylon.com/articles/2407390554-connecting-to-the-pylon-mcp-server)). Reconnecting re-runs the same authorization flow.
+- **A Pylon admin can turn off the integration workspace-wide** from the same **Settings → AI Controls → MCP Server** panel used to enable it, or remove an individual's **MCP Access** role from the Users page under Settings to cut off just that person's connection ([Roles & User Management](https://docs.usepylon.com/pylon-docs/platform/roles-and-user-management)).
+
+</Tab>
+
+<Tab title="Pylon API">
+
+C1 hosts the Pylon MCP server, so your users' AI clients only ever see MCP tools — they never call Pylon directly. When an AI client calls one of these tools, C1 makes the matching request to the Pylon API using the bearer token you configure here, then returns the result to the AI client.
+
+Pylon's REST API supports a single authentication method: a bearer token generated in the Pylon dashboard. Every tool call reaches Pylon as that one shared identity.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- You need access to generate an API token in Pylon, at **Settings → API Tokens** in the Pylon dashboard.
+
+<Note>
+In your MCP server catalog, this option is listed as **Pylon API** — distinct from the **Pylon** entry, which connects to Pylon's own hosted MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Generate a Pylon API token
+
+<Steps>
+<Step>
+In Pylon, go to [Settings → API Tokens](https://app.usepylon.com/settings/api-tokens).
+</Step>
+<Step>
+Create a new token and give it a recognizable name — actions the token takes in Pylon show up under that name, so use something that identifies C1.
+</Step>
+<Step>
+Copy the token. Treat it as a high-value credential; Pylon only shows it once.
+</Step>
+</Steps>
+
+For a shared production setup, generate the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+## Register the server in C1
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Pylon API** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your Pylon API token.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Pylon server exposes.
+</Step>
+</Steps>
+
+## How Pylon API credentials are shared
+
+Every user's tool calls use the one bearer token you provided, so Pylon sees a single shared identity, attributed to whichever token name you chose. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Pylon. Discovered tools appear on the server's **Tools** tab and include issues, accounts, contacts, teams, users, knowledge bases, and tags.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Pylon tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Pylon API token when an approved user successfully calls a Pylon tool from their AI client.
+</Note>
+
+## Manage your Pylon API credentials
+
+- **Rotate the token** by generating a new one at **Settings → API Tokens** in Pylon, then updating it on the server's authentication settings in C1. Revoke the old token in Pylon once the new one is in place.
+- **Revoke access entirely** by deleting the token in Pylon; C1's calls will start failing until you provide a new one.
+
+</Tab>
+
+</Tabs>
