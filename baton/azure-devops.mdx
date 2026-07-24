@@ -16,6 +16,8 @@ sidebarTitle: "Microsoft Azure DevOps"
 | Projects | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Personal access tokens | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Project roles (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Project role assignments (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 The Azure DevOps connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
@@ -36,12 +38,32 @@ perform.
 To have C1 manage Entra group membership through this connector, enable
 **Entra group membership provisioning** during setup. Requirements:
 
-- OAuth authentication. Personal Access Tokens do not support changes to
-  Entra group membership.
-- The `GroupMember.ReadWrite.All` permission on the Entra app registration,
-  with admin consent in the tenant.
+- OAuth or client secret authentication. Personal Access Tokens do not support
+  changes to Entra group membership.
+- The `GroupMember.ReadWrite.All` Microsoft Graph application permission on the
+  Entra app registration, with admin consent in the tenant.
 
 See [Configure the Azure DevOps connector](#configure-the-azure-devops-connector) below for setup steps.
+
+## Project RBAC (opt-in)
+
+By default, Azure DevOps project-scoped security groups (such as "Contributors" and "Project Administrators") are synced as flat group resources alongside org-level groups.
+
+When you enable **Use project RBAC roles**, project-scoped groups are also represented as structured **Project Role Assignment** resources — for example, "Contributor on Project X." This provides a clearer view of project-level access during access reviews and just-in-time requests, with the role and project scope visible directly on the entitlement.
+
+Enabling this option also enables provisioning: C1 can grant and revoke project role assignments, adding or removing members from the underlying Azure DevOps security group.
+
+<Note>
+When **Use project RBAC roles** is enabled, project-scoped groups continue to sync as flat group resources as well, alongside the new Project Role Assignment resources. Org-level groups are unaffected and continue to sync as normal group resources. No additional Azure DevOps permissions are required beyond those already configured for group sync and provisioning.
+</Note>
+
+<Note>
+Project roles are scoped to a single project. A role with the same name in two different projects, such as "Contributors" in both Project A and Project B, appears as two separate roles, each with its own membership.
+</Note>
+
+<Warning>
+**Use project RBAC roles** cannot be enabled together with **Enable incremental sync**. Incremental sync does not yet update Project Role Assignment resources between full syncs, so the connector rejects this configuration rather than syncing stale data.
+</Warning>
 
 ## Gather Azure DevOps credentials
 
@@ -51,7 +73,7 @@ Configuring the connector requires you to pass in credentials generated in Azure
 A user with **Project Collection Administrator** role at the organization level and **Project Administrator** role at the project level must perform this task.
 </Warning>
 
-You can authenticate the Azure DevOps connector by registering a web app and signing in with OAuth, or by using a personal access token. Follow the relevant set of instructions below to create your preferred set of credentials.
+You can authenticate the Azure DevOps connector in three ways: OAuth (interactive sign-in), a service principal with a client secret (machine-to-machine), or a personal access token. Follow the relevant set of instructions below to create your preferred set of credentials.
 
 ### Option 1: Register a web application
 
@@ -128,7 +150,48 @@ You can authenticate the Azure DevOps connector by registering a web app and sig
 
 **Done.** Next, move on to the connector configuration instructions.
 
-### Option 2: Create a personal access token
+### Option 2: Register a service principal (client secret)
+
+<Note>
+This option authenticates as a service principal using the OAuth 2.0 client
+credentials grant — no user interaction required. It supports all sync
+capabilities including PAT sync, license sync, and account provisioning. Entra
+group membership provisioning is also supported when the SP holds the
+`GroupMember.ReadWrite.All` Microsoft Graph permission.
+</Note>
+
+<Steps>
+  <Step>
+  In the [Microsoft Entra admin center](https://entra.microsoft.com), navigate to **App registrations** and click **New registration**.
+  </Step>
+  <Step>
+  Give the app a name, select **Accounts in this organizational directory only**, leave the redirect URI blank, and click **Register**.
+  </Step>
+  <Step>
+  On the overview page, copy and save the **Application (client) ID** and the **Directory (tenant) ID**.
+  </Step>
+  <Step>
+  Click **Certificates & secrets** > **New client secret**. Set a description and expiry, then click **Add**. Copy and save the secret **Value** immediately — it is not shown again.
+  </Step>
+  <Step>
+  **No Azure DevOps API permission is required.** Azure DevOps does not expose application permissions in Entra — for the Azure DevOps API the **Application permissions** option is disabled, and the service principal does not need one. The connector uses the OAuth 2.0 client credentials grant against the Azure DevOps resource; the service principal is authorized by being added to your organization in the steps below.
+  </Step>
+  <Step>
+  **Optional — only required for Entra group membership provisioning.**
+
+  Click **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions** > select **`GroupMember.ReadWrite.All`** > click **Add permissions**. Then click **Grant admin consent for &lt;tenant&gt;** and confirm — the status column must show a green checkmark.
+  </Step>
+  <Step>
+  In Azure DevOps, navigate to **Organization Settings** > **Users** > **Add users**. Search for your app by name, assign **Basic** access level, and add it to the relevant projects.
+  </Step>
+  <Step>
+  Go to **Organization Settings** > **Security** > **Permissions** > **Project Collection Administrators** > **Members** > **Add**, and add the service principal. This grants it the access needed to read all org-level resources.
+  </Step>
+</Steps>
+
+**Done.** Next, move on to the connector configuration instructions.
+
+### Option 3: Create a personal access token
 
 <Note>
 Personal Access Token authentication does **not** support Entra group
@@ -137,7 +200,8 @@ Entra-sourced groups (descriptor prefix `aadgp.`) are silent no-ops — the
 connector accepts the request and returns success without making any API
 call. If you need C1 to actually grant or revoke memberships on Entra-sourced
 Azure DevOps groups, configure the connector with OAuth
-([Option 1](#option-1-register-a-web-application)) instead.
+([Option 1](#option-1-register-a-web-application)) or a client secret
+([Option 2](#option-2-register-a-service-principal-client-secret)) instead.
 </Note>
 
 <Steps>
@@ -212,22 +276,31 @@ To complete this task, you'll need:
   Find the **Settings** area of the page and click **Edit**.
   </Step>
   <Step>
-  Select your method of authenticating to Azure DevOps and click either **OAuth** or **Username and password**.
+  Select your method of authenticating to Azure DevOps.
     If you chose **OAuth**:
     1. Enter your organization URL, Azure tenant ID, OAuth client ID, and OAuth client secret in the relevant fields.
     2. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
     3. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
-    4. **Optional.** Check **Enable Entra group membership provisioning** to grant and revoke memberships on Entra-sourced groups via Microsoft Graph. Requires the `GroupMember.ReadWrite.All` Microsoft Graph application permission with admin consent (see Step 9 of [Option 1](#option-1-register-a-web-application)). Per Microsoft, changes may take up to 1 hour to appear in the Azure DevOps Members view.
-    5. Click **Save**.
-    6. Click **Login with OAuth**.
-    7. Log in and authorize C1 with your Azure DevOps instance.
-    8. You will then be redirected back to the Azure DevOps setup page in C1, where you'll see an authorization message.
+    4. **Optional.** Check **Enable Entra group membership provisioning** to grant and revoke memberships on Entra-sourced groups via Microsoft Graph. Requires the `GroupMember.ReadWrite.All` Microsoft Graph application permission with admin consent. Per Microsoft, changes may take up to 1 hour to appear in the Azure DevOps Members view.
+    5. **Optional.** Check **Use project RBAC roles** to enable the Sparse ACL model for project access. Project-scoped groups are also synced as structured Project Role Assignment resources, with role and project context visible on each entitlement. See [Project RBAC](#project-rbac-opt-in) for details.
+    6. Click **Save**.
+    7. Click **Login with OAuth**.
+    8. Log in and authorize C1 with your Azure DevOps instance.
+    9. You will then be redirected back to the Azure DevOps setup page in C1, where you'll see an authorization message.
+    If you chose **Client secret**:
+    1. Enter your Azure DevOps organization URL, tenant ID, client ID, and client secret from [Option 2](#option-2-register-a-service-principal-client-secret).
+    2. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
+    3. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission on the service principal.
+    4. **Optional.** Check **Enable Entra group membership provisioning** to grant and revoke memberships on Entra-sourced groups via Microsoft Graph. The same client ID and secret are used. Requires the `GroupMember.ReadWrite.All` Microsoft Graph application permission with admin consent. Per Microsoft, changes may take up to 1 hour to appear in the Azure DevOps Members view.
+    5. **Optional.** Check **Use project RBAC roles** to enable the Sparse ACL model for project access. See [Project RBAC](#project-rbac-opt-in) for details.
+    6. Click **Save**.
     If you chose **Personal access token**:
     1. Paste your Azure DevOps organization URL in the format `https://dev.azure.com/{Your_Organization}` into the **Organization URL** field.
     2. Paste the token into the **Personal Access Token** field.
     3. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
     4. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
-    5. Click **Save**.
+    5. **Optional.** Check **Use project RBAC roles** to enable the Sparse ACL model for project access. See [Project RBAC](#project-rbac-opt-in) for details.
+    6. Click **Save**.
   </Step>
   <Step>
   The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
@@ -284,6 +357,10 @@ Create two Kubernetes manifest files for your Azure DevOps connector deployment:
 
 #### Secrets configuration
 
+Choose one of the following secrets configurations based on your authentication method.
+
+**Option A — Personal access token:**
+
 ```yaml expandable
 # baton-azure-devops-secrets.yaml
 apiVersion: v1
@@ -292,28 +369,70 @@ metadata:
   name: baton-azure-devops-secrets
 type: Opaque
 stringData:
-  # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-  
-  # Azure DevOps credentials
-  BATON_ORGANIZATION_URL: <Your Azure DevOps organization URL, formed like https://dev.azure.com/{Your_Organization}>
-  BATON_PAT: <Azure DevOps personal access token>
+  BATON_AUTH_METHOD: azure-devops-group-pat
+  BATON_ORGANIZATION_URL: <https://dev.azure.com/{Your_Organization}>
+  BATON_PERSONAL_ACCESS_TOKEN: <Azure DevOps personal access token>
+  BATON_PROVISIONING: "true"
+  BATON_SYNC_ORGANIZATION: "true"
+  BATON_ENABLE_INCREMENTAL_SYNC: "true"
+  # Optional: enable the Sparse ACL model for project access
+  BATON_USE_PROJECT_RBAC: "true"
+```
 
-  # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+**Option B — Service principal (client secret):**
 
-  # Optional: include if you want to sync grant sources
-  BATON_SKIP_UNUSED_ROLES: true
+```yaml expandable
+# baton-azure-devops-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-azure-devops-secrets
+type: Opaque
+stringData:
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
+  BATON_AUTH_METHOD: azure-devops-group-client-secret
+  BATON_ORGANIZATION_URL: <https://dev.azure.com/{Your_Organization}>
+  BATON_CLIENT_SECRET_TENANT_ID: <Entra tenant ID>
+  BATON_CLIENT_SECRET_CLIENT_ID: <App registration client ID>
+  BATON_CLIENT_SECRET_CLIENT_SECRET: <App registration client secret>
+  BATON_PROVISIONING: "true"
+  BATON_SYNC_ORGANIZATION: "true"
+  BATON_ENABLE_INCREMENTAL_SYNC: "true"
+  # Optional: requires GroupMember.ReadWrite.All Graph permission with admin consent
+  BATON_ENABLE_ENTRA_GROUP_PROVISIONING: "true"
+  # Optional: enable the Sparse ACL model for project access
+  BATON_USE_PROJECT_RBAC: "true"
+```
 
-  # Optional: include to read audit logs and capture updates between full syncs (requires Audit Log: Read permission)
-  BATON_ENABLE_INCREMENTAL_SYNC: true
+**Option C — OAuth:**
 
-  # Optional: include to provision membership on Entra-sourced groups via Microsoft Graph.
-  # Requires OAuth authentication (BATON_PAT-only deployments cannot use this)
-  # AND the GroupMember.ReadWrite.All Microsoft Graph application permission
-  # with admin consent on the Entra app registration. See the OAuth setup section above.
-  BATON_ENABLE_ENTRA_GROUP_PROVISIONING: true
+```yaml expandable
+# baton-azure-devops-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-azure-devops-secrets
+type: Opaque
+stringData:
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
+  BATON_AUTH_METHOD: azure-devops-group-oauth
+  BATON_ORGANIZATION_URL: <https://dev.azure.com/{Your_Organization}>
+  BATON_AZURE_DEVOPS_TENANT_ID: <Entra tenant ID>
+  BATON_OAUTH2_CLIENT_CRED_GRANT_CLIENT_ID: <OAuth app client ID>
+  BATON_OAUTH2_CLIENT_CRED_GRANT_CLIENT_SECRET: <OAuth app client secret>
+  BATON_PROVISIONING: "true"
+  BATON_SYNC_ORGANIZATION: "true"
+  BATON_ENABLE_INCREMENTAL_SYNC: "true"
+  # Optional: requires GroupMember.ReadWrite.All Graph permission with admin consent
+  BATON_ENABLE_ENTRA_GROUP_PROVISIONING: "true"
+  BATON_ENTRA_CLIENT_ID: <Graph app client ID>
+  BATON_ENTRA_CLIENT_SECRET: <Graph app client secret>
+  # Optional: enable the Sparse ACL model for project access
+  BATON_USE_PROJECT_RBAC: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
