@@ -1,16 +1,97 @@
 ---
 title: Set up the Lucid MCP server
-description: Connect Lucid to C1 with per-user OAuth or an API token, then register the Lucid MCP server and govern its tools.
+description: Connect Lucid to C1 through the Lucid API or Lucid's own hosted MCP server, then register the server and govern its tools.
 og:title: Set up the Lucid MCP server
-og:description: Connect Lucid to C1 with per-user OAuth or an API token, then register the Lucid MCP server and govern its tools.
+og:description: Connect Lucid to C1 through the Lucid API or Lucid's own hosted MCP server, then register the server and govern its tools.
 sidebarTitle: Lucid
 ---
 
-{/* Editor Refresh: 2026-06-11 */}
+{/* Editor Refresh: 2026-07-24 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
+
+C1 can govern Lucid access two ways. Both let your AI clients read from and act on Lucid through governed MCP tools, but they come from different places and appear as two separate entries in your MCP server catalog:
+
+- **Lucid MCP** — listed as plain **Lucid** in your catalog. C1 registers Lucid's own hosted MCP server (`mcp.lucid.app`) as a downstream server C1 governs. Authentication is always per-user OAuth using dynamic client registration (DCR) — Lucid's hosted MCP server doesn't support a bearer token or API key, so there's no application to create in Lucid first. Before anyone can connect, a Lucid account admin must enable MCP access for the account from the Lucid Admin Panel. Tool calls run with the connected user's full Lucid permissions.
+- **Lucid API** — C1 hosts its own MCP server that translates Lucid's REST API into tools. You choose between per-user OAuth or a shared API token, and you scope access with the **scopes** you grant the Lucid OAuth application (or token).
+
+| | Lucid MCP | Lucid API |
+| :--- | :--- | :--- |
+| **Who hosts the MCP server** | Lucid | C1 |
+| **Authentication** | Per-user OAuth with dynamic client registration (DCR) only — no bearer token or API key option | Per-user OAuth, or a shared API token |
+| **Access scoping** | The connected user's full Lucid permissions — not independently scoped | The OAuth **scopes** you configure on the application, or the token |
+| **Tool surface** | Lucid's own tool set: document search, content retrieval, diagram creation (including org charts, mind maps, and UML sequence diagrams), image export, and sharing | Documents, folders, teams, and users, mapped to Lucid API endpoints |
+| **Setup effort** | An account admin enables MCP access in Lucid, then register and authorize in C1 — nothing else to create in Lucid first | Create a Lucid OAuth application or API token first, then register it in C1 |
+
+Use the native **Lucid MCP** option (listed as plain **Lucid** in your catalog) if you want Lucid's own broader, agentic tool set and per-user OAuth is acceptable for your tenant. Use **Lucid API** if you need a shared service-account credential (API token), or you want to scope access with OAuth scopes.
+
+<Tabs>
+
+<Tab title="Lucid MCP">
+
+C1 registers as a client of Lucid's own hosted MCP server ([Integrate Lucid with AI tools using the Lucid MCP server](https://help.lucid.co/hc/en-us/articles/42578801807508-Integrate-Lucid-with-AI-tools-using-the-Lucid-MCP-server)) rather than translating Lucid's REST API itself. Your users' AI clients still only ever see C1-governed MCP tools, but C1 proxies each tool call straight through to `mcp.lucid.app` under the connected user's authorized session, then returns the result. The tools available are exactly the ones Lucid's own MCP server exposes — C1 doesn't reshape or add to them.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Lucid account admin must enable MCP access for the account from the Lucid Admin Panel before anyone can connect ([Integrate Lucid with AI tools using the Lucid MCP server](https://help.lucid.co/hc/en-us/articles/42578801807508-Integrate-Lucid-with-AI-tools-using-the-Lucid-MCP-server#for-admins-enable-or-disable-use-of-the-mcp-server-for-your-account)). Skipping this step means users won't be able to connect. If MCP access is enabled after a user has already signed in from a connected AI tool, that user may need to re-authenticate for the change to take effect ([Introducing the Lucid Model Context Protocol (MCP) server](https://community.lucid.co/community-news-and-announcements-9/introducing-the-lucid-model-context-protocol-mcp-server-12230)).
+- Nothing else to create in Lucid ahead of time. This option only supports per-user OAuth with dynamic client registration — Lucid's hosted MCP server doesn't offer a bearer token or API key mode, so there's no client ID, secret, or application to register. Each user just needs a Lucid account with access to the workspace.
+
+<Note>
+In your MCP server catalog, this option is listed as **Lucid** — distinct from the **Lucid API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Set up per-user OAuth
+
+Per-user OAuth with dynamic client registration (DCR) is the only authentication method this option supports — there's no bearer token or API key fallback. Each user authorizes individually, and C1 registers itself with Lucid's authorization server automatically, so there's no application to create in Lucid first (see Lucid's [Integrate Lucid with AI tools using the Lucid MCP server](https://help.lucid.co/hc/en-us/articles/42578801807508-Integrate-Lucid-with-AI-tools-using-the-Lucid-MCP-server#faq) documentation).
+
+<Steps>
+<Step>
+In Lucid, have an account admin go to the Lucid Admin Panel and enable MCP access for the account. This is a prerequisite — until it's enabled, users can't connect regardless of how the server is configured in C1.
+</Step>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Lucid** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enable **Use dynamic client registration**. There's no client ID or secret to enter.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Lucid tool from their AI client, they're redirected to Lucid to sign in (if they aren't already) and approve the connection, then returned to C1.
+</Step>
+</Steps>
+
+## What access is granted
+
+Unlike the Lucid API option, there are no separate scope toggles to configure in C1. Once a user authorizes, tool calls run with that user's full Lucid permissions — they can access everything the user can already access in Lucid, including documents and folders across Lucidchart, Lucidspark, and Lucidscale. This integration's tools can search for and open documents, read their contents and metadata, create and edit diagrams (including org charts, mind maps, and UML sequence diagrams), export documents as images, and manage sharing — creating share links and granting collaborators view, comment, edit, or edit-and-share access ([Integrate Lucid with AI tools using the Lucid MCP server](https://help.lucid.co/hc/en-us/articles/42578801807508-Integrate-Lucid-with-AI-tools-using-the-Lucid-MCP-server#available-actions); [Lucid MCP Server — Supported Operations](https://learn.microsoft.com/en-us/connectors/lucidmcpserver/)). Access follows your normal Lucid permissions — the integration can only reach documents and folders you can already see.
+
+## How Lucid MCP credentials are shared
+
+This option only supports per-user OAuth — there's no shared, service-account, or bearer-token mode. Every tool call runs under the calling user's own Lucid identity, and Lucid attributes each action to that individual. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Lucid's MCP server. Discovered tools appear on the server's **Tools** tab and include Lucid's own document search and fetch tools, diagram creation (including org charts, mind maps, and UML sequence diagrams), image export, and sharing.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Lucid tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized. You confirm access when an approved user successfully calls a Lucid tool from their AI client.
+</Note>
+
+## Manage access to Lucid MCP
+
+Because this option uses per-user OAuth, there's no shared secret in C1 to rotate. Users and admins manage access from Lucid itself:
+
+- **An individual user can disconnect at any time.** In Lucid, open account settings and go to the **Authorized Websites and Applications** list, then select the app and choose the remove option to revoke it ([Access and update account settings](https://help.lucid.co/hc/en-us/articles/360049864551-Access-and-update-account-settings#apps-and-integrations-settings)).
+- **An account admin can turn off MCP access for everyone.** In the Lucid Admin Panel, disable MCP access for the account. This revokes every AI tool and MCP client connected through Lucid MCP at once; users must re-authenticate if it's re-enabled later.
+
+</Tab>
+
+<Tab title="Lucid API">
 
 The Lucid MCP server lets you govern access to Lucid — documents, folders, teams, users, and account data — as tools your AI clients can call through C1.
 
@@ -34,7 +115,7 @@ The credentials you set up below are what C1 uses to call Lucid on your users' b
 - For an API token, the Lucid account whose access the token should carry.
 
 <Note>
-If you don't see **Lucid** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+In your MCP server catalog, this option is listed as **Lucid API** — distinct from the **Lucid** entry, which connects to Lucid's own hosted MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
 ## Option 1: Set up per-user OAuth
@@ -66,7 +147,7 @@ With your OAuth application ready, register the server and provide its credentia
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Lucid** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Lucid API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth application's **client ID**, **client secret**, and **scopes**.
@@ -104,7 +185,7 @@ With your API token ready, register the server and provide it to C1.
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Lucid** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Lucid API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your API token.
@@ -140,3 +221,7 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 - **Rotate the OAuth client secret** in your Lucid OAuth application under **Account settings** > **Developer**, then update the secret on the server's authentication settings in C1.
 - **Rotate an API token** by generating a new one in Lucid and updating it in C1, then revoking the old token.
 - **Adjust access** by editing the application's scopes in Lucid.
+
+</Tab>
+
+</Tabs>

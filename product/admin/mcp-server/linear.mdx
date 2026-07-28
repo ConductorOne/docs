@@ -1,16 +1,139 @@
 ---
 title: Set up the Linear MCP server
-description: Connect Linear to C1 with per-user OAuth or a personal API key, then register the Linear MCP server and govern its tools.
+description: Connect Linear to C1 through Linear's own hosted MCP server or the Linear API, then register the server and govern its tools.
 og:title: Set up the Linear MCP server
-og:description: Connect Linear to C1 with per-user OAuth or a personal API key, then register the Linear MCP server and govern its tools.
+og:description: Connect Linear to C1 through Linear's own hosted MCP server or the Linear API, then register the server and govern its tools.
 sidebarTitle: Linear
 ---
 
-{/* Editor Refresh: 2026-06-11 */}
+{/* Editor Refresh: 2026-07-24 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
+
+C1 can govern Linear access two ways. Both let your AI clients read from and act on Linear through governed MCP tools, but they come from different places and appear as two separate entries in your MCP server catalog:
+
+- **Linear MCP** — listed as plain **Linear** in your catalog. C1 registers Linear's own hosted MCP server (`mcp.linear.app`) as a downstream server C1 governs. The recommended authentication method is per-user OAuth with dynamic client registration (DCR) — nothing to register in Linear first. Linear's MCP server also accepts a personal API key sent as a bearer token, if you'd rather use a single shared credential.
+- **Linear API** — C1 hosts its own MCP server that translates the Linear API into tools. You choose between per-user OAuth (which requires creating a Linear OAuth application) or a personal API key, and scope access with the OAuth scopes or API key permissions you grant.
+
+| | Linear MCP | Linear API |
+| :--- | :--- | :--- |
+| **Who hosts the MCP server** | Linear | C1 |
+| **Authentication** | Per-user OAuth with dynamic client registration (DCR), or a personal API key (bearer token) | Per-user OAuth (requires a Linear OAuth application), or a personal API key (bearer token) |
+| **Access scoping** | The connected user's full Linear permissions with OAuth; a personal API key can be restricted to Read, Write, Admin, Create issues, Create comments, and specific teams | The OAuth scopes or API key permissions you configure |
+| **Tool surface** | Linear's own tool set: finding, creating, and updating issues, projects, and comments, with more functionality on the way | Issues, projects, cycles, teams, users, and comments, mapped to Linear API endpoints |
+| **Setup effort** | Register in C1 and authorize — nothing to create in Linear first for OAuth | Create a Linear OAuth application first (for per-user OAuth), then register it in C1 |
+
+Use the native **Linear MCP** option (listed as plain **Linear** in your catalog) if you want Linear's own hosted tool set and dynamic client registration is acceptable for your tenant. Use **Linear API** if you need to create a dedicated OAuth application, or you want to scope access with the Linear API's own permission model.
+
+<Tabs>
+
+<Tab title="Linear MCP">
+
+C1 registers as a client of Linear's own hosted MCP server ([MCP server](https://linear.app/docs/mcp)) rather than translating the Linear API itself. Your users' AI clients still only ever see C1-governed MCP tools, but C1 proxies each tool call straight through to `mcp.linear.app` under the connected user's authorized session (or a shared bearer credential, if you choose that method instead), then returns the result. The tools available are exactly the ones Linear's own MCP server exposes — C1 doesn't reshape or add to them.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- For per-user OAuth with dynamic client registration, nothing to create in Linear ahead of time — C1 registers itself with Linear's authorization server automatically. Each user just needs a Linear account with access to the workspace.
+- For a personal API key, you need the Linear account whose access the key should carry.
+
+<Note>
+In your MCP server catalog, this option is listed as **Linear** — distinct from the **Linear API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+Linear's MCP server (`https://mcp.linear.app/mcp`) supports two ways to authenticate:
+
+- **Per-user OAuth with dynamic client registration** (recommended). Each person authorizes with their own Linear account, and C1 registers itself with Linear's authorization server automatically — there's no OAuth application to create in Linear first ([MCP server](https://linear.app/docs/mcp)).
+- **Personal API key**. A single key authenticates everyone, sent as a bearer token, so all tool calls reach Linear's MCP server as one shared identity.
+
+## Option 1: Set up per-user OAuth with dynamic client registration
+
+Linear's MCP server supports OAuth 2.1 with dynamic client registration ([MCP server](https://linear.app/docs/mcp#setup)), so there's no OAuth application to register in advance.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Linear** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enable **Use dynamic client registration**. There's no client ID or secret to enter.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Linear tool from their AI client, they're redirected to Linear to sign in (if they aren't already) and approve the connection, then returned to C1.
+</Step>
+</Steps>
+
+## Option 2: Use a personal API key
+
+Linear's MCP server also accepts a personal API key sent as a bearer credential instead of the interactive OAuth flow ([MCP server](https://linear.app/docs/mcp#collapsible-28a2f832a8df)). Use this when per-user attribution isn't required.
+
+### Create a personal API key
+
+Create the key in Linear before registering the server in C1.
+
+<Steps>
+<Step>
+Sign in to Linear as the account C1 should run as, then open **Settings** > **Security & access**.
+</Step>
+<Step>
+Under **Personal API keys**, select **Create key**.
+</Step>
+<Step>
+Enter a label such as `C1`, then choose full access or restrict the key to specific permissions — **Read**, **Write**, **Admin**, **Create issues**, **Create comments** — and optionally limit it to specific teams ([API and webhooks](https://linear.app/docs/api-and-webhooks)).
+</Step>
+<Step>
+Copy the generated key.
+</Step>
+</Steps>
+
+For a read-only connection, restrict the key to the **Read** permission only. For a shared production setup, create the key from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+### Register the server with a key
+
+With your key ready, register the server and provide it as the credential.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Linear** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your personal API key.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools Linear's MCP server exposes.
+</Step>
+</Steps>
+
+## What access is granted
+
+With per-user OAuth, tool calls run with the connected user's own Linear permissions — they can access everything the user can already access in Linear, including issues, projects, and comments ([MCP server](https://linear.app/docs/mcp)). With a personal API key, tool calls run with whatever permissions the key was scoped to, up to the full access of the account that created it ([API and webhooks](https://linear.app/docs/api-and-webhooks)).
+
+## How Linear MCP credentials are shared
+
+- **Per-user OAuth.** Every tool call runs under the calling user's own Linear identity, and Linear attributes each action to that individual.
+- **Personal API key.** Every user's tool calls use the one key you provided, so Linear sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Linear's MCP server. Discovered tools appear on the server's **Tools** tab and include Linear's own tools for finding, creating, and updating issues, projects, and comments.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Linear tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized or that a key is valid. You confirm access when an approved user successfully calls a Linear tool from their AI client.
+</Note>
+
+## Manage access to Linear MCP
+
+- **Rotate or revoke a personal API key** in Linear under **Settings** > **Security & access** > **Personal API keys** ([Security & access](https://linear.app/docs/security-and-access)). Adjust a key's scope by revoking it and creating a new one with different permissions — existing keys can't be re-scoped after creation.
+- **An individual user can revoke their own OAuth authorization at any time.** In Linear, go to **Settings** > **Security & access**, find the C1 entry under **Authorized applications**, hover over it, and select **Revoke access** ([Security & access](https://linear.app/docs/security-and-access)).
+
+</Tab>
+
+<Tab title="Linear API">
 
 The Linear MCP server lets you govern access to Linear — issues, projects, cycles, teams, users, and comments — as tools your AI clients can call through C1.
 
@@ -34,7 +157,7 @@ The credentials you set up below are what C1 uses to call Linear on your users' 
 - For a personal API key, you need the Linear account whose access the key should carry.
 
 <Note>
-If you don't see **Linear** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+If you don't see **Linear API** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
 ## Option 1: Set up per-user OAuth
@@ -70,7 +193,7 @@ With your OAuth application ready, register the server and provide its credentia
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Linear** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Linear API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your application's **client ID** and **client secret**.
@@ -111,7 +234,7 @@ With your key ready, register the server and provide it as the credential.
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Linear** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Linear API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your personal API key.
@@ -121,7 +244,7 @@ Save your changes. C1 starts a sync that discovers the tools the Linear server e
 </Step>
 </Steps>
 
-## How Linear credentials are shared
+## How Linear API credentials are shared
 
 How Linear sees your users' activity depends on the method you chose:
 
@@ -142,8 +265,12 @@ Before anyone can call a Linear tool, it must be approved, added to a toolset, a
 Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Linear credentials when an approved user successfully calls a Linear tool from their AI client.
 </Note>
 
-## Manage your Linear credentials
+## Manage your Linear API credentials
 
 - **Rotate the OAuth client secret** in your Linear OAuth application under **Settings** > **API** > **OAuth applications**, then update the secret on the server's authentication settings in C1.
 - **Rotate a personal API key** in **Settings** > **Security & access** by deleting the existing key, creating a new one, and updating it in C1. Linear personal API keys don't expire on their own, so rotate them on a schedule.
 - **Adjust access** by editing the OAuth application's scopes, or by changing the workspace memberships of the account that owns the personal API key.
+
+</Tab>
+
+</Tabs>

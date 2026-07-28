@@ -1,18 +1,148 @@
 ---
 title: Set up the GitHub MCP server
-description: Connect GitHub to C1 with per-user OAuth or a personal access token, then register the GitHub MCP server and govern its tools.
+description: Connect GitHub to C1 through the GitHub API or GitHub's own hosted MCP server, then register the server and govern its tools.
 og:title: Set up the GitHub MCP server
-og:description: Connect GitHub to C1 with per-user OAuth or a personal access token, then register the GitHub MCP server and govern its tools.
+og:description: Connect GitHub to C1 through the GitHub API or GitHub's own hosted MCP server, then register the server and govern its tools.
 sidebarTitle: GitHub
 ---
 
-{/* Editor Refresh: 2026-06-11 */}
+{/* Editor Refresh: 2026-07-24 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-The GitHub MCP server lets you govern access to GitHub — repositories, pull requests, issues, Actions, and organization data — as tools your AI clients can call through C1.
+C1 can govern GitHub access two ways. Both let your AI clients read from and act on GitHub through governed MCP tools, but they come from different places and appear as two separate entries in your MCP server catalog:
+
+- **GitHub MCP** — listed as plain **GitHub** in your catalog. C1 registers GitHub's own hosted MCP server (`api.githubcopilot.com`) as a downstream server C1 governs. GitHub doesn't support dynamic client registration (DCR), so authentication is per-user OAuth through a GitHub OAuth App you register once, or a shared personal access token. Tool calls run with the connected user's granted OAuth scopes (or the token's permissions), against GitHub's own broader tool set — including cross-item search, discussions, and security alerts.
+- **GitHub API** — C1 hosts its own MCP server that translates GitHub's REST API into tools. You choose between per-user OAuth or a shared personal access token, and access follows the OAuth app's requested scopes or the token's repository permissions.
+
+| | GitHub MCP | GitHub API |
+| :--- | :--- | :--- |
+| **Who hosts the MCP server** | GitHub | C1 |
+| **Authentication** | Per-user OAuth (no dynamic client registration — requires a GitHub OAuth App), or a personal access token | Per-user OAuth (requires a GitHub OAuth App), or a personal access token |
+| **Access scoping** | The OAuth scopes granted at authorization, or the personal access token's permissions | The OAuth app's requested scopes, or the personal access token's repository permissions |
+| **Tool surface** | GitHub's own tool set: repositories, issues, pull requests, Actions workflows, discussions, security alerts, and notifications | Repositories, pull requests, issues, Actions, and organization data, mapped to GitHub API endpoints |
+| **Setup effort** | Register a GitHub OAuth App (or generate a token), then register in C1 | Register a GitHub OAuth App (or generate a token), then register in C1 |
+
+Use the native **GitHub MCP** option (listed as plain **GitHub** in your catalog) if you want GitHub's own broader, agentic tool set, including cross-item search, discussions, and security alerts. Use **GitHub API** if you want C1's own curated tool surface mapped directly to GitHub API endpoints.
+
+<Tabs>
+
+<Tab title="GitHub MCP">
+
+C1 registers as a client of GitHub's own hosted MCP server ([GitHub MCP Server](https://github.com/github/github-mcp-server)) rather than translating GitHub's REST API itself. Your users' AI clients still only ever see C1-governed MCP tools, but C1 proxies each tool call straight through to `api.githubcopilot.com` under the connected user's authorized session, then returns the result. The tools available are exactly the ones GitHub's hosted MCP server exposes — C1 doesn't reshape or add to them.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- GitHub doesn't support dynamic client registration (DCR) for this server, so — unlike some native MCP integrations — there's a one-time setup step in GitHub first: register a GitHub OAuth App and provide its client ID and secret. See **Set up per-user OAuth** below.
+- If you'd rather not register an OAuth App, this option also accepts a GitHub personal access token as a shared bearer credential. See **Use a personal access token instead** below.
+
+<Note>
+In your MCP server catalog, this option is listed as **GitHub** — distinct from the **GitHub API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Set up per-user OAuth
+
+Per-user OAuth is the recommended way to connect — each user authorizes individually, and every tool call runs under their own GitHub identity and permissions. Unlike C1's other native MCP integrations, GitHub doesn't support dynamic client registration for this server, so you need to register a GitHub OAuth App yourself before C1 can prompt users to connect.
+
+First, create a GitHub OAuth App that users will authorize through:
+
+<Steps>
+<Step>
+In GitHub, go to **Settings** > **Developer settings** > **OAuth Apps** and select **New OAuth App** (or **Register a new application** if this is your first one). See GitHub's [guide to creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+</Step>
+<Step>
+Fill in the registration form:
+
+- **Application name** — a recognizable name such as `C1`.
+- **Homepage URL** — your C1 tenant URL, or `https://www.c1.ai`.
+- **Authorization callback URL** — set this exactly to `https://accounts.conductor.one/auth/callback`. GitHub OAuth Apps allow only one callback URL, unlike GitHub Apps.
+</Step>
+<Step>
+Select **Register application**, then copy the **Client ID**. Select **Generate a new client secret** and copy the secret — GitHub shows it only once. Store it securely, and if it's ever exposed, generate a new one, update C1, then delete the old one ([best practices for creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/best-practices-for-creating-an-oauth-app)).
+</Step>
+</Steps>
+
+With your OAuth app ready, register the server and provide its credentials:
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enter your OAuth app's **client ID** and **client secret**.
+</Step>
+<Step>
+Save your changes. The first time a user calls a GitHub tool from their AI client, they're redirected to GitHub to sign in (if they aren't already) and approve the requested scopes, then returned to C1 ([authorizing OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)).
+</Step>
+</Steps>
+
+## What access is granted
+
+When a user authorizes, C1 requests these scopes on GitHub's consent screen ([scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)):
+
+- `repo` — full read/write access to public and private repositories, including code, commit statuses, invitations, collaborators, deployment statuses, and webhooks.
+- `read:org` — read-only access to organization membership, organization projects, and team membership.
+- `read:user` and `user:email` — read access to the user's profile data and email addresses.
+- `read:packages` and `write:packages` — download/install and upload/publish access to GitHub Packages.
+- `read:project` and `project` — read-only and read/write access to user and organization projects.
+- `gist` — write access to gists.
+- `notifications` — read access to the user's notifications, plus mark-as-read and subscription management.
+- `workflow` — the ability to add and update GitHub Actions workflow files.
+- `codespace` — the ability to create and manage codespaces.
+
+Tool calls then run with the connected user's own GitHub permissions across whichever of these scopes they hold — for example, a user without `write:packages` can't publish a package through a GitHub tool even though C1 requested that scope.
+
+## Use a personal access token instead
+
+If you'd rather not register an OAuth App, GitHub's hosted MCP server also accepts a personal access token (PAT) — classic or fine-grained — as a shared bearer credential that authenticates every user as one identity.
+
+<Steps>
+<Step>
+In GitHub, generate a token under **Settings** > **Developer settings** > **Personal access tokens**. GitHub recommends **fine-grained tokens**, which you can scope to specific repositories and permissions ([types of personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#types-of-personal-access-tokens)); a classic token works too, but it can reach every repository you can access.
+</Step>
+<Step>
+Copy the token — GitHub shows it only once.
+</Step>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste the token. C1 sends it as `Authorization: Bearer <token>` on every request.
+</Step>
+</Steps>
+
+## How GitHub MCP credentials are shared
+
+- **Per-user OAuth.** Each user authorizes with their own GitHub account, so tool calls run under that user's GitHub identity and inherit only the scopes they granted. GitHub attributes each action to the individual user.
+- **Personal access token.** Every user's tool calls use the one token you provided, so GitHub sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against GitHub's hosted MCP server. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a GitHub tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized. You confirm access when an approved user successfully calls a GitHub tool from their AI client.
+</Note>
+
+## Manage access to GitHub MCP
+
+- **Rotate the OAuth client secret** on your OAuth app's settings page in GitHub (**Settings** > **Developer settings** > **OAuth Apps**), then update the secret on the server's authentication settings in C1.
+- **Rotate a personal access token** by generating a new one in GitHub and updating it in C1. Set an expiration on the token so it rotates on a schedule.
+- **An individual user can revoke their own authorization at any time.** In GitHub, go to **Settings** > **Applications** > **Authorized OAuth Apps**, then select **Revoke** next to C1 ([reviewing your authorized OAuth apps](https://docs.github.com/en/apps/oauth-apps/using-oauth-apps/reviewing-your-authorized-oauth-apps)).
+- **An organization owner can restrict or revoke OAuth App access org-wide** if the organization has third-party application access restrictions enabled ([about OAuth App access restrictions](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/about-oauth-app-access-restrictions)).
+
+</Tab>
+
+<Tab title="GitHub API">
+
+C1 hosts the GitHub MCP server, so your users' AI clients only ever see MCP tools — they never call GitHub directly. When an AI client calls one of these tools, C1 makes the matching request to the GitHub API using the credentials you configure here, then returns the result to the AI client. The credentials you set up below are what C1 uses to call GitHub on your users' behalf.
 
 GitHub supports two ways to authenticate, and you choose one when you register the server:
 
@@ -21,12 +151,6 @@ GitHub supports two ways to authenticate, and you choose one when you register t
 
 For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
-## How C1 connects to GitHub
-
-C1 hosts the GitHub MCP server, so your users' AI clients only ever see MCP tools — they never call GitHub directly. When an AI client calls one of these tools, C1 makes the matching request to the GitHub API using the credentials you configure here, then returns the result to the AI client.
-
-The credentials you set up below are what C1 uses to call GitHub on your users' behalf.
-
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
@@ -34,7 +158,7 @@ The credentials you set up below are what C1 uses to call GitHub on your users' 
 - For a personal access token, you need the GitHub account whose access the token should carry.
 
 <Note>
-If you don't see **GitHub** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+In your MCP server catalog, this option is listed as **GitHub API** — distinct from the **GitHub** entry, which connects to GitHub's own hosted MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
 ## Option 1: Set up per-user OAuth
@@ -70,7 +194,7 @@ With your OAuth app ready, register the server and provide its credentials.
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth app's **client ID** and **client secret**.
@@ -86,7 +210,7 @@ A personal access token authenticates every user as one shared GitHub identity. 
 
 ### Create a personal access token
 
-Generate a fine-grained personal access token in GitHub for C1 to authenticate with. For the full walkthrough, see GitHub's [guide to managing personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+Generate a fine-grained personal access token in GitHub for C1 to authenticate with. For the full walkthrough, see GitHub's [guide to creating a fine-grained personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token).
 
 <Steps>
 <Step>
@@ -111,7 +235,7 @@ With your token ready, register the server and provide it as the credential.
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **GitHub API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your personal access token.
@@ -121,7 +245,7 @@ Save your changes. C1 starts a sync that discovers the tools the GitHub server e
 </Step>
 </Steps>
 
-## How GitHub credentials are shared
+## How GitHub API credentials are shared
 
 How GitHub sees your users' activity depends on the method you chose:
 
@@ -147,3 +271,7 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 - **Rotate the OAuth client secret** in your GitHub OAuth app under **Settings** > **Developer settings** > **OAuth Apps**, then update the secret on the server's authentication settings in C1.
 - **Rotate a personal access token** by generating a new one in GitHub and updating it in C1. Set an expiration on the token so it rotates on a schedule.
 - **Adjust access** by editing the OAuth app's scopes or the token's repository permissions in GitHub.
+
+</Tab>
+
+</Tabs>

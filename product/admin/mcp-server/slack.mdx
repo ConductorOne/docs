@@ -1,16 +1,170 @@
 ---
 title: Set up the Slack MCP server
-description: Connect Slack to C1 with per-user OAuth, then register the Slack MCP server and govern the tools it exposes.
+description: Connect Slack to C1 through the Slack API or Slack's own hosted MCP server, then register the server and govern its tools.
 og:title: Set up the Slack MCP server
-og:description: Connect Slack to C1 with per-user OAuth, then register the Slack MCP server and govern the tools it exposes.
+og:description: Connect Slack to C1 through the Slack API or Slack's own hosted MCP server, then register the server and govern its tools.
 sidebarTitle: Slack
 ---
 
-{/* Editor Refresh: 2026-06-11 */}
+{/* Editor Refresh: 2026-07-24 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
+
+C1 can govern Slack access two ways. Both let your AI clients read from and act on Slack through governed MCP tools, but they come from different places and appear as two separate entries in your MCP server catalog:
+
+- **Slack MCP** — listed as plain **Slack** in your catalog. C1 registers Slack's own hosted MCP server (`mcp.slack.com`) as a downstream server C1 governs. Authentication uses Slack's dedicated user-token OAuth flow: an admin registers a Slack app and provides its client ID and secret to C1 (there's no dynamic client registration), then each user authorizes individually. A static Slack user token is also supported as a bearer fallback. Tool calls run with the connected user's **User Token Scopes** — never a bot identity.
+- **Slack API** — C1 hosts its own MCP server that translates the Slack API into tools. You authorize with per-user OAuth using a Slack app's client ID and secret, and scope access with the **User Token Scopes** you configure.
+
+| | Slack MCP | Slack API |
+| :--- | :--- | :--- |
+| **Who hosts the MCP server** | Slack | C1 |
+| **Authentication** | Slack's user-token OAuth flow via a Slack app you register (client ID/secret; no dynamic client registration) — or a static user token as a bearer fallback | Per-user OAuth via a Slack app's client ID/secret |
+| **Access scoping** | The **User Token Scopes** you request on the Slack app | The **User Token Scopes** you configure |
+| **Tool surface** | Slack's own tool set exposed by its hosted MCP server | Channels, messages, users, files, and search, mapped to Slack API endpoints |
+| **Setup effort** | Create a Slack app, turn on **Enable MCP**, configure the user-token OAuth flow (or a static token), then register in C1 | Create a Slack app, configure user token scopes, then register in C1 |
+
+Use the native **Slack MCP** option (listed as plain **Slack** in your catalog) if you want Slack's own hosted tool set and can register a Slack app for its user-token OAuth flow (or a static token). Use **Slack API** if you'd rather use C1's own Slack integration with the scopes-based setup you're already familiar with.
+
+<Tabs>
+
+<Tab title="Slack MCP">
+
+C1 registers as a client of Slack's own hosted MCP server ([Slack MCP server](https://docs.slack.dev/ai/slack-mcp-server)) rather than translating the Slack API itself. Your users' AI clients still only ever see C1-governed MCP tools, but C1 proxies each tool call straight through to `mcp.slack.com` under the connected user's authorized session (or a configured static token), then returns the result. The tools available are exactly the ones Slack's own MCP server exposes — C1 doesn't reshape or add to them.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- Permission to create and configure a Slack app. Unlike some MCP servers, Slack's hosted MCP server doesn't support dynamic client registration, so you register an app and provide its client ID and secret to C1 before anyone can authorize.
+- Only a **directory-published** or **internal** Slack app can use the hosted MCP server — see Step 3 below.
+
+<Note>
+In your MCP server catalog, this option is listed as **Slack** — distinct from the **Slack API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Create a Slack app for MCP
+
+Before configuring authentication, register a Slack app and turn on its MCP support. This step comes before any OAuth configuration — Slack's hosted MCP server rejects an app that hasn't enabled it.
+
+<Steps>
+<Step>
+Sign in at [api.slack.com/apps](https://api.slack.com/apps) and select **Create New App** > **From scratch**. Enter an app name such as `C1`, pick a workspace to develop in, then select **Create App**.
+</Step>
+<Step>
+In the app settings sidebar, open **Agents & AI Apps**. Under **Model Context Protocol**, turn on the **Enable MCP** toggle. Without this, Slack's hosted MCP server rejects the app.
+</Step>
+<Step>
+Make the app eligible to use the MCP server: either submit it to the Slack Marketplace (directory-published), or have a workspace admin install it as an internal app. Keep the app ID fixed once you've registered it in C1, since C1's connection pins to it.
+</Step>
+</Steps>
+
+## Slack MCP scopes
+
+Slack's hosted MCP server authenticates with a Slack **user token** (`xoxp-`), never a bot token, so every scope below is a **User Token Scope** — add them on the app's **OAuth & Permissions** page and leave **Bot Token Scopes** empty.
+
+Start with the read scopes for browsing channels, messages, users, canvases, files, and search:
+
+`search:read.public`, `search:read.private`, `search:read.mpim`, `search:read.im`, `search:read.files`, `search:read.users`, `channels:read`, `channels:history`, `groups:read`, `groups:history`, `mpim:read`, `mpim:history`, `im:history`, `canvases:read`, `users:read`, `users:read.email`, `reactions:read`, `emoji:read`, `files:read`
+
+Add the write scopes only where a tool needs them:
+
+`chat:write`, `canvases:write`, `reactions:write`, `channels:write`, `groups:write`, `im:write`, `mpim:write`
+
+<Note>
+Scope changes take effect the next time a user connects (or the next call using a static token). If you add a scope after users have already connected, each user must reconnect their Slack account — or you must reissue the static token — to grant it.
+</Note>
+
+## Option 1: Set up the user-token OAuth flow (recommended)
+
+With per-user OAuth, each person authorizes individually and tool calls run under that user's own Slack identity. Because the MCP server issues user tokens rather than bot tokens, C1 uses Slack's dedicated user-token OAuth endpoints — authorizing at `slack.com/oauth/v2_user/authorize` and exchanging the code at `slack.com/api/oauth.v2.user.access` — rather than Slack's classic bot-token authorize and token pair. There's no dynamic client registration for this flow: you register the Slack app from the previous step, then provide its client ID and secret to C1.
+
+<Steps>
+<Step>
+In the app settings, open **OAuth & Permissions**. Under **Redirect URLs**, select **Add New Redirect URL** and enter exactly:
+
+```
+https://accounts.conductor.one/auth/callback
+```
+
+Select **Add**, then **Save URLs**.
+</Step>
+<Step>
+Still on **OAuth & Permissions**, scroll to **Scopes** and add the **User Token Scopes** the tools need — see [Slack MCP scopes](#slack-mcp-scopes) above.
+</Step>
+<Step>
+In the left sidebar, open **Basic Information**. Under **App Credentials**, copy the **Client ID**, then reveal and copy the **Client Secret**.
+</Step>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Slack** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enter your app's **client ID** and **client secret**, plus the scopes you configured.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Slack tool from their AI client, they're redirected to Slack to authorize (if they aren't already), then returned to C1.
+</Step>
+</Steps>
+
+## Option 2: Use a static user token (Bearer)
+
+Instead of per-user OAuth, you can connect with a single pre-issued Slack user token. Every tool call then runs as that one token's identity rather than each individual user's.
+
+<Steps>
+<Step>
+In the Slack app's **OAuth & Permissions** page, add the same **User Token Scopes** as in [Slack MCP scopes](#slack-mcp-scopes) above.
+</Step>
+<Step>
+Install the app to the workspace, then copy the **User OAuth Token** (`xoxp-…`) from that page.
+</Step>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Slack** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste the user token.
+</Step>
+<Step>
+Save your changes. C1 sends the token as `Authorization: Bearer <token>` on every call to Slack's MCP server.
+</Step>
+</Steps>
+
+The token must carry every scope the tools use; if it's missing a scope, the corresponding tool call fails. Rotate the token in Slack if it's ever exposed.
+
+## What access is granted
+
+Tool calls run with whichever **User Token Scopes** you granted — either the connected user's own scopes (per-user OAuth) or the static token's scopes (bearer). This is narrower than a blanket grant of everything the user or token holder can do in Slack: a tool call only succeeds if the relevant scope was requested and approved.
+
+## How Slack MCP credentials are shared
+
+How Slack sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth (recommended).** Each user authorizes with their own Slack account, so tool calls run under that user's Slack user-token identity, scoped to the User Token Scopes you configured. Slack attributes each action to the individual user.
+- **Static user token (Bearer).** Every user's tool calls use the one token you provided, so Slack sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Slack's MCP server. Discovered tools appear on the server's **Tools** tab and are exactly the ones Slack's own MCP server exposes.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Slack tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized (or that a static token is valid). You confirm access when an approved user successfully calls a Slack tool from their AI client.
+</Note>
+
+## Manage access to Slack MCP
+
+- **Rotate the client secret** on the app's **Basic Information** page under **App Credentials**, then update the secret on the server's authentication settings in C1.
+- **Rotate a static user token** by reinstalling the app in Slack to regenerate the **User OAuth Token**, then update it in C1.
+- **Revoke access** by uninstalling the Slack app from the workspace on **OAuth & Permissions**, or by turning off the app's **Enable MCP** toggle.
+- **Adjust access** by editing the app's **User Token Scopes** on the **OAuth & Permissions** page in Slack.
+
+</Tab>
+
+<Tab title="Slack API">
 
 The Slack MCP server lets you govern access to Slack — channels, messages, users, files, and search — as tools your AI clients can call through C1.
 
@@ -28,7 +182,7 @@ The credentials you set up below are what C1 uses to call Slack on your users' b
 - Permission to create and configure a Slack app. See Slack's [guide to installing apps with OAuth](https://docs.slack.dev/authentication/installing-with-oauth/).
 
 <Note>
-If you don't see **Slack** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+In your MCP server catalog, this option is listed as **Slack API** — distinct from the **Slack** entry, which connects to Slack's own hosted MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
 ## Create a Slack app
@@ -37,7 +191,7 @@ With per-user OAuth, you register one Slack app and each user authorizes individ
 
 <Steps>
 <Step>
-Sign in to the Slack apps dashboard and select **Create New App** > **From scratch**. Enter an app name such as `C1`, pick a workspace to develop in, then select **Create App**. For detail on the OAuth flow, see Slack's [guide to installing apps with OAuth](https://docs.slack.dev/authentication/installing-with-oauth/).
+Sign in to the Slack apps dashboard and select **Create New App** > **From scratch**. Enter an app name such as `C1`, pick a workspace to develop in, then select **Create App**. For detail on the OAuth flow, see Slack's [guide to installing apps with OAuth](https://docs.slack.dev/authentication/installing-with-oauth/#how).
 </Step>
 <Step>
 In the app's left sidebar, open **OAuth & Permissions**. Under **Redirect URLs**, select **Add New Redirect URL** and enter exactly:
@@ -95,7 +249,7 @@ Register the server in C1 and connect it to the Slack app you created.
 
 <Steps>
 <Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Slack** from the catalog.
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Slack API** from the catalog.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your app's **client ID** and **client secret**, plus the scopes you configured (see [Slack scopes](#slack-scopes)).
@@ -121,3 +275,7 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 - **Rotate the client secret** on the app's **Basic Information** page under **App Credentials**, then update the secret on the server's authentication settings in C1.
 - **Adjust access** by editing the app's **User Token Scopes** on the **OAuth & Permissions** page in Slack.
+
+</Tab>
+
+</Tabs>
