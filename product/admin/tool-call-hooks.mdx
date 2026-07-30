@@ -75,17 +75,37 @@ C1 ships eleven pre-built hook patterns. Each one is a self-contained handler wi
 
 | Pattern | Event | What it does |
 | :--- | :--- | :--- |
-| **PII field redaction** | Post | Replaces values in JSON output fields whose names match a configurable list (defaults: `ssn`, `social_security_number`, `date_of_birth`, `dob`, `salary`, `bank_account`, `routing_number`) with a placeholder string (default `***REDACTED***`). A configured field list **replaces** the defaults — it does not extend them. |
-| **Credit card blocking** | Post | Scans tool output for Luhn-valid credit card numbers and denies the response if any are found. |
-| **Query scope limit** | Pre | Caps numeric input fields (defaults: `limit`, `page_size`, `count`, `max_results`) at a configured maximum (default 100) to prevent oversized queries. A configured field list **replaces** the defaults — it does not extend them. |
-| **Write authorization** | Pre | Denies tool calls whose classification is in a blocked list — Write, Destructive, Sensitive, Dangerous (Read is intentionally not offered) — optionally only outside a configured business-hours window (timezone, start/end times, days of the week). |
-| **Sensitive file guard** | Pre | Denies tool calls that reference sensitive file paths or directories, via two separate config lists: `blocked_patterns` (defaults: `.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `id_rsa`, `*.pfx`) and `blocked_directories` (defaults: `.ssh`, `.aws`, `.config`). |
-| **Tool output size guard** | Post | Denies output exceeding a configurable byte cap (default 131072 bytes / 128 KB). |
-| **Secrets masking** | Post | Redacts secret-shaped values (AWS keys, bearer tokens, JWTs, private keys, Slack/GitHub tokens) from output. |
-| **Link filter** | Post, Pre-output | Redacts or annotates URLs and markdown images whose host is not in an allowlist; mitigates markdown-image exfiltration. Configurable action (Redact/Annotate) and an option to also act on images. |
-| **Encoded content guard** | Pre | Denies input containing long base64 blobs, long hex runs, or invisible/zero-width unicode used to smuggle instructions. |
-| **Prompt injection scan** | Post | Scores output for prompt injection using the AI-governance judge and acts at or above a configured threshold. |
-| **Block output** | Pre-output | Withholds the in-flight response chunk. Configurable message and one or more output surfaces (Slack, Web). |
+| **PII field redaction** | Post | Replaces values in output fields whose names match a configurable list with a placeholder string |
+| **Credit card blocking** | Post | Denies the response if output contains a Luhn-valid credit card number |
+| **Query scope limit** | Pre | Caps numeric input fields at a maximum, to prevent oversized queries |
+| **Write authorization** | Pre | Denies calls whose classification is in a blocked list, optionally only outside business hours |
+| **Sensitive file guard** | Pre | Denies calls that reference sensitive file paths or directories |
+| **Tool output size guard** | Post | Denies output exceeding a byte cap |
+| **Secrets masking** | Post | Redacts secret-shaped values from output — AWS keys, bearer tokens, JWTs, private keys, Slack/GitHub tokens |
+| **Link filter** | Post, Pre-output | Redacts or annotates URLs and markdown images whose host is not allowlisted, mitigating markdown-image exfiltration |
+| **Encoded content guard** | Pre | Denies input containing long base64 blobs, long hex runs, or invisible unicode used to smuggle instructions |
+| **Prompt injection scan** | Post | Scores output for prompt injection using the AI-governance judge and acts at or above a threshold |
+| **Block output** | Pre-output | Withholds the in-flight response chunk |
+
+### Pattern configuration and defaults
+
+<Warning>
+Where a pattern takes a list, a value you configure **replaces** the default list — it does not extend it. If you add one field name to **PII field redaction**, the built-in field names stop applying unless you re-include them.
+</Warning>
+
+| Pattern | Configuration | Defaults |
+| :--- | :--- | :--- |
+| **PII field redaction** | Fields to redact; replacement text | `ssn`, `social_security_number`, `date_of_birth`, `dob`, `salary`, `bank_account`, `routing_number`; replacement `***REDACTED***` |
+| **Credit card blocking** | None | — |
+| **Query scope limit** | Fields to cap; maximum value | `limit`, `page_size`, `count`, `max_results`; maximum `100` |
+| **Write authorization** | Blocked classifications (at least one); optional business-hours window with timezone, start/end times, and days | Read is not offered as a blockable classification |
+| **Sensitive file guard** | Two separate lists: blocked file patterns, and blocked directories | Patterns `.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `id_rsa`, `*.pfx`; directories `.ssh`, `.aws`, `.config` |
+| **Tool output size guard** | Maximum output size in bytes | `131072` (128 KB) |
+| **Secrets masking** | None | — |
+| **Link filter** | Allowed hosts; action (Redact or Annotate); whether to also act on images | Action defaults to Redact |
+| **Encoded content guard** | None | — |
+| **Prompt injection scan** | Risk threshold at which to act | — |
+| **Block output** | Message; output surfaces (at least one of Slack, Web) | — |
 
 ## Custom function hooks
 
