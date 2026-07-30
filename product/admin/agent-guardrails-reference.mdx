@@ -39,7 +39,7 @@ A binding is the only thing that activates a guardrail. Creating a guardrail, au
 
 | Surface | Governs | Bind at | Available CEL variables |
 | :--- | :--- | :--- | :--- |
-| **Agent** | C1AI agents | **AI > Guardrails** → **Default C1AI Guardrail policy**, or an agent's **Guardrails** tab | `ctx.private_data`, `ctx.untrusted_content`, `ctx.exfiltration`, `ctx.tool_name`, `ctx.agent_id` |
+| **Agent** | C1AI agents | **AI > Guardrails** → **Default C1AI Guardrail policy**, or an agent's **Guardrails** tab | `ctx.private_data`, `ctx.untrusted_content`, `ctx.exfiltration`, `ctx.tool_name` |
 | **Gateway** | External AI clients through the C1 Gateway | **AI > C1 Gateway > Settings** → **Default C1 Gateway Guardrail policy** | `ctx.private_data`, `ctx.exfiltration`, `ctx.tool_name` |
 
 A guardrail marked **Any surface** can bind to either.
@@ -47,7 +47,7 @@ A guardrail marked **Any surface** can bind to either.
 Binding resolution on the agent surface tries the specific agent's binding first, then falls back to the tenant default agent binding. The gateway surface resolves a single tenant-wide binding — there is no per-client or per-connection gateway granularity.
 
 <Note>
-`ctx.untrusted_content` and `ctx.agent_id` are **not available on the Gateway surface**. The untrusted-content score comes from the judge, which runs inside a C1AI session; there is no equivalent for an external client. A gateway rule written against `ctx.untrusted_content` will not behave as intended.
+`ctx.untrusted_content` is **not available on the Gateway surface**. The untrusted-content score comes from the judge, which runs inside a C1AI session; there is no equivalent for an external client. A gateway rule written against `ctx.untrusted_content` will not behave as intended.
 </Note>
 
 If no binding resolves for a surface — none configured, or it points at a deleted guardrail — that surface falls back to an empty policy with no rules. It does **not** fall back to another surface's guardrail.
@@ -59,15 +59,15 @@ If no binding resolves for a surface — none configured, or it points at a dele
 | **Name** | Required. Up to 128 characters. |
 | **Description** | Optional. Up to 1024 characters. |
 | **Applies to** | **Agent**, **Gateway**, or **Any surface**. Determines which variables rules can read. |
-| **Managed by** | **Tenant** for guardrails you own. |
+| **Managed by** | **Tenant** for guardrails you author — freely editable. **System** marks a C1-curated guardrail, which is read-only. |
 
 ## Guardrail rule fields
 
 | Field | Notes |
 | :--- | :--- |
-| **Name** | Required. Up to 128 characters. Appears in audit records. |
+| **Name** | Required. Up to 128 characters. |
 | **Description** | Optional. Up to 1024 characters. |
-| **Condition (CEL)** | Optional. Empty matches **every** tool call. |
+| **Condition (CEL)** | Optional. Empty matches **every** tool call. Up to 32,768 bytes. |
 | **Action** | **Block** or **Evaluate hooks**. |
 | **Pre-tool hooks** | Hooks evaluated before the tool call. Hidden when Action is Block. |
 | **Post-tool hooks** | Hooks evaluated after the tool call. Hidden when Action is Block. |
@@ -76,7 +76,11 @@ If no binding resolves for a surface — none configured, or it points at a dele
 | **Mode** | **Enforce**, **Observe**, or **Disabled**. |
 | **Deny reason** | Optional. Up to 256 characters. Shown to the caller on denial. |
 
-Only hooks and tool gates with **Managed by guardrails** enabled are selectable in the hook and gate pickers.
+Only hooks and tool gates with **Managed by guardrails** enabled are selectable in the hook and gate pickers, and each picker only offers hooks whose event matches it.
+
+<Note>
+Audit records identify a matched rule by its **ID**, not its name. Renaming a rule doesn't change what earlier records point at — but it also means a rule's name isn't what you search on when tracing a decision.
+</Note>
 
 ### Actions
 
@@ -101,7 +105,6 @@ Only hooks and tool gates with **Managed by guardrails** enabled are selectable 
 | `ctx.untrusted_content` | level | Agent only | Prompt-injection risk, from the judge |
 | `ctx.exfiltration` | level | Both | Capability of this call to move data out |
 | `ctx.tool_name` | string | Both | The tool being called |
-| `ctx.agent_id` | string | Agent only | The acting agent |
 
 Levels are `LOW`, `MEDIUM`, and `HIGH`, ordered — they compare as 0, 1, and 2 respectively, so `>=` works as you'd expect and the numeric form is equivalent.
 
@@ -131,9 +134,52 @@ A rule whose CEL expression fails to evaluate is **skipped**, and the cascade co
 5. **The tool executes.**
 6. Run **post-tool hooks**, same union rule. A denial blocks the result from reaching the caller.
 
-**Pre-output hooks** are a separate path: they gate a chunk of the assistant's generated response as it's delivered, with no tool call involved.
-
 If no rule matches, the call proceeds with no guardrail-curated gates or hooks — unmanaged gates and hooks still apply.
+
+Pre-output hooks are not part of this walk. See [Pre-output hooks](#pre-output-hooks).
+
+## Pre-output hooks
+
+Pre-output hooks run when a chunk of the assistant's generated response is about to be delivered. No tool call is involved, and the stage differs from the tool-call stages in four ways that each have a distinct failure mode.
+
+### It is a separate cascade walk with an eligibility test
+
+The cascade is walked again for the outgoing response, but a rule is only **eligible** to win if both of these hold:
+
+- its action is **Evaluate hooks**, and
+- its **Pre-output hooks** list is non-empty.
+
+An ineligible rule is skipped and the walk **continues to the next rule**, even if its condition matched. Two consequences:
+
+- A **Block**-action rule can never win on this path. It curates no hook lists, so it is structurally excluded — a Block rule does not block outgoing responses.
+- An **Evaluate hooks** rule that curates only tool gates or pre/post-tool hooks is also skipped here, so a later rule can win the response even though the earlier rule won the tool call.
+
+Mode works exactly as it does on the tool-call path: **Disabled** and unset are skipped, **Observe** logs a would-have-fired and falls through, **Enforce** can win. If no rule is eligible, the response is delivered unfiltered.
+
+### Only two built-in patterns run here
+
+**Block output** and **Link filter**. Every other built-in pattern is restricted to the tool-call events, and C1 rejects an incompatible event when you save the hook.
+
+<Warning>
+**Custom function hooks cannot run on this stage.** Saving a function hook with the Pre-output event is rejected. The stage is also fail-closed, so a function hook that did reach it would withhold every matching response rather than being ignored.
+</Warning>
+
+### The filter variables are different, and one name is a trap
+
+| Variable | Values |
+| :--- | :--- |
+| `ctx.untrusted_class` | The strings `"LOW"`, `"MEDIUM"`, `"HIGH"` |
+| `ctx.surface` | `"slack"` or `"web"` |
+
+`ctx.tool_name` is **unset** here.
+
+<Warning>
+`ctx.untrusted_class` (pre-output hook filter) and `ctx.untrusted_content` (guardrail rule) are the same underlying risk score exposed under different names *and* different types — an uppercase string versus an ordered level. A hook filter needs `ctx.untrusted_class == "HIGH"`; a rule needs `ctx.untrusted_content == HIGH`. Writing the rule form in a hook filter fails to evaluate, and a failed hook filter **denies** — so the mistake withholds responses rather than erroring visibly.
+</Warning>
+
+### A Block output hook with no surfaces is inert
+
+An empty surface list means no surface at all, not all of them. Select **Slack**, **Web**, or both, or the hook never fires. See [Tool call hooks](/product/admin/tool-call-hooks#built-in-patterns).
 
 ## Tool gate fields
 
@@ -155,14 +201,23 @@ A tool gate filter is evaluated against a different variable set than a guardrai
 | Variable | Notes |
 | :--- | :--- |
 | `ctx.tool_name` | The tool being called |
-| `ctx.tool_kind` | The kind of tool |
+| `ctx.tool_kind` | What kind of tool it is — see below |
 | `ctx.tool_input` | The call's input arguments |
 | `ctx.app_id` | Target app |
 | `ctx.connector_id` | Target connector |
 | `ctx.app_entitlement_id` | Target entitlement |
-| `ctx.caller_kind` | The kind of caller |
+| `ctx.caller_kind` | What kind of caller made the call — see below |
 | `ctx.principal_user_id` | The acting user |
 | `ctx.agent_id` | The acting agent |
+
+`ctx.tool_kind` and `ctx.caller_kind` are **separate vocabularies** — the values are not interchangeable:
+
+| Variable | Values |
+| :--- | :--- |
+| `ctx.tool_kind` | `builtin`, `connector`, `c1_derived`, `unspecified` |
+| `ctx.caller_kind` | `c1aw`, `claw_builtin`, `code_mode`, `connector_manager`, `mcp_gateway`, `unspecified` |
+
+Both fall back to `unspecified` for a value C1 doesn't recognize, so a filter written as an equality test against a specific kind won't match an unrecognized one.
 
 <Note>
 The in-product helper text on the filter field mentions only `ctx.tool_name` and `ctx.tool_input` — the two you'll use most. The rest are available.
@@ -208,7 +263,7 @@ Disabling the judge does not disable rules that read `ctx.untrusted_content` —
 | Rule with a failing CEL expression | Skipped; cascade continues |
 | Hook failure mode | Fail-closed — error, timeout, or filter failure denies the call |
 | Custom function hook timeout | 60 seconds |
-| Gate filter variables | `ctx.tool_name`, `ctx.tool_input` |
+| Gate filter variables | Nine — see [Gate filter variables](#gate-filter-variables). Distinct from the rule variable set. |
 | Gate ordering | Enabled first, then priority ascending, then oldest first |
 | Priority range | 0–1000 for gates and hooks; lower first |
 | Tenant defaults | No guardrail, binding, or rule is created for a new tenant |

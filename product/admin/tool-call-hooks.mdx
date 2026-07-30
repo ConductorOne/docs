@@ -47,7 +47,7 @@ Fill out the form:
 | **Description** | Optional. Up to 2048 characters. |
 | **Hook type** | **Built-in pattern** for one of the patterns below, or **Custom function** to invoke a [function](/product/admin/functions). |
 | **Event** | **Pre-tool use**, **Post-tool use**, or **Pre-output**. Some built-in patterns only support one event. |
-| **Filter** | Optional CEL expression. Empty matches all calls for the event. Available variables depend on the event: for **Pre-tool use** and **Post-tool use**, `ctx.tool_name` (example: `ctx.tool_name.startsWith("github_")`); for **Pre-output**, `ctx.tool_name` is unset — use `ctx.untrusted_class` or `ctx.surface` (`"slack"` or `"web"`) instead. |
+| **Filter** | Optional CEL expression. Empty matches all calls for the event. Available variables depend on the event — see [Filter variables by event](#filter-variables-by-event). |
 | **Priority** | 0–1000. Lower runs first. |
 | **Managed by guardrails** | Off by default. See [Managed by guardrails](#managed-by-guardrails) below. |
 | **Enabled** | Toggle on to activate the hook immediately on save. |
@@ -59,6 +59,27 @@ If you selected **Built-in pattern**, choose the pattern and configure its optio
 Click **Save**.
 </Step>
 </Steps>
+
+### Filter variables by event
+
+A filter expression only sees the variables available for its event. Referencing one that isn't set for that event makes the expression fail to evaluate, which **denies the call** — see the fail-closed note above.
+
+| Event | Variables |
+| :--- | :--- |
+| **Pre-tool use**, **Post-tool use** | `ctx.tool_name` — for example, `ctx.tool_name.startsWith("github_")` |
+| **Pre-output** | `ctx.untrusted_class`, one of the strings `"LOW"`, `"MEDIUM"`, `"HIGH"`; and `ctx.surface`, `"slack"` or `"web"`. `ctx.tool_name` is **unset** — no tool call is involved. |
+
+<Warning>
+`ctx.untrusted_class` (a hook filter, comparing **strings**) and `ctx.untrusted_content` (a [guardrail rule](/product/admin/agent-guardrails-reference#cel-variables) variable, comparing **ordered levels**) carry the same underlying risk score under two different names and two different types. In a pre-output hook filter write `ctx.untrusted_class == "HIGH"`; in a guardrail rule write `ctx.untrusted_content == HIGH`. Using the rule form in a hook filter fails to evaluate, and the call is denied.
+</Warning>
+
+### Event and pattern must be compatible
+
+Each built-in pattern is only valid for certain events, and C1 rejects a mismatch when you save the hook. The **Event** column in [Built-in patterns](#built-in-patterns) is the authoritative list.
+
+<Note>
+**Custom function hooks cannot use the Pre-output event.** Saving one is rejected. Only the **Block output** and **Link filter** built-in patterns run on that stage.
+</Note>
 
 ## Managed by guardrails
 
@@ -105,7 +126,11 @@ Where a pattern takes a list, a value you configure **replaces** the default lis
 | **Link filter** | Allowed hosts; action (Redact or Annotate); whether to also act on images | Action defaults to Redact |
 | **Encoded content guard** | None | — |
 | **Prompt injection scan** | Risk threshold at which to act | — |
-| **Block output** | Message; output surfaces (at least one of Slack, Web) | — |
+| **Block output** | Message; output surfaces | Surfaces default to **none** — see the warning below |
+
+<Warning>
+**A Block output hook with no surfaces selected never fires.** An empty surface list means *no* surface, not all of them — deliberately, so that forgetting to choose can't silently apply the hook everywhere. The failure mode is a hook that looks configured and enabled but withholds nothing. Select **Slack**, **Web**, or both.
+</Warning>
 
 ## Custom function hooks
 
