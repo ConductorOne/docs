@@ -1,0 +1,81 @@
+---
+title: How access requests work
+og:title: How access requests work - C1 docs
+og:description: Understand ConductorOne's access request system and find the right starting point for your setup.
+description: Understand ConductorOne's access request system and find the right starting point for your setup.
+sidebarTitle: Overview
+---
+{/* Editor Refresh: 2026-07-29 */}
+
+Access requests let your colleagues request the apps, roles, and permissions they need — and let you control exactly who can see what, and what happens when they submit a request. This page explains how the system works and points you to the right place to get started.
+
+## New here? Start with a guide
+
+If you're setting up access requests for the first time, pick the guide that matches your situation:
+
+<CardGroup cols={2}>
+<Card title="Self-service requests" icon="arrow-right" href="/product/how-to/qs-self-service-requests" horizontal>
+  Make entitlements requestable in about 5 minutes. A good first look at how access requests work in C1.
+</Card>
+<Card title="SSO app requests" icon="arrow-right" href="/product/how-to/qs-sso-app-requests" horizontal>
+  Set up requests for apps managed through Okta, OneLogin, or Microsoft Entra.
+</Card>
+<Card title="AWS JIT access" icon="arrow-right" href="/product/how-to/qs-aws-jit-identity-center" horizontal>
+  Configure just-in-time access to AWS resources via Identity Center.
+</Card>
+<Card title="GCP JIT access" icon="arrow-right" href="/product/how-to/qs-gcp-jit" horizontal>
+  Configure just-in-time access to Google Cloud Platform projects and roles.
+</Card>
+<Card title="On-call access control" icon="arrow-right" href="/product/how-to/qs-on-call-access-control" horizontal>
+  Automatically grant or make available the right access when someone goes on-call.
+</Card>
+</CardGroup>
+
+## How the system works
+
+Configuring access requests involves two independent concerns: **who can request** an entitlement, and **how that request is handled** once submitted. C1 gives you separate tools for each.
+
+### Who can request (catalog visibility)
+
+An entitlement only appears in the access catalog for users who are part of its audience. C1 gives you three tools to control this:
+
+| Tool | What it does |
+| :--- | :--- |
+| **Standard audience** | Sets the default audience for all entitlements in an app — everyone, no one, or users who already have specific access. Set on the app's **Access requests** card. |
+| **Default access profile rule** | Assigns all entitlements of selected resource types to one or more [access profiles](/product/admin/profiles), making them visible and requestable to the users in those profiles. |
+| **Per-entitlement Access controls** | Overrides visibility for a specific entitlement — assign it to different profiles or opt it out of the standard audience. |
+
+### How requests are handled (request settings)
+
+Request settings control what happens after a request is submitted: which approval policy routes it, how long the access lasts, and whether emergency access or a request form applies.
+
+| Tool | What it does |
+| :--- | :--- |
+| **App-level defaults** | Sets the fallback request and revoke policies for all entitlements in the app. Set on the app's **Access requests** card. |
+| **Entitlement configuration rules** | CEL-based rules that match entitlements by their attributes and apply specific request settings. Up to five rules per app, evaluated in priority order — the first match wins. |
+| **Per-entitlement Access controls** | Overrides request settings for a specific entitlement. Enable **Lock configuration** to prevent configuration rules from applying to it. |
+
+## How settings are resolved
+
+When someone requests an entitlement, C1 uses this order of precedence to determine the effective request settings:
+
+1. **Locked entitlement** — if Lock configuration is enabled on the entitlement, its own settings are used and no configuration rules apply.
+2. **Entitlement configuration rules** — the first rule whose condition matches the entitlement provides the request settings. Any fields the rule leaves empty fall back to the entitlement's own settings.
+3. **Entitlement settings** — the settings in the entitlement's Access controls (when not locked, these fill in any gaps left by a matching rule, or apply in full if no rule matches).
+4. **App-level defaults** — the request policy set on the app's **Access requests** card.
+5. **Built-in fallback** — app owner approval.
+
+<Tip>
+When you set an app-level request policy on the **Access requests** card, C1 automatically creates a corresponding entitlement configuration rule called "Access request defaults." You can view and edit it from the app's **Entitlement management** card.
+</Tip>
+
+## Which tool should I use?
+
+| Situation | Recommended approach |
+| :--- | :--- |
+| Most entitlements in an app should follow the same approval policy | Set app-level defaults on the **Access requests** card |
+| All entitlements of a given resource type should be requestable by the same group | Use the **Default access profile rule** |
+| Different entitlement types need different policies (for example, admin roles vs. standard groups) | Create **entitlement configuration rules** |
+| One specific entitlement needs its own settings | Use **per-entitlement Access controls** |
+| A specific entitlement must never be affected by app-level rules | Enable **Lock configuration** on that entitlement |
+| Users need expedited access in urgent situations | Enable **Emergency access** — via a configuration rule or per-entitlement Access controls. See [Emergency access](/product/admin/emergency). |
