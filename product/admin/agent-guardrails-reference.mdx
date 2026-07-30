@@ -133,7 +133,7 @@ A rule whose CEL expression fails to evaluate is **skipped**, and the cascade co
 
 1. **Resolve the binding** for the surface, and walk the guardrail's rules top to bottom, first match wins.
 2. If the matched rule's action is **Block** → deny. **Gates and hooks never run.**
-3. Otherwise run **tool gates**: the gates the rule selected, plus every gate with **Managed by guardrails** off. First match wins by enabled-then-priority-then-age. A gate that requests approval or denies short-circuits here — **hooks and the tool never run.**
+3. Otherwise run **tool gates**: the gates the rule selected, plus every gate with **Managed by guardrails** off. Only the [first matching gate](#only-the-first-matching-gate-runs) runs. A gate that requests approval or denies short-circuits here — **hooks and the tool never run.**
 4. Run **pre-tool hooks**: those the rule selected, plus every pre-tool hook with **Managed by guardrails** off. A denial blocks the call.
 5. **The tool executes.**
 6. Run **post-tool hooks**, same union rule. A denial blocks the result from reaching the caller.
@@ -196,6 +196,22 @@ An empty surface list means no surface at all, not all of them. Select **Slack**
 | **Priority** | 0–1000. Lower matches first. |
 | **Enabled** | Default on. |
 | **Managed by guardrails** | Default **off** — the gate always evaluates. On — only when a rule selects it. |
+
+### Only the first matching gate runs
+
+A rule can select several tool gates, but they are not all applied. The gates are evaluated in order and **the first one whose filter matches wins** — its grant policy is the one that decides the call, and no further gate is consulted.
+
+The order is:
+
+1. Enabled gates first
+2. Then ascending **Priority** (lower first)
+3. Then oldest first
+
+The set evaluated is the gates the matched rule selected **plus** every gate with **Managed by guardrails** off, so an unmanaged gate with a lower priority can win ahead of one your rule explicitly selected.
+
+<Warning>
+This makes **Priority** load-bearing whenever more than one gate could match the same call. Two gates with different grant policies and overlapping filters will not both apply — the call is approved under whichever gate sorts first, and the other is silently skipped. If you need a stricter approver to take precedence, give that gate the lower priority number.
+</Warning>
 
 ### Gate filter variables
 
