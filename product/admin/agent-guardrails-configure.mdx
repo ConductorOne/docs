@@ -177,6 +177,10 @@ Go back to your rule and select the gate under **Tool gates**.
 </Step>
 </Steps>
 
+<Warning>
+If a rule selects more than one tool gate, they don't all apply — **only the first gate whose filter matches runs**, and its grant policy decides the call. Order is enabled-first, then ascending **Priority**, then oldest first, across the gates your rule selected *plus* every gate with **Managed by guardrails** off. Give the gate whose approver should win the lower priority number. See [Only the first matching gate runs](/product/admin/agent-guardrails-reference#only-the-first-matching-gate-runs).
+</Warning>
+
 <Note>
 Leaving **Managed by guardrails** **off** means the gate evaluates on every matching call independently of any guardrail. That's sometimes what you want — a blanket approval requirement — but it makes the gate invisible to your rule cascade.
 </Note>
@@ -200,7 +204,7 @@ Until you do this, a rule in **Observe** is a reporting mechanism, not a control
 Leave the rule in **Observe** and run real traffic through it.
 </Step>
 <Step>
-Review what it would have caught. Observe-mode matches are recorded as informational audit events marked as *would have fired*, and agent-side evaluations are also reviewable under **AI > Conversations**.
+Review what it would have caught — see [Where to find Observe results](#where-to-find-observe-results) below.
 </Step>
 <Step>
 Check both directions: rules that would have fired on calls you consider legitimate (too broad), and risky calls that matched nothing (too narrow).
@@ -211,6 +215,35 @@ Edit the rule and set **Mode** to **Enforce**.
 </Steps>
 
 Because an Observe match falls through to the next rule, you can safely stage a whole cascade in Observe and promote it rule by rule.
+
+### Where to find Observe results
+
+Every rule that matches a call — enforcing or observing — writes an event to the [C1 system log](/product/admin/system-log). There is no per-guardrail activity view in C1, so the system log is where you read Observe results.
+
+<Warning>
+C1 does not surface these events in the admin UI, and nothing notifies you when an Observe rule would have fired. To read them you need a [system log exporter](/product/admin/system-log#sync-c1-system-logs-into-your-siem) configured to your SIEM or data source. Set that up **before** you start an Observe rollout, or the traffic you were staging against passes unrecorded from your point of view.
+</Warning>
+
+In the exported OCSF events, guardrail decisions carry:
+
+| Field | Value |
+| :--- | :--- |
+| `activity_name` | `guardrail_decision` |
+| `api.operation` | `aigov.guardrail.decision` |
+| `would_have_fired` | `true` for an Observe match; absent or `false` when a rule actually acted |
+| `policy_rule_id` | Which rule matched — the rule's ID, not its name |
+| `guardrail_id` | Which guardrail the rule belongs to |
+| `mode`, `action` | The rule's mode and action at evaluation time |
+| `tool_name`, `session_id` | What was called, and in which session |
+| `a1_private`, `a2_untrusted`, `a3_exfiltration` | The three risk scores as evaluated |
+
+To count what a rule would have caught, filter on `activity_name = "guardrail_decision"` plus `would_have_fired = true` and your `policy_rule_id`.
+
+<Note>
+Observe records are written at **informational** severity — only an actual block is raised above that. A severity filter tuned to warnings and above will exclude exactly the records you're staging against.
+</Note>
+
+System log events are retained for 365 days by default.
 
 ## Step 7: Configure the untrusted content judge
 
