@@ -1,0 +1,166 @@
+---
+title: Register a device from Docker on macOS
+og:title: Register a device from Docker on macOS - C1
+og:description: Bootstrap a C1 Vault device inside a Docker container using the OAuth device-code flow, with browser approval on the macOS host.
+description: Bootstrap a C1 Vault device inside a Docker container using the OAuth device-code flow, with browser approval on the macOS host.
+sidebarTitle: Docker device setup (macOS)
+---
+
+{/* Editor Refresh: 2026-07-30 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Register a C1 Vault device running inside a headless Docker container on macOS, using a browser on the host Mac to approve the device-code grant.
+
+## How the topology works
+
+The device-code flow (RFC 8628) splits authentication across two machines:
+
+| Component | Role |
+| :--- | :--- |
+| **Docker container** | Runs the C1 Vault CLI headlessly. Generates device keys, initiates the device-code grant, and polls for approval. Has no browser. |
+| **Mac host browser** | The operator opens the verification URL printed by the CLI and approves the device code. This approval registers the device with C1. |
+| **Docker volume** | Persists the device state directory across container restarts. Contains the device's private key material and identity record. |
+
+The container and the Mac host never share credentials directly. The device-code grant bridges them: the CLI generates a one-time code, the operator approves it in a browser, and C1 issues the device identity back to the polling CLI.
+
+<Warning>
+The Docker volume holds the device's private key material. Treat it with the same care as any private key store: restrict access, do not copy it to untrusted hosts, and delete it when decommissioning the device.
+</Warning>
+
+## Device bootstrap versus vault bootstrap
+
+Device registration establishes the device's identity with C1 and binds its cryptographic keys. This is a prerequisite for vault operations but is not itself a vault operation. After device registration completes, the device can participate in vault membership workflows (invitations, key package exchange, and secret access) as a separate step.
+
+## Prerequisites
+
+- Docker installed on the macOS host.
+- A C1 tenant URL (for example, `yourcompany.conductor.one`).
+- The public OAuth client ID for device-code registration. Your C1 administrator provides this value.
+- A browser on the Mac host to approve the device code.
+- The `c1-vault` CLI binary, available inside your Docker image.
+
+## Register the device
+
+The registration flow has three phases: create the volume, register the device identity, then activate it.
+
+### Create a Docker volume for device state
+
+The state directory holds the device's generated key material. Use a named Docker volume so the state survives container recreation.
+
+```bash
+docker volume create c1-vault-state
+```
+
+### Run `device register` in the container
+
+Start the container with the state volume mounted and the required environment variables set. The CLI initiates the device-code grant and prints a verification URL and user code.
+
+```bash
+docker run --rm -it \
+  -v c1-vault-state:/state \
+  -e LATCHKEY_C1_URL=https://yourcompany.conductor.one \
+  -e LATCHKEY_PUBLIC_CLIENT_ID=your-public-client-id \
+  -e SECRET_ACCESS_STATE_DIR=/state \
+  your-image:tag \
+  c1-vault device register
+```
+
+The CLI prints output like:
+
+```text
+Approve this device in your browser:
+  URL: https://yourcompany.conductor.one/verify-device?user_code=ABCD-EFGH
+  User code: ABCD-EFGH
+  Expires in: 900 seconds
+```
+
+The CLI blocks and polls until the code is approved or expires.
+
+### Approve the device code on the Mac host
+
+<Steps>
+<Step>
+Open the verification URL in a browser on the Mac host.
+</Step>
+<Step>
+Sign in to C1 with your account if prompted.
+
+<Note>
+If the browser redirects you to a different tenant or an authentication gate, confirm that the tenant URL in `LATCHKEY_C1_URL` matches the tenant you intend to register with. A mismatch between the CLI's configured tenant and your browser session causes a redirect loop. Sign out of the wrong tenant in the browser and sign in to the correct one.
+</Note>
+</Step>
+<Step>
+Confirm that the user code shown in the browser matches the code the CLI printed, then approve the device.
+</Step>
+</Steps>
+
+After approval, the CLI receives the device identity, persists the device key and client ID in the state volume, and exits with a JSON summary. The `device_id` field in the output identifies this device going forward.
+
+### Run `device activate` to complete registration
+
+In a new container run against the same volume, activate the device. This step completes the server-side registration and publishes the device's cryptographic key packages.
+
+```bash
+docker run --rm -it \
+  -v c1-vault-state:/state \
+  -e LATCHKEY_C1_URL=https://yourcompany.conductor.one \
+  -e SECRET_ACCESS_STATE_DIR=/state \
+  your-image:tag \
+  c1-vault device activate
+```
+
+The device is now registered with C1. Subsequent CLI operations against the same volume authenticate using the persisted device identity.
+
+## Verify the device
+
+Confirm the device is registered and can authenticate:
+
+```bash
+docker run --rm \
+  -v c1-vault-state:/state \
+  -e LATCHKEY_C1_URL=https://yourcompany.conductor.one \
+  -e SECRET_ACCESS_STATE_DIR=/state \
+  your-image:tag \
+  c1-vault device whoami
+```
+
+The output includes the device ID, bound user, and tenant.
+
+## Environment variable reference
+
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `LATCHKEY_C1_URL` | Yes | Your C1 tenant URL, for example `https://yourcompany.conductor.one`. |
+| `LATCHKEY_PUBLIC_CLIENT_ID` | Yes (for `device register`) | The public OAuth client ID for the device-code grant. Provided by your C1 administrator. |
+| `SECRET_ACCESS_STATE_DIR` | Yes | Path to the device state directory inside the container. Mount a Docker volume here. |
+
+## Troubleshooting
+
+### Wrong tenant or authentication redirect loop
+
+If the browser redirects unexpectedly after opening the verification URL, the `LATCHKEY_C1_URL` value likely does not match the tenant your browser session is signed into. Sign out of the browser session and sign in to the correct tenant, then re-open the verification URL.
+
+### Device code expired
+
+The device code is valid for a limited time (typically 15 minutes). If it expires before approval, re-run `c1-vault device register` to generate a new code.
+
+### State volume permissions
+
+The CLI writes device key material with restricted file permissions. If the container runs as a non-root user, confirm that user has read and write access to the mounted volume path.
+
+### Resetting a device
+
+To start device registration from scratch on the same volume, remove the existing device key:
+
+```bash
+docker run --rm \
+  -v c1-vault-state:/state \
+  -e SECRET_ACCESS_STATE_DIR=/state \
+  your-image:tag \
+  c1-vault device reset-local
+```
+
+This removes only the local key material. It does not revoke server-side device access.
