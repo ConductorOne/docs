@@ -1,235 +1,311 @@
 ---
 title: "Agent guardrails reference"
-og:title: "Agent guardrails reference"
-description: "Technical reference for agent guardrails: what each layer enforces, hook payloads and return values, filter expressions, audit statuses, constraints, and troubleshooting."
-og:description: "Technical reference for agent guardrails: what each layer enforces, hook payloads and return values, filter expressions, audit statuses, constraints, and troubleshooting."
+og:title: "Agent guardrails reference - C1 docs"
+description: "Technical reference for agent guardrails: object model, rule fields, CEL variables, enforcement surfaces, evaluation order, the built-in template catalog, and troubleshooting."
+og:description: "Technical reference for agent guardrails: object model, rule fields, CEL variables, enforcement surfaces, evaluation order, the built-in template catalog, and troubleshooting."
 sidebarTitle: "Agent guardrails reference"
 ---
 
 {/* Editor Refresh: 2026-07-30 */}
 
-## What a call has to clear
+## Object model
 
-A governed tool call has to satisfy every applicable guardrail. These are the checks involved:
-
-| Check | Enforced against | Result if it fails |
+| Object | What it is | Scope |
 | :--- | :--- | :--- |
-| **Client type allowed** | Tenant **Allowed client types** | Client is rejected at registration; no tool is ever exposed to it |
-| **Client state** | [Client lifecycle](/product/admin/ai-clients#client-lifecycle-states) | Tokens are revoked at **Closed**; the client must re-authenticate |
-| **Kill switch** | Tenant, a single tool, or a single client | Call denied regardless of any grant the user holds |
-| **Access profile** | The user's granted [toolsets](/product/admin/tools-and-toolsets) | Call denied: tool not in the user's access profile |
-| **Tool state** | Tool must be **Approved** | **Unset** and **Disabled** tools can't be in a toolset; **Removed** tools are skipped at call time |
-| **Pre-tool-use hooks** | Each enabled hook, in priority order | Call denied, or input rewritten and passed to the next hook |
-| **Post-tool-use hooks** | Each enabled hook, in priority order | Response denied before reaching the client, or output rewritten |
+| **Guardrail** | A named, ordered cascade of rules, plus the surface it may bind to | Tenant; many per tenant |
+| **Guardrail rule** | One entry in a cascade. Stored inline on the guardrail, not separately reusable | Per guardrail |
+| **Guardrail binding** | Attaches one guardrail to one enforcement target. The only object that puts a guardrail into effect | One per target |
+| **Tool gate** | Standalone approval requirement: a filter plus a grant policy | Tenant; reusable across rules |
+| **Hook** | Standalone interceptor that inspects, rewrites, or denies a payload | Tenant; reusable across rules |
+| **Guardrail template** | Versioned definition that mints a guardrail plus the gates and hooks its rules need | Built-in, or tenant-authored |
 
-A kill switch is decisive on its own — it blocks calls regardless of access profile, which is what makes it usable for incident response without editing any policy.
+How they relate:
 
-## Guardrail layers by configuration location
+```
+Guardrail template  --instantiate-->  Guardrail (+ its tool gates and hooks)
 
-| Guardrail | Location | Scope |
-| :--- | :--- | :--- |
-| Allowed client types | **AI > C1 Gateway > Settings** | Tenant |
-| Require tool approval | See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) | Tenant |
-| Default tool classification | **AI > MCP > Settings** | Tenant |
-| Client lifecycle thresholds | **AI > C1 Gateway > Settings** | Tenant, overridable per client |
-| Tenant kill switch | **Settings > System management**, then **Disable system features** | Tenant |
-| Tool call hooks | **AI > C1 Gateway > Settings > Hooks** | Tenant, filterable per tool |
-| Tool approval and classification | **AI > MCP >** server **> Tools** | Per tool |
-| Tool kill switch | **AI > MCP >** server **> Tools >** tool | Per tool |
-| Allowed client types (per tool) | **AI > MCP >** server **> Tools >** tool | Per tool |
-| Toolset membership | **AI access management > Toolsets** | Per toolset |
-| Access policy and approvers | **Access profiles** | Per access profile |
-| Client kill switch, lifecycle override | **AI access management > AI clients >** client | Per client |
-| Step-up authentication | **Admin > Integrations > Step up auth**, then **Policies** | Per policy step |
-| Agent mode, failure action, instructions | **Policies >** step **> Agent** | Per policy step |
+Guardrail binding  --(surface, target)-->  Guardrail
+                                            └── rules[] (ordered)
+                                                  ├── tool gate ids
+                                                  ├── pre-tool hook ids
+                                                  ├── post-tool hook ids
+                                                  └── pre-output hook ids
+```
 
-## Tool classification axes
+Rules live inline on the guardrail because an ordered cascade is configuration, not a reusable unit. Tool gates and hooks are the reusable primitives — a rule references them by ID, and the same gate or hook can be selected by rules in different guardrails.
 
-Both axes are **metadata only**. Nothing is enforced on them directly — they exist for filtering, reasoning, and as input to hooks.
+<Warning>
+A binding is the only thing that activates a guardrail. Creating a guardrail, authoring rules, and wiring up gates and hooks changes nothing about live traffic until a binding points at it.
+</Warning>
 
-| Axis | Values |
+## Enforcement surfaces
+
+| Surface | Governs | Bind at | Available CEL variables |
+| :--- | :--- | :--- | :--- |
+| **Agent** | C1AI agents | **AI > Guardrails** → **Default C1AI Guardrail policy**, or an agent's **Guardrails** tab | `ctx.private_data`, `ctx.untrusted_content`, `ctx.exfiltration`, `ctx.tool_name`, `ctx.agent_id` |
+| **Gateway** | External AI clients through the C1 Gateway | **AI > C1 Gateway > Settings** → **Default C1 Gateway Guardrail policy** | `ctx.private_data`, `ctx.exfiltration`, `ctx.tool_name` |
+
+A guardrail marked **Any surface** can bind to either.
+
+Binding resolution on the agent surface tries the specific agent's binding first, then falls back to the tenant default agent binding. The gateway surface resolves a single tenant-wide binding — there is no per-client or per-connection gateway granularity.
+
+<Note>
+`ctx.untrusted_content` and `ctx.agent_id` are **not available on the Gateway surface**. The untrusted-content score comes from the judge, which runs inside a C1AI session; there is no equivalent for an external client. A gateway rule written against `ctx.untrusted_content` will not behave as intended.
+</Note>
+
+If no binding resolves for a surface — none configured, or it points at a deleted guardrail — that surface falls back to an empty policy with no rules. It does **not** fall back to another surface's guardrail.
+
+## Guardrail fields
+
+| Field | Notes |
 | :--- | :--- |
-| **Action** | Read / Write / Delete |
-| **Risk** | Sensitive / Dangerous |
+| **Name** | Required. Up to 128 characters. |
+| **Description** | Optional. Up to 1024 characters. |
+| **Applies to** | **Agent**, **Gateway**, or **Any surface**. Determines which variables rules can read. |
+| **Managed by** | **Tenant** for guardrails you own; **System** for read-only built-ins. |
+| **Created from template** | Provenance stamp recording the template ID and version, when instantiated from one. |
 
-Classification appears in the hook payload as `context.classification`, with values `READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`. This is how you turn a classification into actual enforcement — either with a **Write authorization** built-in hook or a custom function that branches on it.
+## Guardrail rule fields
 
-## Hook configuration fields
+| Field | Notes |
+| :--- | :--- |
+| **Name** | Required. Up to 128 characters. Appears in audit records. |
+| **Description** | Optional. Up to 1024 characters. |
+| **Condition (CEL)** | Optional. Empty matches **every** tool call. |
+| **Action** | **Block** or **Evaluate hooks**. |
+| **Pre-tool hooks** | Hooks evaluated before the tool call. Hidden when Action is Block. |
+| **Post-tool hooks** | Hooks evaluated after the tool call. Hidden when Action is Block. |
+| **Pre-output hooks** | Hooks evaluated before the assistant's response is delivered. Hidden when Action is Block. |
+| **Tool gates** | Gates that must grant before the call executes. Hidden when Action is Block. |
+| **Mode** | **Enforce**, **Observe**, or **Disabled**. |
+| **Deny reason** | Optional. Up to 256 characters. Shown to the caller on denial. |
+
+Only hooks and tool gates with **Managed by guardrails** enabled are selectable in the hook and gate pickers.
+
+### Actions
+
+| Action | Behavior |
+| :--- | :--- |
+| **Block** | Deny the call immediately. Tool gates and hooks are skipped entirely. |
+| **Evaluate hooks** | Run the selected tool gates and hooks; their outcome decides the call. |
+
+### Modes
+
+| Mode | On a match |
+| :--- | :--- |
+| **Enforce** | The outcome applies and cascade evaluation stops. |
+| **Observe** | Logs that the rule *would have fired*, then **falls through to the next rule**. Nothing is blocked. The first Observe match is recorded as an informational audit event marked *would have fired* if no later Enforce rule fires. |
+| **Disabled** | Skipped entirely. Unset behaves as disabled. |
+
+## CEL variables
+
+| Variable | Type | Surface | Notes |
+| :--- | :--- | :--- | :--- |
+| `ctx.private_data` | level | Both | Sensitivity of data in play |
+| `ctx.untrusted_content` | level | Agent only | Prompt-injection risk, from the judge |
+| `ctx.exfiltration` | level | Both | Capability of this call to move data out |
+| `ctx.tool_name` | string | Both | The tool being called |
+| `ctx.agent_id` | string | Agent only | The acting agent |
+
+Levels are `LOW`, `MEDIUM`, and `HIGH`, ordered — they compare as 0, 1, and 2 respectively, so `>=` works as you'd expect and the numeric form is equivalent.
+
+Examples:
+
+```
+ctx.untrusted_content == HIGH && ctx.exfiltration == HIGH
+ctx.private_data >= MEDIUM && ctx.exfiltration >= MEDIUM
+ctx.private_data == HIGH && ctx.tool_name.startsWith("salesforce_")
+```
+
+<Note>
+A rule whose CEL expression fails to evaluate is **skipped**, and the cascade continues to the next rule. It does not abort evaluation and does not deny the call — so a catch-all rule lower in the cascade still fires. This is the opposite of hook filter behavior, where a failed filter denies the call.
+</Note>
+
+## Evaluation order on a tool call
+
+1. **Resolve the binding** for the surface, and walk the guardrail's rules top to bottom, first match wins.
+2. If the matched rule's action is **Block** → deny. **Gates and hooks never run.**
+3. Otherwise run **tool gates**: the gates the rule selected, plus every gate with **Managed by guardrails** off. First match wins by enabled-then-priority-then-age. A gate that requests approval or denies short-circuits here — **hooks and the tool never run.**
+4. Run **pre-tool hooks**: those the rule selected, plus every pre-tool hook with **Managed by guardrails** off. A denial blocks the call.
+5. **The tool executes.**
+6. Run **post-tool hooks**, same union rule. A denial blocks the result from reaching the caller.
+
+**Pre-output hooks** are a separate path: they gate a chunk of the assistant's generated response as it's delivered, with no tool call involved.
+
+If no rule matches, the call proceeds with no guardrail-curated gates or hooks — unmanaged gates and hooks still apply.
+
+## Tool gate fields
 
 | Field | Notes |
 | :--- | :--- |
 | **Name** | Required. 1–100 characters. |
 | **Description** | Optional. Up to 2048 characters. |
-| **Hook type** | **Built-in pattern** or **Custom function** |
-| **Event** | **Pre-tool use** or **Post-tool use**. Some built-in patterns support only one. |
-| **Filter** | Optional CEL expression. Empty matches all tools. |
-| **Priority** | 0–1000. Lower runs first. |
-| **Enabled** | Activates the hook immediately on save. |
+| **Grant policy** | Required. Determines who approves and how. |
+| **Start from pattern** | Optional helper that prefills the filter. Not persisted. |
+| **Filter (CEL expression)** | Optional. See the variables below. |
+| **Priority** | 0–1000. Lower matches first. |
+| **Enabled** | Default on. |
+| **Managed by guardrails** | Default **off** — the gate always evaluates. On — only when a rule selects it. |
 
-### Filter expressions
+### Gate filter variables
 
-The only variable available in a hook filter is `ctx.tool_name`.
+A tool gate filter is evaluated against a different variable set than a guardrail rule — it sees the call's identity and target rather than the risk axes:
 
-```
-ctx.tool_name.startsWith("github_")
-ctx.tool_name == "salesforce_query"
-ctx.tool_name.contains("delete")
-```
-
-<Warning>
-A filter that fails to evaluate **denies the call**. There is no "filter didn't match, so allow" fallback for a broken expression — a malformed filter blocks traffic for every tool the hook could apply to.
-</Warning>
-
-### Built-in patterns
-
-| Pattern | Event | Behavior | Configurable |
-| :--- | :--- | :--- | :--- |
-| **PII field redaction** | Post | Replaces values in output fields whose names match a list with a placeholder | Field name list (defaults: `ssn`, `social_security_number`, `date_of_birth`, `salary`, `bank_account`), placeholder string |
-| **Credit card blocking** | Post | Denies the response if output contains a Luhn-valid card number | — |
-| **Query scope limit** | Pre | Caps numeric input fields at a maximum | Field name list (defaults: `limit`, `page_size`, `count`, `max_results`), maximum |
-| **Write authorization** | Pre | Denies calls whose classification is in a blocked list | Blocked classifications, optional business-hours window (timezone, start/end, days) |
-| **Sensitive file guard** | Pre | Denies calls referencing sensitive paths | Path list (defaults: `.env`, `*.pem`, `*.key`, `id_rsa`, `.ssh/`, `.aws/`, and similar) |
-
-## Custom function hook contract
-
-### Pre-tool-use payload
-
-```json
-{
-  "tool_name": "github_create_issue",
-  "input": { /* the tool's input arguments */ },
-  "context": {
-    "tool_source": "connector",
-    "classification": "WRITE"
-  }
-}
-```
-
-### Post-tool-use payload
-
-```json
-{
-  "tool_name": "github_create_issue",
-  "input": { /* original input */ },
-  "output": { /* whatever the tool returned */ },
-  "error": "",
-  "context": { /* same as pre */ }
-}
-```
-
-### Payload fields
-
-| Field | Present on | Notes |
-| :--- | :--- | :--- |
-| `tool_name` | Both | The tool being called |
-| `input` | Both | The tool's input arguments; on post, the original input |
-| `output` | Post | Whatever the tool returned |
-| `error` | Post | Populated if the tool call errored |
-| `context.tool_source` | Both | `builtin` or `connector` |
-| `context.classification` | Both | `READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS` |
-
-<Warning>
-The payload describes the **call**, not the caller. There is no user, client, or access-profile field, so hooks cannot make identity-based decisions. Use access profiles for identity scope and hooks for call-shape decisions.
-</Warning>
-
-### Return value
-
-```json
-{
-  "deny": false,
-  "reason": "explanation shown in audit log",
-  "input":  { /* pre only: replacement input */ },
-  "output": { /* post only: replacement output */ }
-}
-```
-
-| Field | Notes |
+| Variable | Notes |
 | :--- | :--- |
-| `deny` | `true` blocks the call. The `reason` is recorded in the audit log and surfaced to the AI client as a denial. |
-| `reason` | Explanation recorded in the audit log |
-| `input` | Pre only. Omit when you don't need to modify the payload. |
-| `output` | Post only. Omit when you don't need to modify the payload. |
+| `ctx.tool_name` | The tool being called |
+| `ctx.tool_kind` | The kind of tool |
+| `ctx.tool_input` | The call's input arguments |
+| `ctx.app_id` | Target app |
+| `ctx.connector_id` | Target connector |
+| `ctx.app_entitlement_id` | Target entitlement |
+| `ctx.caller_kind` | The kind of caller |
+| `ctx.principal_user_id` | The acting user |
+| `ctx.agent_id` | The acting agent |
 
-Returning `{}` allows the call unchanged.
+<Note>
+The in-product helper text on the filter field mentions only `ctx.tool_name` and `ctx.tool_input` — the two you'll use most. The rest are available.
+</Note>
 
-## Audit statuses
+### Gate filter patterns
 
-Every hook execution is recorded in the [audit log](/product/admin/audit-ai-tool-usage) with one of these statuses:
+| Pattern | Matches |
+| :--- | :--- |
+| **Destructive action** | Destructive or irreversible operations |
+| **External send** | Calls that send data outside the boundary |
+| **Third-party connector** | Third-party connector tools |
+| **Finance action** | Finance-related operations |
+| **Infrastructure mutation** | Infrastructure changes |
+| **Database write** | Database write operations |
 
-| Status | Meaning | Guardrail working as intended? |
+Each prefills a canned CEL expression you can then edit.
+
+## Built-in template catalog
+
+Built-in templates are **read-only and virtual** — they're presented to every tenant without being seeded into your tenant's data, and instantiating one gives you an editable copy. Editing your copy never affects the template.
+
+<Warning>
+**Most templates do not enforce when you instantiate them.** The **Ships as** column below is the mode each template's rule carries on creation. An **Observe** rule logs what it would have done and falls through — it blocks and redacts nothing until you edit the rule and set **Mode** to **Enforce**. A **Disabled** rule does nothing at all. The "What it does" column describes the behavior once enforcing.
+</Warning>
+
+### Rule-only templates
+
+| Template | Surface | Ships as | What it does |
+| :--- | :--- | :--- | :--- |
+| **PII redaction** | Gateway | Enforce | Blocks calls that would send high-sensitivity private data outside the trust boundary |
+| **Lethal trifecta protection** | Agent | Enforce | Requires approval when an agent combines private data access, untrusted-content exposure, and exfiltration capability. Requires a grant policy parameter |
+| **Multiplayer protection** | Agent | Mixed | Two rules: an **Observe** rule for untrusted shared context, and an **Enforce** rule blocking cross-user exfiltration in shared multi-user sessions |
+| **Untrusted content exfil freeze** | Agent | **Observe** | Blocks calls combining untrusted-content exposure with an exfiltration channel — the EchoLeak/CamoLeak pattern |
+| **Crown-jewel read-only** | Any surface | **Observe** | Blocks the highest-sensitivity data from leaving through a high-exfiltration tool |
+| **Strict trifecta (paranoid)** | Agent | **Disabled** | Blocks when any two of the three axes are elevated. Opt in deliberately |
+
+### Approval-gate templates
+
+Each pairs a coarse rule with a tool gate. All ship **Enforce** and require you to supply a grant policy parameter when instantiating.
+
+| Template | Surface | Requires approval before |
 | :--- | :--- | :--- |
-| `ALLOWED` | Hook ran and allowed the call unchanged | Yes |
-| `MUTATED` | Hook rewrote the input or output | Yes |
-| `DENIED` | Hook explicitly denied the call | Yes |
-| `ERROR` | Hook errored; call denied fail-closed | **No** — fix the hook |
-| `TIMEOUT` | Hook exceeded the 60-second timeout; call denied | **No** — fix the hook |
-| `FILTER_ERROR` | Filter expression failed to evaluate; call denied | **No** — fix the filter |
+| **Destructive action approval** | Agent | A destructive or mutating tool such as delete, drop, or terminate |
+| **Third-party connector approval** | Agent | Calling a third-party connector tool |
+| **External send approval** | Agent | Sending data outside the boundary |
+| **Finance action approval** | Agent | A finance-related operation |
+| **Infrastructure mutation approval** | Agent | An infrastructure change |
+| **Database write gate** | Agent | A database write |
 
-The last three deny traffic for the wrong reason. Traffic being blocked is not evidence that a guardrail is working — check the status.
+### Hook templates
 
-## What else gets logged
+Each is a single **Evaluate hooks** rule wired to a built-in hook pattern. **All ten ship in Observe mode** — instantiating one creates the hook and wires it up, but nothing is redacted or blocked until you promote the rule to **Enforce**.
 
-Beyond individual tool calls, the audit log captures:
+| Template | Surface | What the hook does once enforcing |
+| :--- | :--- | :--- |
+| **PII redaction (DLP hook)** | Gateway | Redacts sensitive fields (SSN, DOB, bank account, and similar) from output before it reaches the agent |
+| **Credit card blocking (DLP hook)** | Gateway | Blocks output containing a Luhn-valid card number |
+| **Tool output size guard (hook)** | Gateway | Denies output exceeding a maximum size, preventing context flooding |
+| **Query scope limit (hook)** | Gateway | Caps numeric query parameters so callers can't request unbounded data |
+| **Write authorization (hook)** | Gateway | Blocks calls classified write or destructive before they execute |
+| **Sensitive file guard (hook)** | Gateway | Blocks calls referencing sensitive file paths or directories |
+| **Secrets masking (DLP hook)** | Gateway | Redacts secret-shaped values — AWS keys, bearer tokens, JWTs, private keys, Slack/GitHub tokens |
+| **Link filter (hook)** | Gateway | Strips or annotates URLs and markdown images whose host isn't allowlisted, mitigating markdown-image exfiltration |
+| **Encoded content guard (hook)** | Gateway | Blocks input with long base64 blobs, long hex runs, or invisible unicode used to smuggle instructions |
+| **Prompt injection scan (hook)** | Gateway | Scans output for prompt injection using the judge and blocks high-risk output |
 
-- Access request submitted / approved / denied
-- Tool approved / disabled / classification changed
-- MCP server registered / removed / auth changed
-- AI client registered / state changed (active → hidden → closed → deleted)
-- Kill switch flipped (tenant, server, tool, or client level)
-- Tenant defaults changed
+### Framework tags
 
-Agent policy-step evaluations are additionally recorded as conversations under **AI > Conversations > System**, where you can review the agent's reasoning and tool calls behind a decision.
+Templates are tagged for filtering in the gallery: **OWASP LLM Top 10**, **OWASP Agentic**, and **Zero-Trust MCP**.
+
+<Note>
+These are filtering labels indicating which risk category a template addresses. They are not a compliance attestation or a claim of complete coverage of any framework.
+</Note>
+
+## The untrusted content judge
+
+| Property | Detail |
+| :--- | :--- |
+| What it does | Scores agent input and tool output for prompt-injection risk on every turn |
+| Produces | `ctx.untrusted_content`, as `LOW`, `MEDIUM`, or `HIGH` |
+| Default | On |
+| Configuration | A single on/off toggle at **AI > Guardrails > Settings** |
+| When off | The dimension **always scores as low risk** and the judge never runs |
+| When it can't be reached at the start of a run | C1 seeds a cautious **MEDIUM** untrusted-content floor rather than treating the turn as low risk |
+| When a mid-run rescore fails | The existing floor is kept; no new score is synthesized |
+
+There is no model selection, threshold, or per-agent judge configuration.
+
+<Warning>
+Disabling the judge does not disable rules that read `ctx.untrusted_content` — it makes them silently stop matching, because the value is pinned to low risk. Disable those rules explicitly rather than relying on the judge being off.
+</Warning>
 
 ## Constraints
 
 | Constraint | Detail |
 | :--- | :--- |
-| Hook failure mode | Fail-closed. Error, timeout, or filter failure denies the call. |
-| Custom function hook timeout | 60 seconds per invocation |
-| Hook filter variables | `ctx.tool_name` only |
-| Hook priority range | 0–1000, lower runs first |
-| Hook chaining | Modifications from earlier hooks pass to later ones; any hook can short-circuit by denying |
-| Tool classification enforcement | None directly — metadata only, consumed by hooks |
-| Step-up authentication surfaces | Not supported for approvals made through Slack, Teams, or the `cone` CLI |
-| Step-up and automation | Enabling step-up on a step disables automated approval for that step |
+| Rule evaluation | First match wins, top to bottom |
+| Rule with empty condition | Matches every call |
+| Rule with a failing CEL expression | Skipped; cascade continues |
+| Hook failure mode | Fail-closed — error, timeout, or filter failure denies the call |
+| Custom function hook timeout | 60 seconds |
+| Gate filter variables | `ctx.tool_name`, `ctx.tool_input` |
+| Gate ordering | Enabled first, then priority ascending, then oldest first |
+| Priority range | 0–1000 for gates and hooks; lower first |
+| Tenant defaults | No guardrail, binding, or rule is created for a new tenant |
+| Built-in templates | Read-only; instantiating produces an editable copy |
 
-## Client lifecycle defaults
+## Troubleshooting
 
-| State | Effect | Default threshold |
-| :--- | :--- | :--- |
-| **Active** | Normal operation | — |
-| **Hidden** | Hidden from the user's connected-clients list; tokens still work | 1 day |
-| **Closed** | Tokens revoked; client must re-authenticate | 7 days |
-| **Deleted** | Registration removed; user must re-register from scratch | 90 days |
+### My guardrail isn't doing anything
 
-A client returns to **Active** on its next successful tool call, assuming its tokens are still valid. Per-client overrides can exempt a client from the tenant policy or apply stricter thresholds.
+Check, in order:
 
-## Troubleshooting agent guardrails
+1. **Is it bound?** An unbound guardrail is evaluated on zero calls. Check **Default C1AI Guardrail policy** (agent) or **Default C1 Gateway Guardrail policy** (gateway), and any per-agent override that might be shadowing the default.
+2. **Does the surface match?** An Agent guardrail won't appear in the gateway selector, and vice versa.
+3. **Are the rules in Observe?** Observe logs and falls through by design.
+4. **Are the rules Disabled?** An unset mode behaves as disabled.
+5. **Is an earlier rule matching first?** A broad rule above a narrow one makes the narrow one unreachable.
 
-### Every call to a tool is being denied
+### A rule that reads `ctx.untrusted_content` never matches
 
-- Check whether a kill switch is set at the tenant or tool level — a kill switch overrides access profiles entirely
-- Check the audit status. `FILTER_ERROR` means a hook filter is malformed; `ERROR` or `TIMEOUT` means a hook is broken and denying fail-closed
-- Confirm the tool is **Approved**, not **Unset**, **Disabled**, or **Removed**
+Either the guardrail is bound to the **Gateway** surface, where that variable isn't available, or the **untrusted content judge** is turned off, which pins the value to low risk.
 
-### A guardrail isn't firing at all
+### A hook or tool gate I created isn't selectable in a rule
 
-- Confirm the hook's **Enabled** toggle is on
-- Check the **Filter** — a filter scoped to the wrong prefix silently matches nothing
-- Confirm the hook's **Event** matches what you're testing; a post-only pattern won't block a call before it reaches the downstream server
+Its **Managed by guardrails** toggle is off. Turn it on from the hook or gate form, or from the toggle column in the table.
 
-### A tool classified Dangerous is still callable
+### A hook fires even though no rule selects it
 
-Classification is metadata and enforces nothing on its own. Add a **Write authorization** hook that blocks the classification, or set the tool's kill switch.
+That's the documented behavior for **Managed by guardrails** off: the hook always evaluates. Turn the toggle on to bring it under rule control.
 
-### An agent lost access with no configuration change
+### Calls are being denied and I can't tell which layer did it
 
-Check the client's lifecycle state. Inactivity past the **Closed** threshold revokes tokens, and past **Deleted** removes the registration entirely. Set a per-client lifecycle override for clients that shouldn't be auto-closed.
+Distinguish the three denial shapes:
 
-### A new tool appeared and an agent can already call it
+- A **Block**-action rule denies with your configured **Deny reason**.
+- A **tool gate** doesn't deny — it pauses the call behind an approval request. A denial only follows if the request is denied.
+- A **hook** denies with its own reason, or fail-closed because it errored, timed out, or its filter failed to evaluate. Check the recorded hook status: `ERROR`, `TIMEOUT`, and `FILTER_ERROR` mean the hook is broken, not that it matched.
 
-Check whether **Require tool approval** is on and what **Default tool classification** is set to. If the default state isn't **Pending Review / Unset**, newly-discovered tools become eligible for toolsets without review. Note that C1-maintained toolsets (**All approved**, **Read-only**) update automatically as tools are approved, so approving a tool can widen access without any toolset edit.
+### An Observe rule shows nothing in the logs
 
-### A custom guardrail function times out
+Observe records a match. No records means no calls matched the condition — widen it, or confirm traffic is actually reaching the bound surface.
 
-The 60-second timeout denies the call. Remove external API calls from the hook path, or move slow work out of the guardrail entirely — a hook is on the critical path of every matching call.
+### A template's rules aren't what I expected
+
+Instantiating copies the template at its current version. Your copy is independent, and the **Created from template** strip records which version it came from. A template updated later does not update your guardrail.
