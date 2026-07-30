@@ -1,84 +1,86 @@
 ---
 title: "Agent guardrails"
 og:title: "Agent guardrails"
-description: "How C1 scopes, intercepts, halts, and audits AI agents acting on your organization's behalf — whether they're external AI clients calling tools through C1 MCP or C1's own built-in agent."
-og:description: "How C1 scopes, intercepts, halts, and audits AI agents acting on your organization's behalf — whether they're external AI clients calling tools through C1 MCP or C1's own built-in agent."
+description: "Layer scope, runtime interception, emergency stops, and audit around AI agents acting on your organization's behalf, so no agent can reach a tool or return data you haven't explicitly allowed."
+og:description: "Layer scope, runtime interception, emergency stops, and audit around AI agents acting on your organization's behalf, so no agent can reach a tool or return data you haven't explicitly allowed."
 sidebarTitle: "Agent guardrails"
 ---
 
 {/* Editor Refresh: 2026-07-30 */}
 
 <Note>
-**Activation required.** Most of the guardrails below require AI access management to be enabled for your tenant. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+**Activation required.** The guardrails on this page require AI access management to be enabled for your tenant. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-Any time an AI agent acts on your organization's behalf — an external AI client calling a downstream tool, or C1's own agent evaluating a policy step — C1 puts guardrails around it. Guardrails bound what an agent can access, intercept what it does in real time, give you an emergency stop, and log everything for review. No agent bypasses these controls, and no guardrail requires trusting the agent's own judgment about when to apply it.
+Agent guardrails are the layered controls C1 puts around any AI agent acting on your organization's behalf. Each layer is enforced by C1, not by the agent — an agent cannot reason its way past a guardrail, ignore one, or decide a guardrail doesn't apply to the call it's about to make.
 
-## What guardrails control
+## What you can do with agent guardrails
 
-- **Scope**: which tools or actions an agent can ever attempt, set before any call happens
-- **Runtime behavior**: inspecting, modifying, or denying an individual call as it happens
-- **Emergency stop**: immediately cutting off an agent, tool, or MCP server without waiting for a policy change to propagate
-- **Human oversight**: requiring explicit approval or stronger authentication before a sensitive action completes
-- **Audit trail**: a record of every call, decision, and configuration change, with identity context
+- **Scope what an agent can reach**: keep newly-discovered tools out of reach until an admin approves them, then expose only curated toolsets through access profiles
+- **Intercept calls at runtime**: redact sensitive fields, cap risky parameters, or deny individual calls with built-in patterns or your own code
+- **Stop an agent immediately**: kill switches at three scopes — tenant-wide, a single tool, or a single client
+- **Require human oversight**: step-up authentication on sensitive approvals, and explicit limits on what C1's own agent may do
+- **Prove what happened**: every call, denial reason, and configuration change is logged with identity context
 
-## Where agents act in C1
+## The guardrail layers
 
-### External AI agents, via C1 MCP
+Guardrails stack. A call has to clear every applicable layer, and any single layer can stop it.
 
-[AI access management (AIAM)](/product/admin/aiam-overview) governs AI clients — Claude Desktop, Cursor, ChatGPT, Copilot, and other MCP-compatible agents — that call tools on downstream systems through C1's identity-aware proxy. Every call is authenticated, checked against the caller's access, and logged before it reaches the downstream server.
+| Layer | What it constrains | Where you configure it | If the layer stops a call |
+| :--- | :--- | :--- | :--- |
+| **Tenant baseline** | Which AI client types may register at all; whether new tools require approval | **AI > C1 Gateway > Settings** | Client is rejected at registration, before any tool is exposed |
+| **Tool approval** | Which discovered tools are eligible to be used | **AI > MCP >** server **> Tools** | **Unset** or **Disabled** tools can't be added to a toolset |
+| **Toolsets and access profiles** | Which tools a specific user's agent can reach | **Toolsets**, then **Access profiles** | Call denied: tool not in the user's access profile |
+| **Tool call hooks** | The inputs and outputs of an individual call, at runtime | **AI > C1 Gateway > Settings > Hooks** | Call denied or payload rewritten; fail-closed on error or timeout |
+| **Kill switches** | Everything in scope, immediately | Tenant, a single tool, or a single client | Call denied regardless of any grant |
+| **Client lifecycle** | How long an idle agent registration stays usable | **AI > C1 Gateway > Settings > Client lifecycle** | Tokens revoked once the client reaches **Closed** |
+| **Step-up authentication** | Approval of a sensitive access request | **Admin > Integrations > Step up auth**, then **Policies** | Approval can't complete without fresh, stronger authentication |
+| **Agent step limits** | What C1's own agent may do on a policy step | **Policies >** step **> Agent** | Agent is held to comment-only or policy-change-only; failure action decides the fallback |
+| **Audit log** | Nothing — this layer is detective, not preventive | **AI > Conversations**, [system log](/product/admin/system-log) | — |
+
+Two of these guard different paths, and it's worth being precise about which:
+
+- **Tool call hooks** guard the *call* path — they run on every governed tool call, every time.
+- **Step-up authentication** guards the *access-granting* path — it runs when a human approves the access request that grants an agent's user a toolset in the first place.
+
+## Where guardrails apply
+
+### External AI agents, through C1 MCP
+
+[AI access management (AIAM)](/product/admin/aiam-overview) governs AI clients — Claude Desktop, Claude Code, Cursor, ChatGPT, Copilot, and custom agents — that call tools on downstream systems. Clients connect to one URL (C1 MCP) rather than to each downstream server, so every call passes through C1's identity-aware proxy, which authenticates the caller, checks the call against the user's granted access profile, enforces configured constraints, forwards the call, and logs the result.
 
 ### C1's own agent
 
-C1's built-in AI acts on your behalf in two places, both bounded by explicit, admin- or user-controlled limits:
+C1's built-in AI acts on your behalf in two places, each with its own explicit bounds:
 
-- **Agent policy step**: a [policy](/product/admin/policies#assign-for-review) can assign a request or review step to C1's AI agent, which evaluates it against instructions you provide and C1's built-in evaluation guidance.
-- **Ask C1AI**: the [AI assistant](/product/admin/ai-assistant) can query and act on identity data on behalf of the signed-in user, but only within that user's own role permissions, and only after the user explicitly approves the action.
+- **Agent policy step** — a [policy](/product/admin/policies#assign-for-review) can assign a request or review step to C1's AI agent. **Agent mode** caps what it may do, and **Agent failure action** decides the fallback when it can't reach a decision.
+- **Ask C1AI** — the [AI assistant](/product/admin/ai-assistant) can query and act on identity data, but only within the signed-in user's own role permissions, and only after that user explicitly approves each change.
 
-## Key guardrail mechanisms
+## Key use cases for agent guardrails
 
-### Access scoping: toolsets and access profiles
+### Keep an agent out of production while it's still earning trust
 
-Tools start **Unset** when C1 discovers them and can't be called until an admin approves and bundles them into a [toolset](/product/admin/tools-and-toolsets), then binds that toolset to an access profile with an approval policy. An agent can only reach the tools included in the toolsets its user's approved access profiles grant — nothing is reachable by default.
+Approve only read-classified tools into the toolset you bind to a broad access profile, and keep write and delete tools in a separate profile with an approval policy. A new agent gets useful read access on day one without any path to mutate a downstream system.
 
-### Runtime interception: tool call hooks
+### Stop sensitive data from reaching an agent's context
 
-[Tool call hooks](/product/admin/tool-call-hooks) run on every governed tool call, before it reaches the downstream server and after the result comes back. Hooks can redact sensitive fields, cap risky parameters, or deny a call outright — either with a built-in pattern (PII redaction, credit card blocking, query scope limits, write authorization windows, sensitive file guards) or a custom function. Hooks are fail-closed: an error, timeout, or bad filter expression denies the call rather than letting it through.
+Attach a post-tool-use hook to the tools that return records — **PII field redaction** for known field names, or a custom function for your own patterns. The values are replaced before the response reaches the agent, no matter what the downstream tool returned.
 
-### Emergency stop: kill switches
+### Cap the blast radius of a single call
 
-Kill switches exist at four levels — tenant, MCP server, individual tool, and individual [AI client](/product/admin/ai-clients) — so you can cut off exactly the scope you need without a broader policy change. A tenant-wide kill switch (**Settings > System management > Disable system features**) revokes every client's access to every tool in-flight; a per-client kill switch revokes just that one client's tokens. See [Enable AI access management](/product/admin/enable-ai-access-management#emergency-kill-switch) for the tenant-level switch.
+Use the **Query scope limit** pattern to cap `limit`-style parameters, and the **Sensitive file guard** pattern to deny calls that reference credentials and key material. Both run pre-call, so an over-broad request never reaches the downstream server.
 
-### Client lifecycle policy
+### Contain an agent that's misbehaving right now
 
-Inactive AI clients age out automatically — hidden, then closed (tokens revoked), then deleted — on tenant-configured thresholds, with per-client overrides for clients that need stricter or looser handling. This limits how long a forgotten or abandoned agent registration stays usable. See [Manage AI clients](/product/admin/ai-clients#client-lifecycle-states).
+Flip the narrowest kill switch that covers the problem: per-client if one registration is suspect, per-tool if one capability is the issue, tenant-wide if the blast radius is still unclear. In-flight calls fail immediately.
 
-### Step-up authentication for sensitive approvals
+### Reconstruct exactly what an agent did
 
-For approval steps that carry real risk, [step-up authentication](/product/admin/step-up-auth) forces a fresh, stronger authentication challenge at the moment of approval — so a standing session (human or automated) can't silently clear a sensitive request. Step-up automatically disables automated approval on a step, since there's no user present to complete the challenge.
+Pull the audit entry for the call to get the result, denial reason, and latency. For agent-evaluated policy steps, open the matching conversation under **AI > Conversations > System** to see the reasoning behind the decision.
 
-### Bounding the Agent policy step
+## Where to go from here
 
-When a policy step is assigned to C1's AI agent, **Agent mode** limits what it can actually do — comment only, change policy only, or full control to approve/deny — and **Agent failure action** determines the fallback (reassign to users, reassign to super admins, or skip the step) if the agent can't reach a decision. See [Policies: Assign for review](/product/admin/policies#assign-for-review).
-
-### Audit and review
-
-Every tool call and every non-call event (approvals, tool state changes, MCP server changes, client lifecycle transitions, kill switch flips) is written to the [audit log](/product/admin/audit-ai-tool-usage), including the denial reason for blocked calls. Agent policy-step evaluations are additionally logged as conversations under **AI > Conversations > System**, so you can review the agent's reasoning alongside the decision it made.
-
-## Key guardrail scenarios
-
-### Contain a compromised or misbehaving agent
-
-Flip the tool-level or client-level kill switch to cut off just the affected scope, or the tenant-wide switch if the blast radius is unclear. All in-flight calls fail immediately and the client is forced into a re-authentication state.
-
-### Prevent sensitive data from leaving through a tool call
-
-Classify a tool's risk as **Sensitive** or **Dangerous** for visibility, and attach a **PII field redaction** or **credit card blocking** post-call hook so matching values never reach the agent's response, regardless of what the downstream tool returns.
-
-### Require a human decision before a high-risk action completes
-
-Set the policy step's reviewer to **Agent** in **Comment only** mode so it surfaces a recommendation without acting, or keep full control but require step-up authentication on the step so approval — human or agent-triggered — always demands fresh, stronger authentication.
-
-### Reconstruct exactly what an agent did and why
-
-Pull the audit log entry for the call (result, denial reason, latency) and, for agent-evaluated policy steps or Ask C1AI actions, open the matching conversation to see the reasoning and tool calls behind the decision.
+- Ready to set guardrails up? See [Configure agent guardrails](/product/admin/agent-guardrails-configure) for the end-to-end walkthrough.
+- Need the tables, payload shapes, and CEL variables? See the [Agent guardrails reference](/product/admin/agent-guardrails-reference).
+- Setting up the interception layer specifically? See [Tool call hooks](/product/admin/tool-call-hooks).
+- Not enabled yet? Start with [Enable AI access management](/product/admin/enable-ai-access-management).
