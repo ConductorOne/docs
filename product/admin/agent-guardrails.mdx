@@ -1,86 +1,146 @@
 ---
 title: "Agent guardrails"
-og:title: "Agent guardrails"
-description: "Layer scope, runtime interception, emergency stops, and audit around AI agents acting on your organization's behalf, so no agent can reach a tool or return data you haven't explicitly allowed."
-og:description: "Layer scope, runtime interception, emergency stops, and audit around AI agents acting on your organization's behalf, so no agent can reach a tool or return data you haven't explicitly allowed."
+og:title: "Agent guardrails - C1 docs"
+description: "Guardrails are named, reusable rule cascades that decide what an AI agent may do on each tool call, based on how much private data, untrusted content, and exfiltration capability is in play."
+og:description: "Guardrails are named, reusable rule cascades that decide what an AI agent may do on each tool call, based on how much private data, untrusted content, and exfiltration capability is in play."
 sidebarTitle: "Agent guardrails"
 ---
 
 {/* Editor Refresh: 2026-07-30 */}
 
 <Note>
-**Activation required.** The guardrails on this page require AI access management to be enabled for your tenant. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+**Activation required.** Agent guardrails must be enabled for your tenant before you can use them. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-Agent guardrails are the layered controls C1 puts around any AI agent acting on your organization's behalf. Each layer is enforced by C1, not by the agent — an agent cannot reason its way past a guardrail, ignore one, or decide a guardrail doesn't apply to the call it's about to make.
+A **guardrail** is a named, reusable cascade of rules that C1 evaluates on every governed tool call. Each rule asks a question about the *risk shape* of the call — how sensitive the data in play is, whether the agent has been exposed to untrusted content, whether the call could exfiltrate — and decides what happens: allow it, run a set of hooks over it, require human approval, or block it outright.
 
-## What you can do with agent guardrails
+Guardrails exist because the risk of an agent action often isn't a property of the tool. `send_email` is harmless until the agent has just read a support ticket written by a stranger and is holding customer records. Access profiles can't express that; they only know whether the tool is reachable. A guardrail can, because it evaluates the combination at call time.
 
-- **Scope what an agent can reach**: keep newly-discovered tools out of reach until an admin approves them, then expose only curated toolsets through access profiles
-- **Intercept calls at runtime**: redact sensitive fields, cap risky parameters, or deny individual calls with built-in patterns or your own code
-- **Stop an agent immediately**: kill switches at three scopes — tenant-wide, a single tool, or a single client
-- **Require human oversight**: step-up authentication on sensitive approvals, and explicit limits on what C1's own agent may do
-- **Prove what happened**: every call, denial reason, and configuration change is logged with identity context
+## What you can do with guardrails
 
-## The guardrail layers
+- **Gate on risk combinations, not just tool identity**: write rules over private-data sensitivity, untrusted-content exposure, and exfiltration capability
+- **Start from a curated template**: instantiate one of the built-in presets, tagged against OWASP LLM Top 10, OWASP Agentic, and Zero-Trust MCP — most arrive in Observe mode so you can watch before you enforce
+- **Require approval mid-call**: attach tool gates so a matching call pauses for a human decision instead of failing
+- **Redact and inspect payloads**: attach hooks that rewrite inputs, outputs, or the assistant's outgoing response
+- **Roll out safely**: run any rule in **Observe** mode to log what it *would* have done before it denies anything
+- **Bind per surface**: apply one guardrail to your C1AI agents and a different one to external clients on the gateway
 
-Guardrails stack. A call has to clear every applicable layer, and any single layer can stop it.
+## Key concepts
 
-| Layer | What it constrains | Where you configure it | If the layer stops a call |
-| :--- | :--- | :--- | :--- |
-| **Tenant baseline** | Which AI client types may register at all; whether new tools require approval | **AI > C1 Gateway > Settings** | Client is rejected at registration, before any tool is exposed |
-| **Tool approval** | Which discovered tools are eligible to be used | **AI > MCP >** server **> Tools** | **Unset** or **Disabled** tools can't be added to a toolset |
-| **Toolsets and access profiles** | Which tools a specific user's agent can reach | **Toolsets**, then **Access profiles** | Call denied: tool not in the user's access profile |
-| **Tool call hooks** | The inputs and outputs of an individual call, at runtime | **AI > C1 Gateway > Settings > Hooks** | Call denied or payload rewritten; fail-closed on error or timeout |
-| **Kill switches** | Everything in scope, immediately | Tenant, a single tool, or a single client | Call denied regardless of any grant |
-| **Client lifecycle** | How long an idle agent registration stays usable | **AI > C1 Gateway > Settings > Client lifecycle** | Tokens revoked once the client reaches **Closed** |
-| **Step-up authentication** | Approval of a sensitive access request | **Admin > Integrations > Step up auth**, then **Policies** | Approval can't complete without fresh, stronger authentication |
-| **Agent step limits** | What C1's own agent may do on a policy step | **Policies >** step **> Agent** | Agent is held to comment-only or policy-change-only; failure action decides the fallback |
-| **Audit log** | Nothing — this layer is detective, not preventive | **AI > Conversations**, [system log](/product/admin/system-log) | — |
+| Concept | What it is |
+| :--- | :--- |
+| **Guardrail** | A named, ordered cascade of rules, plus which surface it may bind to. The reusable unit you create and manage. |
+| **Guardrail rule** | One entry in the cascade: an optional CEL condition, an action, a mode, and — for hook-evaluating rules — the hooks and tool gates it selects. |
+| **Guardrail binding** | What actually puts a guardrail into effect: it attaches one guardrail to one enforcement target. Nothing is enforced until a binding exists. |
+| **Tool gate** | Requires approval before a matching tool call executes. The call pauses behind a request under a grant policy rather than being denied. |
+| **Hook** | Runs synchronously around a call to inspect, rewrite, or deny its input, output, or the assistant's outgoing response. See [Tool call hooks](/product/admin/tool-call-hooks). |
+| **Guardrail template** | A curated, versioned definition that mints a guardrail preconfigured with rules — and, where relevant, the tool gates and hooks those rules reference. |
+| **Untrusted content judge** | The classifier that scores agent input and tool output for prompt-injection risk on every turn, producing the untrusted-content signal rules read. |
 
-Two of these guard different paths, and it's worth being precise about which:
+## The three risk signals
 
-- **Tool call hooks** guard the *call* path — they run on every governed tool call, every time.
-- **Step-up authentication** guards the *access-granting* path — it runs when a human approves the access request that grants an agent's user a toolset in the first place.
+Every guardrail rule is a CEL expression over the same small set of variables. Three of them are the risk axes C1 scores per call, each `LOW`, `MEDIUM`, or `HIGH`:
+
+| Variable | What it measures |
+| :--- | :--- |
+| `ctx.private_data` | How sensitive the data the agent is holding or requesting is |
+| `ctx.untrusted_content` | How much untrusted, potentially injected content the agent has been exposed to. Scored by the untrusted content judge. **Agent surface only** |
+| `ctx.exfiltration` | How capable this call is of moving data outside the trust boundary |
+
+Plus `ctx.tool_name` for name-based matching, and `ctx.agent_id` on the agent surface.
+
+The reason this framing exists is that each axis alone is usually fine and the *combination* is what's dangerous — an agent with private data, exposure to untrusted content, and an exfiltration channel is the "lethal trifecta." Several built-in templates encode exactly that pattern.
+
+<Note>
+`ctx.untrusted_content` is only populated on the **Agent** surface, because the judge runs inside a C1AI session. A rule written against it on a **Gateway** guardrail won't behave as you expect. See [Enforcement surfaces](/product/admin/agent-guardrails-reference#enforcement-surfaces).
+</Note>
+
+## How a rule decides
+
+Rules are evaluated **top to bottom, first match wins**. A rule with no condition matches every call, which makes it useful as a catch-all at the bottom of a cascade.
+
+Each matching rule has an **action**:
+
+- **Block** — deny the call immediately. No gates or hooks run.
+- **Evaluate hooks** — run the tool gates and hooks this rule selects, and let their outcome decide the call.
+
+...and a **mode**, which is what makes guardrails safe to roll out:
+
+| Mode | What happens on a match |
+| :--- | :--- |
+| **Enforce** | The rule's outcome applies and the cascade stops. |
+| **Observe** | The rule logs that it *would* have fired and evaluation **falls through to the next rule**. Nothing is blocked. |
+| **Disabled** | The rule is skipped entirely. |
+
+<Tip>
+Author every new rule in **Observe** mode. You get a durable record of what it would have caught against real traffic, with no risk of blocking a legitimate call, and you promote it to **Enforce** once the logs match your expectation. This is a first-class mode — you don't need to fake it with a permissive rule.
+</Tip>
 
 ## Where guardrails apply
 
-### External AI agents, through C1 MCP
+A guardrail declares which surface it **applies to**, and a binding attaches it to a target on that surface.
 
-[AI access management (AIAM)](/product/admin/aiam-overview) governs AI clients — Claude Desktop, Claude Code, Cursor, ChatGPT, Copilot, and custom agents — that call tools on downstream systems. Clients connect to one URL (C1 MCP) rather than to each downstream server, so every call passes through C1's identity-aware proxy, which authenticates the caller, checks the call against the user's granted access profile, enforces configured constraints, forwards the call, and logs the result.
+| Surface | Governs | Where you bind it | Signals available |
+| :--- | :--- | :--- | :--- |
+| **Agent** | C1AI agents acting in your tenant | **AI > Guardrails** → **Default C1AI Guardrail policy**, or per-agent on an agent's **Guardrails** tab | All three risk axes, plus `ctx.agent_id` |
+| **Gateway** | External AI clients connecting through the C1 Gateway | **AI > C1 Gateway > Settings** → **Default C1 Gateway Guardrail policy** | `ctx.private_data`, `ctx.exfiltration`, `ctx.tool_name` — no `ctx.untrusted_content` |
 
-### C1's own agent
+A guardrail set to **Any surface** can bind to either.
 
-C1's built-in AI acts on your behalf in two places, each with its own explicit bounds:
+<Warning>
+Creating a guardrail does nothing on its own. Until you **bind** it, no call is evaluated against it. A tenant starts with no guardrails and no bindings — there is no default cascade to inherit.
+</Warning>
 
-- **Agent policy step** — a [policy](/product/admin/policies#assign-for-review) can assign a request or review step to C1's AI agent. **Agent mode** caps what it may do, and **Agent failure action** decides the fallback when it can't reach a decision.
-- **Ask C1AI** — the [AI assistant](/product/admin/ai-assistant) can query and act on identity data, but only within the signed-in user's own role permissions, and only after that user explicitly approves each change.
+## Guardrails, tool gates, and hooks
 
-## Key use cases for agent guardrails
+These three are easy to conflate. The distinction is what each one does to a call:
 
-### Keep an agent out of production while it's still earning trust
+| | Decides | Effect on a matching call |
+| :--- | :--- | :--- |
+| **Guardrail rule** | Which gates and hooks apply to this call, or whether to block it outright | Dispatches, or blocks |
+| **Tool gate** | Whether a human must approve first | **Pauses** the call behind an approval request under a grant policy |
+| **Hook** | Whether the payload is acceptable, and what it should look like | Allows, **rewrites**, or denies — synchronously, in-line |
 
-Approve only read-classified tools into the toolset you bind to a broad access profile, and keep write and delete tools in a separate profile with an approval policy. A new agent gets useful read access on day one without any path to mutate a downstream system.
+A guardrail rule invokes hooks and gates; never the reverse. On a single tool call the order is fixed:
 
-### Stop sensitive data from reaching an agent's context
+**guardrail rule match → tool gate → pre-tool hooks → tool executes → post-tool hooks**
 
-Attach a post-tool-use hook to the tools that return records — **PII field redaction** for known field names, or a custom function for your own patterns. The values are replaced before the response reaches the agent, no matter what the downstream tool returned.
+A `Block` rule short-circuits before any gate or hook runs. A gate that requests approval short-circuits before any hook runs. Separately, **pre-output hooks** gate the assistant's outgoing response rather than a tool call.
 
-### Cap the blast radius of a single call
+Both hooks and tool gates carry a **Managed by guardrails** toggle that decides whether they participate in this cascade at all:
 
-Use the **Query scope limit** pattern to cap `limit`-style parameters, and the **Sensitive file guard** pattern to deny calls that reference credentials and key material. Both run pre-call, so an over-broad request never reaches the downstream server.
+- **Off** (default) — the hook or gate always evaluates, on every matching call, regardless of guardrails.
+- **On** — it only evaluates when a guardrail rule explicitly selects it.
 
-### Contain an agent that's misbehaving right now
+<Note>
+This is the single most common source of surprise. A hook you created before adopting guardrails has **Managed by guardrails** off, so it keeps firing on every call even when no guardrail selects it. Turning it on hands control of that hook to your rule cascade.
+</Note>
 
-Flip the narrowest kill switch that covers the problem: per-client if one registration is suspect, per-tool if one capability is the issue, tenant-wide if the blast radius is still unclear. In-flight calls fail immediately.
+## Key use cases for guardrails
 
-### Reconstruct exactly what an agent did
+### Freeze exfiltration after the agent reads untrusted content
 
-Pull the audit entry for the call to get the result, denial reason, and latency. For agent-evaluated policy steps, open the matching conversation under **AI > Conversations > System** to see the reasoning behind the decision.
+The indirect prompt-injection pattern behind published attacks like EchoLeak and CamoLeak: an agent reads attacker-controlled text, then is steered into sending data out. A rule matching elevated `ctx.untrusted_content` **and** elevated `ctx.exfiltration` blocks that combination while leaving each capability independently available. The **Untrusted content exfil freeze** template ships this rule — in Observe mode, so you promote it to Enforce once you've seen what it catches.
+
+### Require approval for the lethal trifecta
+
+Rather than blocking, route the risky combination to a human: a rule that matches all three axes being elevated and selects a tool gate, so the call pauses for approval under a grant policy you choose. The **Lethal trifecta protection** template ships this.
+
+### Keep your crown jewels inside the boundary
+
+A rule matching the highest `ctx.private_data` level against a high-exfiltration call, blocking regardless of which tool is involved. Because it's written on the data-sensitivity axis rather than a tool allowlist, it covers tools you haven't onboarded yet.
+
+### Strip secrets and PII from tool output
+
+Attach the **Secrets masking** and **PII field redaction** hooks to a rule so matching values are removed from output before the agent's context ever sees them.
+
+### Approve destructive actions without blocking the agent
+
+A tool gate filtered to destructive operations turns `delete`/`drop`/`terminate`-shaped calls into approval requests instead of failures, so the agent stays useful and a human owns the irreversible step.
 
 ## Where to go from here
 
-- Ready to set guardrails up? See [Configure agent guardrails](/product/admin/agent-guardrails-configure) for the end-to-end walkthrough.
-- Need the tables, payload shapes, and CEL variables? See the [Agent guardrails reference](/product/admin/agent-guardrails-reference).
-- Setting up the interception layer specifically? See [Tool call hooks](/product/admin/tool-call-hooks).
-- Not enabled yet? Start with [Enable AI access management](/product/admin/enable-ai-access-management).
+- Ready to set one up? See [Configure agent guardrails](/product/admin/agent-guardrails-configure).
+- Need the rule fields, CEL variables, template catalog, and evaluation order? See the [Agent guardrails reference](/product/admin/agent-guardrails-reference).
+- Configuring the hooks a rule selects? See [Tool call hooks](/product/admin/tool-call-hooks).
+- Governing which tools are reachable in the first place? See [Govern tools and toolsets](/product/admin/tools-and-toolsets).

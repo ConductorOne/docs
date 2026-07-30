@@ -1,420 +1,283 @@
 ---
 title: "Configure agent guardrails"
-og:title: "Configure agent guardrails"
-description: "Walk through setting up agent guardrails end to end: tenant baseline, tool scope, runtime hooks, custom guardrail functions, human oversight, and verification."
-og:description: "Walk through setting up agent guardrails end to end: tenant baseline, tool scope, runtime hooks, custom guardrail functions, human oversight, and verification."
+og:title: "Configure agent guardrails - C1 docs"
+description: "Create a guardrail from a template or from scratch, author rules, attach hooks and tool gates, bind it to a surface, and promote it from Observe to Enforce."
+og:description: "Create a guardrail from a template or from scratch, author rules, attach hooks and tool gates, bind it to a surface, and promote it from Observe to Enforce."
 sidebarTitle: "Configure agent guardrails"
 ---
 
 {/* Editor Refresh: 2026-07-30 */}
 
 <Note>
-**Activation required.** AI access management must be enabled for your tenant before you can configure these guardrails. See [Enable AI access management](/product/admin/enable-ai-access-management).
+**Activation required.** Agent guardrails must be enabled for your tenant before the surfaces below appear. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-This guide walks through standing up guardrails around an AI agent, in the order you should do it: set the tenant baseline first, scope what the agent can reach, then add runtime interception, then verify. Each step is independently useful — you don't have to complete all six before an agent is safer than it was.
+Everything on this page lives under **AI > Guardrails**. The **General** tab holds guardrails, hooks, and tool gates; the **Settings** tab holds the untrusted content judge.
+
+The fastest path to a working guardrail is Step 1 — instantiate a template, bind it, watch it in Observe mode. Steps 3 onward cover authoring your own rules.
+
+## Step 1: Create a guardrail from a template
+
+Templates mint a guardrail already populated with rules, and — where the rules need them — the tool gates and hooks they reference.
+
+<Steps>
+<Step>
+Go to **AI > Guardrails**.
+</Step>
+<Step>
+In the **Guardrails** section, click **Start from template**.
+</Step>
+<Step>
+Filter the gallery by framework if you're working against one: **All**, **OWASP LLM Top 10**, **OWASP Agentic**, or **Zero-Trust MCP**. Each card shows the template's name, the surface it applies to, and its framework tags.
+</Step>
+<Step>
+Click the template you want. Enter a **Name** — it defaults to the template's own name if you leave it blank — and fill in any required parameters the template asks for. Templates that gate on approval require you to pick a **grant policy** here.
+</Step>
+<Step>
+Click **Create guardrail**. C1 creates the guardrail and opens its detail page.
+</Step>
+</Steps>
+
+The detail page shows a **Created from template** strip recording which template and version it came from, and a **Managed by** value of **Tenant** — the instantiated copy is yours to edit freely, and editing it does not affect the template or any other guardrail minted from it.
+
+<Warning>
+**Most templates arrive in Observe mode and enforce nothing yet.** All ten hook templates, plus **Untrusted content exfil freeze** and **Crown-jewel read-only**, instantiate with their rule set to **Observe** — it logs what it would have done and falls through. **Strict trifecta (paranoid)** arrives **Disabled**. Only **PII redaction**, **Lethal trifecta protection**, and the six approval-gate templates enforce on arrival.
+
+This is deliberate: you get to see what a rule would catch before it can block anything. But it means instantiating a template is not the finish line. Check each rule's mode chip on the detail page, then promote it in Step 7.
+</Warning>
 
 <Tip>
-Work outside-in. Every layer you add closer to the call is more precise but harder to reason about. Getting the tenant baseline and tool scope right removes far more risk than a clever hook does.
+Instantiating a template is a copy, not a subscription. If a newer version of the template ships later, your guardrail is untouched — instantiate again if you want the new version.
 </Tip>
 
-## Step 1: Set the tenant baseline
+### Which template to start with
 
-The tenant defaults are the fallback for everything that follows. Set them to the safest configuration you're willing to live with, because individual servers, tools, and clients can only be loosened from here deliberately.
+| If you want to… | Start from |
+| :--- | :--- |
+| Block the indirect prompt-injection exfil pattern | **Untrusted content exfil freeze** |
+| Route the risky three-way combination to a human | **Lethal trifecta protection** |
+| Stop your most sensitive data leaving via a high-exfiltration call | **Crown-jewel read-only** |
+| Require approval before destructive operations | **Destructive action approval** |
+| Redact secrets or PII from tool output | **Secrets masking (DLP hook)** or **PII redaction (DLP hook)** |
+| Be maximally conservative and tune down | **Strict trifecta (paranoid)** — arrives disabled; enable its rule deliberately |
+
+See the [full catalog](/product/admin/agent-guardrails-reference#built-in-template-catalog) for all of them.
+
+## Step 2: Bind the guardrail
+
+<Warning>
+A guardrail does nothing until it's bound. This is the step people skip — a carefully authored cascade that was never bound is evaluated on exactly zero calls.
+</Warning>
+
+Where you bind depends on the surface the guardrail applies to.
+
+### Agent surface
+
+For a tenant-wide default across your C1AI agents:
+
+<Steps>
+<Step>
+Go to **AI > Guardrails**.
+</Step>
+<Step>
+Under **Default C1AI Guardrail policy**, open the dropdown — it reads **No default guardrail selected** until you set one.
+</Step>
+<Step>
+Pick your guardrail.
+</Step>
+</Steps>
+
+To override the default for one agent, open that agent from **AI > Agents**, go to its **Guardrails** tab, and select a guardrail there. Choosing **Use the default agent guardrail** clears the override.
+
+<Note>
+Only guardrails whose **Applies to** is **Agent** (or **Any surface**) appear in these dropdowns.
+</Note>
+
+### Gateway surface
+
+For external AI clients connecting through the C1 Gateway:
 
 <Steps>
 <Step>
 Go to **AI > C1 Gateway > Settings**.
 </Step>
 <Step>
-Under **Allowed client types**, permit only the categories you actually need. **Personal** is allowed by default; **shared**, **service**, and **ephemeral** are disallowed by default.
-</Step>
-<Step>
-Under **Client lifecycle**, set the inactivity thresholds for **Hidden** (default 1 day), **Closed** (default 7 days), and **Deleted** (default 90 days).
-</Step>
-<Step>
-Click **Save**.
-</Step>
-<Step>
-Go to **AI > MCP > Settings** and find **Default tool classification**. Leave the state as **Pending Review / Unset** and the classification as **Unclassified**, then click **Save**.
-</Step>
-<Step>
-Confirm [**Require tool approval**](/product/admin/enable-ai-access-management#require-tool-approval) is on, so every newly-discovered tool starts in **Pending Review** instead of becoming eligible for toolsets as soon as it's discovered.
+Under **Default C1 Gateway Guardrail policy**, select your guardrail.
 </Step>
 </Steps>
 
-<Note>
-Tightening **Allowed client types** doesn't retroactively cut off already-registered clients of a now-disallowed type — they keep working until their tokens expire. New registrations of that type are rejected immediately. To cut an existing client off now, use its kill switch (Step 6).
-</Note>
-
-For the full detail on each default, see [Enable AI access management](/product/admin/enable-ai-access-management#configure-tenant-defaults).
-
-## Step 2: Scope what the agent can reach
-
-This is the layer that does the most work. An agent can only call tools that are approved, bundled into a toolset, and bound to an access profile its user holds.
-
-### Approve and classify tools
+## Step 3: Create a guardrail from scratch
 
 <Steps>
 <Step>
-Go to **AI > MCP** and open the registered server.
+Go to **AI > Guardrails** and click **Create guardrail**.
 </Step>
 <Step>
-Click the **Tools** tab. Every discovered tool starts as **Unset** and cannot be added to a toolset.
+Enter a **Name** (required, up to 128 characters) and optionally a **Description** (up to 1024 characters).
 </Step>
 <Step>
-Open a tool's detail panel and set **Action** (Read / Write / Delete) and **Risk** (Sensitive / Dangerous), then click **Save**.
+Set **Applies to** — **Agent** or **Gateway**. Choose deliberately: it determines which risk signals your rules can read.
 </Step>
 <Step>
-Select the tools you're ready to allow and click **Approve**. Click **Disable** on anything you want to keep permanently out of reach.
+Click **Create guardrail**.
 </Step>
 </Steps>
 
-<Warning>
-Classification is **metadata only** — setting a tool's Action to Delete or its Risk to Dangerous does not by itself block anything. It exists so you can filter and reason about tools, and so hooks can act on the classification. If you need a classification to actually be enforced, pair it with a **Write authorization** hook (Step 3) or a kill switch (Step 6).
-</Warning>
+A new guardrail has no rules, so it matches nothing. Add rules next.
 
-### Bundle approved tools into a toolset
-
-C1 auto-maintains two toolsets per tenant: **All approved** (every approved tool) and **Read-only** (every approved tool with Action = Read). Both update themselves as you approve and disable tools.
-
-For anything narrower, create a custom toolset:
+## Step 4: Author a rule
 
 <Steps>
 <Step>
-Go to **AI access management > Toolsets** and click **Create toolset**.
+On the guardrail's detail page, click **New guardrail rule**.
 </Step>
 <Step>
-Enter a name and optional description, then click **Save**.
+Enter a **Name** and optional **Description**. Name it for the behavior it prevents — this string is what you'll be reading in audit logs later.
 </Step>
 <Step>
-Click back into the toolset and add the approved tools you want in it.
-</Step>
-</Steps>
-
-<Note>
-Custom toolsets are **manually curated** — they don't auto-populate based on classification. When you approve a new tool that belongs in a custom toolset, you have to add it yourself. If you want a bundle that keeps itself current, use a C1-maintained toolset instead.
-</Note>
-
-### Bind the toolset to an access profile
-
-A toolset isn't reachable by any agent until it's bound to an access profile.
-
-<Steps>
-<Step>
-Go to **Access profiles** and open or create a profile.
-</Step>
-<Step>
-Add the toolset as an entitlement. C1-maintained and custom toolsets both appear as options.
-</Step>
-<Step>
-Set the access policy: auto-approve, JIT with expiry, or approval required.
-</Step>
-<Step>
-Publish the access profile to the catalog.
-</Step>
-</Steps>
-
-<Tip>
-Split by risk rather than by system. A **Read-only** toolset on an auto-approve profile plus a write toolset on an approval-required profile gives an agent same-day usefulness with no unattended path to mutate anything.
-</Tip>
-
-See [Govern tools and toolsets](/product/admin/tools-and-toolsets) for the full workflow.
-
-## Step 3: Add a runtime guardrail with a built-in hook
-
-[Tool call hooks](/product/admin/tool-call-hooks) run on every governed call. Start with a built-in pattern — no code required.
-
-<Steps>
-<Step>
-Go to **AI > C1 Gateway > Settings** and find the **Hooks** section.
-</Step>
-<Step>
-Click **New hook**.
-</Step>
-<Step>
-Give it a **Name** and optional **Description**.
-</Step>
-<Step>
-Set **Hook type** to **Built-in pattern** and pick the pattern:
-
-| Pattern | Event | Use it to |
-| :--- | :--- | :--- |
-| **PII field redaction** | Post | Replace values in output fields named `ssn`, `date_of_birth`, `salary`, and similar |
-| **Credit card blocking** | Post | Deny any response containing a Luhn-valid card number |
-| **Query scope limit** | Pre | Cap `limit`, `page_size`, `count`, `max_results` at a maximum |
-| **Write authorization** | Pre | Deny calls whose classification is in a blocked list, optionally only outside business hours |
-| **Sensitive file guard** | Pre | Deny calls referencing `.env`, `*.pem`, `id_rsa`, `.ssh/`, `.aws/`, and similar |
-</Step>
-<Step>
-**Optional.** Narrow the hook with a **Filter** — a CEL expression over `ctx.tool_name`. Leave it empty to match every tool.
+Enter a **Condition (CEL)**. Leave it empty to match every tool call. Available variables:
 
 ```
-ctx.tool_name.startsWith("github_")
+ctx.private_data        LOW | MEDIUM | HIGH
+ctx.untrusted_content   LOW | MEDIUM | HIGH   (Agent surface only)
+ctx.exfiltration        LOW | MEDIUM | HIGH
+ctx.tool_name           string
+```
+
+For example, to match the untrusted-content exfiltration pattern:
+
+```
+ctx.untrusted_content == HIGH && ctx.exfiltration == HIGH
 ```
 </Step>
 <Step>
-Set **Priority** (0–1000, lower runs first).
+Choose an **Action**:
+
+- **Block** — deny the call immediately. Gates and hooks are skipped, and the hook/gate pickers disappear from the form.
+- **Evaluate hooks** — run the gates and hooks you select below, and let their outcome decide.
 </Step>
 <Step>
-Leave **Enabled** off for now, and click **Save**.
-</Step>
-<Step>
-Once you've reviewed the configuration, open the hook and toggle **Enabled** on. It takes effect immediately on save.
-</Step>
-</Steps>
+If you chose **Evaluate hooks**, select what this rule dispatches:
 
-<Warning>
-Hooks are **fail-closed**. If a hook errors, times out, or its filter expression fails to evaluate, the call is **denied** — not allowed through. A hook with a typo in its filter will block traffic. Save it disabled, confirm the filter, then enable.
-</Warning>
-
-### Example: redact salary data from one server's tools only
-
-To redact PII from the HR server's responses without touching any other server:
-
-| Field | Value |
+| Picker | When it runs |
 | :--- | :--- |
-| **Name** | Redact HR PII |
-| **Hook type** | Built-in pattern → PII field redaction |
-| **Event** | Post-tool use |
-| **Filter** | `ctx.tool_name.startsWith("workday_")` |
-| **Priority** | `100` |
-| **Enabled** | On |
+| **Pre-tool hooks** | Before the tool call |
+| **Post-tool hooks** | After the tool call |
+| **Pre-output hooks** | Before the assistant's response is delivered |
+| **Tool gates** | Must grant before the tool call executes |
 
-Every `workday_*` tool response now has matching fields replaced before it reaches the agent. Calls to every other server are untouched, and each redaction is recorded in the audit log with status `MUTATED`.
+Only hooks and gates with **Managed by guardrails** turned on appear in these lists. If something you expect is missing, that's why — see Step 6.
+</Step>
+<Step>
+Set **Mode** to **Observe** for now. (**Enforce** applies the outcome; **Disabled** skips the rule.)
+</Step>
+<Step>
+Optionally enter a **Deny reason** (up to 256 characters). It's shown to the caller when this rule denies a call, so write it for whoever hits it — a bare "policy violation" leaves the agent's user with nothing to act on.
+</Step>
+<Step>
+Click **Create**.
+</Step>
+</Steps>
 
-## Step 4: Write a custom guardrail function
+### Order the cascade
 
-When no built-in pattern fits, attach a [function](/product/admin/functions) to a hook. C1 invokes it with a JSON payload describing the call and uses the return value to allow, modify, or deny.
-
-<Note>
-A guardrail function is an ordinary C1 function — see [Create and test functions](/product/admin/functions-create) for authoring, testing, and publishing. The hook payload arrives as the function's `input`, and the function's return value is the hook's decision.
-</Note>
-
-### What the function receives
-
-A pre-tool-use hook receives the tool name, the call's input arguments, and context:
-
-```json
-{
-  "tool_name": "github_create_issue",
-  "input": { /* the tool's input arguments */ },
-  "context": {
-    "tool_source": "connector",
-    "classification": "WRITE"
-  }
-}
-```
-
-A post-tool-use hook receives the same fields plus `output` and `error`.
+Rules evaluate **top to bottom, first match wins**. Click **Manage guardrail rules** to reorder them with the move controls, or to edit and delete individual rules.
 
 <Warning>
-The payload contains the **call**, not the caller. There is no user, client, or access-profile field — so a guardrail function can't make decisions based on who is calling. Use access profiles (Step 2) for identity-based scope, and hooks for call-shape decisions.
+Put narrow rules above broad ones. A catch-all rule with an empty condition matches every call, so anything below it is unreachable.
 </Warning>
 
-### What the function returns
+Each rule renders as an **IF** / **THEN** card showing its condition and its action and mode chips, so you can read the cascade top-down without opening each rule.
 
-```json
-{
-  "deny": false,
-  "reason": "explanation shown in audit log",
-  "input":  { /* pre only: replacement input */ },
-  "output": { /* post only: replacement output */ }
-}
-```
+## Step 5: Add a tool gate for approval
 
-Returning `{}` allows the call unchanged.
-
-### Example: deny writes outside an allowlist of repositories
-
-A pre-tool-use hook that lets the agent open issues and pull requests only against repositories you've approved:
-
-```typescript
-import { JSONObject } from "@c1/functions-sdk";
-
-const ALLOWED_REPOS = ["acme/docs", "acme/sandbox"];
-
-export default async function main(input: JSONObject): Promise<JSONObject> {
-  const args = (input.input ?? {}) as JSONObject;
-  const context = (input.context ?? {}) as JSONObject;
-
-  // Read-classified calls don't mutate anything; let them through untouched.
-  if (context.classification === "READ") {
-    return {};
-  }
-
-  const repo = args.repository as string | undefined;
-
-  if (!repo) {
-    return {
-      deny: true,
-      reason: `${input.tool_name} did not specify a repository`,
-    };
-  }
-
-  if (!ALLOWED_REPOS.includes(repo)) {
-    return {
-      deny: true,
-      reason: `Repository ${repo} is not in the approved allowlist`,
-    };
-  }
-
-  return {};
-}
-```
-
-### Example: strip fields from a response
-
-A post-tool-use hook that removes internal fields before the agent ever sees them:
-
-```typescript
-import { JSONObject } from "@c1/functions-sdk";
-
-const STRIP_FIELDS = ["internal_notes", "compensation", "home_address"];
-
-export default async function main(input: JSONObject): Promise<JSONObject> {
-  const output = (input.output ?? {}) as JSONObject;
-  const cleaned: JSONObject = { ...output };
-
-  let stripped = 0;
-  for (const field of STRIP_FIELDS) {
-    if (field in cleaned) {
-      delete cleaned[field];
-      stripped++;
-    }
-  }
-
-  if (stripped === 0) {
-    return {};
-  }
-
-  console.log(`Stripped ${stripped} field(s) from ${input.tool_name}`);
-  return { output: cleaned };
-}
-```
-
-### Roll a custom hook out in observe mode first
-
-Because hooks are fail-closed and take effect immediately, validate the logic before it can deny anything. Log the decision and return `{}` so every call is allowed:
-
-```typescript
-import { JSONObject } from "@c1/functions-sdk";
-
-export default async function main(input: JSONObject): Promise<JSONObject> {
-  const wouldDeny = shouldDeny(input);
-
-  console.log(JSON.stringify({
-    tool: input.tool_name,
-    wouldDeny,
-    classification: (input.context as JSONObject)?.classification,
-  }));
-
-  // Observe only — flip to `return { deny: wouldDeny, reason }` once the logs look right.
-  return {};
-}
-```
-
-Run real traffic through it, read the invocation logs in the functions UI, and switch to enforcing once you're confident the logic matches what you expect.
-
-<Warning>
-Custom function hooks have a **60-second invocation timeout**. A slow external API call inside a hook doesn't just add latency — if it exceeds the timeout, the tool call is denied. Keep guardrail functions self-contained and fast.
-</Warning>
-
-## Step 5: Require human oversight where it matters
-
-Guardrails so far are automatic. These two put a person back in the loop.
-
-### Require step-up authentication on sensitive approvals
-
-Step-up authentication guards the *access-granting* path: it forces the approver to re-authenticate with stronger verification at the moment they approve, so a standing session can't quietly clear a request for a high-risk toolset.
+A tool gate turns a matching call into an approval request instead of a failure.
 
 <Steps>
 <Step>
-Configure a provider under **Admin > Integrations > Step up auth** and test it. See [Step-up authentication](/product/admin/step-up-auth).
+In the **Tool gates** section on **AI > Guardrails**, click **New tool gate**.
 </Step>
 <Step>
-Go to **Policies** and open the policy attached to your high-risk access profile.
+Enter a **Name** (1–100 characters) and optional **Description**.
 </Step>
 <Step>
-On the approval step, enable **Step-up authentication required** and select your provider.
+Pick a **Grant policy** — this determines who approves and how. Required.
 </Step>
 <Step>
-Click **Save**.
+Optionally choose **Start from pattern** to prefill the filter: **Destructive action**, **External send**, **Third-party connector**, **Finance action**, **Infrastructure mutation**, or **Database write**. This only prefills the expression; it isn't stored as a pattern.
+</Step>
+<Step>
+Review the **Filter (CEL expression)**. Gate filters read a different variable set than guardrail rules — the call's identity and target rather than the risk axes. The field's helper text names `ctx.tool_name` and `ctx.tool_input`; see the [full list](/product/admin/agent-guardrails-reference#gate-filter-variables).
+</Step>
+<Step>
+Set **Priority** (0–1000, lower matches first) and leave **Enabled** on.
+</Step>
+<Step>
+Turn **Managed by guardrails** **on** so this gate only fires when a rule selects it, then click **Create**.
+</Step>
+<Step>
+Go back to your rule and select the gate under **Tool gates**.
 </Step>
 </Steps>
 
 <Note>
-Enabling step-up on a step **disables automated approval** for that step — there's no user present to complete the authentication challenge. That's the point, but it means you can't combine step-up with auto-approve on the same step.
+Leaving **Managed by guardrails** **off** means the gate evaluates on every matching call independently of any guardrail. That's sometimes what you want — a blanket approval requirement — but it makes the gate invisible to your rule cascade.
 </Note>
 
-### Bound what C1's own agent may do
+## Step 6: Attach hooks
 
-When a policy step is assigned to C1's AI agent, cap its authority explicitly:
+Hooks do the inspection and rewriting. Create them in the **Hooks** section of **AI > Guardrails** — see [Tool call hooks](/product/admin/tool-call-hooks) for the full field reference and the built-in patterns.
+
+To make a hook selectable by a guardrail rule, turn on its **Managed by guardrails** toggle, either in the hook form or directly from the toggle column in the hooks table.
+
+<Warning>
+Hooks are **fail-closed**: if a hook errors, times out, or its filter expression fails to evaluate, the call is **denied**. A hook selected by an Enforce-mode rule can therefore block traffic because it's broken, not because it matched. Check the recorded status rather than assuming a denial means the guardrail worked.
+</Warning>
+
+## Step 7: Promote from Observe to Enforce
+
+This step is required for any rule that arrived in **Observe** — including most template rules (see Step 1). Until you do it, the rule is a reporting mechanism, not a control.
 
 <Steps>
 <Step>
-Go to **Policies**, open the policy, and on the step choose **Assign for review > Agent**.
+Leave the rule in **Observe** and run real traffic through it.
 </Step>
 <Step>
-Set **Agent mode**:
-
-- **Comment only** — the agent posts its analysis but cannot approve or deny
-- **Change policy only** — the agent selects from a set of allowed policies but cannot approve or deny
-- **Full control** — the agent can approve, deny, or otherwise act
+Review what it would have caught. Observe-mode matches are recorded as informational audit events marked as *would have fired*, and agent-side evaluations are also reviewable under **AI > Conversations**.
 </Step>
 <Step>
-Set **Agent failure action** for when the agent can't reach a decision: **Reassign to users**, **Reassign to super admins**, or **Skip policy step**.
+Check both directions: rules that would have fired on calls you consider legitimate (too broad), and risky calls that matched nothing (too narrow).
 </Step>
 <Step>
-Enter **Agent instructions** describing how to evaluate requests. C1's built-in evaluation guidance always applies in addition to yours.
+Edit the rule and set **Mode** to **Enforce**.
 </Step>
 </Steps>
 
-<Tip>
-Start any new Agent step in **Comment only** mode. You get the agent's reasoning on real requests — reviewable under **AI > Conversations > System** — without it deciding anything, and you can promote it to full control once its comments consistently match what you'd have decided.
-</Tip>
+Because an Observe match falls through to the next rule, you can safely stage a whole cascade in Observe and promote it rule by rule.
 
-## Step 6: Verify your guardrails and prepare an emergency stop
+## Step 8: Configure the untrusted content judge
 
-### Confirm a guardrail actually fires
+The judge produces the `ctx.untrusted_content` signal. It's on by default and needs no setup — but you can turn it off.
 
 <Steps>
 <Step>
-From a registered AI client, make a call you expect the guardrail to block.
+Go to **AI > Guardrails** and open the **Settings** tab.
 </Step>
 <Step>
-Confirm the client receives a denial rather than a result.
-</Step>
-<Step>
-Go to the [audit log](/product/admin/audit-ai-tool-usage) and find the entry for the call.
-</Step>
-<Step>
-Check the **Result** and **Denial reason**. For hooks, confirm the recorded status is what you intended — `DENIED` or `MUTATED`, not `ERROR`, `TIMEOUT`, or `FILTER_ERROR`.
+Under **Untrusted content judge**, click **Edit** and toggle it.
 </Step>
 </Steps>
 
 <Warning>
-A denial with status `ERROR`, `TIMEOUT`, or `FILTER_ERROR` means your guardrail is failing, not working. The call was blocked because the hook broke — so traffic is being denied for the wrong reason, and the guardrail isn't evaluating what you think it is. Fix the hook rather than treating the denial as success.
+Turning the judge off doesn't just stop the scoring — `ctx.untrusted_content` then **always evaluates as low risk**. Any rule that gates on it silently stops matching, so a cascade that looks correct is no longer protecting anything. Leave it on unless you have a specific reason, and if you do turn it off, disable the rules that depend on it rather than leaving them in place.
 </Warning>
 
-### Know which kill switch to reach for
+## Delete a guardrail
 
-Kill switches take effect immediately and don't wait on a policy change. Pick the narrowest scope that covers the problem:
-
-| Scope | Where | What it stops | Reach for it when |
-| :--- | :--- | :--- | :--- |
-| **Client** | **AI access management > AI clients >** client detail panel | Revokes that client's tokens and forces it to **Closed** | One registration is compromised or behaving unexpectedly |
-| **Tool** | **AI > MCP >** server **> Tools >** tool | Blocks all calls to that tool from any client, regardless of access profile | One capability is the problem |
-| **Tenant** | **Settings > System management**, then toggle **Disable MCP traffic** under **Disable system features** | Revokes every client's access to every tool; all in-flight calls fail | Blast radius is unclear and you need everything stopped |
-
-Audit entries are still written for failed attempts after a switch is flipped, so you keep visibility into what the agent was trying to do while it was cut off.
-
-<Tip>
-Decide *before* an incident who is allowed to flip the tenant-wide switch and how clients get re-onboarded afterward. End users must re-authenticate once you turn it back off, so flipping it is disruptive enough that you want the recovery path agreed in advance.
-</Tip>
+Open the guardrail and click **Delete** in the top bar. The confirmation dialog names the guardrail and warns the deletion can't be undone. Any binding that pointed at it stops applying.
 
 ## Next steps
 
-- Need the payload shapes, CEL variables, and audit statuses in one place? See the [Agent guardrails reference](/product/admin/agent-guardrails-reference).
-- Want the full hook mechanism detail? See [Tool call hooks](/product/admin/tool-call-hooks).
-- Writing your first guardrail function? See [Create and test functions](/product/admin/functions-create).
+- Rule fields, CEL variables, the template catalog, and evaluation order: [Agent guardrails reference](/product/admin/agent-guardrails-reference).
+- Hook configuration and built-in patterns: [Tool call hooks](/product/admin/tool-call-hooks).
+- Controlling which tools exist to be gated at all: [Govern tools and toolsets](/product/admin/tools-and-toolsets).

@@ -5,7 +5,7 @@ og:title: Tool call hooks - C1 docs
 og:description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
 ---
 
-{/* Editor Refresh: 2026-05-08 */}
+{/* Editor Refresh: 2026-07-30 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
@@ -15,12 +15,13 @@ Tool call hooks are interception points that run on every governed MCP tool call
 
 ## How hooks work
 
-Each hook fires on one of two events:
+Each hook fires on one of three events:
 
 | Event | When it runs | What it can do |
 | :--- | :--- | :--- |
 | **Pre-tool use** | Before C1 forwards the call to the MCP server | Inspect or rewrite the input, or deny the call |
 | **Post-tool use** | After the MCP server returns | Inspect or rewrite the output, or deny the response from reaching the client |
+| **Pre-output** | Before a chunk of the assistant's generated response leaves the process (Slack or web chat). No tool call is involved. | Inspect or rewrite the outgoing response chunk, or withhold it |
 
 Hooks run in **priority order** (lower priority numbers run first). Each hook is independently enabled or disabled and can be scoped to specific tools with a [CEL](/product/admin/expressions) filter expression. Multiple hooks can stack on the same call — input or output modifications from earlier hooks are passed to later ones, and any hook can short-circuit the chain by denying.
 
@@ -32,7 +33,7 @@ Every hook execution is recorded in the [audit log](/product/admin/audit-ai-tool
 
 <Steps>
 <Step>
-Go to **AI > C1 Gateway > Settings** and find the **Hooks** section.
+Go to **AI > Guardrails**, open the **General** tab, and find the **Hooks** section.
 </Step>
 <Step>
 Click **New hook**.
@@ -45,9 +46,10 @@ Fill out the form:
 | **Name** | Required. 1–100 characters. |
 | **Description** | Optional. Up to 2048 characters. |
 | **Hook type** | **Built-in pattern** for one of the patterns below, or **Custom function** to invoke a [function](/product/admin/functions). |
-| **Event** | **Pre-tool use** or **Post-tool use**. Some built-in patterns only support one event. |
-| **Filter** | Optional CEL expression. Available variable: `ctx.tool_name`. Empty matches all tools. Example: `ctx.tool_name.startsWith("github_")`. |
+| **Event** | **Pre-tool use**, **Post-tool use**, or **Pre-output**. Some built-in patterns only support one event. |
+| **Filter** | Optional CEL expression. Empty matches all calls for the event. Available variables depend on the event: for **Pre-tool use** and **Post-tool use**, `ctx.tool_name` (example: `ctx.tool_name.startsWith("github_")`); for **Pre-output**, `ctx.tool_name` is unset — use `ctx.untrusted_class` or `ctx.surface` (`"slack"` or `"web"`) instead. |
 | **Priority** | 0–1000. Lower runs first. |
+| **Managed by guardrails** | Off by default. See [Managed by guardrails](#managed-by-guardrails) below. |
 | **Enabled** | Toggle on to activate the hook immediately on save. |
 </Step>
 <Step>
@@ -58,17 +60,32 @@ Click **Save**.
 </Step>
 </Steps>
 
+## Managed by guardrails
+
+Each hook has a **Managed by guardrails** toggle:
+
+- **Off (default)** — the hook always evaluates on every matching call.
+- **On** — the hook only evaluates when a [guardrail](/product/admin/agent-guardrails) rule explicitly selects it.
+
+See [Agent guardrails](/product/admin/agent-guardrails) for how guardrail rules select hooks.
+
 ## Built-in patterns
 
-C1 ships five pre-built hook patterns. Each one is a self-contained handler with its own configuration; no function code is required.
+C1 ships eleven pre-built hook patterns. Each one is a self-contained handler with its own configuration; no function code is required.
 
 | Pattern | Event | What it does |
 | :--- | :--- | :--- |
-| **PII field redaction** | Post | Replaces values in JSON output fields whose names match a configurable list (defaults: `ssn`, `social_security_number`, `date_of_birth`, `salary`, `bank_account`) with a placeholder string. |
+| **PII field redaction** | Post | Replaces values in JSON output fields whose names match a configurable list (defaults: `ssn`, `social_security_number`, `date_of_birth`, `dob`, `salary`, `bank_account`, `routing_number`) with a placeholder string (default `***REDACTED***`). A configured field list **replaces** the defaults — it does not extend them. |
 | **Credit card blocking** | Post | Scans tool output for Luhn-valid credit card numbers and denies the response if any are found. |
-| **Query scope limit** | Pre | Caps numeric input fields (defaults: `limit`, `page_size`, `count`, `max_results`) at a configured maximum to prevent oversized queries. |
-| **Write authorization** | Pre | Denies tool calls whose classification is in a blocked list, optionally only outside a configured business-hours window (timezone, start/end times, days of the week). |
-| **Sensitive file guard** | Pre | Denies tool calls that reference sensitive file paths or directories (defaults: `.env`, `*.pem`, `*.key`, `id_rsa`, `.ssh/`, `.aws/`, and similar). |
+| **Query scope limit** | Pre | Caps numeric input fields (defaults: `limit`, `page_size`, `count`, `max_results`) at a configured maximum (default 100) to prevent oversized queries. A configured field list **replaces** the defaults — it does not extend them. |
+| **Write authorization** | Pre | Denies tool calls whose classification is in a blocked list — Write, Destructive, Sensitive, Dangerous (Read is intentionally not offered) — optionally only outside a configured business-hours window (timezone, start/end times, days of the week). |
+| **Sensitive file guard** | Pre | Denies tool calls that reference sensitive file paths or directories, via two separate config lists: `blocked_patterns` (defaults: `.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `id_rsa`, `*.pfx`) and `blocked_directories` (defaults: `.ssh`, `.aws`, `.config`). |
+| **Tool output size guard** | Post | Denies output exceeding a configurable byte cap (default 131072 bytes / 128 KB). |
+| **Secrets masking** | Post | Redacts secret-shaped values (AWS keys, bearer tokens, JWTs, private keys, Slack/GitHub tokens) from output. |
+| **Link filter** | Post, Pre-output | Redacts or annotates URLs and markdown images whose host is not in an allowlist; mitigates markdown-image exfiltration. Configurable action (Redact/Annotate) and an option to also act on images. |
+| **Encoded content guard** | Pre | Denies input containing long base64 blobs, long hex runs, or invisible/zero-width unicode used to smuggle instructions. |
+| **Prompt injection scan** | Post | Scores output for prompt injection using the AI-governance judge and acts at or above a configured threshold. |
+| **Block output** | Pre-output | Withholds the in-flight response chunk. Configurable message and one or more output surfaces (Slack, Web). |
 
 ## Custom function hooks
 
@@ -87,11 +104,21 @@ The function receives:
   "context": {
     "tool_source": "connector",
     "classification": "WRITE"
+  },
+  "caller": {
+    "id": "<principal id>",
+    "token_id": "...",
+    "mcp_client_id": "...",
+    "mcp_client_type": "..."
   }
 }
 ```
 
-`tool_source` is either `builtin` or `connector`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`).
+`tool_source` is `builtin`, `connector`, or `claw`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`). `caller` identifies who made the call; `token_id`, `mcp_client_id`, and `mcp_client_type` are omitted when empty.
+
+<Warning>
+`caller` is for logging and call-shape decisions only — it is **never an authorization input**, because the grant decision is made before the hook runs. Identity-based scope belongs in [access profiles](/product/admin/tools-and-toolsets), not hooks.
+</Warning>
 
 ### Post-tool-use payload
 
@@ -103,7 +130,8 @@ The function receives the same fields plus the call result:
   "input": { /* original input */ },
   "output": { /* whatever the tool returned */ },
   "error": "",
-  "context": { /* same as pre */ }
+  "context": { /* same as pre */ },
+  "caller": { /* same as pre */ }
 }
 ```
 
