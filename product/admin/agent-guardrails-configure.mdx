@@ -1,8 +1,8 @@
 ---
 title: "Configure agent guardrails"
 og:title: "Configure agent guardrails - C1 docs"
-description: "Create a guardrail from a template or from scratch, author rules, attach hooks and tool gates, bind it to a surface, and promote it from Observe to Enforce."
-og:description: "Create a guardrail from a template or from scratch, author rules, attach hooks and tool gates, bind it to a surface, and promote it from Observe to Enforce."
+description: "Create a guardrail, bind it to a surface, author rules, attach hooks and tool gates, and promote rules from Observe to Enforce."
+og:description: "Create a guardrail, bind it to a surface, author rules, attach hooks and tool gates, and promote rules from Observe to Enforce."
 sidebarTitle: "Configure agent guardrails"
 ---
 
@@ -14,54 +14,30 @@ sidebarTitle: "Configure agent guardrails"
 
 Everything on this page lives under **AI > Guardrails**. The **General** tab holds guardrails, hooks, and tool gates; the **Settings** tab holds the untrusted content judge.
 
-The fastest path to a working guardrail is Step 1 — instantiate a template, bind it, watch it in Observe mode. Steps 3 onward cover authoring your own rules.
+The order below is deliberate: create the guardrail, bind it, then author rules in **Observe** mode and promote them to **Enforce** once you've seen what they catch on real traffic.
 
-## Step 1: Create a guardrail from a template
-
-Templates mint a guardrail already populated with rules, and — where the rules need them — the tool gates and hooks they reference.
+## Step 1: Create a guardrail
 
 <Steps>
 <Step>
-Go to **AI > Guardrails**.
+Go to **AI > Guardrails** and click **Create guardrail**.
 </Step>
 <Step>
-In the **Guardrails** section, click **Start from template**.
+Enter a **Name** (required, up to 128 characters) and optionally a **Description** (up to 1024 characters).
 </Step>
 <Step>
-Filter the gallery by framework if you're working against one: **All**, **OWASP LLM Top 10**, **OWASP Agentic**, or **Zero-Trust MCP**. Each card shows the template's name, the surface it applies to, and its framework tags.
+Set **Applies to** — **Agent** or **Gateway**. Choose deliberately: it determines which risk signals your rules can read, and which selector the guardrail appears in when you bind it.
 </Step>
 <Step>
-Click the template you want. Enter a **Name** — it defaults to the template's own name if you leave it blank — and fill in any required parameters the template asks for. Templates that gate on approval require you to pick a **grant policy** here.
-</Step>
-<Step>
-Click **Create guardrail**. C1 creates the guardrail and opens its detail page.
+Click **Create guardrail**. C1 creates it and opens its detail page.
 </Step>
 </Steps>
 
-The detail page shows a **Created from template** strip recording which template and version it came from, and a **Managed by** value of **Tenant** — the instantiated copy is yours to edit freely, and editing it does not affect the template or any other guardrail minted from it.
+A new guardrail has no rules, so it matches nothing yet. Bind it first (Step 2), then add rules (Step 3) — that way the first rule you author is live in Observe mode immediately and starts producing signal.
 
-<Warning>
-**Most templates arrive in Observe mode and enforce nothing yet.** All ten hook templates, plus **Untrusted content exfil freeze** and **Crown-jewel read-only**, instantiate with their rule set to **Observe** — it logs what it would have done and falls through. **Strict trifecta (paranoid)** arrives **Disabled**. Only **PII redaction**, **Lethal trifecta protection**, and the six approval-gate templates enforce on arrival.
-
-This is deliberate: you get to see what a rule would catch before it can block anything. But it means instantiating a template is not the finish line. Check each rule's mode chip on the detail page, then promote it in Step 7.
-</Warning>
-
-<Tip>
-Instantiating a template is a copy, not a subscription. If a newer version of the template ships later, your guardrail is untouched — instantiate again if you want the new version.
-</Tip>
-
-### Which template to start with
-
-| If you want to… | Start from |
-| :--- | :--- |
-| Block the indirect prompt-injection exfil pattern | **Untrusted content exfil freeze** |
-| Route the risky three-way combination to a human | **Lethal trifecta protection** |
-| Stop your most sensitive data leaving via a high-exfiltration call | **Crown-jewel read-only** |
-| Require approval before destructive operations | **Destructive action approval** |
-| Redact secrets or PII from tool output | **Secrets masking (DLP hook)** or **PII redaction (DLP hook)** |
-| Be maximally conservative and tune down | **Strict trifecta (paranoid)** — arrives disabled; enable its rule deliberately |
-
-See the [full catalog](/product/admin/agent-guardrails-reference#built-in-template-catalog) for all of them.
+<Note>
+To rename a guardrail or change its description or surface later, click **Edit** on the **Details** card on its detail page.
+</Note>
 
 ## Step 2: Bind the guardrail
 
@@ -106,26 +82,7 @@ Under **Default C1 Gateway Guardrail policy**, select your guardrail.
 </Step>
 </Steps>
 
-## Step 3: Create a guardrail from scratch
-
-<Steps>
-<Step>
-Go to **AI > Guardrails** and click **Create guardrail**.
-</Step>
-<Step>
-Enter a **Name** (required, up to 128 characters) and optionally a **Description** (up to 1024 characters).
-</Step>
-<Step>
-Set **Applies to** — **Agent** or **Gateway**. Choose deliberately: it determines which risk signals your rules can read.
-</Step>
-<Step>
-Click **Create guardrail**.
-</Step>
-</Steps>
-
-A new guardrail has no rules, so it matches nothing. Add rules next.
-
-## Step 4: Author a rule
+## Step 3: Author a rule
 
 <Steps>
 <Step>
@@ -166,7 +123,7 @@ If you chose **Evaluate hooks**, select what this rule dispatches:
 | **Pre-output hooks** | Before the assistant's response is delivered |
 | **Tool gates** | Must grant before the tool call executes |
 
-Only hooks and gates with **Managed by guardrails** turned on appear in these lists. If something you expect is missing, that's why — see Step 6.
+Only hooks and gates with **Managed by guardrails** turned on appear in these lists. If something you expect is missing, that's why — see Step 5.
 </Step>
 <Step>
 Set **Mode** to **Observe** for now. (**Enforce** applies the outcome; **Disabled** skips the rule.)
@@ -189,7 +146,7 @@ Put narrow rules above broad ones. A catch-all rule with an empty condition matc
 
 Each rule renders as an **IF** / **THEN** card showing its condition and its action and mode chips, so you can read the cascade top-down without opening each rule.
 
-## Step 5: Add a tool gate for approval
+## Step 4: Add a tool gate for approval
 
 A tool gate turns a matching call into an approval request instead of a failure.
 
@@ -224,7 +181,7 @@ Go back to your rule and select the gate under **Tool gates**.
 Leaving **Managed by guardrails** **off** means the gate evaluates on every matching call independently of any guardrail. That's sometimes what you want — a blanket approval requirement — but it makes the gate invisible to your rule cascade.
 </Note>
 
-## Step 6: Attach hooks
+## Step 5: Attach hooks
 
 Hooks do the inspection and rewriting. Create them in the **Hooks** section of **AI > Guardrails** — see [Tool call hooks](/product/admin/tool-call-hooks) for the full field reference and the built-in patterns.
 
@@ -234,9 +191,9 @@ To make a hook selectable by a guardrail rule, turn on its **Managed by guardrai
 Hooks are **fail-closed**: if a hook errors, times out, or its filter expression fails to evaluate, the call is **denied**. A hook selected by an Enforce-mode rule can therefore block traffic because it's broken, not because it matched. Check the recorded status rather than assuming a denial means the guardrail worked.
 </Warning>
 
-## Step 7: Promote from Observe to Enforce
+## Step 6: Promote from Observe to Enforce
 
-This step is required for any rule that arrived in **Observe** — including most template rules (see Step 1). Until you do it, the rule is a reporting mechanism, not a control.
+Until you do this, a rule in **Observe** is a reporting mechanism, not a control.
 
 <Steps>
 <Step>
@@ -255,7 +212,7 @@ Edit the rule and set **Mode** to **Enforce**.
 
 Because an Observe match falls through to the next rule, you can safely stage a whole cascade in Observe and promote it rule by rule.
 
-## Step 8: Configure the untrusted content judge
+## Step 7: Configure the untrusted content judge
 
 The judge produces the `ctx.untrusted_content` signal. It's on by default and needs no setup — but you can turn it off.
 
@@ -278,6 +235,6 @@ Open the guardrail and click **Delete** in the top bar. The confirmation dialog 
 
 ## Next steps
 
-- Rule fields, CEL variables, the template catalog, and evaluation order: [Agent guardrails reference](/product/admin/agent-guardrails-reference).
+- Rule fields, CEL variables, and evaluation order: [Agent guardrails reference](/product/admin/agent-guardrails-reference).
 - Hook configuration and built-in patterns: [Tool call hooks](/product/admin/tool-call-hooks).
 - Controlling which tools exist to be gated at all: [Govern tools and toolsets](/product/admin/tools-and-toolsets).

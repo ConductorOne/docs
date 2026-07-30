@@ -19,7 +19,6 @@ Guardrails exist because the risk of an agent action often isn't a property of t
 ## What you can do with guardrails
 
 - **Gate on risk combinations, not just tool identity**: write rules over private-data sensitivity, untrusted-content exposure, and exfiltration capability
-- **Start from a curated template**: instantiate one of the built-in presets, tagged against OWASP LLM Top 10, OWASP Agentic, and Zero-Trust MCP — most arrive in Observe mode so you can watch before you enforce
 - **Require approval mid-call**: attach tool gates so a matching call pauses for a human decision instead of failing
 - **Redact and inspect payloads**: attach hooks that rewrite inputs, outputs, or the assistant's outgoing response
 - **Roll out safely**: run any rule in **Observe** mode to log what it *would* have done before it denies anything
@@ -34,7 +33,6 @@ Guardrails exist because the risk of an agent action often isn't a property of t
 | **Guardrail binding** | What actually puts a guardrail into effect: it attaches one guardrail to one enforcement target. Nothing is enforced until a binding exists. |
 | **Tool gate** | Requires approval before a matching tool call executes. The call pauses behind a request under a grant policy rather than being denied. |
 | **Hook** | Runs synchronously around a call to inspect, rewrite, or deny its input, output, or the assistant's outgoing response. See [Tool call hooks](/product/admin/tool-call-hooks). |
-| **Guardrail template** | A curated, versioned definition that mints a guardrail preconfigured with rules — and, where relevant, the tool gates and hooks those rules reference. |
 | **Untrusted content judge** | The classifier that scores agent input and tool output for prompt-injection risk on every turn, producing the untrusted-content signal rules read. |
 
 ## The three risk signals
@@ -49,7 +47,7 @@ Every guardrail rule is a CEL expression over the same small set of variables. T
 
 Plus `ctx.tool_name` for name-based matching, and `ctx.agent_id` on the agent surface.
 
-The reason this framing exists is that each axis alone is usually fine and the *combination* is what's dangerous — an agent with private data, exposure to untrusted content, and an exfiltration channel is the "lethal trifecta." Several built-in templates encode exactly that pattern.
+The reason this framing exists is that each axis alone is usually fine and the *combination* is what's dangerous — an agent holding private data, exposed to untrusted content, and able to exfiltrate is the "lethal trifecta." Writing rules on the combination is the point of guardrails.
 
 <Note>
 `ctx.untrusted_content` is only populated on the **Agent** surface, because the judge runs inside a C1AI session. A rule written against it on a **Gateway** guardrail won't behave as you expect. See [Enforcement surfaces](/product/admin/agent-guardrails-reference#enforcement-surfaces).
@@ -120,11 +118,11 @@ This is the single most common source of surprise. A hook you created before ado
 
 ### Freeze exfiltration after the agent reads untrusted content
 
-The indirect prompt-injection pattern behind published attacks like EchoLeak and CamoLeak: an agent reads attacker-controlled text, then is steered into sending data out. A rule matching elevated `ctx.untrusted_content` **and** elevated `ctx.exfiltration` blocks that combination while leaving each capability independently available. The **Untrusted content exfil freeze** template ships this rule — in Observe mode, so you promote it to Enforce once you've seen what it catches.
+The indirect prompt-injection pattern behind published attacks like EchoLeak and CamoLeak: an agent reads attacker-controlled text, then is steered into sending data out. A rule matching elevated `ctx.untrusted_content` **and** elevated `ctx.exfiltration` blocks that combination while leaving each capability independently available.
 
 ### Require approval for the lethal trifecta
 
-Rather than blocking, route the risky combination to a human: a rule that matches all three axes being elevated and selects a tool gate, so the call pauses for approval under a grant policy you choose. The **Lethal trifecta protection** template ships this.
+Rather than blocking, route the risky combination to a human: a rule that matches all three axes being elevated and selects a tool gate, so the call pauses for approval under a grant policy you choose.
 
 ### Keep your crown jewels inside the boundary
 
@@ -141,6 +139,6 @@ A tool gate filtered to destructive operations turns `delete`/`drop`/`terminate`
 ## Where to go from here
 
 - Ready to set one up? See [Configure agent guardrails](/product/admin/agent-guardrails-configure).
-- Need the rule fields, CEL variables, template catalog, and evaluation order? See the [Agent guardrails reference](/product/admin/agent-guardrails-reference).
+- Need the rule fields, CEL variables, and evaluation order? See the [Agent guardrails reference](/product/admin/agent-guardrails-reference).
 - Configuring the hooks a rule selects? See [Tool call hooks](/product/admin/tool-call-hooks).
 - Governing which tools are reachable in the first place? See [Govern tools and toolsets](/product/admin/tools-and-toolsets).
