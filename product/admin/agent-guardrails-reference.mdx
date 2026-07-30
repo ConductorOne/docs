@@ -140,6 +140,12 @@ A rule whose CEL expression fails to evaluate is **skipped**, and the cascade co
 
 If no rule matches, the call proceeds with no guardrail-curated gates or hooks — unmanaged gates and hooks still apply.
 
+A guardrail with no rules, or one whose every rule is **Disabled**, matches nothing. At call time it is indistinguishable from an unbound surface: bound-but-empty and not-bound-at-all behave identically.
+
+<Warning>
+**A call that matches no rule writes no `guardrail_decision` event.** Only a matched rule produces a durable record. So in the system log you cannot tell *"traffic reached this surface and matched nothing"* apart from *"no traffic reached this surface at all"* — both look like silence. Keep that in mind when a rule you expected to fire shows no records.
+</Warning>
+
 Pre-output hooks are not part of this walk. See [Pre-output hooks](#pre-output-hooks).
 
 ## Pre-output hooks
@@ -308,7 +314,9 @@ Distinguish the three denial shapes:
 
 ### An Observe rule shows nothing in the logs
 
-Observe records a match. No records means no calls matched the condition — widen it, or confirm traffic is actually reaching the bound surface.
+Observe records a match, and only a match. A call that matches no rule writes no event at all — so "traffic arrived and matched nothing" and "no traffic arrived" produce identical silence, and you can't tell them apart from the log. Check both: widen the condition, and independently confirm traffic is reaching the bound surface.
+
+Also confirm the guardrail is bound, and that your severity filter isn't excluding informational records.
 
 ### A rule matches calls I expected it to ignore
 
