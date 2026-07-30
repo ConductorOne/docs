@@ -1,8 +1,8 @@
 ---
 title: "Agent guardrails reference"
 og:title: "Agent guardrails reference - C1 docs"
-description: "Technical reference for agent guardrails: object model, rule fields, CEL variables, enforcement surfaces, evaluation order, the built-in template catalog, and troubleshooting."
-og:description: "Technical reference for agent guardrails: object model, rule fields, CEL variables, enforcement surfaces, evaluation order, the built-in template catalog, and troubleshooting."
+description: "Technical reference for agent guardrails: object model, rule and tool gate fields, CEL variables, enforcement surfaces, evaluation order, constraints, and troubleshooting."
+og:description: "Technical reference for agent guardrails: object model, rule and tool gate fields, CEL variables, enforcement surfaces, evaluation order, constraints, and troubleshooting."
 sidebarTitle: "Agent guardrails reference"
 ---
 
@@ -17,13 +17,10 @@ sidebarTitle: "Agent guardrails reference"
 | **Guardrail binding** | Attaches one guardrail to one enforcement target. The only object that puts a guardrail into effect | One per target |
 | **Tool gate** | Standalone approval requirement: a filter plus a grant policy | Tenant; reusable across rules |
 | **Hook** | Standalone interceptor that inspects, rewrites, or denies a payload | Tenant; reusable across rules |
-| **Guardrail template** | Versioned definition that mints a guardrail plus the gates and hooks its rules need | Built-in, or tenant-authored |
 
 How they relate:
 
 ```
-Guardrail template  --instantiate-->  Guardrail (+ its tool gates and hooks)
-
 Guardrail binding  --(surface, target)-->  Guardrail
                                             └── rules[] (ordered)
                                                   ├── tool gate ids
@@ -62,8 +59,7 @@ If no binding resolves for a surface — none configured, or it points at a dele
 | **Name** | Required. Up to 128 characters. |
 | **Description** | Optional. Up to 1024 characters. |
 | **Applies to** | **Agent**, **Gateway**, or **Any surface**. Determines which variables rules can read. |
-| **Managed by** | **Tenant** for guardrails you own; **System** for read-only built-ins. |
-| **Created from template** | Provenance stamp recording the template ID and version, when instantiated from one. |
+| **Managed by** | **Tenant** for guardrails you own. |
 
 ## Guardrail rule fields
 
@@ -180,63 +176,6 @@ The in-product helper text on the filter field mentions only `ctx.tool_name` and
 
 Each prefills a canned CEL expression you can then edit.
 
-## Built-in template catalog
-
-Built-in templates are **read-only and virtual** — they're presented to every tenant without being seeded into your tenant's data, and instantiating one gives you an editable copy. Editing your copy never affects the template.
-
-<Warning>
-**Most templates do not enforce when you instantiate them.** The **Ships as** column below is the mode each template's rule carries on creation. An **Observe** rule logs what it would have done and falls through — it blocks and redacts nothing until you edit the rule and set **Mode** to **Enforce**. A **Disabled** rule does nothing at all. The "What it does" column describes the behavior once enforcing.
-</Warning>
-
-### Rule-only templates
-
-| Template | Surface | Ships as | What it does |
-| :--- | :--- | :--- | :--- |
-| **PII redaction** | Gateway | Enforce | Blocks calls that would send high-sensitivity private data outside the trust boundary |
-| **Lethal trifecta protection** | Agent | Enforce | Requires approval when an agent combines private data access, untrusted-content exposure, and exfiltration capability. Requires a grant policy parameter |
-| **Multiplayer protection** | Agent | Mixed | Two rules: an **Observe** rule for untrusted shared context, and an **Enforce** rule blocking cross-user exfiltration in shared multi-user sessions |
-| **Untrusted content exfil freeze** | Agent | **Observe** | Blocks calls combining untrusted-content exposure with an exfiltration channel — the EchoLeak/CamoLeak pattern |
-| **Crown-jewel read-only** | Any surface | **Observe** | Blocks the highest-sensitivity data from leaving through a high-exfiltration tool |
-| **Strict trifecta (paranoid)** | Agent | **Disabled** | Blocks when any two of the three axes are elevated. Opt in deliberately |
-
-### Approval-gate templates
-
-Each pairs a coarse rule with a tool gate. All ship **Enforce** and require you to supply a grant policy parameter when instantiating.
-
-| Template | Surface | Requires approval before |
-| :--- | :--- | :--- |
-| **Destructive action approval** | Agent | A destructive or mutating tool such as delete, drop, or terminate |
-| **Third-party connector approval** | Agent | Calling a third-party connector tool |
-| **External send approval** | Agent | Sending data outside the boundary |
-| **Finance action approval** | Agent | A finance-related operation |
-| **Infrastructure mutation approval** | Agent | An infrastructure change |
-| **Database write gate** | Agent | A database write |
-
-### Hook templates
-
-Each is a single **Evaluate hooks** rule wired to a built-in hook pattern. **All ten ship in Observe mode** — instantiating one creates the hook and wires it up, but nothing is redacted or blocked until you promote the rule to **Enforce**.
-
-| Template | Surface | What the hook does once enforcing |
-| :--- | :--- | :--- |
-| **PII redaction (DLP hook)** | Gateway | Redacts sensitive fields (SSN, DOB, bank account, and similar) from output before it reaches the agent |
-| **Credit card blocking (DLP hook)** | Gateway | Blocks output containing a Luhn-valid card number |
-| **Tool output size guard (hook)** | Gateway | Denies output exceeding a maximum size, preventing context flooding |
-| **Query scope limit (hook)** | Gateway | Caps numeric query parameters so callers can't request unbounded data |
-| **Write authorization (hook)** | Gateway | Blocks calls classified write or destructive before they execute |
-| **Sensitive file guard (hook)** | Gateway | Blocks calls referencing sensitive file paths or directories |
-| **Secrets masking (DLP hook)** | Gateway | Redacts secret-shaped values — AWS keys, bearer tokens, JWTs, private keys, Slack/GitHub tokens |
-| **Link filter (hook)** | Gateway | Strips or annotates URLs and markdown images whose host isn't allowlisted, mitigating markdown-image exfiltration |
-| **Encoded content guard (hook)** | Gateway | Blocks input with long base64 blobs, long hex runs, or invisible unicode used to smuggle instructions |
-| **Prompt injection scan (hook)** | Gateway | Scans output for prompt injection using the judge and blocks high-risk output |
-
-### Framework tags
-
-Templates are tagged for filtering in the gallery: **OWASP LLM Top 10**, **OWASP Agentic**, and **Zero-Trust MCP**.
-
-<Note>
-These are filtering labels indicating which risk category a template addresses. They are not a compliance attestation or a claim of complete coverage of any framework.
-</Note>
-
 ## The untrusted content judge
 
 | Property | Detail |
@@ -268,7 +207,6 @@ Disabling the judge does not disable rules that read `ctx.untrusted_content` —
 | Gate ordering | Enabled first, then priority ascending, then oldest first |
 | Priority range | 0–1000 for gates and hooks; lower first |
 | Tenant defaults | No guardrail, binding, or rule is created for a new tenant |
-| Built-in templates | Read-only; instantiating produces an editable copy |
 
 ## Troubleshooting
 
@@ -306,6 +244,6 @@ Distinguish the three denial shapes:
 
 Observe records a match. No records means no calls matched the condition — widen it, or confirm traffic is actually reaching the bound surface.
 
-### A template's rules aren't what I expected
+### A rule matches calls I expected it to ignore
 
-Instantiating copies the template at its current version. Your copy is independent, and the **Created from template** strip records which version it came from. A template updated later does not update your guardrail.
+An empty **Condition (CEL)** matches every tool call. Check that the condition saved, and that a broader rule above this one isn't the one actually matching — evaluation stops at the first match in **Enforce** mode.
