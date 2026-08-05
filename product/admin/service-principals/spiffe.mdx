@@ -1,0 +1,97 @@
+---
+title: SPIFFE integration
+og:title: SPIFFE integration - C1 docs
+og:description: Set up secretless authentication from SPIFFE/SPIRE workload identities to C1 using JWT-SVIDs.
+description: Set up secretless authentication from SPIFFE/SPIRE workload identities to C1 using JWT-SVIDs.
+sidebarTitle: SPIFFE
+---
+
+{/* Editor Refresh: 2026-08-05 */}
+
+SPIFFE (Secure Production Identity Framework For Everyone) issues workloads a cryptographically verifiable identity in the form of a JWT-SVID (JWT SVID). C1 can trust JWT-SVIDs directly from any SPIFFE implementation, including [SPIRE](https://spiffe.io/docs/latest/spire-about/), so your workloads authenticate without stored secrets.
+
+## Prerequisites
+
+- A SPIFFE implementation (for example SPIRE) issuing JWT-SVIDs to your workloads, with a publicly accessible SPIFFE bundle endpoint
+- A service principal with a SPIFFE federation trust. See [set up federation](/product/admin/service-principals/federation-setup) if you haven't created one yet. Use the **SPIFFE** preset.
+- The trust's **client ID** (for example `still-heron-30217@yourcompany.conductor.one/wfe`)
+
+## Step 1: Configure the provider in C1
+
+When creating the provider, select the **SPIFFE** preset and provide:
+
+| Field | Description |
+| :--- | :--- |
+| **Trust domain** | Your SPIFFE trust domain, for example `prod.acme.internal` |
+| **Bundle endpoint URL** | The publicly accessible URL where your SPIFFE implementation serves its JWKS bundle |
+
+C1 verifies every JWT-SVID's signature against this bundle endpoint, and confirms the token's trust domain matches the one you configured -- this check happens server-side, not in the trust's CEL expression.
+
+## Step 2: Create a federation trust
+
+Configure the trust with the workload path you want to allow. The wizard generates a CEL expression from the path you enter; switch to manual mode to write your own.
+
+## Step 3: Request and exchange the token
+
+From your workload, request a JWT-SVID from your SPIFFE implementation (for example the SPIRE Workload API), then exchange it for a C1 access token:
+
+```bash
+# Fetch a JWT-SVID from the SPIRE agent (audience must match your C1 tenant domain)
+SPIFFE_JWT=$(spire-agent api fetch jwt \
+  -audience yourcompany.conductor.one \
+  -socketPath /run/spire/sockets/agent.sock \
+  | tail -n +2)
+
+# Exchange for a C1 access token
+C1_ACCESS_TOKEN=$(curl -s -X POST \
+  "https://yourcompany.conductor.one/auth/v1/token" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+  -d "subject_token=$SPIFFE_JWT" \
+  -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+  -d "client_id=still-heron-30217@yourcompany.conductor.one/wfe" \
+  | jq -r '.access_token')
+
+curl -s "https://yourcompany.conductor.one/api/v1/apps" \
+  -H "Authorization: Bearer $C1_ACCESS_TOKEN"
+```
+
+## CEL expression examples
+
+The JWT-SVID's `sub` claim is a SPIFFE ID URI in the form `spiffe://<trust-domain>/<workload-path>`. Use the CEL `url()` function to parse it and match on the workload path.
+
+### Restrict to a specific workload path
+
+```go
+url(claims.sub).path == "/ns/prod/sa/deployer"
+```
+
+### Restrict to a path prefix
+
+```go
+url(claims.sub).path.startsWith("/ns/prod/")
+```
+
+## Common JWT-SVID claims
+
+JWT-SVIDs carry minimal claims compared to platform-specific OIDC tokens:
+
+| Claim | Example value | Description |
+| :--- | :--- | :--- |
+| `sub` | `spiffe://prod.acme.internal/ns/prod/sa/deployer` | The workload's SPIFFE ID |
+| `aud` | `yourcompany.conductor.one` | Audience requested when fetching the JWT-SVID |
+| `exp` | `1700000900` | Token expiration time (Unix timestamp) |
+| `iat` | `1700000000` | Token issued-at time (Unix timestamp), if present |
+
+<Note>
+The `iat` claim is optional under the JWT-SVID specification, and many SPIFFE implementations (including SPIRE) omit it. C1 only enforces the token-freshness check when `iat` is present.
+</Note>
+
+## Security best practices for SPIFFE
+
+<Warning>
+Trust domain verification confirms which SPIFFE implementation issued the token, but it doesn't scope which workload within that trust domain can authenticate. Always add a workload-path condition to your CEL expression.
+</Warning>
+
+- **Scope by workload path**: Use `url(claims.sub).path` to restrict which specific workload identity can use this trust, not just the trust domain.
+- **Keep bundle endpoints current**: If your SPIFFE implementation rotates its signing keys, make sure the bundle endpoint URL configured in C1 stays reachable so signature verification keeps working.
+- **Scope trust roles**: Use scoped roles on the federation trust to limit what the exchanged token can do. See [security controls](/product/admin/service-principals/security) for details.
