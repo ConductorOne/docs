@@ -23,7 +23,7 @@ C1 can govern Slack access two ways. Both let your AI clients read from and act 
 | **Authentication** | Slack's user-token OAuth flow via a Slack app you register (client ID/secret; no dynamic client registration) — or a static user token as a bearer fallback | Per-user OAuth via a Slack app's client ID/secret |
 | **Access scoping** | The **User Token Scopes** you request on the Slack app | The **User Token Scopes** you configure |
 | **Tool surface** | Slack's own tool set exposed by its hosted MCP server | Channels, messages, users, files, and search, mapped to Slack API endpoints |
-| **Setup effort** | Create a Slack app, turn on **Enable MCP**, configure the user-token OAuth flow (or a static token), then register in C1 | Create a Slack app, configure user token scopes, then register in C1 |
+| **Setup effort** | Create a Slack app, turn on its **Slack Model Context Protocol (MCP) Server** toggle, configure the user-token OAuth flow (or a static token), then register in C1 | Create a Slack app, configure user token scopes, then register in C1 |
 
 Use the native **Slack MCP** option (listed as plain **Slack** in your catalog) if you want Slack's own hosted tool set and can register a Slack app for its user-token OAuth flow (or a static token). Use **Slack API** if you'd rather use C1's own Slack integration with the scopes-based setup you're already familiar with.
 
@@ -49,10 +49,67 @@ Before configuring authentication, register a Slack app and turn on its MCP supp
 
 <Steps>
 <Step>
-Sign in at [api.slack.com/apps](https://api.slack.com/apps) and select **Create New App** > **From scratch**. Enter an app name such as `C1`, pick a workspace to develop in, then select **Create App**.
+Sign in at [api.slack.com/apps](https://api.slack.com/apps) and select **Create New App** > **From an app manifest**. Choose the workspace to develop in, then select **Next**.
 </Step>
 <Step>
-In the app settings sidebar, open **Agents & AI Apps**. Under **Model Context Protocol**, turn on the **Enable MCP** toggle. Without this, Slack's hosted MCP server rejects the app.
+Paste the manifest below and select **Next**, then **Create**. It turns on MCP support and sets the redirect URL and C1's default, read-only **User Token Scopes** for you, instead of clicking through Slack's scope picker. Slack ignores YAML comments on import, so the commented-out write scopes stay disabled until you uncomment them and reimport.
+
+<Accordion title="Slack app manifest (copy/paste)">
+
+```yaml
+display_information:
+  name: C1
+oauth_config:
+  redirect_urls:
+    - https://accounts.conductor.one/auth/callback
+  scopes:
+    user:
+      # Default (read-only) — what C1 requests by default.
+      - search:read.public
+      - search:read.private
+      - search:read.mpim
+      - search:read.im
+      - search:read.files
+      - search:read.users
+      - channels:read
+      - channels:history
+      - groups:read
+      - groups:history
+      - mpim:read
+      - mpim:history
+      - im:history
+      - canvases:read
+      - users:read
+      - users:read.email
+      - reactions:read
+      - emoji:read
+      - files:read
+      # Optional (write) — uncomment to enable write tools, then add the
+      # matching scopes in C1's authentication settings too.
+      # - chat:write
+      # - canvases:write
+      # - reactions:write
+      # - channels:write
+      # - groups:write
+      # - im:write
+      # - mpim:write
+settings:
+  # Turns on the Slack MCP Server toggle under Features > Agents.
+  is_mcp_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+
+</Accordion>
+
+To create the app by hand instead, select **From scratch**, then add the redirect URL and scopes yourself on **OAuth & Permissions** — see [Slack MCP scopes](#slack-mcp-scopes) below.
+</Step>
+<Step>
+In the app settings sidebar, open **Features** > **Agents**. Under **Slack Model Context Protocol (MCP) Server**, confirm the toggle is on — the manifest's `is_mcp_enabled` sets it, but check it here, because Slack's hosted MCP server rejects an app without it. If you created the app from scratch, turn it on now.
+</Step>
+<Step>
+Leave the **Agent experience** toggle on the same page off. It's a separate Slack feature for conversational agents, and the MCP server doesn't require it.
 </Step>
 <Step>
 Make the app eligible to use the MCP server: either submit it to the Slack Marketplace (directory-published), or have a workspace admin install it as an internal app. Keep the app ID fixed once you've registered it in C1, since C1's connection pins to it.
@@ -61,15 +118,20 @@ Make the app eligible to use the MCP server: either submit it to the Slack Marke
 
 ## Slack MCP scopes
 
-Slack's hosted MCP server authenticates with a Slack **user token** (`xoxp-`), never a bot token, so every scope below is a **User Token Scope** — add them on the app's **OAuth & Permissions** page and leave **Bot Token Scopes** empty.
+Slack's hosted MCP server authenticates with a Slack **user token** (`xoxp-`), never a bot token, so every scope below is a **User Token Scope** — the [manifest above](#create-a-slack-app-for-mcp) adds the read scopes for you, and you can add more on the app's **OAuth & Permissions** page. Leave **Bot Token Scopes** empty.
 
-Start with the read scopes for browsing channels, messages, users, canvases, files, and search:
+**Default scopes** browse channels, messages, users, canvases, and files, and search across them:
 
 `search:read.public`, `search:read.private`, `search:read.mpim`, `search:read.im`, `search:read.files`, `search:read.users`, `channels:read`, `channels:history`, `groups:read`, `groups:history`, `mpim:read`, `mpim:history`, `im:history`, `canvases:read`, `users:read`, `users:read.email`, `reactions:read`, `emoji:read`, `files:read`
 
-Add the write scopes only where a tool needs them:
+**Optional scopes** enable the write tools — add only what you need:
 
-`chat:write`, `canvases:write`, `reactions:write`, `channels:write`, `groups:write`, `im:write`, `mpim:write`
+| Scope(s) | Enables |
+| :--- | :--- |
+| `chat:write` | Send messages |
+| `canvases:write` | Create and edit canvases |
+| `reactions:write` | Add emoji reactions |
+| `channels:write`, `groups:write`, `im:write`, `mpim:write` | Create and manage channels and direct messages |
 
 <Note>
 Scope changes take effect the next time a user connects (or the next call using a static token). If you add a scope after users have already connected, each user must reconnect their Slack account — or you must reissue the static token — to grant it.
@@ -81,16 +143,9 @@ With per-user OAuth, each person authorizes individually and tool calls run unde
 
 <Steps>
 <Step>
-In the app settings, open **OAuth & Permissions**. Under **Redirect URLs**, select **Add New Redirect URL** and enter exactly:
+In the app settings, open **OAuth & Permissions** and confirm the redirect URL (`https://accounts.conductor.one/auth/callback`) and the **User Token Scopes** match the manifest — see [Slack MCP scopes](#slack-mcp-scopes) above.
 
-```
-https://accounts.conductor.one/auth/callback
-```
-
-Select **Add**, then **Save URLs**.
-</Step>
-<Step>
-Still on **OAuth & Permissions**, scroll to **Scopes** and add the **User Token Scopes** the tools need — see [Slack MCP scopes](#slack-mcp-scopes) above.
+If you created the app from scratch, add them now: under **Redirect URLs**, select **Add New Redirect URL**, enter the URL exactly, select **Add**, then **Save URLs**; then add the scopes under **Scopes**.
 </Step>
 <Step>
 In the left sidebar, open **Basic Information**. Under **App Credentials**, copy the **Client ID**, then reveal and copy the **Client Secret**.
@@ -112,7 +167,7 @@ Instead of per-user OAuth, you can connect with a single pre-issued Slack user t
 
 <Steps>
 <Step>
-In the Slack app's **OAuth & Permissions** page, add the same **User Token Scopes** as in [Slack MCP scopes](#slack-mcp-scopes) above.
+Create the app from the [manifest above](#create-a-slack-app-for-mcp) — or, on an existing app's **OAuth & Permissions** page, add the same **User Token Scopes** as in [Slack MCP scopes](#slack-mcp-scopes) above.
 </Step>
 <Step>
 Install the app to the workspace, then copy the **User OAuth Token** (`xoxp-…`) from that page.
@@ -159,7 +214,7 @@ Tool discovery runs even if authentication isn't complete yet, so seeing discove
 
 - **Rotate the client secret** on the app's **Basic Information** page under **App Credentials**, then update the secret on the server's authentication settings in C1.
 - **Rotate a static user token** by reinstalling the app in Slack to regenerate the **User OAuth Token**, then update it in C1.
-- **Revoke access** by uninstalling the Slack app from the workspace on **OAuth & Permissions**, or by turning off the app's **Enable MCP** toggle.
+- **Revoke access** by uninstalling the Slack app from the workspace on **OAuth & Permissions**, or by turning off the app's **Slack Model Context Protocol (MCP) Server** toggle under **Features** > **Agents**.
 - **Adjust access** by editing the app's **User Token Scopes** on the **OAuth & Permissions** page in Slack.
 
 </Tab>
@@ -191,19 +246,54 @@ With per-user OAuth, you register one Slack app and each user authorizes individ
 
 <Steps>
 <Step>
-Sign in to the Slack apps dashboard and select **Create New App** > **From scratch**. Enter an app name such as `C1`, pick a workspace to develop in, then select **Create App**. For detail on the OAuth flow, see Slack's [guide to installing apps with OAuth](https://docs.slack.dev/authentication/installing-with-oauth/#how).
+Sign in to the Slack apps dashboard and select **Create New App** > **From an app manifest**. Choose the workspace to develop in, then select **Next**. For detail on the OAuth flow, see Slack's [guide to installing apps with OAuth](https://docs.slack.dev/authentication/installing-with-oauth/#how).
 </Step>
 <Step>
-In the app's left sidebar, open **OAuth & Permissions**. Under **Redirect URLs**, select **Add New Redirect URL** and enter exactly:
+Paste the manifest below and select **Next**, then **Create**. It sets the redirect URL and C1's default, read-only **User Token Scopes** for you, instead of clicking through Slack's scope picker. Slack ignores YAML comments on import, so the commented-out scopes stay disabled until you uncomment them and reimport.
 
-```
-https://accounts.conductor.one/auth/callback
+<Accordion title="Slack app manifest (copy/paste)">
+
+```yaml
+display_information:
+  name: C1
+oauth_config:
+  redirect_urls:
+    - https://accounts.conductor.one/auth/callback
+  scopes:
+    user:
+      # Default (read-only) — what C1 requests by default.
+      - channels:read
+      - channels:history
+      - groups:read
+      - groups:history
+      - im:read
+      - im:history
+      - mpim:read
+      - mpim:history
+      - users:read
+      - users:read.email
+      - usergroups:read
+      - files:read
+      - pins:read
+      - search:read
+      # Optional — uncomment to enable the write, read, and admin tools you
+      # need, then add the matching scopes in C1's authentication settings too.
+      # These two are examples; see the optional scopes table below for the
+      # full set.
+      # - chat:write
+      # - reactions:read
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
 ```
 
-Select **Add**, then **Save URLs**.
+</Accordion>
+
+To create the app by hand instead, select **From scratch**, then add the redirect URL (`https://accounts.conductor.one/auth/callback`) under **Redirect URLs** on **OAuth & Permissions**, and the scopes under **Scopes**.
 </Step>
 <Step>
-Still on **OAuth & Permissions**, scroll to **Scopes** and add the **User Token Scopes** from [Slack scopes](#slack-scopes) below — the default read scopes for browsing, plus any optional scopes for write or admin tools. User token scopes let the app act as each authorizing user.
+In the app's left sidebar, open **OAuth & Permissions** and confirm the redirect URL and **User Token Scopes** match the manifest. Add any optional scopes your write or admin tools need from [Slack scopes](#slack-scopes) below. User token scopes let the app act as each authorizing user.
 </Step>
 <Step>
 In the left sidebar, open **Basic Information**. Under **App Credentials**, copy the **Client ID**, then reveal and copy the **Client Secret**.
@@ -212,7 +302,7 @@ In the left sidebar, open **Basic Information**. Under **App Credentials**, copy
 
 ## Slack scopes
 
-C1 uses **user token scopes** only — every tool call acts as the authorizing user, not as a bot. Add all of the scopes below under **User Token Scopes** on Slack's **OAuth & Permissions** page; leave **Bot Token Scopes** empty.
+C1 uses **user token scopes** only — every tool call acts as the authorizing user, not as a bot. The [manifest above](#create-a-slack-app) adds the default scopes under **User Token Scopes**; add any optional ones on Slack's **OAuth & Permissions** page. Leave **Bot Token Scopes** empty.
 
 C1 requests the default read scopes automatically. The default is read-only; to enable write or admin tools, an admin adds the optional scopes below manually — under **User Token Scopes** in Slack, and in C1's scopes field when configuring authentication. Grant only what you need.
 
