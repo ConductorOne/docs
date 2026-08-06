@@ -35,6 +35,27 @@ You'll need:
 - `kubectl` configured to connect to the cluster
 - Permissions to create namespaces, service accounts, and RBAC resources in the cluster
 
+## Connection resolution
+
+The connector determines which cluster to connect to using the following precedence:
+
+1. **Explicit kubeconfig file** (`--kubeconfig`) — If provided, the connector uses this file. It must exist; the connector returns an error if the path is invalid.
+2. **Explicit API server** (`--server`) — If provided without `--kubeconfig`, the connector connects directly to this URL. Credentials must be supplied separately via `--token` or `--client-certificate`/`--client-key`.
+3. **Implicit sources** — When neither `--kubeconfig` nor `--server` is set, the connector falls back to these sources in order:
+   - The `KUBECONFIG` environment variable (a colon-separated list of paths; the first existing file wins)
+   - The default kubeconfig at `~/.kube/config`
+   - An in-cluster service account (the token mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token`)
+
+If none of the implicit sources exist, the connector returns an error asking you to supply a kubeconfig.
+
+<Warning>
+When running the connector outside a cluster without `--kubeconfig` or `--server`, the connector uses the current context from your default kubeconfig (`~/.kube/config` or `KUBECONFIG`). Verify that your current context points at the intended cluster before starting a sync — an unrelated context can silently direct the connector to the wrong cluster.
+
+```bash
+kubectl config current-context
+```
+</Warning>
+
 ## Set up RBAC permissions in your cluster
 
 The connector uses a Kubernetes service account to read cluster state. Apply the following manifest to create the namespace, service account, and the read-only RBAC permissions it needs.
@@ -280,3 +301,47 @@ Add the connector in C1 and enter the credentials you collected in the previous 
 **Done.** Your Kubernetes connector is now pulling access data into C1.
 </Tab>
 </Tabs>
+
+## CLI configuration reference
+
+When running `baton-kubernetes` as a self-hosted connector, use these flags to configure the cluster connection and authentication. Each flag can also be set as an environment variable by converting the flag name to uppercase, replacing dashes with underscores, and adding the `BATON_` prefix (for example, `--kubeconfig` becomes `BATON_KUBECONFIG`).
+
+### Connection flags
+
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `--kubeconfig` | Path to the kubeconfig file. See [Connection resolution](#connection-resolution) for fallback behavior. | |
+| `--server` | Address and port of the Kubernetes API server (for example, `https://api.example.com:6443`). | |
+| `--context` | Name of the kubeconfig context to use. | Current context |
+| `--cluster` | Name of the kubeconfig cluster to use. | |
+| `--user` | Name of the kubeconfig user to use. | |
+
+### Authentication flags
+
+Choose one authentication method. These methods are mutually exclusive — the connector rejects combinations such as `--token` with `--client-certificate`.
+
+| Flag | Description |
+| :--- | :--- |
+| `--token` | Bearer token for API server authentication. |
+| `--client-certificate` | Path to a client certificate file for TLS authentication. Must be used with `--client-key`. |
+| `--client-key` | Path to a client key file for TLS authentication. Must be used with `--client-certificate`. |
+
+### Impersonation flags
+
+Impersonation is mutually exclusive with both `--token` and `--client-certificate`/`--client-key`.
+
+| Flag | Description |
+| :--- | :--- |
+| `--as` | Username to impersonate. Can be a regular user or a service account. |
+| `--as-uid` | UID to impersonate. |
+| `--as-group` | Group to impersonate. Repeat the flag to specify multiple groups. |
+
+### TLS and transport flags
+
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `--certificate-authority` | Path to a CA certificate file for verifying the API server's certificate. | |
+| `--tls-server-name` | Server name for certificate validation. If omitted, the hostname from the server URL is used. | |
+| `--insecure-skip-tls-verify` | Skip TLS certificate verification. | `false` |
+| `--request-timeout` | Timeout for individual API requests (for example, `30s`, `2m`). `0` means no timeout. | `0` |
+| `--disable-compression` | Disable response compression for all API requests. | `false` |
