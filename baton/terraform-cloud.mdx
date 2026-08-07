@@ -1,0 +1,302 @@
+---
+title: "Set up an HCP Terraform connector"
+og:title: "Set up an HCP Terraform connector"
+description: "C1 provides identity governance and just-in-time provisioning for HCP Terraform. Integrate your HCP Terraform instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for HCP Terraform. Integrate your HCP Terraform instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "HCP Terraform"
+---
+
+<Note>
+HCP Terraform was formerly named Terraform Cloud. The connector repository and configuration retain the `terraform-cloud` name.
+</Note>
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The HCP Terraform connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Create |
+| Organizations | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Grant, Revoke |
+| Teams | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Grant, Revoke |
+| Projects | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Workspaces | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Agent tokens | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+**Additional functionality:**
+The HCP Terraform connector supports [automatic account provisioning](/product/admin/account-provisioning).
+
+**Notes:**
+
+- Account provisioning creates an organization invitation. HCP Terraform does not accept a password through the API, so C1 does not set one. The invited person receives an email from HCP Terraform and sets their own password when they accept the invitation.
+- Account deprovisioning is not supported. HCP Terraform has no user-deletion API, so removing a person from an organization is done by revoking their organization membership grant.
+- Agent tokens sync as secrets for visibility only. They have no entitlements or grants.
+- Projects and workspaces sync for visibility and are read-only. C1 does not provision access to them directly.
+- Managing organization members and teams requires an HCP Terraform paid plan. Team management is unavailable on the free tier.
+
+## Gather HCP Terraform credentials
+
+<Warning>
+To configure the HCP Terraform connector, you need a **user API token** belonging to an account with the **owners** team membership (organization owner) in each HCP Terraform organization you want C1 to manage. Organization owner permissions are required to read and manage organization members and teams. A token from an account without owner permissions syncs a reduced set of data and cannot provision access.
+</Warning>
+
+HCP Terraform issues several kinds of API tokens. Create a **user token**, which inherits the permissions of the account that owns it. Team tokens are limited to the workspaces their team can access, and organization tokens cannot cover multiple organizations, so neither is suitable for this connector.
+
+### Create a user API token
+
+<Steps>
+<Step>
+Sign in to HCP Terraform at [https://app.terraform.io](https://app.terraform.io) as a user who is a member of the **owners** team.
+
+<Tip>
+If you run Terraform Enterprise, sign in to your own instance URL instead. You provide that URL to C1 as the **Address** setting.
+</Tip>
+</Step>
+
+<Step>
+Confirm that your account has owner permissions. Navigate to **Organization settings** > **Teams** and check that your account appears in the **owners** team.
+</Step>
+
+<Step>
+Click your user icon in the top-right corner and select **Account settings**.
+</Step>
+
+<Step>
+In the left sidebar, click **Tokens**.
+</Step>
+
+<Step>
+Click **Create an API token**.
+</Step>
+
+<Step>
+Configure the token:
+
+1. Enter a **Description**: `ConductorOne`
+2. Choose an **Expiration** for the token.
+
+<Warning>
+This token is used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, use an account without owner permissions and do not enable provisioning.**
+</Warning>
+
+<Tip>
+If you set an expiration date, record it and rotate the token in C1 before it expires. An expired token causes syncs to fail.
+</Tip>
+</Step>
+
+<Step>
+Click **Generate token**, then copy and save the token value securely. HCP Terraform displays the token only once.
+</Step>
+</Steps>
+
+That's it! You now have the token you need to configure the connector.
+
+For more information, see the HashiCorp documentation on [API tokens](https://developer.hashicorp.com/terraform/cloud-docs/users-teams-organizations/api-tokens).
+
+## Configure the HCP Terraform connector
+
+<Warning>
+To configure a connector in C1, you must have the **Connector Administrator** or **Super Administrator** role. You also need the HCP Terraform API token you created above.
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+<Steps>
+<Step>
+In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+</Step>
+
+<Step>
+Search for **HCP Terraform** and click **Add**.
+</Step>
+
+<Step>
+Choose how to set up the new HCP Terraform connector:
+
+- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+- Add the connector to a managed app (select from the list of existing managed apps)
+- Create a new managed app
+</Step>
+
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+If you choose someone else, C1 notifies the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+
+<Step>
+Click **Next**.
+</Step>
+
+<Step>
+Find the **Settings** area of the page and click **Edit**.
+</Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+<Step>
+Enter the required configuration:
+
+- **Token** (required): The API token used to authenticate with terraform cloud.
+- **Address** (optional): The address of the terraform instance. Default: `https://app.terraform.io`
+</Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+<Step>
+Click **Save**.
+</Step>
+
+<Step>
+The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+</Step>
+</Steps>
+
+**Done.** Your HCP Terraform connector is now pulling access data into C1.
+
+</Tab>
+
+<Tab title="Self-hosted">
+
+Follow these instructions to use the [baton-terraform-cloud](https://github.com/conductorone/baton-terraform-cloud) connector, hosted and run in your own environment.
+
+When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+### Resources
+
+- Download the connector from the [ConductorOne download center](https://dist.conductorone.com/ConductorOne/baton-terraform-cloud).
+- View the source code in the [baton-terraform-cloud repository](https://github.com/conductorone/baton-terraform-cloud).
+
+### Step 1: Set up a new HCP Terraform connector
+
+<Steps>
+<Step>
+In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+</Step>
+
+<Step>
+Search for **Baton** and click **Add**.
+</Step>
+
+<Step>
+Choose how to set up the new HCP Terraform connector:
+
+- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+- Add the connector to a managed app (select from the list of existing managed apps)
+- Create a new managed app
+</Step>
+
+<Step>
+Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+If you choose someone else, C1 notifies the new connector owner by email that their help is needed to complete the setup process.
+</Step>
+
+<Step>
+Click **Next**.
+</Step>
+
+<Step>
+In the **Settings** area of the page, click **Edit**.
+</Step>
+
+<Step>
+Click **Rotate** to generate a new Client ID and Secret.
+
+Carefully copy and save these credentials. We'll use them in Step 2.
+</Step>
+</Steps>
+
+### Step 2: Create Kubernetes configuration files
+
+Create two Kubernetes manifest files for your HCP Terraform connector deployment:
+
+#### Secrets configuration
+
+```yaml expandable
+# baton-terraform-cloud-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baton-terraform-cloud-secrets
+type: Opaque
+stringData:
+  # C1 credentials
+  BATON_CLIENT_ID: <C1 client ID>
+  BATON_CLIENT_SECRET: <C1 client secret>
+
+  # HCP Terraform credentials
+  BATON_TOKEN: <Your HCP Terraform user API token>
+
+  # Optional: set only for Terraform Enterprise or a regional host.
+  # Defaults to https://app.terraform.io
+  BATON_ADDRESS: <Your HCP Terraform address>
+
+  # Optional: include if you want C1 to provision access using this connector
+  BATON_PROVISIONING: true
+```
+
+See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+#### Deployment configuration
+
+```yaml expandable
+# baton-terraform-cloud.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baton-terraform-cloud
+  labels:
+    app: baton-terraform-cloud
+spec:
+  selector:
+    matchLabels:
+      app: baton-terraform-cloud
+  template:
+    metadata:
+      labels:
+        app: baton-terraform-cloud
+        baton: true
+        baton-app: terraform-cloud
+    spec:
+      containers:
+      - name: baton-terraform-cloud
+        image: public.ecr.aws/conductorone/baton-terraform-cloud:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BATON_HOST_ID
+          value: baton-terraform-cloud
+        envFrom:
+        - secretRef:
+            name: baton-terraform-cloud-secrets
+```
+
+### Step 3: Deploy the connector
+
+<Steps>
+<Step>
+Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+</Step>
+
+<Step>
+Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the HCP Terraform connector to. HCP Terraform data should be found on the **Entitlements** and **Accounts** tabs.
+</Step>
+</Steps>
+
+**Done.** Your HCP Terraform connector is now pulling access data into C1.
+
+</Tab>
+</Tabs>
+
+<Tip>
+Looking for the latest release, checksums, or an older version of this connector? Visit the [ConductorOne download center](https://dist.conductorone.com/ConductorOne/baton-terraform-cloud).
+</Tip>
