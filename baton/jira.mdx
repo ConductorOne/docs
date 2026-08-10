@@ -17,7 +17,14 @@ sidebarTitle: "Atlassian Jira Cloud"
 | Managed accounts | <Icon icon="circle-info" /> |  |
 | Managed groups | <Icon icon="circle-info" /> |  |
 
-The Jira Cloud connector supports [automatic account provisioning](/product/admin/account-provisioning).
+The Jira Cloud connector supports [automatic account provisioning](/product/admin/account-provisioning). To provision accounts, the app's Provisioning step must include a Connector step with mappings for both required fields:
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `email` | String | Email address of the new user. |
+| `products` | String list | Jira products the user can access. Valid values: `jira-core`, `jira-servicedesk`, `jira-product-discovery`, `jira-software`. To create a user without product access, pass an empty list. |
+
+Both mappings are required. If the `products` mapping is missing, the Atlassian API rejects the request with an HTTP 400 error. The connector reports this as a generic "create account failed" error without surfacing the upstream message, so the cause may not be immediately obvious.
 
 This connector does not support account deprovisioning. You must deprovision accounts directly in Jira.
 
@@ -27,8 +34,7 @@ This connector can also be configured to automatically create and update Jira ti
 
 ## Known limitations
 
-- User email is not currently synchronized
-- Only lists the first 1,000 users of a project
+- Per-project participant listing uses a page size of 1,000. On projects with more than 1,000 participants the connector pages through all of them, but each page requires a separate API call.
 
 ## Gather Jira Cloud credentials
 
@@ -253,7 +259,7 @@ stringData:
   # Optional: include if you want C1 to skip syncing customer users
   BATON_SKIP_CUSTOMER_USER: true
 
-  # Optional: include if you want C1 to skip syncing project participants
+  # Optional: skip project participant sync (see note below)
   BATON_SKIP_PROJECT_PARTICIPANTS: true
 
   # Optional: include if you want C1 to sync managed accounts and managed groups from Atlassian 
@@ -262,6 +268,12 @@ stringData:
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+<Warning>
+**About `BATON_SKIP_PROJECT_PARTICIPANTS`**
+
+When this flag is enabled, the connector stops syncing per-project participant data entirely. This removes the `participate` **entitlement** for every project — not just the individual grants. Any access requests or access reviews that reference a project's `participate` entitlement will have no target entitlement to operate on. Only enable this flag if you do not use project participant entitlements in access requests or reviews.
+</Warning>
 
 #### Deployment configuration
 
