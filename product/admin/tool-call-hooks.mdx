@@ -1,8 +1,8 @@
 ---
 title: Tool call hooks
-description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
+description: Intercept MCP tool calls with built-in patterns, input patches, or custom functions to redact, modify, or block calls at runtime.
 og:title: Tool call hooks - C1 docs
-og:description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
+og:description: Intercept MCP tool calls with built-in patterns, input patches, or custom functions to redact, modify, or block calls at runtime.
 ---
 
 {/* Editor Refresh: 2026-07-30 */}
@@ -11,7 +11,7 @@ og:description: Intercept MCP tool calls with built-in patterns or custom functi
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-Tool call hooks are interception points that run on every governed MCP tool call. They can observe a call, modify its inputs or outputs, or deny it outright. Use them to redact sensitive data, cap risky parameters, or enforce conditional access rules that see beyond the entitlement grant model.
+Tool call hooks are interception points that run on every governed MCP tool call. They can observe a call, modify its inputs or outputs, or deny it outright. Use them to redact sensitive data, cap risky parameters, stamp required fields onto a call, or enforce conditional access rules that see beyond the entitlement grant model.
 
 ## How hooks work
 
@@ -47,15 +47,15 @@ Fill out the form:
 | :--- | :--- |
 | **Name** | Required. 1–100 characters. |
 | **Description** | Optional. Up to 2048 characters. |
-| **Hook type** | **Built-in pattern** for one of the patterns below, or **Custom function** to invoke a [function](/product/admin/functions). |
-| **Event** | **Pre-tool use**, **Post-tool use**, or **Pre-output**. Some built-in patterns only support one event. |
+| **Hook type** | **Built-in pattern** for one of the patterns below, **Patch tool input** to rewrite the call's arguments directly, or **Custom function** to invoke a [function](/product/admin/functions). |
+| **Event** | **Pre-tool use**, **Post-tool use**, or **Pre-output**. Some built-in patterns only support one event, and **Patch tool input** only supports **Pre-tool use**. |
 | **Filter** | Optional CEL expression. Empty matches all calls for the event. Available variables depend on the event — see [Filter variables by event](#filter-variables-by-event). |
 | **Priority** | 0–1000. Lower runs first. |
 | **Managed by guardrails** | Off by default. See [Managed by guardrails](#managed-by-guardrails) below. |
 | **Enabled** | Toggle on to activate the hook immediately on save. |
 </Step>
 <Step>
-If you selected **Built-in pattern**, choose the pattern and configure its options. If you selected **Custom function**, pick the function from the dropdown.
+If you selected **Built-in pattern**, choose the pattern and configure its options. If you selected **Patch tool input**, enter either a CEL expression or a static JSON object. If you selected **Custom function**, pick the function from the dropdown.
 </Step>
 <Step>
 Click **Save**.
@@ -68,12 +68,35 @@ A filter expression only sees the variables available for its event. Referencing
 
 | Event | Variables |
 | :--- | :--- |
-| **Pre-tool use**, **Post-tool use** | `ctx.tool_name` — for example, `ctx.tool_name.startsWith("github_")` |
+| **Pre-tool use**, **Post-tool use** | `ctx.tool_name` — for example, `ctx.tool_name.startsWith("github_")`. Also `ctx.surface` and `ctx.channel_id` when the call came from a chat channel — see [Chat channel context](#chat-channel-context). |
 | **Pre-output** | `ctx.untrusted_class`, one of the strings `"LOW"`, `"MEDIUM"`, `"HIGH"`; and `ctx.surface`, `"slack"` or `"web"`. `ctx.tool_name` is **unset** — no tool call is involved. |
 
 <Warning>
 `ctx.untrusted_class` (a hook filter, comparing **strings**) and `ctx.untrusted_content` (a [guardrail rule](/product/admin/agent-guardrails-reference#cel-variables) variable, comparing **ordered levels**) carry the same underlying risk score under two different names and two different types. In a pre-output hook filter write `ctx.untrusted_class == "HIGH"`; in a guardrail rule write `ctx.untrusted_content == HIGH`. Using the rule form in a hook filter fails to evaluate, and the call is denied.
 </Warning>
+
+### Chat channel context
+
+On the **Pre-tool use** and **Post-tool use** events, a filter can also see where the call came from:
+
+| Variable | Contents |
+| :--- | :--- |
+| `ctx.surface` | The chat surface the call came from, such as `"slack"`. |
+| `ctx.channel_id` | The ID of the chat channel the call came from, such as a Slack channel ID. |
+
+Both are **absent** — not empty strings — when the call didn't originate in a chat channel, as with a direct API call or a call from a connected MCP client. Check for them with `has()` before reading them, otherwise the expression fails to evaluate and the call is denied:
+
+```go
+has(ctx.surface) && ctx.surface == "slack"
+```
+
+Filtering on `ctx.channel_id` scopes a hook to one team's channel while leaving the same tool untouched everywhere else:
+
+```go
+has(ctx.channel_id) && ctx.channel_id == "C0123456789"
+```
+
+The same two variables are available to [patch expressions](#patch-tool-input-hooks) and are included in the payload sent to [custom function hooks](#custom-function-hooks).
 
 ### Event and pattern must be compatible
 
@@ -134,6 +157,68 @@ Where a pattern takes a list, a value you configure **replaces** the default lis
 **A Block output hook with no surfaces selected never fires.** An empty surface list means *no* surface, not all of them — deliberately, so that forgetting to choose can't silently apply the hook everywhere. The failure mode is a hook that looks configured and enabled but withholds nothing. Select **Slack**, **Web**, or both.
 </Warning>
 
+## Patch tool input hooks
+
+A **Patch tool input** hook rewrites a tool call's input arguments directly, with no function to author or deploy. Use it to stamp a required field onto every call, overwrite a value the AI client shouldn't get to choose, or strip a field before the call reaches the MCP server.
+
+This hook type only runs on **Pre-tool use** — once the call has run there's no input left to patch.
+
+Configure it one of two ways:
+
+| Mode | When to use |
+| :--- | :--- |
+| **CEL expression** | The fields depend on the call — which channel it came from, who made it, or what the input already contains. The expression must return a JSON object. |
+| **Static JSON** | The same fields apply to every call. Enter a JSON object and C1 applies it as-is. |
+
+### Patch expression variables
+
+| Variable | Contents |
+| :--- | :--- |
+| `ctx` | `ctx.tool_name`, plus `ctx.surface` and `ctx.channel_id` when the call came from a [chat channel](#chat-channel-context). |
+| `input` | The tool call's own arguments, so the patch can read what the AI client already sent. |
+| `caller` | Identity information about who made the call, such as `caller.id`. The same block described under [Pre-tool-use payload](#pre-tool-use-payload) — including the caveat that it is never an authorization input. |
+
+### How the patch is applied
+
+C1 merges the resulting object onto the tool's input one key at a time:
+
+- A key that isn't in the input yet is **added**.
+- A key that is already in the input is **overwritten**.
+- A key set to `null` is **removed** from the input.
+
+Keys you don't mention are left as they were. These are [JSON Merge Patch](https://www.rfc-editor.org/rfc/rfc7396.html) rules, the same merge behavior used by many HTTP APIs. A patch that changes the input is recorded as `MUTATED` in the [audit log](/product/admin/audit-ai-tool-usage).
+
+If the expression fails to evaluate or returns anything other than a JSON object, the call is denied — hooks are fail-closed.
+
+### Example: stamp a scope onto calls from one channel
+
+Say your Datadog tool calls take a `tenant_id` argument, and every call made through one Slack channel should carry that channel's scope whether or not the AI client thought to include it.
+
+Set the filter to match those calls:
+
+```go
+ctx.tool_name.startsWith("datadog_") && has(ctx.channel_id) && ctx.channel_id == "C0123456789"
+```
+
+Then set the patch expression to:
+
+```go
+{"tenant_id": ctx.channel_id}
+```
+
+Every matching call now reaches the MCP server with `tenant_id` set, and any value the client sent is replaced.
+
+### Example: pin a value and drop a field
+
+A hook that doesn't need to vary per call can use a static JSON object instead. This one forces every matching call into the development environment and removes an argument entirely:
+
+```json
+{
+  "environment": "development",
+  "region": null
+}
+```
+
 ## Custom function hooks
 
 When the built-in patterns don't fit, write a [function](/product/admin/functions) and attach it to a hook. C1 invokes the function with a JSON payload describing the call and uses the return value to decide whether to allow, modify, or deny.
@@ -150,7 +235,9 @@ The function receives:
   "input": { /* the tool's input arguments */ },
   "context": {
     "tool_source": "connector",
-    "classification": "WRITE"
+    "classification": "WRITE",
+    "surface": "slack",
+    "channel_id": "C0123456789"
   },
   "caller": {
     "id": "<principal id>",
@@ -161,7 +248,7 @@ The function receives:
 }
 ```
 
-`tool_source` is `builtin`, `connector`, or `claw`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`). `caller` identifies who made the call; `token_id`, `mcp_client_id`, and `mcp_client_type` are omitted when empty.
+`tool_source` is `builtin`, `connector`, or `claw`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`). `caller` identifies who made the call; `token_id`, `mcp_client_id`, and `mcp_client_type` are omitted when empty. `surface` and `channel_id` describe the [chat channel](#chat-channel-context) the call came from and are omitted when it didn't come from one.
 
 <Warning>
 `caller` is for logging and call-shape decisions only — it is **never an authorization input**, because the grant decision is made before the hook runs. Identity-based scope belongs in [access profiles](/product/admin/tools-and-toolsets), not hooks.
