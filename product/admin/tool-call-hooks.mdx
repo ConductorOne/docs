@@ -1,8 +1,8 @@
 ---
 title: Tool call hooks
-description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
+description: Intercept MCP tool calls with built-in patterns, input patches, or custom functions to redact, modify, or block calls at runtime.
 og:title: Tool call hooks - C1 docs
-og:description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
+og:description: Intercept MCP tool calls with built-in patterns, input patches, or custom functions to redact, modify, or block calls at runtime.
 ---
 
 {/* Editor Refresh: 2026-05-08 */}
@@ -44,19 +44,33 @@ Fill out the form:
 | :--- | :--- |
 | **Name** | Required. 1–100 characters. |
 | **Description** | Optional. Up to 2048 characters. |
-| **Hook type** | **Built-in pattern** for one of the patterns below, or **Custom function** to invoke a [function](/product/admin/functions). |
-| **Event** | **Pre-tool use** or **Post-tool use**. Some built-in patterns only support one event. |
-| **Filter** | Optional CEL expression. Available variable: `ctx.tool_name`. Empty matches all tools. Example: `ctx.tool_name.startsWith("github_")`. |
+| **Hook type** | **Built-in pattern** for one of the patterns below, **Patch tool input** to rewrite the call's input fields directly, or **Custom function** to invoke a [function](/product/admin/functions). |
+| **Event** | **Pre-tool use** or **Post-tool use**. Some built-in patterns only support one event, and **Patch tool input** hooks are always pre-tool use. |
+| **Filter** | Optional [CEL](/product/admin/expressions) expression. Empty matches all tools. Example: `ctx.tool_name.startsWith("github_")`. See [Filter variables](#filter-variables). |
 | **Priority** | 0–1000. Lower runs first. |
 | **Enabled** | Toggle on to activate the hook immediately on save. |
 </Step>
 <Step>
-If you selected **Built-in pattern**, choose the pattern and configure its options. If you selected **Custom function**, pick the function from the dropdown.
+Configure the hook type: for **Built-in pattern**, choose the pattern and set its options; for **Patch tool input**, define the patch; for **Custom function**, pick the function from the dropdown.
 </Step>
 <Step>
 Click **Save**.
 </Step>
 </Steps>
+
+### Filter variables
+
+Filter expressions read from a single `ctx` variable:
+
+- `ctx.tool_name` — the name of the tool being called, for example `github_create_issue`. Always available.
+- `ctx.surface` — the chat surface the call came from, either `slack` or `web`.
+- `ctx.channel_id` — the ID of the Slack channel the call came from, for example `C0123456789`.
+
+`ctx.surface` and `ctx.channel_id` are only available for calls that originate in a chat channel. When a call comes from somewhere else — an AI client connected directly over MCP, for example — the variables are absent rather than empty, and reading an absent variable fails the expression. Because hooks are fail-closed, that failure denies the call, so guard with `has()` before reading either one:
+
+```cel
+has(ctx.channel_id) && ctx.channel_id == "C0123456789"
+```
 
 ## Built-in patterns
 
@@ -70,9 +84,67 @@ C1 ships five pre-built hook patterns. Each one is a self-contained handler with
 | **Write authorization** | Pre | Denies tool calls whose classification is in a blocked list, optionally only outside a configured business-hours window (timezone, start/end times, days of the week). |
 | **Sensitive file guard** | Pre | Denies tool calls that reference sensitive file paths or directories (defaults: `.env`, `*.pem`, `*.key`, `id_rsa`, `.ssh/`, `.aws/`, and similar). |
 
+## Patch tool input hooks
+
+A **Patch tool input** hook rewrites the input of a tool call before C1 forwards it to the MCP server — adding, overwriting, or removing fields without invoking a function. Use it to force a parameter to a safe value, stamp a scope onto every call, or strip a field the AI client shouldn't be able to set.
+
+These hooks only run on **pre-tool use**, since the other event has no tool input left to patch.
+
+Define the patch one of two ways:
+
+| Option | Notes |
+| :--- | :--- |
+| **Static fields** | A fixed JSON object applied to every matching call. Use it when the values never change, for example always sending `{"environment": "development"}`. |
+| **CEL expression** | A [CEL](/product/admin/expressions) expression that returns a JSON object, evaluated per call. Use it when the patch depends on who is calling or where the call came from. |
+
+A hook uses one or the other, not both.
+
+### Expression variables
+
+A patch expression reads from three variables:
+
+- `ctx` — the same call context available to [filters](#filter-variables): `ctx.tool_name`, plus `ctx.surface` and `ctx.channel_id` when the call comes from a chat channel. Guard the chat-channel variables with `has()`.
+- `input` — the tool call's own input arguments, so you can derive one field from another.
+- `caller` — identity information about the caller, including `caller.id`.
+
+<Warning>
+Never treat `caller` as an authorization input. C1 has already made the access decision by the time a hook runs, so use these values to shape a call — not to decide whether it's allowed.
+</Warning>
+
+### How the patch is applied
+
+The resulting object is merged onto the tool's input field by field:
+
+- A field in the patch that isn't in the input is **added**.
+- A field in both is **overwritten** with the patch's value.
+- A field set to `null` in the patch is **removed** from the input.
+- Every other field in the input is left untouched.
+
+This follows [JSON Merge Patch (RFC 7396)](https://datatracker.ietf.org/doc/html/rfc7396) at the top level of the input, including its convention that `null` deletes a field. The merge is not recursive: a nested object in the patch replaces the input's object of the same name outright rather than merging into it, so include every field you want to keep.
+
+A call whose input was changed is recorded as `MUTATED` in the [audit log](/product/admin/audit-ai-tool-usage).
+
+### Example: stamp a Slack channel's scope onto DataDog calls
+
+To make every DataDog tool call from one Slack channel query only that team's tenant, filter to the channel and patch the tenant field.
+
+Filter:
+
+```cel
+ctx.tool_name.startsWith("datadog_") && has(ctx.channel_id) && ctx.channel_id == "C0123456789"
+```
+
+Patch expression:
+
+```cel
+{"tenant_id": ctx.channel_id}
+```
+
+Matching calls arrive at the MCP server with `tenant_id` set to the originating channel, whatever the AI client asked for. Calls to other tools, or from anywhere other than that channel, pass through unchanged.
+
 ## Custom function hooks
 
-When the built-in patterns don't fit, write a [function](/product/admin/functions) and attach it to a hook. C1 invokes the function with a JSON payload describing the call and uses the return value to decide whether to allow, modify, or deny.
+When the built-in patterns and input patching don't fit, write a [function](/product/admin/functions) and attach it to a hook. C1 invokes the function with a JSON payload describing the call and uses the return value to decide whether to allow, modify, or deny.
 
 See the [Functions overview](/product/admin/functions) and [Create a function](/product/admin/functions-create) for how to author and deploy a function.
 
@@ -86,12 +158,14 @@ The function receives:
   "input": { /* the tool's input arguments */ },
   "context": {
     "tool_source": "connector",
-    "classification": "WRITE"
+    "classification": "WRITE",
+    "surface": "slack",
+    "channel_id": "C0123456789"
   }
 }
 ```
 
-`tool_source` is either `builtin` or `connector`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`).
+`tool_source` is either `builtin` or `connector`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`). `surface` and `channel_id` identify the chat channel the call came from and are omitted entirely for calls that didn't originate in one.
 
 ### Post-tool-use payload
 
