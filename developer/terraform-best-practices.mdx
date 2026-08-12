@@ -216,7 +216,22 @@ resource "conductorone_app_entitlement" "test_entitlement_update_multistep" {
 
 - **Terraform import is not required.** Reference the entitlement by ID using a data source lookup.
 - **JSON encoding is required** for `multi_step` provisioning and `account_provision` config blocks.
-- **Entitlement owners** can be managed in parallel using [conductorone_app_entitlement_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement_owner).
+- **Entitlement owners** are managed with a separate resource, [conductorone_app_entitlement_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement_owner). Owners are always a list of C1 users — the resource accepts `user_ids` only, and setting the list replaces any existing owners for that entitlement. See the example below.
+
+### Example: manage entitlement owners
+
+Use this pattern to set the owners of an entitlement, replacing any owners currently set.
+
+```hcl
+resource "conductorone_app_entitlement_owner" "role_owners" {
+  app_id         = data.conductorone_app.aws.id
+  entitlement_id = data.conductorone_app_entitlement.role.id
+  user_ids = [
+    data.conductorone_user.alice.id,
+    data.conductorone_user.bob.id,
+  ]
+}
+```
 
 <Tip>
 `duration_grant` and `duration_unset` are mutually exclusive. Set `duration_grant` to a duration string in seconds (for example, `"3600s"` for one hour) to cap how long a grant lasts. Set `duration_unset = {}` for no maximum duration. Never set both.

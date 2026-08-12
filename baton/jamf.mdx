@@ -1,19 +1,38 @@
 ---
 title: "Set up a Jamf connector"
 og:title: "Set up a Jamf connector"
-description: "C1 provides identity governance for Jamf Pro. Integrate your Jamf Pro instance with C1 for unified visibility and governance over user access."
-og:description: "C1 provides identity governance for Jamf Pro. Integrate your Jamf Pro instance with C1 for unified visibility and governance over user access."
+description: "ConductorOne provides identity governance and just-in-time provisioning for Jamf Pro. Integrate your Jamf Pro instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision Jamf accounts."
+og:description: "ConductorOne provides identity governance and just-in-time provisioning for Jamf Pro. Integrate your Jamf Pro instance with ConductorOne to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision Jamf accounts."
 sidebarTitle: "Jamf"
 ---
 
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
 ## Capabilities
+
+The Jamf connector syncs the following resources:
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Users | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Create, Delete |
+| User Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Create, Delete |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| User Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Sites | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Managed Devices | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+**Notes:**
+- Jamf has two distinct account types: **Users** (directory users) and **User Accounts** (Jamf Pro console admins). The connector can only create **one** of these types per connector instance — set by the **Account Provisioning Target** configuration field. Deletion works for both types regardless of this setting.
+- Groups, User Groups, Roles, and Sites are synced for visibility (including membership) but are not provisionable — access changes to these resources must be made directly in Jamf Pro.
+- When creating a **User Account**, the `privilege_set` profile field sets its access level (`Administrator`, `Auditor`, `Enrollment Only`, or `Custom`). For `Custom`, at least one of `privileges_jss_objects`, `privileges_jss_settings`, `privileges_jss_actions`, `privileges_recon`, `privileges_casper_admin`, `privileges_casper_remote`, or `privileges_casper_imaging` must be set to a list of Jamf privilege names — Jamf validates these names server-side, not the connector.
+
+<Note>
+**Managed Devices is opt-in.** This resource type is off by default so existing connectors keep working after upgrading. Enable it by selecting the **Managed Device** resource type in the connector's sync configuration. When enabled, the Jamf API role used by the connector must additionally have the **Read Computers** and **Read Mobile Devices** privileges, or the sync will fail.
+</Note>
 
 ## Gather Jamf credentials 
 
@@ -78,15 +97,21 @@ Click **Next**.
 <Step>
 Find the **Settings** area of the page and click **Edit**.
 </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
 <Step>
-In the **Instance URL** field, enter the URL of your Jamf Pro instance.
+Enter the required configuration:
+
+- **Instance URL**: The URL of your Jamf Pro instance.
+- **Username**: The username of the service account you created (or the username of a Jamf Pro user with Administrator permissions).
+- **Password**: The password associated with the username.
+- **Account Provisioning Target** (optional): Which Jamf account type ConductorOne should create when provisioning accounts — **user** (default) creates directory users, **userAccount** creates Jamf Pro console admin accounts. Only one type can be created at a time per connector instance.
 </Step>
-<Step>
-Enter the username of the service account you created (or the username of a Jamf Pro user with Administrator permissions) into the **Username** field.
-</Step>
-<Step>
-Enter the password associated with the username into the **Password** field.
-</Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
 <Step>
 Click **Save**.
 </Step>
@@ -106,6 +131,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 ### Resources
 
 * [GitHub repository](https://github.com/conductorone/baton-jamf): Access the source code, report issues, or contribute to the project.
+* [Download center](https://dist.conductorone.com/ConductorOne/baton-jamf): Pre-built binaries for `baton-jamf`.
 
 ### Step 1: Set up a new Jamf connector
 
@@ -165,9 +191,16 @@ stringData:
   BATON_INSTANCE_URL: <URL of your Jamf Pro instance>
   BATON_PASSWORD: <Password to the Jamf Pro account>
   BATON_USERNAME: <Username for the Jamf Pro account>
+
+  # Optional: only needed if provisioning accounts. Defaults to "user".
+  # BATON_CREATE_ACCOUNT_RESOURCE_TYPE: <"user" or "userAccount">
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+<Note>
+To provision accounts (create/delete) in self-hosted mode, the deployment also needs `BATON_PROVISIONING: "true"` set — see the Deployment configuration below.
+</Note>
 
 #### Deployment configuration
 
@@ -197,6 +230,9 @@ spec:
         env:
         - name: BATON_HOST_ID
           value: baton-jamf
+        # Uncomment to enable account provisioning (create/delete):
+        # - name: BATON_PROVISIONING
+        #   value: "true"
         envFrom:
         - secretRef:
             name: baton-jamf-secrets
@@ -216,6 +252,10 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your Jamf connector is now pulling access data into C1.
 </Tab>
 </Tabs>
+
+<Tip>
+You can find pre-built binaries for `baton-jamf` on the [ConductorOne download center](https://dist.conductorone.com/ConductorOne/baton-jamf).
+</Tip>
 
 
 

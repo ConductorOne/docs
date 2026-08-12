@@ -33,6 +33,14 @@ role permissions.
   </Step>
 
   <Step>
+    Also grant read access to workplaces, org units (departments/teams), and
+    legal entities. These back the resolved display names described below;
+    if the credential lacks access to one of them (or the legal entities
+    feature isn't enabled on the Personio plan), the connector still syncs —
+    it just keeps the raw Personio ID for that field without a resolved name.
+  </Step>
+
+  <Step>
     Select the readable employee attributes that C1 should sync. Personio only
     returns attributes allowed on the API credential.
   </Step>
@@ -75,6 +83,22 @@ role permissions.
   the newest employment by start date.
 - If employment enrichment fails for one person, the person is still emitted
   with person-level fields.
+- The following employment fields sync as a human-readable display name
+  resolved via a secondary lookup against Personio, instead of the raw
+  Personio ID:
+  - `manager_name` and `manager_email` (via the manager's own person record)
+  - `office_name` (via workplaces)
+  - `department_name` and `team_name` (via org units)
+  - `org_units` (a name list covering every org unit Personio classifies as
+    a department or team; `org_unit_ids` keeps every org unit's raw ID
+    regardless of type, including types the connector doesn't resolve)
+  - `legal_entity_name` (via legal entities)
+
+  If a lookup fails or the credential lacks access to that object type, the
+  `*_name` field (and `org_units`) is simply omitted for that person for
+  that sync.
+- `sub_company` is not synced. Personio's own API marks this field deprecated
+  in favor of legal entity; use `legal_entity_name` instead.
 - Standard PII fields such as address, phone, national identifiers, date of
   birth, gender, salary, bank details, and tax information are not mapped.
 - Custom attributes are filtered before they are emitted.

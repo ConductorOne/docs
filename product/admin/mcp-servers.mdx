@@ -53,10 +53,10 @@ C1 supports multiple auth methods for downstream MCP servers. Admins can select 
 | **Bearer token** | A single shared service account | Simple integrations where per-user attribution downstream isn't required |
 | **Custom header** | A single shared identity via a custom HTTP header (for example, an API key) | Services that authenticate via a non-standard header or API key |
 | **Basic auth** | A single shared identity via username and password | Services that use HTTP Basic authentication |
-| **OAuth2 — client credentials** | A single shared OAuth client | Machine-to-machine OAuth where per-user identity isn't needed |
+| **Client credentials** | A single shared OAuth client | Machine-to-machine OAuth where per-user identity isn't needed |
 | **OAuth2 — service mode** | A single shared identity (admin authenticates once) | When the downstream requires an OAuth auth code flow but a single shared credential is acceptable |
 | **OAuth2 — per-user passthrough** | Each end user, with their own credentials | When the downstream needs per-user identity (Google Workspace, GitHub, Salesforce, and so on) |
-| **OAuth2 — JWT bearer** | A service identity via signed JWT | Services that support certificate-based or JWT-based auth (for example, Tableau or Google service accounts) |
+| **JWT Bearer (RFC 7523)** | A service identity via signed JWT | Services that support certificate-based or JWT-based auth (for example, Tableau or Google service accounts) |
 
 For per-user OAuth passthrough, C1 vaults each user's downstream tokens and auto-refreshes them so end users don't hit token expiry mid-session.
 
@@ -83,6 +83,8 @@ Enter the required credentials for the selected method:
 - **JWT bearer** — enter the issuer, private key, subject, audience, token URL, and scopes.
 
 If the server supports OAuth Dynamic Client Registration (DCR), you can skip entering a client ID and secret entirely. Toggle on **Use dynamic client registration** — C1 registers itself with the server's authorization server automatically.
+
+Before registering, C1 runs a discovery check against the server's authorization server. If discovery finds an issue that can be relaxed — such as an issuer mismatch or an authorization server on a different host — C1 shows you the finding and asks you to acknowledge it before registration continues. Findings that can't be safely relaxed block registration entirely.
 </Step>
 <Step>
 Click **Save**. C1 makes a test call to validate the credentials.
@@ -95,7 +97,8 @@ Click **Save**. C1 makes a test call to validate the credentials.
 | :--- | :--- | :--- |
 | **Authentication** | Required | See above |
 | **Data sensitivity** | Optional | Metadata tag on the server (low / medium / high). Surfaces in the catalog and audit log; no enforcement |
-| **Tool prefix** | Optional; required if multiple servers under one app | Prepended to tool names so AI clients can disambiguate (for example, `gh_` vs `gl_` for two Git providers). C1 generates a default prefix if you don't set one. |
+| **Tool prefix** | Optional; required if multiple servers under one app | Prepended to tool names so AI clients can disambiguate (for example, `gh_` vs `gl_` for two Git providers). If you don't set one, C1 uses the prefix the server's own implementation declares; if it doesn't declare one, C1 generates a default. |
+| **Tool enablement** | Optional | Choose **Require enablement** or **Auto-enable** for this server's tools, independent of your tenant's [default tool approval setting](/product/admin/enable-ai-access-management#require-tool-approval). Leave unset to inherit the tenant default. |
 
 ## What happens after registration
 

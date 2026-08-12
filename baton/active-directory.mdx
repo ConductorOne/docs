@@ -8,7 +8,7 @@ sidebarTitle: "Connector setup"
 
 ## Availability
 
-The Active Directory connector is self-hosted and supports **Windows** and **Linux**.
+The Active Directory connector is self-hosted and runs on a **Windows Server** joined to (or trusted by) the target Active Directory domain. Windows is the only supported platform.
 
 ## Capabilities
 
@@ -25,7 +25,7 @@ The Active Directory connector supports [automatic account provisioning and depr
 - Primary group memberships sync automatically via `primaryGroupID`; AD's `memberOf` doesn't include them.
 - Multi-domain and cross-forest sync in a single run via `additional-domains` config — see [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync).
 - gMSA sync is opt-in via `enable-gmsa-sync`; provisioning modifies the `msDS-GroupMSAMembership` security descriptor ACL.
-- Two connection modes: **LDAP** (default on Linux) and **WinLDAP** (default on Windows; uses `wldap32.dll` for Kerberos/GSSAPI).
+- Two connection modes: **WinLDAP** (default; uses `wldap32.dll` for Kerberos/GSSAPI) and **LDAP** (go-ldap library, e.g. for Simple Bind).
 - Account provisioning (create/delete) requires LDAPS (`ldaps: true`).
 - Provisioning is idempotent: re-granting a group membership a user already holds, revoking one they don't have, or creating an account or group that already exists is treated as success rather than an error — so overlapping grants during a role change don't fail. An account that already exists is returned unchanged (its password is not reset).
 
@@ -66,7 +66,7 @@ You can define additional actions backed by PowerShell scripts in the config fil
 
 ### Resources
 
-* [Official download center](https://dist.conductorone.com/ConductorOne/baton-active-directory): For stable binaries (Windows/Linux) and container images.
+- [C1 download center](https://dist.conductorone.com/ConductorOne/baton-active-directory): For stable release binaries.
 
 ## Gather Active Directory credentials
 
@@ -192,18 +192,18 @@ To complete this task, you'll need:
 - An Active Directory service account with the appropriate permissions (see above)
 </Warning>
 
-The Active Directory connector is self-hosted — it runs on a Windows or Linux server in your environment with direct network access to your domain controllers.
+The Active Directory connector is self-hosted — it runs on a Windows Server in your environment with direct network access to your domain controllers.
 
-Once installed and configured, Baton runs as a Windows service (or Linux daemon). The service maintains contact with C1, syncs and uploads data at regular intervals, and passes that data to the C1 UI for access reviews and access requests.
+Once installed and configured, the connector runs as a Windows service. The service maintains contact with C1, syncs and uploads data at regular intervals, and passes that data to the C1 UI for access reviews and access requests.
 
 ### Requirements
 
-**Host server** (Windows Server or Linux):
+**Host server** (Windows Server):
 
 - 2-4 vCPU
 - 4-8 GB RAM
 - Minimum OS disk space for the binary (~60 MB) plus room for logs and the local sync database
-- The connector runs as a Windows service or Linux daemon — a dedicated host is not required
+- The connector runs as a Windows service — a dedicated host is not required
 
 **Network:**
 
@@ -217,15 +217,13 @@ Once installed and configured, Baton runs as a Windows service (or Linux daemon)
 
 ### File locations
 
-**Windows** (the default install path; `%PROGRAMDATA%` is typically `C:\ProgramData`):
+Default file locations (`%PROGRAMDATA%` is typically `C:\ProgramData`):
 
-- **Binary:** `C:\Program Files\ConductorOne\baton-active-directory.exe`
+- **Binary:** `C:\Program Files\ConductorOne\baton-active-directory\baton-active-directory.exe`
 - **Config:** `%PROGRAMDATA%\ConductorOne\baton-active-directory\config.yaml` — auto-discovered at startup if `BATON_CONFIG_PATH` is not set
 - **Log:** `%PROGRAMDATA%\ConductorOne\baton-active-directory\baton.log`
 
 The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` so the connector can write to the log file. If the connector can't write to this directory, the service will fail to start.
-
-**Linux**: there is no default config location — set `BATON_CONFIG_PATH` (or pass `--config-file`) to wherever you deploy `config.yaml`. A common pattern is `/etc/baton-active-directory/config.yaml` with the log redirected via systemd journal or `--file`.
 
 ### Step 1: Set up a new Active Directory connector in C1
 
@@ -306,11 +304,11 @@ The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` 
 
 <Steps>
   <Step>
-    On the host designated to run the connector, create a folder: `C:\Program Files\ConductorOne`.
+    On the host designated to run the connector, create a folder: `C:\Program Files\ConductorOne\baton-active-directory`.
   </Step>
 
   <Step>
-    Copy `baton-active-directory.exe` to the `ConductorOne` folder.
+    Copy `baton-active-directory.exe` into `C:\Program Files\ConductorOne\baton-active-directory`.
   </Step>
 
   <Step>
@@ -457,8 +455,8 @@ If you make changes to the config file, a service restart is required for the ch
 |---|---|---|---|
 | `domain` | string | *(required)* | Fully-qualified Windows domain. Example: `baton.example.com` |
 | `base-dn` | string | *(required)* | Base DN for LDAP searches. Example: `DC=baton,DC=example,DC=com` |
-| `sitename` | string | *(any reachable DC)* | AD site name. When set, scopes DC discovery to an available DC in that site. Example: `US-DC-01` |
-| `mode` | string | `winldap` (Windows) / `ldap` (Linux) | Connection mode: `ldap` (Go library) or `winldap` (Windows `wldap32.dll` system calls) |
+| `sitename` | string | *(any reachable DC)* | AD site name. When set, scopes DC discovery to an available DC in that site. A **write-capable** connection resolves a **writable** DC so provisioning works (skipping RODCs; if the site has only Read-Only DCs, AD site coverage returns the nearest writable DC in another site). A **read-only** connection resolves the in-site DC (an RODC is fine), keeping reads local. See [Domain controller selection and RODCs](#domain-controller-selection-and-rodcs) for the full behavior matrix. Example: `US-DC-01` |
+| `mode` | string | `winldap` | Connection mode: `winldap` (default; `wldap32.dll` system calls with GSSAPI) or `ldap` (go-ldap library, e.g. for Simple Bind) |
 | `ldaps` | bool | `false` | Enable LDAPS (TLS). Required for account provisioning. |
 | `ldaps-port` | int | `636` | LDAPS port. Use `3269` for Global Catalog over LDAPS. |
 | `ldaps-skip-verify` | bool | `true` | Skip LDAPS certificate validation (go-ldap mode only; ignored in WinLDAP). |
@@ -546,7 +544,7 @@ Each additional domain supports independent connection settings (bind type, cred
 The `additional-domains` field is YAML-only — it cannot be set via CLI flags or environment variables.
 </Note>
 
-##### Supported trust types
+#### Supported trust types
 
 - Intra-forest parent/child or tree-root domains (single forest, multiple domains)
 - 1-way outbound trust (primary trusts remote, or remote trusts primary)
@@ -554,7 +552,7 @@ The `additional-domains` field is YAML-only — it cannot be set via CLI flags o
 - Cross-forest trust
 - External (non-transitive) trust
 
-##### Prerequisites
+#### Prerequisites
 
 **1. Active Directory trust.** A trust relationship must exist between the domains. For Kerberos (`bind-type: external`), the connector's domain must be trusted by the remote domain. For simple bind, any network connectivity is sufficient.
 
@@ -600,33 +598,14 @@ Resolve-DnsName -Name "DC01.remote-forest.example.com"
       -CertStoreLocation "Cert:\LocalMachine\Root"
   ```
 
-- **Option C — Skip validation (go-ldap mode only, lab/testing):** Set `ldaps-skip-verify: true`. This has no effect in WinLDAP mode, which always validates against the Windows certificate store.
+- **Option C — Skip validation (go-ldap mode only, lab/testing):** Set `ldaps-skip-verify: true`. This has no effect in WinLDAP mode, which always validates against the Windows certificate store. Note that `ldaps-skip-verify` is a **global** setting — it applies to every configured domain (including the primary), not just this one, so prefer Option A or B for production.
 - **Option D — Plain LDAP with signing:** Omit `ldaps: true` for the additional domain and connect over TCP/389 with LDAP signing.
 
 **5. Kerberos configuration** (for `bind-type: external`). On Windows domain-joined hosts, cross-realm Kerberos is typically automatic when a forest or external trust exists. The connector targets the remote DC's **hostname** (for example, `DC01.remote-forest.example.com`) rather than the domain FQDN, because the SPN (`ldap/DC01…`) is registered under the DC's machine account.
 
-On Linux, add the remote realm to `/etc/krb5.conf`:
-
-```ini
-[realms]
-REMOTE-FOREST.EXAMPLE.COM = {
-    kdc = DC01.remote-forest.example.com
-    admin_server = DC01.remote-forest.example.com
-}
-
-[domain_realm]
-.remote-forest.example.com = REMOTE-FOREST.EXAMPLE.COM
-remote-forest.example.com = REMOTE-FOREST.EXAMPLE.COM
-
-[capaths]
-PRIMARY.EXAMPLE.COM = {
-    REMOTE-FOREST.EXAMPLE.COM = .
-}
-```
-
 **6. Permissions.** `Authenticated Users` has read access to most AD objects by default, which is usually sufficient. For gMSA provisioning in an additional domain, set `read-only: false` on the domain entry and grant the bind account write access to `msDS-GroupMSAMembership`.
 
-##### Additional domain fields
+#### Additional domain fields
 
 Each entry under `additional-domains` supports the following fields:
 
@@ -651,14 +630,14 @@ Each entry under `additional-domains` supports the following fields:
 
 **`read-only` default:** When omitted, `read-only` defaults to `true` unless `bind-type` is explicitly set (in which case it defaults to `false`). Providing domain-specific bind credentials signals that writes are intended. Set `read-only` explicitly to override.
 
-##### How it works
+#### How it works
 
 - **Resource enumeration:** the connector paginates across all configured domains — the primary completes first, then each additional domain. All resources land in a single unified sync.
 - **Cross-domain DN lookups** (group members, managers, Foreign Security Principals): the DN's domain suffix is matched against your configured domains to route the lookup.
 - **Cross-domain SID lookups** (gMSA ACLs, primary group SIDs): the SID is resolved against each configured domain in order until a match is found.
 - **NetBIOS names** (needed for down-level logon display): each forest's `configurationNamingContext` is queried for `crossRef` entries. On Windows, the primary domain also uses the native `DsCrackNamesW` API; additional domains always fall back to LDAP `crossRef`.
 
-##### Diagnosing issues
+#### Diagnosing issues
 
 Run the built-in test harness to check DC resolution, TLS handshake, certificate validation, and LDAP bind for every configured domain:
 
@@ -674,7 +653,7 @@ Common failures:
 - **"SASL bind failed" / "Cannot obtain Kerberos ticket"** — cross-realm Kerberos isn't working. Verify the trust, DNS SRV records, and that you're targeting the DC hostname rather than the domain FQDN. As a fallback, switch that domain to `bind-type: simple`.
 - **"netbios domain is empty" warnings** — the NetBIOS cache couldn't load crossRef entries. Confirm read access to the remote `configurationNamingContext`.
 
-##### Performance
+#### Performance
 
 Each additional domain adds to the sync cycle. The connector completes one domain fully before moving on; LDAP pagination (1000 entries per page) is used throughout; total sync time scales linearly with the number of domains and objects.
 
@@ -878,6 +857,34 @@ When the connector logs `winldap_ldap_search: search returned 0 entries` at INFO
    - Configure a different bind DC that *is* authoritative for the OU — pass `--sitename` to scope discovery to a site that includes an authoritative DC, or set up [`additional-domains`](#multi-domain-and-cross-forest-sync) if the subtree belongs to a different partition.
    - For multi-domain forests, use [`additional-domains`](#multi-domain-and-cross-forest-sync) so the connector binds separately against each partition's authoritative DC instead of chasing referrals from one DC.
 
+### Domain controller selection and RODCs
+
+The connector performs both directory **reads** (sync) and **writes** (provisioning: grant/revoke, account and group creation, enable/disable, set-manager, and similar) over a **single connection per domain**. Writes cannot be served by a **Read-Only Domain Controller (RODC)** — an RODC answers every write with `LDAP_REFERRAL` (result code 10), referring the client to a writable DC.
+
+**How the connector chooses a DC.** For a **write-capable** connection it asks Windows (`DsGetDcNameW`) for a **writable** DC (`DS_WRITABLE_REQUIRED`); for a **read-only** connection it does not, so the in-site DC (including an RODC) may be used. Write intent is per connection:
+
+- The **primary domain** is always write-capable (it is the provisioning target). A read-only *primary* mode is not currently configurable.
+- An **additional domain** is write-capable only when `read-only: false` (see [Additional domain fields](#additional-domain-fields)); otherwise it is read-only. Note that setting `bind-type` on an additional domain (even without bind credentials) flips its `read-only` default to `false`, making it write-capable — set `read-only: true` explicitly if you use it only for authenticated reads, so its DC selection stays in-site.
+- The **Global Catalog** scope (`sync-scope: GlobalCatalog`) is always read-only — it binds the read-only GC port (`3268`, or `3269` over LDAPS), and provisioning is not performed over a Global Catalog connection.
+
+**Behavior by connection type and site topology.** The configured `sitename` is a *preference* (locate the closest DC); the writable requirement, when it applies, is a *hard filter*. AD **site coverage** means a writable DC in another site automatically "covers" a site that has none, so a writable DC is still located when the local site has only RODCs.
+
+| Connection | Writable DC in the configured site? | DC the connector binds | Reads | Writes |
+|---|---|---|---|---|
+| **Write-capable** (primary, or additional `read-only: false`) | Yes | the in-site writable DC | local to the site | ✅ succeed |
+| **Write-capable** | No — site has only RODCs | nearest **writable** DC covering the site (another site) | traverse a site link (not local) | ✅ succeed |
+| **Write-capable** | No writable DC reachable **anywhere** | native discovery fails → DNS-SRV fallback may bind an RODC (logged with a prominent warning) | succeed | ❌ fail with `LDAP_REFERRAL` until a writable DC is reachable |
+| **Read-only** (additional `read-only: true`) | Yes | the in-site DC (writable or RODC — nearest) | local to the site | n/a (writes blocked by config) |
+| **Read-only** | No — site has only RODCs | the in-site **RODC** | local to the site | n/a |
+
+The selection is logged with `writable=true`/`writable=false`. The practical upshot: a **write-capable** connection whose site has only RODCs trades read locality for working provisioning (reads move to the covering writable DC); a **read-only** connection always keeps reads on the in-site DC.
+
+**Symptom this prevents.** Before this behavior, a site containing an RODC could cause the connector to bind that RODC: sync succeeded (reads work against an RODC) but every write action later failed with `LDAP error: LDAP_REFERRAL` in the C1 action-failure panel, and `ldap_modify: ret code_name=LDAP_REFERRAL r1=10` in the connector log.
+
+**If no writable DC is reachable at all** (a genuine outage, or a network segment that can only reach RODCs), native discovery fails and the connector falls back to DNS SRV, which cannot distinguish an RODC from a writable DC. The connector logs a prominent warning in this case (`native writable-DC discovery failed; falling back to DNS SRV which cannot guarantee a writable DC …`). If an RODC is then bound, sync works but provisioning will fail with `LDAP_REFERRAL` until a writable DC is reachable in or covering the configured site.
+
+**Requirement.** A writable DC must be reachable in, or covering, the configured `sitename` for provisioning to work. This is the normal AD topology (every domain has at least one writable DC, and writable DCs cover sites that have none of the needed type).
+
 ### LDAPS troubleshooting
 
 LDAPS settings (`ldaps`, `ldaps-port`, `ldaps-skip-verify`) live in the [Configuration reference](#configuration-reference). This section covers the parts that don't fit in a flag table: how the two connection modes treat certificate trust differently, and how to diagnose handshake failures.
@@ -886,13 +893,13 @@ LDAPS settings (`ldaps`, `ldaps-port`, `ldaps-skip-verify`) live in the [Configu
 
 The `ldaps-skip-verify` flag behaves differently depending on `mode`:
 
-- **WinLDAP mode** (default on Windows): TLS validation is delegated to the Windows certificate store. `ldaps-skip-verify` has **no effect** — the OS always validates against `Cert:\LocalMachine\Root`. To trust a CA, import its root certificate into the Windows machine store:
+- **WinLDAP mode** (default): TLS validation is delegated to the Windows certificate store. `ldaps-skip-verify` has **no effect** — the OS always validates against `Cert:\LocalMachine\Root`. To trust a CA, import its root certificate into the Windows machine store:
 
   ```powershell
   certutil -addstore Root <path-to-ca.cer>
   ```
 
-- **LDAP mode** (Go library, default on Linux): TLS validation uses Go's TLS stack. `ldaps-skip-verify: true` (the default) disables hostname and chain validation, which lets self-signed AD certs work in lab environments. For production, set `ldaps-skip-verify: false` and either trust the CA at the OS level or import it into the connector machine.
+- **LDAP mode** (go-ldap library): TLS validation uses Go's TLS stack. `ldaps-skip-verify: true` (the default) disables hostname and chain validation, which lets self-signed AD certs work in lab environments. For production, set `ldaps-skip-verify: false` and either trust the CA at the OS level or import it into the connector machine.
 
 If `mode: ldap` doesn't connect on a Windows host (typical when the AD server requires channel binding or LDAP signing), switch to `mode: winldap`.
 

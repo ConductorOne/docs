@@ -12,6 +12,14 @@ Service principals and workload federation include several security controls to 
 
 ## Scoped roles
 
+Scoping happens in two steps: first you assign the service principal its base roles, then you can optionally restrict what any individual credential or trust is allowed to use.
+
+### Step 1: Assign base roles
+
+On the service principal's **Details** tab, the **Role** field assigns one or more of C1's standard roles to the service principal -- the same roles you'd assign to a human user. See [User roles](/product/admin/user-roles) for the full list and descriptions of each role.
+
+### Step 2: Scope a credential or trust (optional)
+
 Every credential and federation trust can be limited to a subset of the service principal's roles. The effective permissions are the **intersection** of:
 
 1. The roles assigned to the service principal
@@ -71,6 +79,8 @@ This is an advanced feature for high-security environments.
 
 Federation trusts use CEL (Common Expression Language) expressions to control which tokens are accepted. The expression is evaluated against the JWT claims and must return `true`.
 
+For GitHub Actions, GitLab CI, HCP Terraform, AWS IAM, and SPIFFE, the trust wizard collects structured fields (for example organization, repository, branch) and generates the CEL expression for you. Switch to manual mode to write your own expression. Custom OIDC providers have no structured wizard -- you write the CEL expression directly. See [set up federation](/product/admin/service-principals/federation-setup) for the wizard walkthrough.
+
 ### CEL environment
 
 The CEL environment exposes:
@@ -85,15 +95,16 @@ Standard CEL string functions are available: `contains()`, `startsWith()`, `ends
 | :--- | :--- |
 | GitHub Actions | `claims.repository == "acme/infra" && claims.environment == "production"` |
 | GitLab CI | `claims.project_path == "acme/infra" && claims.ref_protected == "true"` |
-| HCP Terraform | `claims.terraform_organization == "acme" && claims.terraform_workspace_name == "infra-prod"` |
+| HCP Terraform | `claims.terraform_organization_name == "acme" && claims.terraform_workspace_name == "infra-prod"` |
 | AWS IAM | `claims["https://sts.amazonaws.com/"].aws_account == "123456789012"` |
+| SPIFFE | `url(claims.sub).path == "/ns/prod/sa/deployer"` |
 
 ### Writing expressions
 
 - Expressions are limited to 1,024 bytes
 - Always validate the `sub` claim or an equivalent identifier
 - Use additional claims for defense-in-depth scoping
-{/*- Use the **Test CEL** tool at **Settings** > **Workload Federation** to validate expressions against sample claims without a real JWT*/}
+{/*- Use the **Test expression** tool at **Settings** > **Workload Federation** to validate expressions against sample claims without a real JWT*/}
 
 <Tip>
 For more on CEL syntax, see the [CEL expressions](/product/admin/expressions) documentation.
@@ -109,7 +120,7 @@ Token operations are logged as OCSF Authentication events (class 3002). The `act
 
 | Event | Activity name | Description |
 | :--- | :--- | :--- |
-| **Client credential grant** | `client_credentials` | Service principal authenticated with client ID + secret or client assertion |
+| **Client credentials** | `client_credentials` | Service principal authenticated with client ID + secret or client assertion |
 | **Token exchange** | `token_exchange` | Workload federation token exchange attempt (success or failure) |
 
 Each authentication event includes:

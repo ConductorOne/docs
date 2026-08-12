@@ -1,20 +1,31 @@
 ---
 title: Set up the Okta MCP server
-description: Create an Okta OAuth app, then register the Okta MCP server in C1 with per-user OAuth and govern the tools your AI clients can call.
+description: Create an Okta OIDC app, grant the Okta API scopes C1 needs, and register the Okta MCP server so your AI clients read Okta directory data through governed tools.
 og:title: Set up the Okta MCP server
-og:description: Create an Okta OAuth app, then register the Okta MCP server in C1 with per-user OAuth and govern the tools your AI clients can call.
+og:description: Create an Okta OIDC app, grant the Okta API scopes C1 needs, and register the Okta MCP server so your AI clients read Okta directory data through governed tools.
 sidebarTitle: Okta
 ---
 
-{/* Editor Refresh: 2026-06-11 */}
+{/* Editor Refresh: 2026-07-30 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
 </Note>
 
-The Okta MCP server lets you govern access to Okta — users, groups, applications, and other directory data exposed by the Okta Management APIs — as tools your AI clients can call through C1.
+The Okta MCP server lets you govern access to Okta directory data — users, groups, applications, devices, and organization configuration exposed by the Okta management APIs — as tools your AI clients call through C1.
 
-Okta authenticates with per-user OAuth (recommended). Each person authorizes with their own Okta account, so every tool call runs under that user's Okta identity and permissions. You can also set it up as a shared service mode, where an administrator authorizes once and all tool calls reach Okta as one identity.
+The server is read-only by default: it requests read scopes and exposes read tools. To enable tools that modify Okta, you grant the matching management scopes — see [Okta API scopes](#okta-api-scopes).
+
+## Choose an authentication method
+
+Okta authenticates with per-user OAuth (recommended) or a shared service mode:
+
+- **Per-user OAuth.** Each person authorizes with their own Okta account, so every tool call runs under that user's Okta identity and returns only what their Okta permissions allow.
+- **Service mode.** An administrator authorizes once, and every tool call reaches Okta as that single identity.
+
+The Okta API scopes this server uses are **administrator (management) scopes**, and Okta constrains every token by the authorizing account's admin role — a token can hold a scope but still return nothing if that account lacks the matching admin permission.
+
+Choose per-user OAuth when the people using the server are themselves Okta administrators; choose service mode, authorized by a dedicated admin account, when they aren't.
 
 For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
@@ -22,46 +33,84 @@ For a deeper comparison of shared versus per-user credentials, see [Configure au
 
 C1 hosts the Okta MCP server, so your users' AI clients only ever see MCP tools — they never call Okta directly. When an AI client calls one of these tools, C1 makes the matching request to the Okta API using the credentials you configure here, then returns the result to the AI client.
 
-The credentials you set up below are what C1 uses to call Okta on your users' behalf.
-
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
-- An Okta account with administrator permission to create an OAuth app in the Okta admin console.
-- Your Okta instance URL, such as `https://acme.okta.com`.
+- An Okta account with administrator permission to create an app integration and grant Okta API scopes in the Okta Admin Console.
+- Your Okta organization URL, such as `https://acme.okta.com`.
 
 <Note>
 If you don't see **Okta** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
-## Create an Okta OAuth app
+## Create an Okta OIDC app
 
-You register one Okta OAuth app, and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Okta. For full details, see Okta's [Create OpenID Connect app integrations](https://help.okta.com/en-us/content/topics/apps/apps_app_integration_wizard_oidc.htm) documentation.
+Register one Okta OIDC app that C1 uses to authorize with Okta. For full details, see Okta's [Create OpenID Connect app integrations](https://help.okta.com/en-us/content/topics/apps/apps_app_integration_wizard_oidc.htm) and [OAuth for Okta](https://developer.okta.com/docs/guides/implement-oauth-for-okta/main/) documentation.
 
 <Steps>
 <Step>
-In the Okta admin console, go to **Applications** > **Applications** and select **Create App Integration**.
+In the Okta Admin Console, go to **Applications** > **Applications** and select **Create App Integration**.
 </Step>
 <Step>
-Choose **OIDC - OpenID Connect** as the sign-in method and **Web Application** as the application type, then continue.
+Select **OIDC - OpenID Connect** as the sign-in method and **Web Application** as the application type, then select **Next**.
 </Step>
 <Step>
-Give the app a recognizable name such as `C1`, and set the **Sign-in redirect URI** exactly to `https://accounts.conductor.one/auth/callback`.
+Give the app a recognizable name, such as `C1`.
 </Step>
 <Step>
-Grant the Okta API scopes the server needs, such as read access to users, groups, and apps (for example `okta.users.read` and `okta.groups.read`). Add management scopes only if you need write access.
+Set the **Sign-in redirect URI** to exactly `https://accounts.conductor.one/auth/callback`. The value must match exactly — even a trailing-slash difference fails the authorization flow.
 </Step>
 <Step>
-Save the app, then copy the **Client ID** and **Client Secret**. Okta shows the secret only once.
+Under **Assignments**, limit who can authorize the app to the administrators who will connect it, then select **Save**.
+</Step>
+<Step>
+Open the app's **Okta API Scopes** tab and select **Grant** for each scope the server needs. See [Okta API scopes](#okta-api-scopes) for the recommended set. A scope must be granted here before C1 can request it.
+</Step>
+<Step>
+On the app's **General** tab, copy the **Client ID** and **Client secret**. Okta shows the secret only once.
 </Step>
 </Steps>
+
+Your Okta OIDC app is ready to connect. Keep the client ID and secret for [Register the Okta MCP server in C1](#register-the-okta-mcp-server-in-c1).
+
+## Okta API scopes
+
+C1 requests these read scopes by default. Together they let the server read the Okta directory and configuration that the tools surface, without granting any write access.
+
+| Scope | Grants read access to |
+| :--- | :--- |
+| `okta.users.read` | Users' profiles and credentials |
+| `okta.groups.read` | Groups and their members |
+| `okta.apps.read` | Applications in your Okta organization |
+| `okta.devices.read` | Devices and device search |
+| `okta.deviceAssurance.read` | Device assurance policies |
+| `okta.idps.read` | Identity providers |
+| `okta.authenticators.read` | Org authenticators |
+| `okta.authorizationServers.read` | Authorization servers |
+| `okta.userTypes.read` | User types |
+| `okta.networkZones.read` | Network zones |
+| `okta.trustedOrigins.read` | Trusted origins |
+| `okta.brands.read` | Brands and themes |
+| `okta.emailDomains.read` | Email domains |
+| `okta.features.read` | Org features |
+| `okta.orgs.read` | Organization-specific settings and details |
+
+<Note>
+These are Okta **administrator** scopes. Okta limits each token to what the authorizing account's admin role permits, so grant read scopes to an account with a read-capable admin role — for example, a read-only administrator. A token can hold a scope but still return nothing if the account lacks the matching admin permission.
+</Note>
+
+To enable tools that **modify** Okta, grant the matching management scope — for example `okta.users.manage` for user writes or `okta.groups.manage` for group writes — on the app's **Okta API Scopes** tab, then add it to the server's scopes in C1. Grant management scopes only where you need write access, and only to an account whose admin role allows those changes.
+
+<Note>
+Scope changes take effect the next time a user authorizes. If you add scopes after someone has already connected, they keep their existing grants until they reconnect their Okta account, and tools that need the new scopes return an authorization error until they do.
+</Note>
 
 ## How Okta credentials are shared
 
 How Okta sees your users' activity depends on the method you chose:
 
-- **Per-user OAuth.** Each user authorizes with their own Okta account, so tool calls run under that user's Okta identity and inherit only the access they already have. Okta attributes each action to the individual user.
-- **Service mode.** An administrator authorizes once, so every user's tool calls reach Okta as one shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, authorize from a dedicated service-account user so activity is attributable to C1 rather than a person.
+- **Per-user OAuth.** Each user authorizes with their own Okta account, so tool calls run under that user's Okta identity and inherit only the admin permissions they already have. Okta attributes each action to the individual user.
+- **Service mode.** An administrator authorizes once, so every user's tool calls reach Okta as one shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). Authorize from a dedicated service-account user so activity is attributable to C1 rather than a person.
 
 For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
@@ -74,10 +123,10 @@ With your OAuth app ready, register the server and provide your credentials.
 Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Okta** from the catalog.
 </Step>
 <Step>
-Enter your Okta instance URL, such as `https://acme.okta.com`.
+Enter your Okta organization URL, such as `https://acme.okta.com`.
 </Step>
 <Step>
-When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth app's **client ID**, **client secret**, and the **scopes** you granted. To use a single shared identity instead, choose **OAuth2 — service mode** and authorize once as an administrator.
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter the OAuth app's **client ID**, **client secret**, and the **scopes** you granted. To use a single shared identity instead, choose **OAuth2 — service mode** and authorize once as an administrator.
 </Step>
 <Step>
 Save your changes. With per-user OAuth, the first time a user calls an Okta tool from their AI client, they're prompted to connect their Okta account.
@@ -98,5 +147,5 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 ## Manage your Okta credentials
 
-- **Rotate the OAuth client secret** in your Okta OAuth app under **Applications** > **Applications**, then update the secret on the server's authentication settings in C1.
-- **Adjust access** by editing the Okta API scopes granted to the OAuth app in Okta.
+- **Rotate the OAuth client secret** in your Okta app under **Applications** > **Applications**, then update the secret in the server's authentication settings in C1.
+- **Adjust access** by granting or revoking Okta API scopes on the app's **Okta API Scopes** tab, then updating the scopes in C1 to match. Users reconnect their Okta account for scope changes to take effect.
