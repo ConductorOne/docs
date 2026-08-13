@@ -10,7 +10,7 @@ description: "Plant tripwire credentials that look real but grant no access, and
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Share feedback with the C1 Support team.
 </Warning>
 
-Plant a credential that looks real but grants no access. Any attempt to use it is a high-confidence signal that someone has stolen access. Decoys are tripwire credentials: plant them where an attacker would look — env files, CI variables, secret managers — and using one raises a [Critical finding](/product/admin/findings).
+Plant a credential that looks real but grants no access. Any attempt to use it is a high-confidence signal that someone has stolen access. Decoys are tripwire credentials. Plant them where an attacker would look — env files, CI variables, secret managers. Using one raises a [Critical finding](/product/admin/findings).
 
 Managing decoys requires the **Super Administrator** role in C1. Go to **Settings** > **Security** > **Decoys** to get started.
 
@@ -26,7 +26,7 @@ C1 supports five decoy types, each shaped to sit alongside a different kind of r
 | Workload federation trust | A trust under an existing workload federation provider. Any signature-valid JWT matching its condition triggers a finding. |
 | Access token | A long-lived API access token issued for an existing user. |
 
-Except for a connector client credential, which C1 places automatically, every decoy type plants under an existing object — a human user, a service principal, or a registered workload federation provider. Make sure that object already exists before you start.
+Every decoy type except a connector client credential plants under an existing object — a human user, a service principal, or a registered workload federation provider. C1 places connector client credentials automatically, with nothing to choose. For every other type, make sure the object you need already exists before you start.
 
 <Steps>
 <Step>
@@ -45,17 +45,17 @@ For a workload federation trust, also set a **Condition expression** — a CEL e
 Set a **Display name** and, optionally, a **Description** to remind yourself where you planted it.
 </Step>
 <Step>
-**Optional.** Add **Annotations** — key/value tags for filtering, reporting, and integrations, for example `team = platform` or `owner = alice`. Annotations carry over onto the finding a decoy produces, so a [routing rule](/product/admin/findings#routing-rules) can condition on them.
+**Optional.** Add **Annotations** — key/value tags for filtering, reporting, and integrations, for example `team = platform` or `owner = alice`. Annotations carry over onto the finding a decoy produces. A [routing rule](/product/admin/findings#routing-rules) can then condition on them.
 </Step>
 <Step>
 Click **Plant decoy**.
 </Step>
 </Steps>
 
-C1 shows the decoy's credential material — a client ID and secret, an access token, or a workload federation trust ID, depending on the type — along with a fingerprint.
+C1 shows the decoy's credential material — a client ID and secret, an access token, or a workload federation trust ID, depending on the type. It also shows a fingerprint.
 
 <Warning>
-This is the only time C1 shows this credential material. Save it now — copy each value or download the `.env` file — before confirming you've saved it. If you lose it, rotate the decoy to get a new one.
+This is the only time C1 shows this credential material. Save it now: copy each value or download the `.env` file. You'll need to confirm you've saved it before this screen closes. If you lose it, rotate the decoy to get a new one.
 </Warning>
 
 Save the fingerprint alongside wherever you place the secret. It's how you'll recognize which planted copy fired when you see the resulting finding.
@@ -64,22 +64,22 @@ Save the fingerprint alongside wherever you place the secret. It's how you'll re
 
 Open a decoy from the list to edit its display name, description, or annotations, or to take one of the following actions from the **...** (more actions) menu:
 
-- **Disable** — stops the decoy from triggering findings without deleting it. Past findings stay in history, and you can re-enable it at any time.
+- **Disable** — stops the decoy from triggering findings without deleting it. Past findings stay in history. You can re-enable it at any time.
 - **Rotate** — mints a new secret for the decoy and invalidates the old one. C1 shows the new credential material once, the same as when you first planted it.
 - **Delete** — removes the decoy from the list and stops it from triggering findings. Past findings stay in history.
 
 ## What happens when a decoy is used
 
-Any attempt to authenticate with a planted decoy credential does two things at once: whoever presented it gets an ordinary authentication failure — there's no way to tell a decoy apart from a real bad credential — and C1 records the attempt.
+Any attempt to authenticate with a planted decoy credential triggers two things. Whoever presented it gets an ordinary authentication failure — there's no way to tell a decoy apart from a real bad credential. C1 also records the attempt.
 
-If the **Decoy credential used** [finding type](/product/admin/findings#turn-on-finding-types) is turned on, C1 raises a Critical finding the moment the decoy is used. Repeated use of the same decoy doesn't create duplicate findings — it's tracked as recurrences of the same finding, reopening it if it had been resolved.
+If the **Decoy credential used** [finding type](/product/admin/findings#turn-on-finding-types) is turned on, C1 raises a Critical finding the moment the decoy is used. Repeated use of the same decoy doesn't create duplicate findings — it's tracked as recurrences of the same finding. If the finding had been resolved, it reopens.
 
 <Note>
-Turning off the **Decoy credential used** finding type stops the finding from being created, but C1 still records every use to your audit log regardless. Quieting the finding doesn't cost you the trail.
+Turning off the **Decoy credential used** finding type stops the finding from being created. C1 still records every use to your audit log regardless. Quieting the finding doesn't cost you the trail.
 </Note>
 
-The resulting finding includes an **Attempts** table with the forensic detail you need for incident response: timestamp, source IP, user agent, and endpoint for every attempt, plus the raw event detail behind each one.
+The resulting finding includes an **Attempts** table with the forensic detail you need for incident response — timestamp, source IP, user agent, and endpoint for every attempt. Each row also includes the raw event detail behind it.
 
-If a decoy's secret turns up published somewhere public — a paste site, a public repository — C1 raises a separate **Decoy publicly exposed** finding, with the scanner that found it, where it was found, and when.
+If a decoy's secret turns up published somewhere public — a paste site, a public repository — C1 raises a separate **Decoy publicly exposed** finding. The finding includes the scanner that found it, where it was found, and when.
 
 See [Findings](/product/admin/findings) for how to turn on these finding types and build rules around them.
