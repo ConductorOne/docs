@@ -1,6 +1,137 @@
 ---
 title: "Findings"
-description: "Content coming soon."
+og:title: "Findings"
+og:description: "Detect and act on the things you care about in your organization's access data, from unowned service accounts to exposed credentials."
+description: "Detect and act on the things you care about in your organization's access data, from unowned service accounts to exposed credentials."
 ---
+{/* Editor Refresh: 2026-08-13 */}
 
-Content coming soon.
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Share feedback with the C1 Support team.
+</Warning>
+
+Stop hunting for risk by hand. Point C1 at the conditions you care about — unowned service accounts, exposed credentials, misclassified identities, and more — and it surfaces them as findings the moment they occur, then use rules to triage, escalate, or resolve them automatically. C1 checks for the conditions you've turned on every time a connector syncs, and reports back when it detects a match.
+
+Go to **Identity security** > **Findings** to get started.
+
+## Turn on finding types
+
+C1 ships with a catalog of built-in finding types, grouped by category. None are required — you choose which conditions matter to your organization.
+
+<Note>
+Findings don't appear until you turn on the finding types you want C1 to detect. There's no separate "create" or "new" control — everything starts from **Findings settings**.
+</Note>
+
+<Steps>
+<Step>
+From any tab in **Findings**, click the **settings** (gear) icon in the top right.
+</Step>
+<Step>
+In **Findings settings**, toggle on the finding types you want C1 to detect. Each type shows a short description of what it looks for.
+</Step>
+<Step>
+Click **Save changes**.
+</Step>
+</Steps>
+
+C1 starts creating findings of the types you turned on the next time each connector syncs.
+
+<Note>
+Turning off a finding type stops C1 from creating new findings of that type. Findings of that type that are already open stay open — nothing re-checks them, so they won't resolve automatically.
+</Note>
+
+### Finding catalog reference
+
+The following finding types are available today, grouped by category:
+
+| Category | Finding type | Detects |
+| :--- | :--- | :--- |
+| Ownership | Unowned non-human identity | Non-human identities with no assigned owner. |
+| Ownership | Unowned service account | Service accounts with no assigned owner. |
+| Ownership | Deactivated owner | Accounts and resources whose owner has been deactivated. |
+| Identity resolution | Similar username match | App accounts that look like they belong to a known identity. |
+| Identity resolution | Service account misclassification | Accounts labeled human that behave like service accounts. |
+| Credentials | Decoy credential used | A planted [decoy credential](/product/admin/decoys) was used to attempt access. |
+| Credentials | Unused secret | Secrets that have gone unused past the inactivity threshold. |
+| Credentials | Credential publicly exposed | Credentials found published outside your organization. |
+| Credentials | Decoy publicly exposed | A planted [decoy credential](/product/admin/decoys) was found published publicly. |
+| Configuration | Anomaly detection disabled | Connectors running with sync anomaly detection turned off. |
+
+## Work with a finding
+
+Click a finding from the **Overview** or **All findings** tab to open its detail view, which includes:
+
+- **Evidence** — why C1 flagged this finding, including any confidence score.
+- **Activity** — an audit trail of everything that's happened to the finding, including when it was created, when routing rules evaluated against it, and any evidence updates.
+
+From the detail view, you can take one of the following actions on a finding:
+
+- **Accept risk** — formally acknowledge the finding as a known risk. Requires a justification and an expiration date; the finding reopens automatically when the acceptance period ends.
+- **Suppress** — permanently hide the finding from the default view and exclude it from posture scores. Requires a reason.
+- **Snooze** — temporarily hide the finding. Requires a duration (1, 7, 30, or 90 days, or a custom date) and a reason; the finding automatically returns to open status when the snooze period ends.
+- **Remediate** — resolve and close the finding. This action only appears for finding types that support it, and its label varies by finding type — for example, a service account misclassification finding offers **Confirm human** and **Mark as service** instead of a generic remediate button.
+
+<Note>
+You can only act on findings one at a time today. Bulk actions are coming soon.
+</Note>
+
+## Transformation rules
+
+Transformation rules reshape a finding's data — for example, escalating its severity or adding annotations — before a routing rule acts on it. Use them to make sure the findings that matter most are marked that way consistently, so your routing rules can act on severity or annotations instead of re-deriving that context from scratch.
+
+Go to **Findings** > **Transformation rules** to create or manage them. Each rule has:
+
+- **A match condition** — narrow the rule to a specific app, finding type, or a [CEL expression](/product/admin/expressions) referencing `finding.severity`, `finding.state`, `finding.risk_score`, or `finding.annotations`. Leave everything unset to match every finding.
+- **One or more transforms** — set severity, add annotations, or remove annotations.
+
+For example, to flag every finding on a sensitive app as more urgent, create a rule matching `finding.app_id == "<app-id>"` that sets severity to Critical. A routing rule can then match on that Critical severity and escalate automatically.
+
+You can create as many transformation rules as you need. Every rule whose condition matches a finding is applied, in ascending order by the rule's **Order** value — later rules override earlier ones where they conflict.
+
+## Routing rules
+
+Routing rules turn triage into automation. Instead of someone opening every finding to decide what happens next, a routing rule matches on a condition and immediately suppresses, snoozes, accepts, remediates, or dispatches it — no manual review required unless nothing matches.
+
+Go to **Findings** > **Routing rules** to create or manage them. Each rule has:
+
+- **A match condition** — the same app, finding type, or CEL expression matching used by transformation rules.
+- **An action** — No action, Suppress, Snooze, or Accept risk. Remediate is also available for finding types that support it.
+- **Dispatchers (optional)** — fire a webhook, invoke a function, or trigger an automation every time the rule matches.
+
+For example, suppress low-severity noise automatically with a rule matching `finding.severity == FINDING_SEVERITY_LOW` and action Suppress. Escalate anything Critical with a rule matching `finding.severity == FINDING_SEVERITY_CRITICAL` that triggers an [automation](/product/admin/automations) to notify your team or open a ticket.
+
+Unlike transformation rules, routing rules stop at the first match: C1 evaluates rules in ascending order by **Order** and applies only the first one that matches.
+
+### Order rules effectively
+
+Transformation rules and routing rules order in opposite directions, and mixing up the two is the most common way a rule set stops working as expected.
+
+- **Transformation rules apply cumulatively** — every matching rule runs, and later rules override earlier ones. Put your general, default-setting rules early and your specific overrides later.
+- **Routing rules stop at the first match** — only one rule ever runs. Put your specific, narrow rules early and your general, catch-all rules last. A broad rule placed too early will catch findings a later, more specific rule was meant to handle.
+
+A few other tips for keeping a rule set maintainable:
+
+- Test a routing rule's match condition with the **No action** action first, which matches the finding without changing its state. Confirm it's catching the right findings before wiring up Suppress, Snooze, or a dispatcher.
+- Leave gaps between **Order** values (10, 20, 30 instead of 1, 2, 3) so you can insert a new rule later without renumbering the rest.
+- If you want a default outcome for anything your specific rules don't catch, add a broad rule with no match condition (**Match all**) at the end of your routing rules.
+
+## Example: catch and escalate decoy credential use
+
+This walkthrough combines a finding type, a transformation rule, and a routing rule to automatically flag and escalate decoy credential use — a strong signal of compromise that shouldn't wait for someone to notice it in the findings list. See [Decoys](/product/admin/decoys) for how to plant a decoy credential.
+
+<Steps>
+<Step>
+Turn on the finding type. In **Findings settings**, under **Credentials**, turn on **Decoy credential used** and save.
+</Step>
+<Step>
+Create a transformation rule to guarantee severity. Go to **Transformation rules** > **Create rule**. Set **Finding type** to **Decoy credential used**, leave **App** and the expression unset to match every app, add a **Set severity** transform, and set it to **Critical**. Save the rule.
+</Step>
+<Step>
+Create a routing rule to escalate automatically. Go to **Routing rules** > **Create rule**. Set **Finding type** to **Decoy credential used**, set **Action** to **No action** so the finding stays open for review, and add a **Trigger automation** dispatcher to notify your security team immediately.
+</Step>
+<Step>
+Set this rule's **Order** so it runs before any broad catch-all routing rules — a general rule like "suppress low severity findings" could otherwise match first and prevent this one from running.
+</Step>
+</Steps>
+
+From now on, every decoy credential finding is marked Critical and your security team is notified the moment it's created — no one has to find it in the findings list first.

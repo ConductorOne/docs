@@ -111,6 +111,7 @@ Sidebar grouping in `docs.json` is independent of folder structure. You can visu
 - **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
 - **UI elements**: Bold formatting (**New profile**)
 - **Navigation paths**: **Admin** > **Access profiles** > **New profile**
+- **Kebab/overflow menus**: Always write as the **...** (more actions) menu — e.g., "click the **...** (more actions) menu and select **Delete**." This is the established pattern across the docs; don't substitute "kebab menu," "more options," a middle-dot glyph (···), or a vertical ellipsis (⋮).
 - **Terminology**: Use product-specific terms consistently (access profile, entitlement, campaign)
 - **Clarity**: Be specific, cite sources, avoid vague claims
 - **Simplicity**: Keep examples practical, avoid excessive options
