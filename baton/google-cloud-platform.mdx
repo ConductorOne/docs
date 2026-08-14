@@ -50,6 +50,8 @@ Configuring the connector requires credentials from both Google Cloud Platform a
 
 We recommend creating a dedicated GCP project for the C1 integration. This keeps the integration's permissions and audit logs isolated from your other projects.
 
+Each section below gives the Google Cloud console steps and the equivalent `gcloud` commands. Use whichever you prefer. To use the CLI, [install the gcloud CLI](https://cloud.google.com/sdk/docs/install) and run `gcloud auth login` first.
+
 <Steps>
 <Step>
 As a Google Cloud Platform with Google Workspace Super Admin, sign in to [https://console.cloud.google.com](https://console.cloud.google.com/).
@@ -69,7 +71,34 @@ After the project is created, make sure the correct project is selected in the d
 </Step>
 </Steps>
 
+From the command line:
+
+```bash
+gcloud projects create YOUR_PROJECT_ID \
+  --name="C1 Integration" \
+  --organization=YOUR_ORG_ID
+```
+
+```bash
+gcloud config set project YOUR_PROJECT_ID
+```
+
+To find your organization ID:
+
+```bash
+gcloud organizations list
+```
+
 ### Enable the APIs
+
+The connector requires these four APIs. The service ID is the identifier you use with the `gcloud` CLI.
+
+| API | Service ID | Used for |
+| :--- | :--- | :--- |
+| Cloud Asset API | `cloudasset.googleapis.com` | Searching resources and IAM policies across the organization |
+| Cloud Resource Manager API | `cloudresourcemanager.googleapis.com` | Reading organizations, folders, and projects |
+| Identity and Access Management API | `iam.googleapis.com` | Reading roles and service accounts |
+| Admin SDK API | `admin.googleapis.com` | Reading Google Workspace users, groups, and roles through domain-wide delegation |
 
 <Steps>
 <Step>
@@ -86,6 +115,23 @@ Search for each of the following APIs and click **Enable**:
 </Step>
 </Steps>
 
+From the command line:
+
+```bash
+gcloud services enable \
+  cloudasset.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  iam.googleapis.com \
+  admin.googleapis.com \
+  --project=YOUR_PROJECT_ID
+```
+
+To confirm which APIs are enabled on the project:
+
+```bash
+gcloud services list --enabled --project=YOUR_PROJECT_ID
+```
+
 ### Optional: Sync secrets and buckets
 
 Complete this section only if you want the connector to sync secrets (API keys, service account keys, Secret Manager secrets) or Cloud Storage buckets.
@@ -98,14 +144,33 @@ Secrets and bucket permissions are configured per project in GCP. If the connect
 
 Grant the service account the `roles/cloudasset.viewer` role at the organization level. This allows it to search resources across projects.
 
+```bash
+gcloud organizations add-iam-policy-binding YOUR_ORG_ID \
+  --member="serviceAccount:YOUR_SERVICE_ACCOUNT_EMAIL" \
+  --role="roles/cloudasset.viewer"
+```
+
 **Additional APIs to enable:**
 
 Enable these APIs for each project you want to sync (or only for the projects specified in the **Project IDs** filter):
 
-* Secrets - API Keys: **API Keys API**
-* Secrets - Service account keys: **IAM API**
-* Secrets - Secret Manager secrets: **Secret Manager API**
-* Buckets: **Cloud Storage API**
+| Resource | API | Service ID |
+| :--- | :--- | :--- |
+| Secrets - API keys | API Keys API | `apikeys.googleapis.com` |
+| Secrets - Service account keys | IAM API | `iam.googleapis.com` |
+| Secrets - Secret Manager secrets | Secret Manager API | `secretmanager.googleapis.com` |
+| Buckets | Cloud Storage API | `storage.googleapis.com` |
+
+```bash
+gcloud services enable \
+  apikeys.googleapis.com \
+  iam.googleapis.com \
+  secretmanager.googleapis.com \
+  storage.googleapis.com \
+  --project=YOUR_PROJECT_ID
+```
+
+Repeat for each project you want to sync, changing `--project` each time.
 
 ### Create a service account
 
@@ -139,6 +204,17 @@ Leave **Grant users access to this service account** blank.
 Click **DONE**.
 </Step>
 </Steps>
+
+From the command line:
+
+```bash
+gcloud iam service-accounts create c1-integration \
+  --project=YOUR_PROJECT_ID \
+  --display-name="C1 Integration" \
+  --description="Service account for C1 Google Cloud Platform with Google Workspace Integration"
+```
+
+The service account's email address follows the pattern `c1-integration@YOUR_PROJECT_ID.iam.gserviceaccount.com`. Use it wherever `YOUR_SERVICE_ACCOUNT_EMAIL` appears below.
 
 ### Grant organization-level access
 
@@ -205,19 +281,27 @@ In **New principals**, enter the service account's email address. In **Role**, s
 To do the same from the command line, create the role:
 
 ```bash
-gcloud iam roles create c1_gcp_connector --organization=YOUR_ORG_ID --title="C1 GCP Connector" --permissions=cloudasset.assets.analyzeIamPolicy,cloudasset.assets.searchAllIamPolicies,cloudasset.assets.searchAllResources,iam.roles.get,iam.roles.list,resourcemanager.folders.getIamPolicy,resourcemanager.folders.list,resourcemanager.organizations.get,resourcemanager.organizations.getIamPolicy,resourcemanager.projects.get,resourcemanager.projects.getIamPolicy,resourcemanager.projects.list
+gcloud iam roles create c1_gcp_connector \
+  --organization=YOUR_ORG_ID \
+  --title="C1 GCP Connector" \
+  --permissions=cloudasset.assets.analyzeIamPolicy,cloudasset.assets.searchAllIamPolicies,cloudasset.assets.searchAllResources,iam.roles.get,iam.roles.list,resourcemanager.folders.getIamPolicy,resourcemanager.folders.list,resourcemanager.organizations.get,resourcemanager.organizations.getIamPolicy,resourcemanager.projects.get,resourcemanager.projects.getIamPolicy,resourcemanager.projects.list
 ```
 
 Then bind it at the organization:
 
 ```bash
-gcloud organizations add-iam-policy-binding YOUR_ORG_ID --member="serviceAccount:YOUR_SERVICE_ACCOUNT_EMAIL" --role="organizations/YOUR_ORG_ID/roles/c1_gcp_connector"
+gcloud organizations add-iam-policy-binding YOUR_ORG_ID \
+  --member="serviceAccount:YOUR_SERVICE_ACCOUNT_EMAIL" \
+  --role="organizations/YOUR_ORG_ID/roles/c1_gcp_connector"
 ```
 
 To confirm the binding exists:
 
 ```bash
-gcloud organizations get-iam-policy YOUR_ORG_ID --flatten="bindings[].members" --filter="bindings.members:YOUR_SERVICE_ACCOUNT_EMAIL" --format="table(bindings.role)"
+gcloud organizations get-iam-policy YOUR_ORG_ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:YOUR_SERVICE_ACCOUNT_EMAIL" \
+  --format="table(bindings.role)"
 ```
 
 <Note>
@@ -247,9 +331,48 @@ Keep the downloaded file safe — you'll upload it when configuring the connecto
 </Step>
 </Steps>
 
+From the command line, create the JSON key:
+
+```bash
+gcloud iam service-accounts keys create c1-credentials.json \
+  --iam-account=YOUR_SERVICE_ACCOUNT_EMAIL
+```
+
+Retrieve the numeric unique ID you'll use for domain-wide delegation:
+
+```bash
+gcloud iam service-accounts describe YOUR_SERVICE_ACCOUNT_EMAIL \
+  --format='value(uniqueId)'
+```
+
+To review the keys that exist on the service account:
+
+```bash
+gcloud iam service-accounts keys list \
+  --iam-account=YOUR_SERVICE_ACCOUNT_EMAIL
+```
+
+<Warning>
+**If key creation fails,** your organization blocks it. Creating a key requires the `iam.serviceAccountKeys.create` permission, granted by the **Service Account Key Admin** role (`roles/iam.serviceAccountKeyAdmin`), and the `constraints/iam.disableServiceAccountKeyCreation` organization policy must not be enforced on the project. Google enforces that policy by default for organizations created on or after May 3, 2024, and key creation then fails with `FAILED_PRECONDITION: Key creation is not allowed on this service account`.
+
+Check whether the policy applies to your project:
+
+```bash
+gcloud org-policies describe iam.disableServiceAccountKeyCreation \
+  --project=YOUR_PROJECT_ID \
+  --effective
+```
+
+A user with the **Organization Policy Administrator** role (`roles/orgpolicy.policyAdmin`) can add a project-level exception. See Google's [organization policy constraints for service accounts](https://cloud.google.com/resource-manager/docs/organization-policy/restricting-service-accounts).
+</Warning>
+
 ### Add the service account to Google Workspace
 
 Domain-wide delegation allows the GCP service account to access Google Workspace data — directory users, groups, roles, and audit logs — on behalf of your organization. You configure this in the Google Workspace Admin console at [https://admin.google.com](https://admin.google.com), which is separate from the Google Cloud console.
+
+<Note>
+The remaining steps have no `gcloud` equivalent. Domain-wide delegation, the customer ID, and the primary domain all live in Google Workspace rather than Google Cloud, so you must complete them in the Admin console.
+</Note>
 
 <Steps>
 <Step>
