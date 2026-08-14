@@ -61,7 +61,7 @@ You need:
 
 | What | Why it matters |
 | :--- | :--- |
-| **Enabled APIs** | The connector calls the Admin SDK, and optionally the Cloud Identity and Groups Settings APIs. Each must be enabled in your project. |
+| **Enabled APIs** | The connector calls the Admin SDK and Cloud Identity APIs, plus the Groups Settings API if you use group settings. Each must be enabled in your project. |
 | **Service account** | The single identity C1 authenticates as. It needs no project IAM role. |
 | **JSON key** | The credential you upload to C1. Creating one requires the Service Account Key Admin role and an organization policy that permits key creation. |
 | **Domain-wide delegation** | The Workspace-side grant that authorizes the service account's scopes. This is what actually lets the connector read and write directory data. |
@@ -72,9 +72,7 @@ Domain-wide delegation is configured in the Google Admin console, not in Google 
 
 ## Set up the Google Cloud project
 
-<Warning>
-A user with the **Super Admin** role in Google Workspace must perform this task.
-</Warning>
+This part happens entirely in Google Cloud and needs the Google Cloud permissions listed in [Before you begin](#before-you-begin). The Workspace super admin isn't needed until [Grant domain-wide delegation in Google Workspace](#grant-domain-wide-delegation-in-google-workspace).
 
 Each section below gives the Google Cloud console steps and the equivalent `gcloud` commands. Use whichever you prefer. To use the CLI, [install the gcloud CLI](https://cloud.google.com/sdk/docs/install) and run `gcloud auth login` first.
 
@@ -82,7 +80,7 @@ Each section below gives the Google Cloud console steps and the equivalent `gclo
 
 <Steps>
 <Step>
-As a Google Workspace Super Admin, sign in to [https://console.cloud.google.com](https://console.cloud.google.com/).
+Sign in to [https://console.cloud.google.com](https://console.cloud.google.com/) with an account that can create projects, enable APIs, and manage service accounts.
 </Step>
 <Step>
 In the toolbar, open the project select dropdown and click **NEW PROJECT**.
@@ -343,10 +341,6 @@ Click **AUTHORIZE**.
 
 Choose one of the two sets below. Read-only access lets C1 sync access data. Read/write access lets C1 sync access data and provision access.
 
-<Tip>
-If you're using Google Workspace as your C1 directory and don't want C1 provisioning access, the read-only set is all you need. It syncs users, groups, and roles, and it cannot modify anything in Workspace.
-</Tip>
-
 <Tabs>
 <Tab title="Read-only">
 Paste this comma-separated list into the **OAuth Scopes** field:
@@ -391,7 +385,7 @@ https://www.googleapis.com/auth/admin.directory.domain.readonly, https://www.goo
 </Tabs>
 
 <Warning>
-The write scopes let C1 provision and deprovision access. **If you don't want C1 to perform these tasks, use the read-only scope set.**
+The write scopes let C1 provision and deprovision access. **If you don't want C1 to perform these tasks, use the read-only scope set.** Read-only still syncs users, groups, and roles, so it's sufficient when you use Google Workspace as your [directory](#set-google-workspace-as-your-c1-directory) and run access reviews.
 </Warning>
 
 ### Find your customer ID and primary domain
@@ -596,12 +590,6 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 </Tab>
 </Tabs>
 
-### What's next?
-
-If Google Workspace holds a record for everyone at your company, designate it as your directory so C1 creates user accounts from it. See [Set Google Workspace as your C1 directory](#set-google-workspace-as-your-c1-directory).
-
-If Google Workspace is your company's identity provider (meaning that it is used to SSO into other software), the integration sync will automatically create applications in C1 for all of your SCIMed software. Before you move on, review the [Create applications](/product/admin/applications) page for important information about how to set up integrations with the SCIMed apps.
-
 ## Set Google Workspace as your C1 directory
 
 If Google Workspace is your source of truth for who works at your company, designate the connector's app as your [directory](/product/admin/directory). C1 then creates a C1 user for each Workspace account it syncs, and accounts from your other connectors attach to those users.
@@ -633,12 +621,16 @@ Click **Create directory**.
 
 For how directory accounts become C1 users, and how accounts from non-directory apps find an owner, see [Connect a directory](/product/admin/directory).
 
+## What's next?
+
+If Google Workspace is your company's identity provider (meaning that it is used to SSO into other software), the integration sync will automatically create applications in C1 for all of your SCIMed software. Before you move on, review the [Create applications](/product/admin/applications) page for important information about how to set up integrations with the SCIMed apps.
+
 ## Troubleshooting the Google Workspace integration
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
 | `FAILED_PRECONDITION: Key creation is not allowed on this service account` | The `iam.disableServiceAccountKeyCreation` organization policy is enforced, or you lack the Service Account Key Admin role. | See [Allow service account key creation](#allow-service-account-key-creation). |
-| `Error 403: Request had insufficient authentication scopes` / `ACCESS_TOKEN_SCOPE_INSUFFICIENT` | The domain-wide delegation grant is missing scopes the connector needs. | Remove and re-add the API client with the full scope set. See below. |
+| `Error 403: Request had insufficient authentication scopes` / `ACCESS_TOKEN_SCOPE_INSUFFICIENT` | The domain-wide delegation grant is missing scopes the connector needs. | Remove and re-add the API client with the full scope set. See [When adding permissions to my Google Workspace API Client permissions I get authorization errors](#when-adding-permissions-to-my-google-workspace-api-client-permissions-i-get-authorization-errors). |
 | `unauthorized_client` when the connector authenticates | The Client ID in domain-wide delegation doesn't match the service account's Unique ID, or the requested scopes aren't authorized. | Confirm you entered the numeric **Unique ID**, not the service account email, and that the scope list matches exactly. |
 | `SERVICE_DISABLED` or "API has not been used in project ... before or it is disabled" | The connector's API isn't enabled in the project. | Enable it. See [Enable the APIs](#enable-the-apis). |
 | Authentication succeeds but the sync returns no users or `Not Authorized to access this resource/api` | The **Administrator email** isn't a super admin, or the **Customer ID** is wrong. | Confirm both values. See [Find your customer ID and primary domain](#find-your-customer-id-and-primary-domain). |
