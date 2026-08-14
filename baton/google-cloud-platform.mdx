@@ -126,7 +126,29 @@ Click **CREATE AND CONTINUE**.
 
 </Step>
 <Step>
-Under **Grant this service account access to a project**, assign the service account a role at the organization level. You can use the predefined **Editor** role, or create a custom role that includes only the permissions listed below.
+Under **Grant this service account access to a project**, click **CONTINUE** without selecting a role.
+
+<Warning>
+This step grants roles on the **project** only. The connector reads your organization, folders, and projects, so it needs a role granted at the **organization** level instead. Granting **Editor** here does not work. You'll grant the role at the organization in [Grant organization-level access](#grant-organization-level-access).
+</Warning>
+</Step>
+<Step>
+Leave **Grant users access to this service account** blank.
+</Step>
+<Step>
+Click **DONE**.
+</Step>
+</Steps>
+
+### Grant organization-level access
+
+The connector calls Cloud Resource Manager against your organization, so the service account needs a role bound at the **organization** node. A role bound to the project is not enough, no matter how broad it is.
+
+<Warning>
+Granting roles at the organization level requires the **Organization Administrator** role (`roles/resourcemanager.organizationAdmin`). Project Owner is not sufficient.
+</Warning>
+
+Create a custom role that includes only the permissions the connector uses.
 
 For **READ** access (syncing access data only), the role needs these permissions:
 
@@ -163,14 +185,44 @@ secretmanager.secrets.setIamPolicy
 storage.buckets.setIamPolicy
 ```
 
+Create the role and bind it to the service account at the organization:
+
+<Steps>
+<Step>
+In the Google Cloud console, open the resource picker at the top of the page and select your **organization**, not a project.
 </Step>
 <Step>
-Leave **Grant users access to this service account** blank.
+Navigate to **IAM & Admin** > **Roles** and click **CREATE ROLE**. Add the permissions listed above, then click **CREATE**.
 </Step>
 <Step>
-Click **DONE**.
+Navigate to **IAM & Admin** > **IAM**, confirm the organization is still selected, and click **GRANT ACCESS**.
+</Step>
+<Step>
+In **New principals**, enter the service account's email address. In **Role**, select the custom role you created, then click **SAVE**.
 </Step>
 </Steps>
+
+To do the same from the command line, create the role:
+
+```bash
+gcloud iam roles create c1_gcp_connector --organization=YOUR_ORG_ID --title="C1 GCP Connector" --permissions=cloudasset.assets.analyzeIamPolicy,cloudasset.assets.searchAllIamPolicies,cloudasset.assets.searchAllResources,iam.roles.get,iam.roles.list,resourcemanager.folders.getIamPolicy,resourcemanager.folders.list,resourcemanager.organizations.get,resourcemanager.organizations.getIamPolicy,resourcemanager.projects.get,resourcemanager.projects.getIamPolicy,resourcemanager.projects.list
+```
+
+Then bind it at the organization:
+
+```bash
+gcloud organizations add-iam-policy-binding YOUR_ORG_ID --member="serviceAccount:YOUR_SERVICE_ACCOUNT_EMAIL" --role="organizations/YOUR_ORG_ID/roles/c1_gcp_connector"
+```
+
+To confirm the binding exists:
+
+```bash
+gcloud organizations get-iam-policy YOUR_ORG_ID --flatten="bindings[].members" --filter="bindings.members:YOUR_SERVICE_ACCOUNT_EMAIL" --format="table(bindings.role)"
+```
+
+<Note>
+If you sync secrets or buckets, also grant `roles/cloudasset.viewer` at the organization level, as described in [Optional: Sync secrets and buckets](#optional-sync-secrets-and-buckets).
+</Note>
 
 ### Get credentials
 
@@ -520,3 +572,23 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 
 </Tab>
 </Tabs>
+
+## Troubleshooting
+
+### The sync fails with a permission denied error on the organization
+
+**Example error:**
+
+`c1z-sync: failed getting metadata: google-cloud-platform: Organizations.Get('organizations/000000000000') failed: googleapi: Error 403: Permission 'resourcemanager.organizations.get' denied on resource '//cloudresourcemanager.googleapis.com/organizations/000000000000' (or it may not exist).`
+
+The error details report `"reason": "IAM_PERMISSION_DENIED"`.
+
+**Cause:** The service account's role is bound to the project rather than to the organization. Roles granted during service account creation, including **Editor**, apply only to the project and confer no access at the organization node.
+
+**To resolve this issue:** Grant the connector's custom role at the organization level. See [Grant organization-level access](#grant-organization-level-access).
+
+<Note>
+Google returns this same error when the organization doesn't exist, so also confirm the organization ID the connector is configured with is correct. Run `gcloud organizations list` to see the organizations you can access.
+</Note>
+
+The Troubleshooter URL included in the error opens Google's Policy Troubleshooter, which shows the principal, permission, and resource that failed.
