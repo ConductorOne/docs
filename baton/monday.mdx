@@ -8,26 +8,85 @@ sidebarTitle: "Monday.com"
 
 ## Capabilities
 
-| Resource | Sync | Provision |
-| :--- | :--- | :--- |
-| Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Board | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Team | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Workspace | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+{/* AUTO-GENERATED:START - capabilities */}
+
+| Resource | Sync | Provision | Delete |
+| :--- | :--- | :--- | :--- |
+| Account | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+| Role | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+| Team | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Board | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Workspace | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
 
 **Additional functionality:**
 
-<Icon icon="square-check" iconType="solid"  color="#c937ae"/> Supports [automatic account provisioning](/product/admin/account-provisioning) <br/>
+<Icon icon="square-check" iconType="solid" color="#c937ae"/> Supports [automatic account provisioning](/product/admin/account-provisioning) <br/>
+<Icon icon="square-check" iconType="solid" color="#c937ae"/> Supports account lifecycle actions (enable and disable user) <br/>
+<Icon icon="square-check" iconType="solid" color="#c937ae"/> Supports resource create for teams, boards, and workspaces <br/>
 
-   This connector does not support account deprovisioning. You must deprovision accounts directly in Monday.com.
+   Monday.com does not expose a hard delete for human users. Use the **Disable User** connector action to deactivate accounts.
+
+   Board and workspace owner/subscriber entitlements are synced for access reviews but are not provisioned by this connector. Boards sync nested under their workspace when `workspace_id` is present; otherwise they sync at the top level. Board and workspace delete are not implemented by this connector.
+
+### Connector actions
+
+| Action | Description |
+| :--- | :--- |
+| Enable User | Reactivates a previously deactivated user via the `activate_users` GraphQL mutation |
+| Disable User | Deactivates (soft-disables) a user via the `deactivate_users` GraphQL mutation |
+
+### User states and provisioning
+
+Monday.com users keep the same ID from invitation through deactivation. The connector maps each lifecycle state to a C1 account status and blocks unsupported operations with clear errors.
+
+**How users appear in C1 after sync:**
+
+| User state | C1 account status | Included in sync |
+| :--- | :--- | :--- |
+| Pending invite (not yet accepted) | Disabled | Yes |
+| Active member | Enabled | Yes |
+| Deactivated (soft-disabled) | Disabled | Yes |
+
+**What each state supports:**
+
+| Operation | Pending invite | Active | Deactivated |
+| :--- | :--- | :--- | :--- |
+| Team member grant | Supported | Supported | Not supported — run **Enable User** first |
+| Team member revoke | Supported | Supported | Supported |
+| Role grant / revoke | Supported | Supported | Supported |
+| **Enable User** action | Not supported — invitation not accepted yet | Idempotent success if already active | Supported |
+| **Disable User** action | Not supported — invitation not accepted yet | Supported | Idempotent success if already disabled |
+
+Pending invites can still receive team and role entitlements because Monday.com accepts those changes before the user accepts the invitation. Team grants on deactivated users are blocked before the API call; role grants on deactivated users remain supported because Monday.com accepts them.
+
+### Provisioned entitlements
+
+| Resource | Entitlement | Operation |
+| :--- | :--- | :--- |
+| Role | Assigned | Grant or revoke a user's account-level base role (Admin, Member, View Only, Guest) |
+| Team | Team Member | Add or remove a user from a team |
+
+### Resource create
+
+| Resource | Operation |
+| :--- | :--- |
+| Team | Create a team (`create_team`) or delete a team (`delete_team`) |
+| Board | Create a board in a workspace (`create_board`) |
+| Workspace | Create a workspace (`create_workspace`) |
 
 ## Gather Monday.com credentials 
+
+<Warning>
+To generate credentials, you'll need a user with the **Admin** role in Monday.com.
+</Warning>
 
 Configuring the connector requires you to pass in information from Monday.com. Gather these configuration details before you move on.
 
 Here's the information you'll need:
 
-- An API key generated by a user with the **Admin** role in Monday.com
+- An API key generated from **Developers** > **My Access Tokens** in Monday.com
 
 See the Monday.com docs for information on how to acquire credentials: [View the documentation](https://developer.monday.com/api-reference/docs/authentication)
 
@@ -75,6 +134,12 @@ Find the **Settings** area of the page and click **Edit**.
 </Step>
 <Step>
 Enter the configuration information from the previous section.
+
+{/* AUTO-GENERATED:START - config-params */}
+
+- **monday-api-key** (required): API Key for Monday
+
+{/* AUTO-GENERATED:END - config-params */}
 </Step>
 <Step>
 Click **Save**.
@@ -94,7 +159,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 ### Resources 
 
-[Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
+[Contact C1's support team](mailto:support@conductorone.com) to download the latest version of the connector.
 
 ### Step 1: Set up a new Monday.com connector
 
@@ -182,7 +247,7 @@ spec:
     spec:
       containers:
       - name: baton-monday
-        image: public.ecr.aws/conductorone/baton-monday:latest
+        image: ghcr.io/conductorone/baton-monday:latest
         imagePullPolicy: IfNotPresent
         env:
         - name: BATON_HOST_ID
@@ -199,12 +264,10 @@ spec:
 Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
 </Step>
 <Step>
-Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the monday connector to. monday data should be found on the **Entitlements** and **Accounts** tabs.
+Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Monday.com connector to. Monday.com data should be found on the **Entitlements** and **Accounts** tabs.
 </Step>
 </Steps>
 
 **Done.** Your Monday.com connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
