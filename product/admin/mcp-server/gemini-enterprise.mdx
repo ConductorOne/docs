@@ -26,14 +26,18 @@ Setup spans two products and three roles. Plan for a Google Cloud administrator 
 | Enable tools | Gemini Enterprise | Gemini Enterprise administrator |
 
 <Tip>
-Most of the Google Cloud steps have `gcloud` equivalents, and this page gives both. The command line is faster and easier to repeat across environments, so use it where you can. Two steps near the end have no API equivalent and must be done in the Google Cloud console.
+Several Google Cloud steps have `gcloud` equivalents, and this page gives both wherever one exists. The command line is faster and easier to repeat across environments, so use it where you can. Creating the data store and enabling tools have no API equivalent and must be done in the Google Cloud console.
 </Tip>
 
 ## Before you begin
 
+Gather these before you start.
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
 - A Google Cloud project with a Gemini Enterprise app already created.
 - The [gcloud CLI](https://cloud.google.com/sdk/docs/install), authenticated with `gcloud auth login`.
-- The `beta` component, which the gateway commands need:
+- A Google Cloud administrator who can grant `roles/orgpolicy.policyAdmin` at the organization or folder level. Project **Owner** is not sufficient for the organization policy change in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors).
+- The `beta` component, which the optional gateway commands need:
 
   ```bash
   gcloud components install beta
@@ -43,11 +47,9 @@ Most of the Google Cloud steps have `gcloud` equivalents, and this page gives bo
   Install this before you start. Without it, `gcloud beta` commands stop at an interactive install prompt. In a script, that looks like a hang rather than an error.
   </Tip>
 
-- A Google Cloud administrator who can grant `roles/orgpolicy.policyAdmin` at the organization or folder level. Project **Owner** is not sufficient for the organization policy change in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors).
-
 ### Required roles
 
-Grant these on the Google Cloud project:
+Grant these roles on the Google Cloud project.
 
 | Role | Why |
 | :--- | :--- |
@@ -74,13 +76,15 @@ https://<your-tenant>-mcp.conductor.one/v1
 </Step>
 </Steps>
 
+You now have the MCP server URL for your tenant.
+
 Your OAuth endpoints follow from your tenant subdomain. Confirm them against your tenant's published metadata:
 
 ```bash
-curl -s https://<your-tenant>-mcp.conductor.one/.well-known/oauth-authorization-server
+curl -s https://YOUR_TENANT-mcp.conductor.one/.well-known/oauth-authorization-server
 ```
 
-You need three values from that response:
+You need three values from that response.
 
 | Value | For a tenant named `acme` |
 | :--- | :--- |
@@ -134,6 +138,8 @@ To confirm which APIs are enabled:
 gcloud services list --enabled --project=YOUR_PROJECT_ID
 ```
 
+Your project can now create data connectors and expose their tool actions.
+
 <Note>
 `connectors.googleapis.com`, `integrations.googleapis.com`, and `secretmanager.googleapis.com` back the tool actions a data connector exposes. Google's setup documentation does not list them, and tool discovery fails without them.
 </Note>
@@ -172,6 +178,8 @@ gcloud org-policies describe \
   --project=YOUR_PROJECT_ID --effective
 ```
 
+The effective policy reports `enforce: false`, and your project can create custom MCP data connectors.
+
 <Note>
 Allow several minutes for the policy to propagate. Until it does, the console returns the same denial message, so a failure right after you apply the policy does not mean the policy is wrong. Setting this policy requires `roles/orgpolicy.policyAdmin` at the organization or folder level.
 </Note>
@@ -188,10 +196,6 @@ C1 publishes a client metadata document for Gemini Enterprise. Use its URL as th
 https://<your-tenant>.conductor.one/auth/v1/client-metadata/gemini-enterprise
 ```
 
-<Note>
-A pre-registered client ID does not mean shared access. The client ID identifies Gemini Enterprise as an application. Each user still signs in to C1 through your identity provider, receives their own token, and is governed by their own access profiles. Per-user consent, audit, and revocation all work normally.
-</Note>
-
 <Tip>
 This client has no secret, so nothing expires and nothing needs rotating. Configure it once and it keeps working. Do not create a client through C1's dynamic registration endpoint for this integration: those secrets expire one hour after they are issued, and re-registering does not extend the expiry.
 </Tip>
@@ -199,6 +203,10 @@ This client has no secret, so nothing expires and nothing needs rotating. Config
 ## Create the data store
 
 Connect the C1 MCP gateway to your Gemini Enterprise app.
+
+<Warning>
+The data connector name generates an ID that cannot be changed later. Decide the name before you begin this procedure.
+</Warning>
 
 <Steps>
 <Step>
@@ -208,10 +216,16 @@ In the Google Cloud console, open **Gemini Enterprise** and select your app.
 Select **Connected data stores** > **New data store**.
 </Step>
 <Step>
-In **Select a data source**, search for `Custom MCP`, then select **Add MCP server** on the **Custom MCP Server** card.
+In **Select a data source**, search for `Custom MCP`.
 </Step>
 <Step>
-For **Select your authentication method**, choose **OAuth 2.0** and complete the fields:
+Select **Add MCP server** on the **Custom MCP Server** card.
+</Step>
+<Step>
+For **Select your authentication method**, choose **OAuth 2.0**.
+</Step>
+<Step>
+Complete the authentication fields:
 
 | Field | Value |
 | :--- | :--- |
@@ -229,15 +243,17 @@ For **Select your authentication method**, choose **OAuth 2.0** and complete the
 Select **Verify Auth**. A window opens for you to sign in through your identity provider and authorize the connection.
 </Step>
 <Step>
-Select **Continue**, enter a **Data connector name**, and select **Create**.
+Select **Continue**.
+</Step>
+<Step>
+Enter a **Data connector name**.
+</Step>
+<Step>
+Select **Create**.
 </Step>
 </Steps>
 
 The form shows **Successfully logged in** after you authorize, and the connector reaches the **Active** state a minute or two after you create it.
-
-<Warning>
-The data connector name generates an ID that cannot be changed later. Choose the name you want before you select **Create**.
-</Warning>
 
 Four details on that form are easy to get wrong:
 
@@ -248,7 +264,11 @@ Four details on that form are easy to get wrong:
 
 ## Enable the tools
 
-Tools import disabled. Turn on the ones you want available to users.
+Gemini Enterprise imports every tool in a disabled state. Turn on the ones you want available to users.
+
+<Note>
+Wait for the connector state to reach **Active** before you start. The reload fails while the connector is still creating.
+</Note>
 
 <Steps>
 <Step>
@@ -258,17 +278,16 @@ Open the data store and select the **Actions** tab.
 Select **Reload custom actions**. Gemini Enterprise queries your MCP server for its current tool list.
 </Step>
 <Step>
-Select the tools to expose, then select **Enable actions**.
+Select the tools to expose.
+</Step>
+<Step>
+Select **Enable actions**.
 </Step>
 </Steps>
 
-Google recommends enabling no more than 100 actions per data store.
+The tools you selected are now available to users in your Gemini Enterprise app. Google recommends enabling no more than 100 actions per data store.
 
-<Note>
-Wait for the connector state to reach **Active** before selecting **Reload custom actions**. The reload fails while the connector is still creating.
-</Note>
-
-## Verify the connection
+## Verify the Gemini Enterprise connection
 
 Tool discovery runs before authentication is proven, so seeing tools listed does not confirm your credentials are correct. You confirm the setup only when a user successfully calls a C1 tool.
 
@@ -280,12 +299,14 @@ Open your Gemini Enterprise app as an end user and ask a question that needs a C
 Authorize the connection when prompted. Sign in through your identity provider and approve.
 </Step>
 <Step>
-In C1, open your user profile menu and select **AI & API** > **AI connections**. The Gemini Enterprise connection appears, bound to that user.
+As that same user in C1, open the user profile menu and select **AI & API** > **AI connections**. The Gemini Enterprise connection appears. Administrators can see connections for everyone under **AI access management** > **AI clients**.
 </Step>
 <Step>
 In C1, go to **Settings** > **System log** and filter on `activity_name starts with "mcp_"`. Tool calls appear as `mcp_tool_call` events attributed to the individual user.
 </Step>
 </Steps>
+
+The connection is working, and every tool call is attributed to the user who made it.
 
 ## Optional: Publish through Agent Registry
 
@@ -296,6 +317,8 @@ Gemini Enterprise supports only **Agent-to-Anywhere (egress)** mode. Google's do
 </Note>
 
 ### Enable the additional APIs
+
+Agent Registry and Agent Gateway need networking and platform APIs beyond the ones you already enabled.
 
 ```bash
 gcloud services enable \
@@ -311,7 +334,7 @@ gcloud services enable \
 ```
 
 <Note>
-`iap.googleapis.com` is missing from Google's published list of required APIs, and the authorization extension below fails without it.
+`iap.googleapis.com` is missing from Google's published list of required APIs, and the authorization extension fails without it.
 </Note>
 
 ### Register the server
@@ -355,10 +378,14 @@ gcloud agent-registry services create c1-mcp-gateway \
   --display-name="C1 MCP Gateway" \
   --mcp-server-spec-type=tool-spec \
   --mcp-server-spec-content="$(cat toolspec.json)" \
-  --interfaces="url=https://<your-tenant>-mcp.conductor.one/v1,protocolBinding=jsonrpc"
+  --interfaces="url=https://YOUR_TENANT-mcp.conductor.one/v1,protocolBinding=jsonrpc"
 ```
 
+Agent Registry catalogs the server and projects it as a read-only entry that consumers can discover.
+
 ### Create the gateway
+
+The gateway routes and governs outbound agent traffic for the registry you just populated.
 
 Save this as `gateway.yaml`:
 
@@ -381,6 +408,8 @@ gcloud network-services agent-gateways import c1-agent-gateway \
   --project=YOUR_PROJECT_ID
 ```
 
+The gateway takes a minute or two to create.
+
 <Note>
 The `registries` value must start with `//agentregistry.googleapis.com/`. A plain `projects/.../locations/...` path is rejected with `does not match the pattern`. There is no separate registry resource to create, because the registry is implicit for each project and location.
 </Note>
@@ -397,7 +426,7 @@ In your Gemini Enterprise app, go to **Security** > **Configuration**.
 Under **Agent Gateway configuration**, enter the gateway resource name:
 
 ```text
-projects/YOUR_PROJECT_ID/locations/us-central1/agentGateways/c1-agent-gateway
+projects/<your-project-id>/locations/us-central1/agentGateways/c1-agent-gateway
 ```
 </Step>
 <Step>
@@ -428,18 +457,19 @@ The console reports **Agent gateway configuration saved**, and the C1 MCP Gatewa
 | Authorization works, then breaks about an hour later | The client was created through dynamic registration, and its secret expired. | Use the C1-published client ID. See [Get the OAuth client ID](#get-the-oauth-client-id). |
 | Users reauthorize constantly | `offline_access` is missing from the scopes, so C1 issues no refresh token. | Add `offline_access` and have users reconnect. |
 | `401` from the MCP server | The token is missing or not bound to the right resource. | Set **Authorization URL Parameters** to `&resource=https://<your-tenant>-mcp.conductor.one/v1`. |
-| The form will not accept an empty **Client Secret** | **Use HTTP Basic Authentication** is still selected. | Clear that checkbox. See [Create the data store](#create-the-data-store). |
+| The form rejects an empty **Client Secret** | **Use HTTP Basic Authentication** is still selected. | Clear that checkbox. See [Create the data store](#create-the-data-store). |
 | C1 MCP Gateway does not appear under **MCP servers** | The gateway is not bound to the app, or the regions do not line up. | See [Bind the gateway to your app](#bind-the-gateway-to-your-app) and [Check your region requirements](#check-your-region-requirements). |
 | A `gcloud beta` command appears to hang | The `beta` component is not installed and the CLI is waiting at an install prompt. | Run `gcloud components install beta`, or add `--quiet`. |
 
-## Limitations
+## Gemini Enterprise integration limitations
+
+These constraints come from Gemini Enterprise and Google Cloud.
 
 - Gemini Enterprise supports egress (**Agent-to-Anywhere**) mode only.
 - MCP servers must use StreamableHTTP transport. Server-sent events are not supported.
 - VPC Service Controls and Private Service Connect are not supported for custom MCP data stores.
 - The MCP server needs a certificate from a publicly trusted authority. Self-signed certificates are rejected.
 - A gateway supports at most 5,000 registered resources.
-- Google recommends a maximum of 100 enabled actions per data store.
 
 ## Frequently asked questions about connecting Gemini Enterprise
 
@@ -456,8 +486,8 @@ The client is a public OAuth client with no secret. Client ID Metadata Document 
 No. Connecting Gemini Enterprise to C1 works without it. Agent Gateway and Agent Registry publish the C1 gateway in a shared catalog of approved servers. Google's documentation notes that Gemini Enterprise data connector traffic does not trigger Agent Gateway policy enforcement, so adding it does not change how tool calls are governed. C1 governs the tool calls.
 </Accordion>
 
-<Accordion title="How do I revoke access for one person?">
-In C1, open **AI access management** > **AI clients**, find the user's Gemini Enterprise connection, and revoke it. Their tokens stop working immediately. Everyone else is unaffected.
+<Accordion title="How do I cut off access in a hurry?">
+In C1, open **AI access management** > **AI clients**, find the Gemini Enterprise client, and use the **kill switch**. It revokes all tokens for that client immediately. See [Manage AI clients](/product/admin/ai-clients).
 </Accordion>
 
 <Accordion title="Can I see what tools Gemini Enterprise called?">
@@ -465,7 +495,9 @@ Yes. C1 records every MCP session and tool call in the system log. Filter on `ac
 </Accordion>
 </AccordionGroup>
 
-## Related pages
+## Pages related to governing AI tool access
+
+These pages cover the C1 side of the integration.
 
 - [Manage AI clients](/product/admin/ai-clients) covers lifecycle states, the kill switch, and allowed client types.
 - [Connect to the C1 MCP](/product/admin/c1-mcp) covers the same gateway from desktop AI assistants.
