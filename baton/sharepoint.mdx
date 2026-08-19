@@ -127,6 +127,20 @@ Upload the certificate to your application by navigating to **Certificates & sec
 </Steps>
 **Done.** Next, move on to the connector configuration instructions.  
 
+## Deduplicate site collection groups
+
+SharePoint defines groups and users **once per site collection**, not once per site. A site collection's SharePoint groups, site users, and site collection administrators are shared by every site (web) in that collection, so by default the connector syncs the same groups again under every subsite. On tenants with deep site hierarchies this produces many duplicate **SharePoint group** resources and a correspondingly longer sync.
+
+Enabling the **deduplicate-site-collection-groups** flag (or setting `BATON_DEDUPLICATE_SITE_COLLECTION_GROUPS=true`) syncs each site collection's groups, users, and administrators a single time, at the collection's root site. Subsites under the `/sites` and `/teams` managed paths, and a first-level web directly under the host root (e.g. `https://host/subweb`), are still synced as **Site** resources, but they're nested under their collection's root site and no longer carry their own group entitlements or grants. A site whose collection root can't be derived from its URL (a custom managed path like `/portals/<hub>`, or a web nested more than one level under the host root) is left un-nested and keeps its own groups, users, and administrators — the same as with the flag off — since there's no root to safely consolidate it under.
+
+The flag is **off by default**, so existing connectors keep their current behavior until you turn it on. New connectors created in C1 have the toggle **pre-checked on**, since deduplication is the recommended setting going forward — uncheck it during setup if you'd rather opt in later.
+
+<Warning>
+**Enabling it on an existing connector produces one large diff.** On the first sync after you enable the flag, C1 removes the duplicate SharePoint group resources, re-parents the remaining groups to their site collection root, re-parents subsites under their root site, and removes subsite-level administrator grants. This is expected: the access data itself is unchanged, but the resources representing it are consolidated. Subsequent syncs are stable.
+
+If you have access reviews or policies that reference specific duplicate group resources, review them before enabling the flag.
+</Warning>
+
 ## Configure the SharePoint connector
 
 <Warning>
@@ -281,6 +295,7 @@ stringData:
   BATON_PEM_CERTIFICATE_KEY: <Base-64 encoded private key>
   BATON_SHAREPOINT_DOMAIN: <SharePoint subdomain (for example, "subdomain" in "subdomain.sharepoint.com")>
   BATON_SKIP_MEMBERSHIP_RESTRICTED_GROUPS: <Optional. Set to "true" when using Sites.Read.All to skip groups that restrict membership visibility. Leave unset/false when using Sites.FullControl.All.>
+  BATON_DEDUPLICATE_SITE_COLLECTION_GROUPS: <Optional. Set to "true" to sync each site collection's groups, users, and administrators once at the collection root instead of repeating them under every subsite. Defaults to false.>
   BATON_EXTERNAL_SYNC_MODE: true
   BATON_EXTERNAL_RESOURCE_C1Z: <The path to the c1z file to sync external Baton resources with>
   BATON_EXTERNAL_RESOURCE_ENTITLEMENT_ID_FILTER: <Optional. The entitlement that external users, groups must have access to sync external Baton resources>
