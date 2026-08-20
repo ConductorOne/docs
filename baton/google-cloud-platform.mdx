@@ -26,7 +26,19 @@ sidebarTitle: "Google Cloud Platform with Google Workspace"
 
 \*Workforce Identity Federation support is optional and must be configured when you set up the connector.
 
-\*\*IAM Role Assignments use the Sparse ACL (RBAC) model. This resource type is opt-in and requires enabling the **Use RBAC** option when configuring the connector. When enabled, IAM role assignments are synced as scope binding resources instead of flat grants on projects, folders, and organizations.
+\*\*IAM Role Assignments use the RBAC model. This resource type is opt-in and requires enabling the **Cloud Infrastructure Access: Use RBAC** option when configuring the connector. When enabled, IAM role assignments are synced as scope binding resources instead of flat grants on projects, folders, and organizations.
+
+<Note>
+GCP IAM bindings can carry a **condition** (a CEL expression that GCP evaluates at request time, e.g. to grant access only during a time window or only for resources with a certain tag). Neither the flat grants model nor the Sparse ACL (RBAC) model evaluates these expressions — a synced grant may reflect access that, in GCP, only actually applies when its condition holds. If the precise, currently-in-effect state of a conditional binding matters, verify it directly in GCP (Console or `gcloud`).
+</Note>
+
+<Warning>
+**Revoking conditional access deletes the condition.** A condition is stored on the IAM binding itself, and GCP does not allow a binding with no members. So when a revoke removes the last member of a conditional binding, GCP deletes the binding and its CEL expression along with it — the same thing `gcloud remove-iam-policy-binding` does. The connector cannot restore the expression afterwards, and it is not visible in the resulting policy.
+
+The connector logs the full expression at `WARN` when this happens, so it can be recovered from connector logs. If a conditional binding's CEL expression is something you need to keep, revoke that access directly in GCP rather than through C1, or ensure the binding retains at least one other member.
+
+This follows from C1 having no way to represent an IAM condition, so both provisioning operations treat access as unconditional: **granting** access always writes a plain, unconditional binding — so granting a role to someone who already holds it under a condition widens their access — and **revoking** it removes the principal from every binding for that role, conditional or not. A revoke followed by a re-grant therefore leaves the principal with unconditional access where they previously had conditional access. If conditions are part of how you control access to a scope, manage those bindings in GCP.
+</Warning>
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
 
@@ -161,7 +173,11 @@ resourcemanager.organizations.setIamPolicy
 resourcemanager.projects.setIamPolicy
 secretmanager.secrets.setIamPolicy
 storage.buckets.setIamPolicy
+iam.serviceAccountKeys.create
+iam.serviceAccountKeys.delete
 ```
+
+`iam.serviceAccountKeys.list` is required when service-account key secret sync is enabled. Credential issuance additionally requires `iam.serviceAccountKeys.create`, and revoking a synced or issued key additionally requires `iam.serviceAccountKeys.delete`.
 
 </Step>
 <Step>
@@ -337,10 +353,10 @@ By default, the connector only syncs roles that are assigned to an IAM policy. T
 
 </Step>
 <Step>
-**Optional.** Check the box to **Use RBAC (Sparse ACL)** to enable the RBAC model for IAM role assignments. When enabled, role assignments are synced as scope binding resources (IAM Role Assignments) instead of flat grants on projects, folders, and organizations. This also enables provisioning of IAM role assignments via the scope binding model.
+**Optional.** Check the box to **Cloud Infrastructure Access: Use RBAC** to enable the RBAC model for IAM role assignments. When enabled, role assignments are synced as scope binding resources (IAM Role Assignments) instead of flat grants on projects, folders, and organizations. This also enables provisioning of IAM role assignments via the scope binding model.
 
 <Note>
-Enabling this option changes how IAM access data is represented in C1. Flat grants on projects, folders, and organizations will no longer be synced — only the IAM Role Assignment resources will carry that data. Enable this only if your C1 configuration is set up to use the Sparse ACL model.
+Enabling this option changes how IAM access data is represented in C1. Flat grants on projects, folders, and organizations will no longer be synced — only the IAM Role Assignment resources will carry that data. Enable this only if your C1 configuration is set up to use the RBAC model.
 </Note>
 </Step>
 <Step>
@@ -464,7 +480,7 @@ stringData:
   # Optional: Include to always sync specific roles (enter role IDs, not names)
   BATON_ALWAYS_SYNC_ROLES_FILTER: <comma-separated list of role IDs>
 
-  # Optional: include to use the Sparse ACL (RBAC) model for IAM role assignments.
+  # Optional: include to use the RBAC model for IAM role assignments.
   # When enabled, role assignments are synced as scope binding resources instead of
   # flat grants on projects, folders, and organizations.
   BATON_USE_RBAC: true
