@@ -179,33 +179,99 @@ API access.
         generate a new Client ID and Client Secret. Store these values
         securely for your deployment.
       </Step>
+    </Steps>
 
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your GitHub Enterprise Cloud connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-github-enterprise-cloud-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-github-enterprise-cloud-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # GitHub Enterprise Cloud credentials
+      BATON_ENTERPRISE_SLUG: <GitHub enterprise slug>
+      BATON_APP_ID: <GitHub App ID>
+      BATON_INSTALLATION_ID: <GitHub App enterprise installation ID>
+      BATON_APP_PRIVATEKEY_PATH: /etc/baton-github-enterprise-cloud/keys/private-key.pem
+
+    ---
+    # baton-github-enterprise-cloud-app-key-secret.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-github-enterprise-cloud-app-key
+    type: Opaque
+    stringData:
+      private-key.pem: |
+        <Contents of the GitHub app's private key (.pem) file>
+    ```
+
+    The private key must be mounted into the container as a file rather than passed as an environment variable. The manifest above stores the key in its own Secret so it can be mounted as a volume in the deployment configuration below. Set `BATON_APP_PRIVATEKEY_PATH` to the path where the key will be mounted.
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-github-enterprise-cloud.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-github-enterprise-cloud
+      labels:
+        app: baton-github-enterprise-cloud
+    spec:
+      selector:
+        matchLabels:
+          app: baton-github-enterprise-cloud
+      template:
+        metadata:
+          labels:
+            app: baton-github-enterprise-cloud
+            baton: true
+            baton-app: github-enterprise-cloud
+        spec:
+          containers:
+          - name: baton-github-enterprise-cloud
+            image: public.ecr.aws/conductorone/baton-github-enterprise-cloud:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-github-enterprise-cloud
+            envFrom:
+            - secretRef:
+                name: baton-github-enterprise-cloud-secrets
+            volumeMounts:
+            - name: github-app-key
+              mountPath: /etc/baton-github-enterprise-cloud/keys
+              readOnly: true
+          volumes:
+          - name: github-app-key
+            secret:
+              secretName: baton-github-enterprise-cloud-app-key
+    ```
+
+    Use a version tag without the leading `v`, such as `0.0.3`, in place of `latest` if you want to pin to a specific release.
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
       <Step>
-        Configure C1 credentials and GitHub Enterprise Cloud settings as
-        environment variables:
-
-        ```bash
-        BATON_CLIENT_ID=<C1 client ID>
-        BATON_CLIENT_SECRET=<C1 client secret>
-        BATON_HOST_ID=baton-github-enterprise-cloud
-        BATON_ENTERPRISE_SLUG=<GitHub enterprise slug>
-        BATON_APP_ID=<GitHub App ID>
-        BATON_INSTALLATION_ID=<GitHub App enterprise installation ID>
-        BATON_APP_PRIVATEKEY_PATH=/var/run/secrets/github-app-private-key.pem
-        ```
-
-        Mount the GitHub App private key at the path configured in
-        `BATON_APP_PRIVATEKEY_PATH`.
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
       </Step>
-
       <Step>
-        Deploy the connector using the Public ECR image:
-
-        ```bash
-        public.ecr.aws/conductorone/baton-github-enterprise-cloud:<version>
-        ```
-
-        Use a version tag without the leading `v`, such as `0.0.3`.
+        Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the GitHub Enterprise Cloud connector to.
       </Step>
     </Steps>
 
