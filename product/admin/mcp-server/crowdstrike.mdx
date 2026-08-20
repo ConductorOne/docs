@@ -42,7 +42,7 @@ In the Falcon console, go to **Support and resources** > **API clients and keys*
 {/* REVIEWER NOTE — needs a verified docs link for generating credentials */}
 </Step>
 <Step>
-Give the client a recognizable name such as `C1`, then grant only the **API scopes** you need, such as **Read** access to Detections, Incidents, and Hosts.
+Give the client a recognizable name such as `C1`, then grant **Read** on the API scopes covering the tools you want. See [Choose API scopes](#choose-api-scopes) for the mapping.
 </Step>
 <Step>
 Select **Create**, then copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
@@ -55,6 +55,42 @@ Note your Falcon cloud's API base URL, such as `https://api.crowdstrike.com` or 
 </Steps>
 
 For a shared production setup, use a dedicated API client so activity is attributable to C1 rather than a person.
+
+## Choose API scopes
+
+The API client's scopes determine which tools return data. C1 exposes tools across several Falcon products, and each needs its own scope. **Read** covers every list tool:
+
+| Tools | Falcon API scope |
+|---|---|
+| Hosts | Hosts |
+| Alerts | Alerts |
+| Incidents | Incidents |
+| Indicators of compromise | IOC Manager |
+| Device control policies | Device control policies |
+| Vulnerabilities and remediations | Vulnerabilities (Falcon Spotlight) |
+| Threat actors, indicators, and reports | Falcon Intelligence |
+| Zero Trust Assessment | Zero Trust Assessment |
+| Applications | Falcon Discover |
+| Cloud misconfigurations (IOM) | CSPM registration |
+
+{/* REVIEWER NOTE — confirm the exact Falcon console labels for each scope row */}
+
+Grant only the scopes for the tools you plan to use. A tool whose scope is missing returns CrowdStrike's authorization error rather than an empty result, so an unexpected 403 usually means the scope is absent from the API client.
+
+The response tools need **Write** in addition to Read:
+
+| Tools | Falcon API scope |
+|---|---|
+| Contain, lift containment, hide host | Hosts (Write) |
+| Create indicator of compromise | IOC Manager (Write) |
+
+Leave these scopes off the API client if you want a read-only connection. The tools then return CrowdStrike's authorization error, so a read-only client is a deliberate way to keep response actions unavailable.
+
+<Warning>
+The cloud misconfiguration tools need **CSPM registration**, not **Cloud Security API Detections**. The two scopes cover different Falcon APIs, and Cloud Security API Detections does not authorize the tools C1 exposes. If `crowdstrike_list_ioms` returns 403 while your other tools work, add CSPM registration to the API client.
+</Warning>
+
+Scope changes take effect the next time C1 requests a token, so you don't need to re-register the server or reconnect after editing the API client.
 
 ## How CrowdStrike credentials are shared
 
@@ -96,4 +132,4 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 ## Manage your CrowdStrike credentials
 
 - **Rotate the client secret** by resetting it on the API client in the Falcon console, then update the secret on the server's authentication settings in C1.
-- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike.
+- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike. See [Choose API scopes](#choose-api-scopes).
