@@ -8,13 +8,33 @@ sidebarTitle: "HubSpot"
 
 ## Capabilities
 
-| Resource | Sync | Provision |
-| :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Teams | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Roles* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Resource | Sync | Provision | Lifecycle actions |
+| :--- | :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |  |
+| Teams | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Roles* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Users | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
 *HubSpot roles are only supported on the free or higher versions of **Marketing Hub, Sales Hub, Service Hub,** and **Content Hub**. Role syncing and provisioning via this connector are not available when using any other HubSpot product or version. 
+
+## Provisioning
+
+C1 can provision access in HubSpot using this connector. Provisioning requires the `settings.users.write` scope on the private app (see the credentials steps below) and that the connector runs with provisioning enabled (`BATON_PROVISIONING=true` when self-hosted).
+
+| Operation | Supported | Notes |
+| :--- | :--- | :--- |
+| Grant / revoke a **Role** | Yes | Assigns or clears the user's role. The **Super Admin** role cannot be assigned through the HubSpot API. |
+| Grant a **Team** membership (primary or secondary) | Yes | Adds the user to the team as a primary or secondary member. |
+| Revoke a **primary Team** membership | Yes | |
+| Revoke a **secondary Team** membership | No | The HubSpot API does not support removing a secondary team membership. Remove it manually in HubSpot. |
+| Create a **User** account | Yes | Invites the user to the HubSpot portal by email. No password is set — the user completes setup from the invitation email. |
+| Delete a **User** account | Yes | Removes the user from the HubSpot portal. |
+
+<Note>
+HubSpot provides no API to re-enable a deactivated user. To restore access for a user who was deactivated in HubSpot, delete the account and re-invite it. This creates a new account and does not preserve the previous user's history.
+</Note>
+
+Deactivated HubSpot users continue to appear in C1 with their existing entitlement grants, because the account still exists in HubSpot. Enable **user status** syncing (see the configuration steps below) to have these users flagged as disabled in C1.
 
 ## Gather HubSpot credentials 
 
@@ -51,7 +71,7 @@ On the **Scopes** tab, select the following scopes:
   - `oauth` - Request
 </Step>
 <Step>
-**Optional.** If you want to use C1 to provision roles, search for and add either `settings.users.write` OR `crm.objects.users.write`.
+**Optional.** If you want to use C1 to provision users (invite, deactivate) or manage team/role membership, add `settings.users.write`.
 </Step>
 <Step>
 **Optional.** To sync user status, search for and add the `crm.objects.users.read` scope to the app.
@@ -192,10 +212,10 @@ stringData:
   BATON_TOKEN: <HubSpot private access token>
 
   # Optional: include if you want to sync user statuses (requires the crm.objects.users.read scope on the private app)
-  BATON_USER_STATUS: true
+  BATON_USER_STATUS: "true"
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -218,7 +238,7 @@ spec:
     metadata:
       labels:
         app: baton-hubspot
-        baton: true
+        baton: "true"
         baton-app: hubspot
     spec:
       containers:
