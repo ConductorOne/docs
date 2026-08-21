@@ -10,27 +10,25 @@ sidebarTitle: Release notes
 
 <Update label="August 21, 2026">
 
-## Product digest: August 7–21, 2026
+## Product digest: August 21, 2026
 
 ### Smart revocation
 
-Revoking one path to an entitlement — say, a direct grant — used to leave the user with equivalent access through another, such as a group or role they also belong to. The next sync often resurrected the grant anyway, because group membership was never removed at the connector. The task closed as done, but the access never actually left.
+Revoking one path to an entitlement — say, a direct grant — could leave the user with equivalent access through another, such as a group or role they also belong to. In these cases, the next sync often resurrected the grant anyway, because group membership was never removed at the connector. The revocation task was complete, but the access never actually went away.
 
-Smart revocation traces where an entitlement's access really comes from and revokes those upstream sources too, not just the entitlement itself. Turn on **Revoke inherited access** (under **Entitlement management** on an app's details page) and a revoke on that app follows the chain — direct grants, nested groups, role hierarchies, delegated provisioning — instead of stopping at the first hop. It's off by default and set per app; a banner shows the downstream effects before an approver commits, so nothing gets revoked as a surprise.
-
-With it on, a revocation completes on the first attempt instead of generating a repeat ticket, and access reviews and offboarding produce outcomes that hold up under audit.
+Smart revocation traces where an entitlement's access really comes from and revokes those upstream sources too, not just the entitlement itself. Turn on **Revoke inherited access** on an app's details page and a revoke on that app follows the chain — direct grants, nested groups, role hierarchies, delegated provisioning — instead of stopping at the first result. It's off by default and set per app; a banner shows the downstream effects before an approver commits, so nothing gets revoked as a surprise.
 
 {/* PR #20849 */}
 {/* TODO: screenshot of the Entitlement management toggle and the pre-commit downstream-effects banner. QUESTION: confirm exact location/label of the setting on the app details page, and whether this needs a new subsection in managing-entitlements.mdx or a standalone page. */}
 
-### Access reviews and requests
+### Access review and request improvements
 
 - **See reviewer context without leaving the table**: Reviewer-visible app user attributes (job title, department, cost center) previously only showed up in a hover tooltip, so reviewers had to mouse over every row to get them. Campaign admins can now show any of these as their own column in the access review table — up to 10 per campaign.
 
   {/* PR #23046 */}
   {/* TODO: screenshot of the column picker and the resulting review table. QUESTION: confirm the exact admin path for adding these columns (campaign scope config?) and whether this belongs in campaigns.mdx or manage-campaigns.mdx. */}
 
-- **Check what you're reviewing, whoever you are**: Task reviewers can now open a read-only details drawer for the entitlement or resource under review directly from the task page — no special role required.
+- **Check what you're reviewing**: Task reviewers can now open a read-only details drawer for the entitlement or resource under review directly from the task page — no special role required.
 
   {/* PR #22897 */}
 
@@ -38,7 +36,7 @@ With it on, a revocation completes on the first attempt instead of generating a 
 
   {/* PR #23678 */}
 
-### Automations
+### Automation improvements
 
 - **Scope automated revokes to the grants you actually mean**: An automation's revoke step always removed both a user's direct grants and anything they had through group membership, so automating cleanup of direct access meant accepting collateral revocation of group-inherited access too. Revoke steps now have a **Grant source** setting (**All** or **Direct**) to scope a revoke to only direct grants.
 
@@ -50,38 +48,24 @@ With it on, a revocation completes on the first attempt instead of generating a 
   {/* PR #22939 */}
   {/* QUESTION: confirm this belongs in automation-circuit-breaker.mdx and whether any existing SIEM-parsing workaround note there needs to be removed. */}
 
-### Connectors, apps, and policies
+### Policy improvements
 
-- **Automate managing the apps your connectors discover**: Bringing a discovered app under management — or just checking whether one already is — meant clicking through the UI app by app. The public API can now list connector-discovered applications, inspect their managed state, and promote an unmanaged application to managed, returning a 409 on a repeat promotion and letting you read back the binding to recover the managed application ID. See [Move an unmanaged app to managed](/product/admin/applications#move-an-unmanaged-app-to-managed) for the UI equivalent.
-
-  {/* PR #23339 */}
-  {/* TODO: needs public API reference docs (endpoint names, request/response shape) - check with eng for exact routes before publishing. */}
-
-- **See exactly what every push rule did — and why one failed**: Push rules ran with no record of what happened, so a failed push meant trying again and hoping. Every attribute push now shows up in execution history: go to **Directory sources → Executions** for pushes across all connectors, or a push rule's row menu → **Show execution history** for just that connector's. Each entry records who was pushed, when, which attributes changed, and — on failure — the reason the target system gave for rejecting it.
-
-  {/* PR #22588 */}
-  {/* TODO: screenshot of the Executions tab and a failure-reason detail. QUESTION: confirm whether this belongs in push-rules.mdx or directory.mdx. */}
-
-- **Keep one-off policies out of the shared library**: Policies used to only live in the global policy library, so a rule meant for just one app or entitlement still had to be added there. Policies can now be created local to a single app or entitlement instead, with inline creation alongside the global option on each configuration slot.
+- **Create local policies for special use cases**: Policies can now be created local to a single app or entitlement, with inline creation alongside the global option on each configuration slot.
 
   {/* PR #22917 */}
   {/* TODO: screenshot of the local-vs-global policy picker on a config slot. QUESTION: does this warrant its own section in product/admin/policies.mdx, or a note added to the existing policy-creation steps? */}
 
-- **Reuse a policy instead of copying it**: A policy rule or baseline can now point to another policy of the same type instead of repeating its steps. Define a common flow once — a security review, a manager-then-owner approval chain — and reuse it across every policy that needs it. Update the shared policy and every policy pointing to it picks up the change automatically, so you're not hunting down and updating copies scattered across your policy library. See [Policy reference](/product/glossary#policy-reference).
+- **Reuse a policy instead of copying it**: A policy rule or baseline can now point to another policy of the same type instead of repeating its steps. Define a common flow once — a security review, a manager-then-owner approval chain — and reuse it across every policy that needs it. Update the shared policy and every policy pointing to it picks up the change automatically, so you're not hunting down and updating copies scattered across your policy library. 
 
   {/* Confirmed GA (2026-08-21) after being cut from the Aug 7 digest as SKU_MANUAL/not broadly available. No PR number captured yet - get one from eng/PM. TODO: screenshot of the "Use a policy" action pointing at another policy; confirm doc location - policies.mdx likely needs a full section, not just the glossary entry. */}
 
-- **Grant history records are now individually addressable**: Each record returned by the public API's past-grants search now includes a unique `id`, so you can reference a specific grant history entry instead of matching on other fields.
-
-  {/* PR #23210 */}
-
-### AI and MCP
+### C1 MCP improvements
 
 - **Bring governed tools into Copilot Studio**: Build a Copilot Studio agent that calls the tools your IT team approved through C1, with every call authorized and logged under the calling user's own identity, then publish it to Microsoft 365 Copilot and Teams for your whole organization. See [Connect Copilot Studio to C1](/product/admin/mcp-server/copilot-studio).
 
   {/* Docs-only guide, no PR number — page's Editor Refresh comment is dated 2026-08-07. */}
 
-- **Bring governed tools into Gemini Enterprise**: Gemini Enterprise can now call the C1 MCP gateway as a tool source, with every tool call attributed to the person who made it instead of a shared service account. Activation is required — contact the C1 support team to get started. See [Connect Gemini Enterprise to C1](/product/admin/mcp-server/gemini-enterprise).
+- **Bring governed tools into Gemini Enterprise**: Gemini Enterprise can now call the C1 MCP gateway as a tool source, with every tool call attributed to the person who made it instead of a shared service account. See [Connect Gemini Enterprise to C1](/product/admin/mcp-server/gemini-enterprise).
 
   {/* Docs-only guide, no PR number — page's Editor Refresh comment is dated 2026-08-19. QUESTION: confirm whether "activation required" framing (vs. a plain AIAM-enabled tenant) is still accurate before publishing. */}
 
@@ -97,17 +81,31 @@ With it on, a revocation completes on the first attempt instead of generating a 
 
 - **Know when a page is hiding something from you**: Information your role doesn't grant access to used to appear blank, with no way to tell whether a field was empty or just hidden. When a page contains information your role hides, C1 now shows a toast: "Some information on this page is hidden based on your permissions." See [Hidden information based on role](/product/admin/user-roles#hidden-information-based-on-role).
 
-  {/* Docs PR #451 — no product PR number captured. QUESTION: confirm PR #451's test-plan items (placeholder convention, exact toast copy) were verified against actual product behavior before publishing. */}
+  {/* Docs PR 451 — no product PR number captured. QUESTION: confirm PR 451's test-plan items (placeholder convention, exact toast copy) were verified against actual product behavior before publishing. */}
+
+- **See exactly what every push rule did — and why one failed**: Push rules ran with no record of what happened, so a failed push meant trying again and hoping. Every attribute push now shows up in execution history: go to **Directory sources > Executions** for pushes across all connectors, or **Show execution history** in a push rule's row menu for just that connector's. Each entry records who was pushed, when, which attributes changed, and — on failure — the reason the target system gave for rejecting it.
+
+  {/* PR #22588 */}
+  {/* TODO: screenshot of the Executions tab and a failure-reason detail. QUESTION: confirm whether this belongs in push-rules.mdx or directory.mdx. */}
+
+- **Automate managing the apps your connectors discover**: Bringing a discovered app under management — or just checking whether one already is — meant clicking through the UI app by app. The public API can now list connector-discovered applications, inspect their managed state, and promote an unmanaged application to managed, returning a 409 on a repeat promotion and letting you read back the binding to recover the managed application ID. 
+
+  {/* PR #23339 */}
+  {/* TODO: needs public API reference docs (endpoint names, request/response shape) - check with eng for exact routes before publishing. */}
+
+- **Grant history records are now individually addressable**: Each record returned by the public API's past-grants search now includes a unique `id`, so you can reference a specific grant history entry instead of matching on other fields.
+
+  {/* PR #23210 */}
 
 ### c1i v0.5.0
 
-Since c1i's early-access launch, this release cycle (v0.4.0 through v0.5.0) tightens up correctness and consistency across the CLI: list commands now emit properly-typed booleans, counts, and nullable fields instead of stringified or inconsistent JSON, and 4xx/5xx responses map onto a single, predictable exit-code scheme. New commands round out API coverage, including `apps create`/`delete`/`set-owners`, `auth token`, `mcp gateway list-tools`/`call`, and a `policies` command family that guards against a silent deny-all default. v0.5.0 also patches 14 reachable stdlib vulnerabilities.
+This release cycle tightens up correctness and consistency across the agent-focused CLI: list commands now emit properly-typed Booleans, counts, and nullable fields instead of stringified or inconsistent JSON, and responses map onto a single, predictable exit-code scheme. New commands round out API coverage, including `apps create`/`delete`/`set-owners`, `auth token`, `mcp gateway list-tools`/`call`, and a `policies` command family that guards against a silent deny-all default. 
 
 **Breaking changes:**
 - c1i now requires a full `https://` tenant URL — the bare short-name shortcut has been retired, and a non-HTTPS URL is rejected instead of silently upgraded.
 - The `mcp gateway` command's `--url` flag has been renamed to `--server-url`, so the global `--url` flag consistently selects the C1 tenant everywhere.
 
-See the [v0.4.0](https://github.com/ConductorOne/c1i/releases/tag/v0.4.0) and [v0.5.0](https://github.com/ConductorOne/c1i/releases/tag/v0.5.0) release notes for the full changelog, and [Install c1i](/product/cli/c1i) for setup instructions.
+See the [v0.5.0](https://github.com/ConductorOne/c1i/releases/tag/v0.5.0) release notes for the full changelog, and [Install c1i](/product/cli/c1i) for setup instructions.
 
 {/* QUESTION: c1i docs page doesn't yet document the new apps create/delete/set-owners, auth token, or policies commands - confirm whether those need their own doc updates before/alongside this note. */}
 
