@@ -20,12 +20,15 @@ sidebarTitle: Ramp
 | Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |       
 | Roles        | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   |
 | Vendors      | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |
+| Vendor agreements | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
 
 {/* AUTO-GENERATED:END - capabilities */}
 
 <Note>
 **Vendor owner is single-assignee.** Each Ramp vendor can have only one owner at a time. Granting the vendor owner entitlement to a new user overwrites the previous owner in Ramp — the prior owner is silently removed. Revoking the entitlement clears the owner only when the principal being revoked is the current owner.
 </Note>
+
+Synced Ramp vendors are emitted as C1 vendor resources with Ramp vendor identity metadata. Vendor owner access is represented as the `owner` entitlement on each vendor. Vendor agreements are available as an opt-in resource type and use the same Ramp `vendors:read` scope as vendors.
 
 The Ramp connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
@@ -55,13 +58,20 @@ The Ramp connector supports two authentication methods. Choose the one that fits
   <Step>
     Click **Create a token**, give it a name (for example, `ConductorOne`), and select the following scopes:
 
-    - `users:read` — sync users
+    - `users:read` — sync users and roles
+    - `vendors:read` — sync vendors and vendor agreements
+
+    If you enable provisioning, also select:
+
     - `users:write` — provision and deprovision users
-    - `vendors:read` — sync vendors
     - `vendors:write` — grant and revoke vendor ownership
 
+    If you enable audit-log event polling, also select:
+
+    - `audit_logs:read` — read Ramp audit-log events for incremental sync
+
     <Warning>
-    The **users:write** and **vendors:write** scopes are used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, do not grant these scopes.**
+    The **users:write** and **vendors:write** scopes are used only when C1 provisions and deprovisions access. **If you do not want C1 to perform these tasks, do not grant these scopes.**
     </Warning>
   </Step>
   <Step>
@@ -84,13 +94,20 @@ For more information, see the [Ramp API token documentation](https://docs.ramp.c
     2. Set the grant type to **Client Credentials**
     3. Select the following scopes:
 
-       - `users:read` — sync users
+       - `users:read` — sync users and roles
+       - `vendors:read` — sync vendors and vendor agreements
+
+       If you enable provisioning, also select:
+
        - `users:write` — provision and deprovision users
-       - `vendors:read` — sync vendors
        - `vendors:write` — grant and revoke vendor ownership
 
+       If you enable audit-log event polling, also select:
+
+       - `audit_logs:read` — read Ramp audit-log events for incremental sync
+
     <Warning>
-    The **users:write** and **vendors:write** scopes are used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, do not grant these scopes.**
+    The **users:write** and **vendors:write** scopes are used only when C1 provisions and deprovisions access. **If you do not want C1 to perform these tasks, do not grant these scopes.**
     </Warning>
 
     4. Click **Create**
@@ -208,7 +225,26 @@ Carefully copy and save these credentials. We'll use them in Step 2.
 
 Create two Kubernetes manifest files for your Ramp connector deployment.
 
-Use the credentials you gathered earlier and pick the secret template that matches your chosen authentication method.
+The Ramp connector supports two authentication methods — pick one when populating the secret:
+
+- **Access Token** — a long-lived Ramp API access token.
+- **OAuth 2.0 Client Credentials** — a Ramp OAuth client ID and secret (the connector exchanges them for a short-lived access token automatically, via `https://api.ramp.com/developer/v1/token`).
+
+See the [Ramp authorization docs](https://docs.ramp.com/developer-api/v1/authorization) for how to create an OAuth app with the `Client Credentials` grant type and the following scopes:
+
+- **Required for read-only sync**: `users:read`, `vendors:read`.
+- **Required only if `BATON_PROVISIONING=true`**: `users:write`, `vendors:write`.
+- **Required only if `BATON_AUDIT_LOG_EVENTS=true`**: Ramp audit-log API availability, such as Ramp Plus, and the `audit_logs:read` scope.
+
+The connector points at `https://api.ramp.com` by default. Set `BATON_RAMP_BASE_URL` (or the **Ramp API Base URL** field) to `https://demo-api.ramp.com` (or another Ramp environment) to override.
+
+### Optional resources and events
+
+The connector ships with an opt-in `vendor_agreement` resource type. When enabled in C1 resource-type settings, the connector syncs Ramp vendor agreements as their own resources, including term, renewal status, total contract value, and contract owners. Vendor agreements use the existing `vendors:read` scope; Ramp does not require a separate vendor-agreement scope.
+
+Ramp vendors are always decorated with cross-system identity and pre-aggregated trailing-window spend when those fields are returned by Ramp.
+
+Set `BATON_AUDIT_LOG_EVENTS=true` to expose Ramp's audit-log API as an event feed so vendor and agreement changes can flow into C1 incrementally between full syncs. This setting is independent from vendor-agreement resource enablement and requires Ramp audit-log API availability, such as Ramp Plus, plus the `audit_logs:read` scope. When the flag is unset (the default), the audit-log API is not called.
 
 #### Secrets configuration
 
@@ -230,7 +266,11 @@ stringData:
   BATON_TOKEN: <Ramp API access token>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
+
+  # Optional: include if you want audit-log incremental sync events.
+  # Requires Ramp audit-log API availability, such as Ramp Plus.
+  BATON_AUDIT_LOG_EVENTS: "true"
 ```
 
 **Option B — OAuth 2.0 Client Credentials:**
@@ -252,7 +292,12 @@ stringData:
   BATON_RAMP_CLIENT_SECRET: <Ramp OAuth client secret>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
+
+  # Optional: include if you want audit-log incremental sync events.
+  # Requires Ramp audit-log API availability, such as Ramp Plus.
+  # When set, the OAuth client must also have the `audit_logs:read` scope.
+  BATON_AUDIT_LOG_EVENTS: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -275,7 +320,7 @@ spec:
     metadata:
       labels:
         app: baton-ramp
-        baton: true
+        baton: "true"
         baton-app: ramp
     spec:
       containers:
