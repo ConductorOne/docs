@@ -22,6 +22,46 @@ This connector requires Adobe enterprise-level licenses. Standard Creative Cloud
 
 The Adobe connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
+Product profiles are synced with license seat data — purchased seats (from the profile's license quota) and consumed seats (from its member count) — so you can track license utilization per product.
+
+## Limitations
+
+- **Product profiles cannot be created through the connector.** Adobe's User Management API does not support creating product profiles; create them in the Adobe Admin Console. The connector syncs existing product profiles and provisions membership only.
+- **Email addresses are case-sensitive.** Adobe's User Management API treats user email addresses as case-sensitive. Provisioning actions must use the exact casing Adobe has on file, or they will not match the intended user.
+
+## Account provisioning
+
+The Adobe connector supports creating new user accounts directly from C1. When configuring an account provisioning policy, you can map the following fields.
+
+### Required fields
+
+| Field | Description |
+| :--- | :--- |
+| `email` | The user's email address. Used as the login identifier in Adobe. |
+
+### Optional fields
+
+| Field | Description | Default |
+| :--- | :--- | :--- |
+| `identity_type` | The type of Adobe identity to create. Must be one of `federatedID`, `enterpriseID`, or `adobeID`. See [Identity types](#identity-types) below. | `federatedID` |
+| `first_name` | The user's first name. Required when `identity_type` is `federatedID` or `enterpriseID`. | None |
+| `last_name` | The user's last name. Required when `identity_type` is `federatedID` or `enterpriseID`. | None |
+| `country` | Two-letter ISO 3166-1 country code (for example, `US`). Required when `identity_type` is `federatedID`. | None |
+
+### Identity types
+
+Adobe's User Management API supports three identity types. Choose the one that matches how your organization manages the user's email domain.
+
+| Value | Description |
+| :--- | :--- |
+| `federatedID` | For users whose email domain is owned and federated by your Adobe organization (SAML/SSO). `first_name`, `last_name`, and `country` are required. Use this for employees whose identity is managed through your identity provider. |
+| `enterpriseID` | For users managed directly by your Adobe organization without federated SSO. `first_name` and `last_name` are required; `country` is optional. |
+| `adobeID` | For users with a personal Adobe ID, typically external collaborators whose email domain is not claimed by any Adobe organization. All fields are optional. |
+
+<Warning>
+**`adobeID` cannot be used for email domains owned by another Adobe organization.** If the user's email domain is claimed by another organization's federated or enterprise directory, Adobe will reject the request with an error. In that case, the user must be provisioned by the organization that owns the domain, or use `federatedID` / `enterpriseID` if your organization owns the domain.
+</Warning>
+
 ## Gather Adobe credentials
 
 Configuring the connector requires you to pass in credentials generated in Adobe. Gather these credentials before you move on.
@@ -183,7 +223,7 @@ stringData:
   BATON_ADOBE_ORGANIZATION_ID: <Your Adobe organization ID>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -206,7 +246,7 @@ spec:
     metadata:
       labels:
         app: baton-adobe
-        baton: true
+        baton: "true"
         baton-app: adobe
     spec:
       containers:
