@@ -103,6 +103,60 @@ Click **Review + assign** at the bottom.
 </Step>
 </Steps>
 
+### Grant access to provision tenant root scoped role assignments (optional)
+
+If you need C1 to provision role assignments at the Azure **tenant root scope** (`/`) — that is, role assignments that appear as **"Root (inherited)"** throughout your Azure hierarchy — the app requires an additional **User Access Administrator** assignment at that scope.
+
+<Note>
+The **Tenant Root Group** visible in the Azure Portal is a management group, not the actual tenant root scope. Role assignments made there will not grant the necessary permission. This setup must be done using the Azure CLI.
+</Note>
+
+<Warning>
+A user with the **Global Administrator** permission in Azure must perform this task.
+</Warning>
+
+<Steps>
+<Step>
+Elevate the Global Administrator's own access to the tenant root scope. Run the following command using the Azure CLI:
+
+```sh
+az rest --method POST \
+  --url "https://management.azure.com/providers/Microsoft.Authorization/elevateAccess?api-version=2016-07-01"
+```
+</Step>
+<Step>
+Assign the **User Access Administrator** role to your app at the tenant root scope. Replace `<app-object-id>` with the **Object ID** of your Entra app registration (found in Entra ID → App registrations → your app → Overview):
+
+```sh
+az role assignment create \
+  --role "User Access Administrator" \
+  --assignee-object-id "<app-object-id>" \
+  --assignee-principal-type ServicePrincipal \
+  --scope "/"
+```
+</Step>
+<Step>
+Revoke the Global Administrator's temporary elevated access using one of the following methods:
+
+   **Option A — Azure Portal:** Navigate to **Microsoft Entra ID** → **Properties**, set **Access management for Azure resources** back to **No**, and click **Save**.
+
+   **Option B — Azure CLI:**
+   ```sh
+   az rest --method DELETE \
+     --url "https://management.azure.com/providers/Microsoft.Authorization/elevateAccess?api-version=2016-07-01"
+   ```
+</Step>
+</Steps>
+
+To remove this permission from the app in the future:
+
+```sh
+az role assignment delete \
+  --role "User Access Administrator" \
+  --assignee "<app-object-id>" \
+  --scope "/"
+```
+
 **Done.** Next, move on to the connector configuration instructions.
 
 ## Configure the Azure connector
