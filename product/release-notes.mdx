@@ -12,17 +12,6 @@ sidebarTitle: Release notes
 
 ## Product digest: August 7–21, 2026
 
-### Access review improvements
-
-- **See reviewer context without leaving the table**: Reviewer-visible app user attributes (job title, department, cost center) previously only showed up in a hover tooltip, so reviewers had to mouse over every row to get them. Campaign admins can now show any of these as their own column in the access review table — up to 10 per campaign.
-
-  {/* PR #23046 */}
-  {/* TODO: screenshot of the column picker and the resulting review table. QUESTION: confirm the exact admin path for adding these columns (campaign scope config?) and whether this belongs in campaigns.mdx or manage-campaigns.mdx. */}
-
-- **Check what you're reviewing, whoever you are**: Task reviewers can now open a read-only details drawer for the entitlement or resource under review directly from the task page — no special role required.
-
-  {/* PR #22897 */}
-
 ### Smart Revocation
 
 Revoking one path to an entitlement — say, a direct grant — used to leave the user with equivalent access through another, such as a group or role they also belong to. The next sync often resurrected the grant anyway, because group membership was never removed at the connector. The task closed as done, but the access never actually left.
@@ -34,13 +23,22 @@ With it on, a revocation completes on the first attempt instead of generating a 
 {/* PR #20849 */}
 {/* TODO: screenshot of the Entitlement management toggle and the pre-commit downstream-effects banner. QUESTION: confirm exact location/label of the setting on the app details page, and whether this needs a new subsection in managing-entitlements.mdx or a standalone page. */}
 
-### Access request improvements
+### Access reviews and requests
+
+- **See reviewer context without leaving the table**: Reviewer-visible app user attributes (job title, department, cost center) previously only showed up in a hover tooltip, so reviewers had to mouse over every row to get them. Campaign admins can now show any of these as their own column in the access review table — up to 10 per campaign.
+
+  {/* PR #23046 */}
+  {/* TODO: screenshot of the column picker and the resulting review table. QUESTION: confirm the exact admin path for adding these columns (campaign scope config?) and whether this belongs in campaigns.mdx or manage-campaigns.mdx. */}
+
+- **Check what you're reviewing, whoever you are**: Task reviewers can now open a read-only details drawer for the entitlement or resource under review directly from the task page — no special role required.
+
+  {/* PR #22897 */}
 
 - **See revoke work at a glance**: An app's **Requests** tab can now be filtered to just **Request** or **Revoke** tasks, and the "Open revocations" stat card on the app's **Overview** tab links straight to that filtered view.
 
   {/* PR #23678 */}
 
-### Automation improvements
+### Automations
 
 - **Scope automated revokes to the grants you actually mean**: An automation's revoke step always removed both a user's direct grants and anything they had through group membership, so automating cleanup of direct access meant accepting collateral revocation of group-inherited access too. Revoke steps now have a **Grant source** setting (**All** or **Direct**) to scope a revoke to only direct grants.
 
@@ -52,7 +50,7 @@ With it on, a revocation completes on the first attempt instead of generating a 
   {/* PR #22939 */}
   {/* QUESTION: confirm this belongs in automation-circuit-breaker.mdx and whether any existing SIEM-parsing workaround note there needs to be removed. */}
 
-### Connector and app management improvements
+### Connectors, apps, and policies
 
 - **Automate managing the apps your connectors discover**: Bringing a discovered app under management — or just checking whether one already is — meant clicking through the UI app by app. The public API can now list connector-discovered applications, inspect their managed state, and promote an unmanaged application to managed, returning a 409 on a repeat promotion and letting you read back the binding to recover the managed application ID. See [Move an unmanaged app to managed](/product/admin/applications#move-an-unmanaged-app-to-managed) for the UI equivalent.
 
@@ -64,7 +62,20 @@ With it on, a revocation completes on the first attempt instead of generating a 
   {/* PR #22588 */}
   {/* TODO: screenshot of the Executions tab and a failure-reason detail. QUESTION: confirm whether this belongs in push-rules.mdx or directory.mdx. */}
 
-### AI and MCP improvements
+- **Keep one-off policies out of the shared library**: Policies used to only live in the global policy library, so a rule meant for just one app or entitlement still had to be added there. Policies can now be created local to a single app or entitlement instead, with inline creation alongside the global option on each configuration slot.
+
+  {/* PR #22917 */}
+  {/* TODO: screenshot of the local-vs-global policy picker on a config slot. QUESTION: does this warrant its own section in product/admin/policies.mdx, or a note added to the existing policy-creation steps? */}
+
+- **Reuse a policy instead of copying it**: A policy rule or baseline can now point to another policy of the same type instead of repeating its steps. Define a common flow once — a security review, a manager-then-owner approval chain — and reuse it across every policy that needs it. Update the shared policy and every policy pointing to it picks up the change automatically, so you're not hunting down and updating copies scattered across your policy library. See [Policy reference](/product/glossary#policy-reference).
+
+  {/* Confirmed GA (2026-08-21) after being cut from the Aug 7 digest as SKU_MANUAL/not broadly available. No PR number captured yet - get one from eng/PM. TODO: screenshot of the "Use a policy" action pointing at another policy; confirm doc location - policies.mdx likely needs a full section, not just the glossary entry. */}
+
+- **Grant history records are now individually addressable**: Each record returned by the public API's past-grants search now includes a unique `id`, so you can reference a specific grant history entry instead of matching on other fields.
+
+  {/* PR #23210 */}
+
+### AI and MCP
 
 - **Bring governed tools into Copilot Studio**: Build a Copilot Studio agent that calls the tools your IT team approved through C1, with every call authorized and logged under the calling user's own identity, then publish it to Microsoft 365 Copilot and Teams for your whole organization. See [Connect Copilot Studio to C1](/product/admin/mcp-server/copilot-studio).
 
@@ -74,30 +85,15 @@ With it on, a revocation completes on the first attempt instead of generating a 
 
   {/* Docs-only guide, no PR number — page's Editor Refresh comment is dated 2026-08-19. QUESTION: confirm whether "activation required" framing (vs. a plain AIAM-enabled tenant) is still accurate before publishing. */}
 
-### API & Admin improvements
-
-- **Keep one-off policies out of the shared library**: Policies used to only live in the global policy library, so a rule meant for just one app or entitlement still had to be added there. Policies can now be created local to a single app or entitlement instead, with inline creation alongside the global option on each configuration slot.
-
-  {/* PR #22917 */}
-  {/* TODO: screenshot of the local-vs-global policy picker on a config slot. QUESTION: does this warrant its own section in product/admin/policies.mdx, or a note added to the existing policy-creation steps? */}
-
-- **Reuse a policy instead of copying it**: A policy rule or baseline can now point to another policy of the same type instead of repeating its steps. Define a common flow once — a security review, a manager-then-owner approval chain — and reuse it across every policy that needs it. Update the shared policy and every policy pointing to it picks up the change automatically, so you're not hunting down and updating copies scattered across your policy library. See [Policy reference](/product/glossary#policy-reference).
-
-  {/* No PR number captured yet - confirm with eng/PM. QUESTION: this is the POLICY_REFERENCES_POLICY feature that was cut from the Aug 7 digest as SKU_MANUAL/not broadly available - confirmed GA now, but double-check with eng that it's on by default before publishing. TODO: screenshot of the "Use a policy" action pointing at another policy; confirm doc location - policies.mdx likely needs a full section, not just the glossary entry. */}
-
-- **Find MCP servers from anywhere**: MCP servers are now searchable from the global search (Cmd+K) — search by name, and recently opened servers show up in **Your recent searches** too.
-
-  {/* PR #23505 */}
-
-- **Grant history records are now individually addressable**: Each record returned by the public API's past-grants search now includes a unique `id`, so you can reference a specific grant history entry instead of matching on other fields.
-
-  {/* PR #23210 */}
-
 ### Usability improvements
 
 - **Wide task lists no longer get squeezed**: Task lists — including access reviews — now size each column to fit its content and scroll sideways instead of cramming every column into the same width. Long entitlement names truncate with an ellipsis and show the full name on hover.
 
   {/* PR #23503 */}
+
+- **Find MCP servers from anywhere**: MCP servers are now searchable from the global search (Cmd+K) — search by name, and recently opened servers show up in **Your recent searches** too.
+
+  {/* PR #23505 */}
 
 - **Know when a page is hiding something from you**: Information your role doesn't grant access to used to appear blank, with no way to tell whether a field was empty or just hidden. When a page contains information your role hides, C1 now shows a toast: "Some information on this page is hidden based on your permissions." See [Hidden information based on role](/product/admin/user-roles#hidden-information-based-on-role).
 
