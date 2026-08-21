@@ -5,7 +5,7 @@ og:title: Govern tools and toolsets - C1 docs
 og:description: Review discovered tools, approve and classify them, bundle them into toolsets, and bind toolsets to access profiles.
 ---
 
-{/* Editor Refresh: 2026-05-08 */}
+{/* Editor Refresh: 2026-07-30 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
@@ -18,6 +18,8 @@ After registering an MCP server, every tool it exposes starts life as **Unset**.
 Tools must be reviewed and approved before end users can request them. Use the sections below to work through the full governance workflow.
 
 ### View discovered tools
+
+Discovered tools live under each registered MCP server's own **Tools** tab.
 
 <Steps>
 <Step>
@@ -32,12 +34,15 @@ The list shows every tool C1 has discovered, its current state, classification, 
 
 ### Classify a tool
 
-C1 captures two classification axes per tool. Both are **metadata only** — there is no enforcement layer that uses them. They exist so admins can filter and reason about tools, and so enforcement can be built on top later.
+C1 captures a single **Classification** field per tool. It isn't enforced at call time on its own, but it isn't purely decorative either: the auto-maintained **Read tools** toolset (see [C1-maintained toolsets](#c1-maintained-toolsets) below) selects its members by `Classification = Read`, so classifying a tool as Read widens what that toolset grants. Classification is also readable by [tool call hooks](/product/admin/tool-call-hooks) as `context.classification`, and it's the field the Write authorization hook pattern blocks against.
 
-| Axis | Values | Meaning |
-| :--- | :--- | :--- |
-| **Action** | Read / Write / Delete | Whether the tool can mutate downstream state |
-| **Risk** | Sensitive / Dangerous | Severity of the worst outcome if misused |
+| Value | Meaning |
+| :--- | :--- |
+| **Read** | Doesn't mutate downstream state |
+| **Write** | Mutates downstream state |
+| **Destructive** | Deletes or irreversibly overwrites downstream state |
+| **Sensitive** | Exposes or handles sensitive data |
+| **Dangerous** | Severe potential impact if misused |
 
 To classify a tool:
 
@@ -46,7 +51,7 @@ To classify a tool:
 Open the tool's detail panel from the **Tools** tab.
 </Step>
 <Step>
-Set **Action** and **Risk**.
+Set **Classification**.
 </Step>
 <Step>
 Click **Save**.
@@ -99,10 +104,12 @@ A **toolset** is a named bundle of approved tools.
 
 ### C1-maintained toolsets
 
-C1 ships and auto-maintains two toolsets per tenant:
+C1 ships and auto-maintains two toolsets per connector:
 
-- **All approved** — every tool in **Approved** state across the server.
-- **Read-only** — every **Approved** tool with Action = Read.
+- **All approved tools** — every tool in **Approved** state on that connector.
+- **Read tools** — every **Approved** tool on that connector with Classification = Read.
+
+Their display names are suffixed with the connector's server name — for example, `All approved tools - Slack` and `Read tools - Slack`.
 
 Both update automatically as tools are approved or disabled. They are read-only — admins can bind them to access profiles but cannot edit their contents.
 
@@ -158,7 +165,7 @@ You can also start from the access profile side and add toolsets as entitlements
 Go to **Access profiles** and either create a new profile or open an existing one.
 </Step>
 <Step>
-Add the toolset as an entitlement — both C1-maintained toolsets (**All approved**, **Read-only**) and custom toolsets appear as options.
+Add the toolset as an entitlement — both C1-maintained toolsets (**All approved tools**, **Read tools**) and custom toolsets appear as options.
 </Step>
 <Step>
 Set the access policy on the profile (auto-approve, JIT with expiry, or approval required).
