@@ -12,7 +12,10 @@ sidebarTitle: "CrowdStrike"
 | :--- | :--- | :--- |
 | Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Insights (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| Insights | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| Shadow MCP servers (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| Endpoint users (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| AI coding tools (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
 
 ### Connector actions
 
@@ -183,7 +186,7 @@ stringData:
   BATON_REGION: <CrowdStrike region, options include 'us-1' (default), 'us-2', 'eu-1', and 'us-gov-1'>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -206,7 +209,7 @@ spec:
     metadata:
       labels:
         app: baton-crowdstrike
-        baton: true
+        baton: "true"
         baton-app: crowdstrike
     spec:
       containers:
@@ -272,6 +275,10 @@ The CrowdStrike API client you created during connector setup needs additional s
   </Step>
 </Steps>
 
+### Risk score ingestion setting
+
+Identity risk scores use the **Identity Risk Score** (`security_insight`) capability, which is opt-in in C1. Once the scopes above are in place and the capability is enabled, the connector syncs risk scores automatically. There is no connector config flag that empties this resource type.
+
 **Done.** Your CrowdStrike connector will now sync risk score data into C1. See [External insights](/product/admin/external-insights) for details on where to see this data in the UI.
 
 ## Surface identity password risk
@@ -312,3 +319,138 @@ Password risk uses the same Identity Protection scopes as risk score ingestion, 
 </Steps>
 
 **Done.** On the next sync, identities with a compromised or weak password carry the corresponding risk factor, visible wherever external insights appear.
+
+## Detect shadow MCP servers
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+The CrowdStrike connector can surface unsanctioned ("shadow") [Model Context Protocol](https://modelcontextprotocol.io) servers running on your endpoints — ungoverned AI-agent tooling that never passed through a sanctioned gateway — and correlate each to the identity that ran it. It reads CrowdStrike endpoint detections and models each shadow server as:
+
+- an **`mcp_server`** resource describing the server (package, launcher, transport, host, sample command line, and the identity it resolved to), and
+- an **`endpoint_user`** account for the OS user that ran it, holding a **runner** grant on that server.
+
+Assign the endpoint-user account to a C1 identity (or it auto-matches by email when the endpoint user resolves in Identity Protection) so the shadow MCP shows up against a real person in access reviews.
+
+### Before you begin
+
+Confirm that:
+
+- Your CrowdStrike environment generates endpoint detections (the connector reads them via the Alerts API)
+- You have the **Falcon Administrator** role in CrowdStrike
+- Your CrowdStrike connector is already set up and syncing in C1
+
+### Add the required API scope
+
+<Steps>
+  <Step>
+  Sign into the Falcon console and navigate to **Support** > **API Clients and Keys**.
+  </Step>
+  <Step>
+  Find the API client you created for the C1 integration and click to edit it.
+  </Step>
+  <Step>
+  In the **API SCOPES** section, enable **Alerts: Read**. Keep the **Identity Protection Entities: Read** scope enabled (from risk score ingestion) so endpoint users can be matched to identities.
+  </Step>
+  <Step>
+  Click **Save**.
+  </Step>
+</Steps>
+
+### Create a detection rule for MCP servers
+
+CrowdStrike doesn't flag MCP servers by default, so you author a Custom IOA rule that raises a detection the connector can read. An MCP server is an ordinary `npx`, `uvx`, `node`, or `python` process whose command line contains a recognizable package name (`@modelcontextprotocol/server-*`, `mcp-server-*`, or `mcp_server_*`).
+
+<Steps>
+  <Step>
+  In the Falcon console, create or open a **Custom IOA rule group** for each platform you want to cover (Windows, macOS, Linux).
+  </Step>
+  <Step>
+  Add a **Process Creation** rule with the **Detect** disposition.
+  </Step>
+  <Step>
+  Set the rule's **Command Line** field to match the MCP signature:
+
+  ```
+  (?i).*(@modelcontextprotocol/server-|mcp-server-|mcp_server_).*
+  ```
+  </Step>
+  <Step>
+  Enable the rule and the rule group, then assign the group to the prevention policy that applies to those hosts.
+  </Step>
+</Steps>
+
+### Turn on shadow MCP detection
+
+In C1, enable **both** the **Shadow MCP Server** and **Endpoint User** capabilities on the connector (these resource types are opt-in via C1 capability mediation, not a connector config flag), then save and re-sync.
+
+**Enable them together.** Shadow MCP `runner` grants use `endpoint_user` principals. If only Shadow MCP Server is enabled and Endpoint User is off, C1 will not list those principals and the runner grant graph will not fully resolve.
+
+### Detection inventory window (page caps)
+
+Shadow MCP inventory is a **recent endpoint-protection (epp) alert scan window**, not full historical state:
+
+- Alerts are scanned newest-first, bounded by `mcpAlertMaxPages` (10 pages × 1000 alerts per page).
+- Identity correlation indexes Identity Protection entities up to `mcpIdentityIndexMaxPages` pages.
+
+If epp volume is high, the effective lookback shortens. Detections (and thus `mcp_server` / `endpoint_user` resources) that fall outside the scanned window can drop from a later sync **without a hard sync failure** — the connector logs a warning when a page cap is hit and continues with partial results. Re-enablement or lower epp noise restores visibility when those detections reappear in the window.
+
+**Done.** As endpoints run MCP servers, CrowdStrike raises detections and the connector syncs them into C1 as `mcp_server` resources and `endpoint_user` accounts. Assign each endpoint-user account to a C1 identity to attribute the finding.
+
+## Detect AI coding tools
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+The CrowdStrike connector can inventory **AI coding tools** ("harnesses" — Claude Code, Claude Desktop, Cursor, Windsurf, OpenAI Codex, Gemini CLI, GitHub Copilot CLI, opencode, Aider, and similar) observed running on your endpoints, and correlate each to the identity that ran it. This gives you governance visibility into which people are using which AI tools on which hosts. It reads CrowdStrike endpoint detections and models each tool as an **`ai_tool`** resource describing the tool (name, vendor, category, host, sample command line, and the identity it resolved to), with a low-severity insight linking it to that identity.
+
+This shares the same detection pipeline as shadow MCP detection — it reads the Alerts API and resolves endpoint users to identities the same way — but is enabled independently via the **AI Coding Tool** C1 capability.
+
+### Before you begin
+
+Confirm that:
+
+- Your CrowdStrike environment generates endpoint detections (the connector reads them via the Alerts API)
+- You have the **Falcon Administrator** role in CrowdStrike
+- Your CrowdStrike connector is already set up and syncing in C1
+
+### Add the required API scope
+
+The **Alerts: Read** scope is required (the same scope shadow MCP detection uses). Keep **Identity Protection Entities: Read** enabled so AI-tool usage can be matched to identities. If you already enabled these for shadow MCP detection, no change is needed.
+
+### Create a detection rule for AI coding tools
+
+CrowdStrike doesn't flag AI coding tools by default, so you author a Custom IOA rule that raises a detection the connector can read.
+
+<Steps>
+  <Step>
+  In the Falcon console, create or open a **Custom IOA rule group** for each platform you want to cover (Windows, macOS, Linux).
+  </Step>
+  <Step>
+  Add a **Process Creation** rule with the **Detect** disposition.
+  </Step>
+  <Step>
+  Set the rule's **Command Line** field to match common AI coding tools:
+
+  ```
+  (?i).*(claude-code|[\\/]claude\.(exe|app)|[\\/]cursor\.(exe|app)|cursor-agent|[\\/]windsurf|@openai[\\/]codex|codex-cli|@github[\\/]copilot|copilot-cli|gemini-cli|[\\/]opencode|[\\/]aider).*
+  ```
+
+  Adjust the list to the tools you want to track. The pattern anchors tool names to executables and package paths (rather than matching the bare words "codex" or "copilot" anywhere) to avoid raising detections on unrelated software. Because AI coding tools are ordinary developer software rather than threats, expect a detection each time one launches.
+  </Step>
+  <Step>
+  Enable the rule and the rule group, then assign the group to the prevention policy that applies to those hosts.
+  </Step>
+</Steps>
+
+### Turn on AI coding tool detection
+
+In C1, enable the **AI Coding Tool** capability on the connector (opt-in via C1 capability mediation, not a connector config flag), then save and re-sync.
+
+### Detection inventory window (page caps)
+
+AI coding tool inventory shares the same Alerts scan as shadow MCP detection. Inventory is a **recent epp alert scan window** bounded by `mcpAlertMaxPages` (and identity correlation by `mcpIdentityIndexMaxPages`), not full historical state. High epp volume shortens effective lookback; tools that fall outside the window can disappear from a later sync without a hard failure (a warning is logged when the page cap is hit). See [Detect shadow MCP servers](#detect-shadow-mcp-servers) for the same semantics.
+
+**Done.** As endpoints run AI coding tools, CrowdStrike raises detections and the connector syncs them into C1 as `ai_tool` resources correlated to the identities that ran them.
