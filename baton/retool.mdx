@@ -8,13 +8,19 @@ sidebarTitle: Retool
 
 ## Capabilities
 
-| Resource     | Sync | Provision |
+The Retool connector syncs the following resources:
+
+| Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |
-| Groups     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>          |
-| Organizations     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |
-| Pages (Apps)     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>          |
-| Resources     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |  
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Create, Enable/Disable |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Grant, Revoke |
+| Organizations | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Pages (Apps) | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Grant, Revoke |
+| Resources | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+**Notes:**
+- Sync and group/page provisioning use a direct connection to the Retool Postgres database (the `connection-string` setting). The account lifecycle (Create and the enable/disable actions) additionally uses the Retool REST API and requires the `retool-api-base-url` and `retool-api-token` settings — sync-only deployments work without them.
+- Retool's API does not expose a hard delete, so the connector does not offer account deletion. Deprovisioning is the **`disable_user`** action, which **deactivates** the account (blocks sign-in) while retaining the user and its group memberships; the **`enable_user`** action reactivates it.
 
 ## Gather Retool credentials 
 
@@ -56,6 +62,27 @@ Compose and save the Retool connection string you'll use when setting up the con
    `"user=baton password=secure-password host=localhost port=5432 dbname=hammerhead_production"`
 </Step>
 </Steps>
+
+### (Optional) Create a Retool API token for account provisioning
+
+Account creation and the enable/disable user actions use the Retool REST API. Skip this section if you only need sync and group/page provisioning.
+
+<Warning>
+A Retool admin must perform this task, and your Retool plan must include REST API access.
+</Warning>
+
+<Steps>
+<Step>
+In Retool, go to **Settings** > **API** and create a new API token.
+</Step>
+<Step>
+Grant the token the **`users:read`** and **`users:write`** scopes (both are required to create, look up, and enable/disable users).
+</Step>
+<Step>
+Copy and save the token, and note your Retool base URL (for example `https://<your-org>.retool.com`). You'll provide both when configuring the connector.
+</Step>
+</Steps>
+
 **Done.** Next, move on to the connector configuration instructions. 
 
 ## Configure the Retool connector 
@@ -139,8 +166,12 @@ stringData:
   # Retool credentials
   BATON_CONNECTION_STRING: <The Retool connection string, in format "user=baton password=secure-password host=localhost port=5432 dbname=hammerhead_production">
 
+  # Optional: required only for account creation and enable/disable actions (REST API)
+  BATON_RETOOL_API_BASE_URL: <Your Retool base URL, e.g. https://your-org.retool.com>
+  BATON_RETOOL_API_TOKEN: <Retool API token with users:read + users:write scopes>
+
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -163,7 +194,7 @@ spec:
     metadata:
       labels:
         app: baton-retool
-        baton: true
+        baton: "true"
         baton-app: retool
     spec:
       containers:
@@ -191,4 +222,8 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your Retool connector is now pulling access data into C1.
 </Tab>
 </Tabs>
+
+<Tip>
+You can download the latest `baton-retool` release binaries from the [ConductorOne download center](https://dist.conductorone.com/ConductorOne/baton-retool).
+</Tip>
 
