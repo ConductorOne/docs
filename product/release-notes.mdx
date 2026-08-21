@@ -10,55 +10,60 @@ sidebarTitle: Release notes
 
 <Update label="August 21, 2026">
 
-## Product digest: August 21, 2026
+## Product digest: August 7–21, 2026
 
-### Make sure revoked access actually goes away
+### Access review improvements
 
-Revoking an inherited entitlement — one a user has because of a group or role, not because it was granted to them directly — used to only remove the entitlement itself. The access that produced it stayed in place, so the next sync brought it right back, and nobody looking at the review could tell the revoke hadn't actually stuck.
+- **See reviewer context without leaving the table**: Reviewer-visible app user attributes (job title, department, cost center) previously only showed up in a hover tooltip, so reviewers had to mouse over every row to get them. Campaign admins can now show any of these as their own column in the access review table — up to 10 per campaign.
 
-Turn on **Revoke inherited access** (under **Entitlement management** on an app's details page) and revoking an inherited entitlement now revokes the upstream grants it came from too, so the access is actually gone. It's off by default and set per app; when it's on, approvers see a notice listing what else a revoke will affect before they confirm.
+  {/* PR #23046 */}
+  {/* TODO: screenshot of the column picker and the resulting review table. QUESTION: confirm the exact admin path for adding these columns (campaign scope config?) and whether this belongs in campaigns.mdx or manage-campaigns.mdx. */}
 
-{/* PR #20849 */}
-{/* TODO: screenshot of the Entitlement management toggle and the approver notice. QUESTION: confirm exact location/label of the setting on the app details page, and whether this needs a new subsection in managing-entitlements.mdx or a standalone page. */}
+- **Check what you're reviewing, whoever you are**: Task reviewers can now open a read-only details drawer for the entitlement or resource under review directly from the task page — no special role required.
 
-### Keep one-off policies out of the shared library
+  {/* PR #22897 */}
 
-Every policy used to live in the global policy library, so a rule meant for just one app or entitlement still had to be added there — cluttering the library with one-offs that don't apply anywhere else.
+### Access request improvements
 
-Policies can now be created local to a single app or entitlement instead. Each policy configuration slot offers the object's local policy alongside the global library, with inline creation, so narrow, one-off rules stay out of everyone else's way. Local policies are still managed by policy administrators.
+- **Make sure revoked access actually goes away**: Revoking an inherited entitlement — one a user has because of a group or role, not because it was granted to them directly — used to only remove the entitlement itself. The access that produced it stayed in place, so the next sync brought it right back, and nobody looking at the review could tell the revoke hadn't actually stuck. Turn on **Revoke inherited access** (under **Entitlement management** on an app's details page) and a revoke now removes the upstream grants too — off by default, set per app, with a notice to approvers listing what else it'll affect.
 
-{/* PR #22917 */}
-{/* TODO: screenshot of the local-vs-global policy picker on a config slot. QUESTION: does this warrant its own section in product/admin/policies.mdx, or a note added to the existing policy-creation steps? */}
-
-### Automate managing the apps your connectors discover
-
-Bringing a discovered app under management — or just checking whether one already is — meant clicking through the UI app by app, which doesn't scale if you're managing hundreds of SSO-connected apps or want this wired into your own provisioning tooling.
-
-The public API can now list connector-discovered applications, inspect their managed state, and promote an unmanaged application to managed. Promoting an app that's already managed returns a 409 instead of erroring silently, and you can read back the binding to recover the resulting managed application ID.
-
-See [Move an unmanaged app to managed](/product/admin/applications#move-an-unmanaged-app-to-managed) for the UI equivalent.
-
-{/* PR #23339 */}
-{/* TODO: needs public API reference docs (endpoint names, request/response shape) - check with eng for exact routes before publishing. */}
-
-### See exactly what every push rule did — and why one failed
-
-Push rules ran with no record of what happened. If a push failed partway through, there was no way to see what was pushed, when, or why the target system rejected it — just try again and hope.
-
-Every attribute push now shows up in execution history. Go to **Directory sources → Executions** to see pushes across all connectors, or open a push rule's row menu and choose **Show execution history** to see just that connector's. Each entry records who was pushed, when, which attributes changed, and — on failure — the reason the target system gave for rejecting it.
-
-{/* PR #22588 */}
-{/* TODO: screenshot of the Executions tab and a failure-reason detail. QUESTION: confirm whether this belongs in push-rules.mdx or directory.mdx. */}
-
-### Usability improvements
+  {/* PR #20849 */}
+  {/* TODO: screenshot of the Entitlement management toggle and the approver notice. QUESTION: confirm exact location/label of the setting on the app details page, and whether this needs a new subsection in managing-entitlements.mdx or a standalone page. */}
 
 - **See revoke work at a glance**: An app's **Requests** tab can now be filtered to just **Request** or **Revoke** tasks, and the "Open revocations" stat card on the app's **Overview** tab links straight to that filtered view.
 
   {/* PR #23678 */}
 
-- **Wide task lists no longer get squeezed**: Task lists — including access reviews — now size each column to fit its content and scroll sideways instead of cramming every column into the same width. Long entitlement names truncate with an ellipsis and show the full name on hover.
+### Automation improvements
 
-  {/* PR #23503 */}
+- **Scope automated revokes to the grants you actually mean**: An automation's revoke step always removed both a user's direct grants and anything they had through group membership, so automating cleanup of direct access meant accepting collateral revocation of group-inherited access too. Revoke steps now have a **Grant source** setting (**All** or **Direct**) to scope a revoke to only direct grants.
+
+  {/* PR #22609 */}
+  {/* TODO: screenshot of the Grant source setting on a revoke step. QUESTION: confirm doc location - automations-steps-reference.mdx? */}
+
+- **Circuit-breaker logs now play nice with your SIEM**: Automation circuit-breaker system-log events include the standard OCSF time field, so you no longer need a workaround to parse them into your SIEM.
+
+  {/* PR #22939 */}
+  {/* QUESTION: confirm this belongs in automation-circuit-breaker.mdx and whether any existing SIEM-parsing workaround note there needs to be removed. */}
+
+### Connector and app management improvements
+
+- **Automate managing the apps your connectors discover**: Bringing a discovered app under management — or just checking whether one already is — meant clicking through the UI app by app. The public API can now list connector-discovered applications, inspect their managed state, and promote an unmanaged application to managed, returning a 409 on a repeat promotion and letting you read back the binding to recover the managed application ID. See [Move an unmanaged app to managed](/product/admin/applications#move-an-unmanaged-app-to-managed) for the UI equivalent.
+
+  {/* PR #23339 */}
+  {/* TODO: needs public API reference docs (endpoint names, request/response shape) - check with eng for exact routes before publishing. */}
+
+- **See exactly what every push rule did — and why one failed**: Push rules ran with no record of what happened, so a failed push meant trying again and hoping. Every attribute push now shows up in execution history: go to **Directory sources → Executions** for pushes across all connectors, or a push rule's row menu → **Show execution history** for just that connector's. Each entry records who was pushed, when, which attributes changed, and — on failure — the reason the target system gave for rejecting it.
+
+  {/* PR #22588 */}
+  {/* TODO: screenshot of the Executions tab and a failure-reason detail. QUESTION: confirm whether this belongs in push-rules.mdx or directory.mdx. */}
+
+### API & Admin improvements
+
+- **Keep one-off policies out of the shared library**: Policies used to only live in the global policy library, so a rule meant for just one app or entitlement still had to be added there. Policies can now be created local to a single app or entitlement instead, with inline creation alongside the global option on each configuration slot.
+
+  {/* PR #22917 */}
+  {/* TODO: screenshot of the local-vs-global policy picker on a config slot. QUESTION: does this warrant its own section in product/admin/policies.mdx, or a note added to the existing policy-creation steps? */}
 
 - **Find MCP servers from anywhere**: MCP servers are now searchable from the global search (Cmd+K) — search by name, and recently opened servers show up in **Your recent searches** too.
 
@@ -68,44 +73,11 @@ Every attribute push now shows up in execution history. Go to **Directory source
 
   {/* PR #23210 */}
 
-### Connector updates
-
-Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
-
-</Update>
-
-<Update label="August 14, 2026">
-
-## Product digest: August 14, 2026
-
-### See reviewer context without leaving the table
-
-Deciding whether someone still needs access often comes down to context — their job title, department, cost center — but that information only lived in a hover tooltip, so reviewers had to mouse over every row to get it.
-
-Campaign admins can now show any reviewer-visible app user attribute as its own column in the access review table — up to 10 per campaign — so reviewers can scan the context they need instead of hunting for it row by row.
-
-{/* PR #23046 */}
-{/* TODO: screenshot of the column picker and the resulting review table. QUESTION: confirm the exact admin path for adding these columns (campaign scope config?) and whether this belongs in campaigns.mdx or manage-campaigns.mdx. */}
-
-### Scope automated revokes to the grants you actually mean
-
-An automation's revoke step always removed both a user's direct grants and anything they had through group membership — so automating cleanup of direct access meant accepting collateral revocation of group-inherited access too, or not automating it at all.
-
-Revoke steps now have a **Grant source** setting (**All** or **Direct**), so you can scope an automation to touch only direct grants and leave group-inherited access untouched.
-
-{/* PR #22609 */}
-{/* TODO: screenshot of the Grant source setting on a revoke step. QUESTION: confirm doc location - automations-steps-reference.mdx? */}
-
 ### Usability improvements
 
-- **Check what you're reviewing, whoever you are**: Task reviewers can now open a read-only details drawer for the entitlement or resource under review directly from the task page — no special role required.
+- **Wide task lists no longer get squeezed**: Task lists — including access reviews — now size each column to fit its content and scroll sideways instead of cramming every column into the same width. Long entitlement names truncate with an ellipsis and show the full name on hover.
 
-  {/* PR #22897 */}
-
-- **Circuit-breaker logs now play nice with your SIEM**: Automation circuit-breaker system-log events include the standard OCSF time field, so you no longer need a workaround to parse them into your SIEM.
-
-  {/* PR #22939 */}
-  {/* QUESTION: confirm this belongs in automation-circuit-breaker.mdx and whether any existing SIEM-parsing workaround note there needs to be removed. */}
+  {/* PR #23503 */}
 
 ### Connector updates
 
