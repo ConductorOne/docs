@@ -16,6 +16,7 @@ sidebarTitle: "Microsoft Entra ID"
 | Directory roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Licenses | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Managed identities | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Service principal credentials | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
 The Entra ID connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). 
 
@@ -63,6 +64,8 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | check_upn | `proposed_upn` (string, required) | Checks if a User Principal Name (UPN) is available. If taken, finds an available UPN by appending incrementing numbers. |
 | update_profile | `user_id` (string, required)<br/>Plus optional profile fields | Updates user profile attributes including mail, displayName, jobTitle, employeeId, department, companyName, country, and extensionAttribute1 through extensionAttribute15. |
 | create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner<br/>`userMembers` (resource ID list, optional): initial group members | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership. Requires the `Group.Create` permission. |
+| revoke_sessions | `user_id` (string, required) | Revokes all active sign-in sessions for a user by invalidating their refresh tokens, forcing re-authentication (`POST /users/{id}/revokeSignInSessions`). Refresh tokens are invalidated immediately, but existing access tokens can remain valid for up to ~1 hour unless Continuous Access Evaluation (CAE) is enabled. Requires the `User.RevokeSessions.All` permission. |
+| revoke_mfa | `user_id` (string, required) | Deletes a user's registered MFA (authentication) methods, forcing re-registration at next sign-in. Lists the user's methods and deletes each deletable one; password methods are skipped. Graph refuses to delete the user's default method while other methods remain (HTTP 400), so MFA may not be fully revocable in one invocation — per-method failures are reported and do not abort the action. Returns `success` (true only if every deletable method was deleted), `deleted_count`, `failed_count`, `skipped_count`, and per-method `results`. Requires the `UserAuthenticationMethod.ReadWrite.All` permission. |
 
 ## Gather Entra ID credentials 
 
@@ -177,6 +180,17 @@ Click **Application permissions**. Select each permission in the relevant set be
    ```
 
    This permission is only required if group management is enabled on the connector.
+   </Info>
+
+   <Info>
+   **Optional:** To enable the offboarding connector actions (`revoke_sessions` and `revoke_mfa`), add the following permissions in addition to the provisioning permissions above:
+
+   ```bash
+   User.RevokeSessions.All
+   UserAuthenticationMethod.ReadWrite.All
+   ```
+
+   `User.RevokeSessions.All` is required for the `revoke_sessions` action, and `UserAuthenticationMethod.ReadWrite.All` is required for the `revoke_mfa` action. **To revoke sessions or MFA methods for users with admin roles, the app must additionally hold the Privileged Authentication Administrator directory role (or Global Administrator).**
    </Info>
 </Step>
 <Step>
@@ -607,7 +621,7 @@ stringData:
   BATON_ENTRA_TENANT_ID: <Entra ID directory (tenant) ID>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 
   # Optional: include if you want to skip syncing Active Directory Server groups
   # BATON_SKIP_AD_GROUPS: "true"
@@ -655,7 +669,7 @@ spec:
     metadata:
       labels:
         app: baton-microsoft-entra
-        baton: true
+        baton: "true"
         baton-app: microsoft-entra
     spec:
       containers:
