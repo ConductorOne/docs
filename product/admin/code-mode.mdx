@@ -1,0 +1,157 @@
+---
+title: Code mode
+description: How C1's MCP gateway exposes governed tools through describe and execute, and how AI agents discover and call those tools by writing short programs.
+og:title: Code mode - C1 docs
+og:description: How C1's MCP gateway exposes governed tools through describe and execute, and how AI agents discover and call those tools by writing short programs.
+---
+
+{/* Editor Refresh: 2026-08-21 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+Read this page to understand what your users' AI agents are doing when they call tools through C1 — and, if you build agents yourself, to write code-mode programs against the gateway.
+
+## How the gateway fits in
+
+C1 is an MCP gateway. AI clients connect to one C1 MCP endpoint, and C1 sits in front of every MCP server and integration your organization has approved. Agents never connect to those servers directly.
+
+On each call, C1 authenticates the human or workload behind the agent, applies per-tool governance, and routes the call to the right upstream server — a hosted server from the catalog, a vendor MCP server, or a private server reached over an [MCP bridge](/product/admin/mcp-server/mcp-bridge). One MCP connection, many governed systems behind it.
+
+## What code mode changes
+
+Code mode changes how the gateway presents those governed tools to the client. Instead of advertising every enabled tool as its own named tool, C1 exposes two entrypoints:
+
+| Entrypoint | What the agent uses it for |
+| :--- | :--- |
+| `describe` | Discovery. Find the tools that fit the task and read their exact names and input schemas. |
+| `execute` | Execution. Run a short TypeScript program that calls those tools. |
+
+A third entrypoint, `get_execution`, retrieves the result of a program that outlived the synchronous wait window.
+
+The practical consequence for admins: your enabled tools won't appear one by one in the client's tool list. That's expected, not a discovery failure. A tenant with three hundred enabled tools still presents a handful of entrypoints, which keeps the client's tool list — and its context window — from being consumed by tool definitions.
+
+Governance is unchanged. Every underlying call still runs the same per-tool checks: the tool must be **Enabled**, and the caller must hold a grant for it. [Tool call hooks](/product/admin/tool-call-hooks) still fire on each call and can rewrite inputs, redact outputs, or deny outright. Every call is still written to the [audit log](/product/admin/audit-ai-tool-usage) with full identity context. Code mode moves where the agent *names* a tool; it moves nothing about who is allowed to call it.
+
+## Which clients use code mode
+
+Code mode is a tenant-level AI governance setting, on by default.
+
+- **Personal and shared clients** — the interactive, human-backed ones — use code mode.
+- **Service and ephemeral clients** get each enabled tool as a directly named tool instead.
+
+Turning the tenant setting off gives every client directly named tools. See [Manage AI clients](/product/admin/ai-clients) for how client types are assigned and controlled.
+
+## Write a code-mode program
+
+An `execute` call takes a JSON object with one required key:
+
+| Key | Required? | What it holds |
+| :--- | :--- | :--- |
+| `source_code` | Required | The TypeScript program, as a string. |
+| `args` | Optional | Runtime values, delivered to the program as its `input` argument. |
+
+Values placed beside `source_code` rather than inside `args` are dropped silently — the program sees `undefined`. Where an agent has already resolved an ID during discovery, inlining it as a `const` is more reliable than parameterizing.
+
+### Program skeleton
+
+Every program has the same shape: one import, one default-exported `main`, and a JSON object as the return value.
+
+```ts
+import { tools } from '@c1/code-mode';
+
+export default async function main(input) {
+  const result = await tools.some_tool_name({ some_arg: 'value' });
+  return { result };
+}
+```
+
+`@c1/code-mode` is the only valid import. Governed tools are called as `tools.<toolName>(args)`, where the tool name and its argument names come from `describe` — never from convention or from another tool's schema. `main` must resolve to a JSON object; a bare array, string, or number is rejected by the runtime, so wrap it (`return { users, count }`).
+
+Discovery belongs outside the program. The agent calls `describe` at the top level first, then writes the program; discovery entrypoints aren't callable from inside `execute`.
+
+### One program per call
+
+Each `execute` call deploys an ephemeral function, while `tools.X()` calls inside the running program are fast. An agent that needs six tool calls should write one program that makes all six, not six `execute` calls. Dependent calls become sequential `await`s; independent lookups go in a `Promise.all()`.
+
+### Example: paginate a large result set
+
+Loops are the clearest payoff. Collecting every page of a large list takes one round trip instead of one per page:
+
+```ts
+import { tools } from '@c1/code-mode';
+
+export default async function main(input) {
+  const out = [];
+  let pageToken;
+  do {
+    const page = await tools.okta_list_users({ page_token: pageToken });
+    out.push(...(page?.records ?? []));
+    pageToken = page?.nextPageToken;
+  } while (pageToken);
+  return { users: out, count: out.length };
+}
+```
+
+Response shapes differ from tool to tool. The `records` and `nextPageToken` keys above belong to this tool; read the real keys from `describe` output rather than carrying an envelope key over from a different tool. Optional keys should be omitted entirely — never passed as `undefined`.
+
+## Reading the results
+
+Most calls return what you'd expect: the upstream tool's normal output, minus anything a post-tool-use hook redacted or capped.
+
+Two results are specific to the gateway, and both matter more than they look.
+
+### Access requests instead of failures
+
+When the caller doesn't hold a grant for a tool, the call doesn't fail opaquely. Any `tools.X()` call can return one of these envelopes in place of domain data:
+
+```json
+{
+  "status": "request_created",
+  "tool": "okta_list_users",
+  "task_id": "...",
+  "task_number": 4821,
+  "task_url": "https://example.conductor.one/task/4821",
+  "entitlement_id": "..."
+}
+```
+
+The tool is requestable but not yet granted, so C1 opened an access request on the caller's behalf. **The upstream API was not called.** Approval runs through the tool's normal policy — manager approval and the rest — and once the grant lands, the same call executes.
+
+```json
+{
+  "status": "denied",
+  "reason": "..."
+}
+```
+
+No access path exists for this caller.
+
+A well-behaved program checks `result?.status === 'request_created' || result?.status === 'denied'` before touching any domain field, and returns the envelope verbatim from `main` so the human sees the `task_url` or the denial reason. It should not map over the missing fields, retry inside the same program, or swallow the envelope into a default value. After a `request_created`, the agent's job is to hand the user the task link and stop that line of work until the request is approved.
+
+<Note>
+`request_created` and `denied` look alike to an agent but mean different things. `request_created` is a pending approval with a link to follow; `denied` means no access path exists for that caller.
+</Note>
+
+### Long-running programs
+
+A program that runs past the synchronous wait window of roughly 25 seconds doesn't fail. `execute` returns `{ "status": "pending", "execution_id": "..." }` and the program keeps running server-side.
+
+The agent then polls `get_execution` with that `execution_id`. Each response carries a `status` of `pending`, `running`, `success`, or `error`, plus the full output and logs once the program finishes either way. Poll with exponential backoff — 1 second, then 2, 4, 8, 16, 30, capped at 30 seconds — and do other independent work in between rather than polling in a tight loop.
+
+Executions are capped at 15 minutes total; the polling response reports elapsed and remaining time. The `execution_id` is opaque and scoped to the calling session's tenant and principal, so it's useful for the polling loop and nothing beyond it.
+
+## Where to go from here
+
+- Setting up the servers behind the gateway? See [Set up an MCP server](/product/admin/mcp-servers).
+- Governing which tools are callable? See [Govern tools and toolsets](/product/admin/tools-and-toolsets).
+- Constraining calls at runtime? See [Tool call hooks](/product/admin/tool-call-hooks).
+- Reviewing what agents actually called? See [Audit AI tool usage](/product/admin/audit-ai-tool-usage).
+- Connecting a client as an end user? See [Connect your MCP client to C1](/product/how-to/connect-mcp-client).
+
+{/*
+LLM Note: For AI assistants interacting with ConductorOne's MCP gateway or writing
+code-mode programs, a structured knowledge base is available at rap/mcp-gateway/INDEX.md
+in the public docs repository, with focused, retrievable documentation chunks.
+*/}
