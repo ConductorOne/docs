@@ -46,6 +46,19 @@ Each synced worker is exposed as a user resource. The following keys are written
 | `start_date` | `workAssignments[<active>].actualStartDate` | Assignment actual start date. |
 | `termination_date` | `worker.workerDates.terminationDate` | Falls back to `workAssignments[].terminationDate` when the worker-level date is absent. |
 | `file_number` | `workAssignments[<active>].payrollFileNumber` | ADP payroll File Number. Distinct from `worker_id` and `associate_oid`. |
+| `given_name` | `worker.person.legalName.givenName` | Legal first name. |
+| `middle_name` | `worker.person.legalName.middleName` | Legal middle name. |
+| `family_name` | `worker.person.legalName.familyName1` | Legal last name. |
+| `personal_email` | `worker.person.communication.emails[<personal>].emailUri` | Personal email (prefers `nameCode` "personal", falls back to first). Onboarding attribute only — **not** used as the email trait or login; the work `email` remains primary. |
+| `worker_type_code` | `workAssignments[<active>].workerTypeCode.codeValue` | Worker type / ADP "Worker Category" code. |
+| `worker_type_description` | `workAssignments[<active>].workerTypeCode` | Worker type description. Prefers `longName`, falls back to `shortName`. |
+| `company_code` | `workAssignments[<active>].payrollGroupCode` | ADP Company Code / payroll legal entity. |
+| `work_city` | `workAssignments[<active>].homeWorkLocation.address.cityName` | Work-location city. |
+| `work_state` | `workAssignments[<active>].homeWorkLocation.address.countrySubdivisionLevel1.codeValue` | Work-location state/subdivision code. |
+| `work_postal_code` | `workAssignments[<active>].homeWorkLocation.address.postalCode` | Work-location postal code. |
+| `work_country` | `workAssignments[<active>].homeWorkLocation.address.countryCode` | Work-location country code. |
+
+> **Work address is coarse by design.** Only city/state/postal/country are surfaced — street lines are intentionally not modeled. ADP exposes no work-from-home indicator, and for remote employees the work-location address resolves to their residence; omitting street lines avoids ingesting home street addresses. The components are kept discrete so a full address can be assembled (or street lines added) later without rework.
 
 When a worker has multiple work assignments, fields drawn from `workAssignments[]` come from the first non-terminated assignment, falling back to any assignment if all are terminated.
 
@@ -62,9 +75,13 @@ Each entry maps an ADP custom field to a profile key using the format `"<fieldTy
 "stringFields/PR code" → profile key "pr_code"
 ```
 
-The `fieldType` must be one of: `stringFields`, `numberFields`, `dateFields`, `indicatorFields`, `codeFields`, `amountFields`, `percentFields`, `telephoneFields`.
+The `fieldType` must be one of: `stringFields`, `numberFields`, `dateFields`, `dateTimeFields`, `indicatorFields`, `codeFields`, `amountFields`, `percentFields`, `telephoneFields`.
 
 The `codeValue` must match the field's `nameCode.codeValue` **exactly** as it appears in ADP, including spaces and capitalisation.
+
+### Code fields
+
+For `codeFields` entries, the emitted value prefers the field's `shortName` and falls back to its `codeValue` when `shortName` is empty. A custom field entry whose own `codeValue` is empty is skipped entirely — no profile key is emitted for it.
 
 ### Amount fields
 
