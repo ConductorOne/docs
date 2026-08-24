@@ -58,36 +58,34 @@ For a shared production setup, use a dedicated API client so activity is attribu
 
 ## Choose API scopes
 
-The API client's scopes determine which tools return data. C1 exposes tools across several Falcon products, and each needs its own scope. **Read** covers every list tool:
+Each tool reads a different Falcon API, and each API has its own scope. Grant **Read** on the scopes for the tools you want. A tool whose scope is missing returns CrowdStrike's authorization error rather than an empty result, so an unexpected 403 usually means the scope is absent from the API client.
 
 | Tools | Falcon API scope |
 |---|---|
-| Hosts | Hosts |
-| Alerts | Alerts |
-| Incidents | Incidents |
-| Indicators of compromise | IOC Manager |
-| Device control policies | Device control policies |
-| Vulnerabilities and remediations | Vulnerabilities (Falcon Spotlight) |
-| Threat actors, indicators, and reports | Falcon Intelligence |
-| Zero Trust Assessment | Zero Trust Assessment |
-| Applications | Falcon Discover |
-| Cloud misconfigurations (IOM) | CSPM registration |
+| `list_hosts` | Hosts |
+| `list_alerts` | Alerts |
+| `list_incidents` | Incidents |
+| `list_ioc_indicators` | IOC Manager |
+| `list_device_control_policies` | Device control policies |
+| `list_vulnerabilities`, `list_remediations` | Vulnerabilities (Falcon Spotlight) |
+| `list_intel_actors`, `list_intel_indicators`, `list_intel_reports` | Falcon Intelligence |
+| `list_zero_trust_assessments` | Zero Trust Assessment |
+| `list_discover_applications` | Falcon Discover |
+| `list_ioms`, `list_iom_details` | CSPM registration |
 
-{/* REVIEWER NOTE — confirm the exact Falcon console labels for each scope row */}
+{/* REVIEWER NOTE — the tool names are exact, taken from the server's own tool list. The right-hand column needs a check against the Falcon console's own scope labels, which I could not verify without a tenant. */}
 
-Grant only the scopes for the tools you plan to use. A tool whose scope is missing returns CrowdStrike's authorization error rather than an empty result, so an unexpected 403 usually means the scope is absent from the API client.
-
-The response tools need **Write** in addition to Read:
+Four tools take action in CrowdStrike and need **Write** as well:
 
 | Tools | Falcon API scope |
 |---|---|
-| Contain, lift containment, hide host | Hosts (Write) |
-| Create indicator of compromise | IOC Manager (Write) |
+| `contain_host`, `lift_containment`, `hide_host` | Hosts (Write) |
+| `create_ioc_indicator` | IOC Manager (Write) |
 
-Leave these scopes off the API client if you want a read-only connection. The tools then return CrowdStrike's authorization error, so a read-only client is a deliberate way to keep response actions unavailable.
+Leaving Write off the API client is a deliberate way to keep the connection read-only: those four tools then return CrowdStrike's authorization error, and the rest keep working.
 
 <Note>
-The cloud misconfiguration tools need **CSPM registration**, not **Cloud Security API Detections**. The two scopes cover different Falcon APIs, and Cloud Security API Detections does not authorize the tools C1 exposes. If `crowdstrike_list_ioms` returns 403 while your other tools work, add CSPM registration to the API client.
+`list_ioms` and `list_iom_details` need the **CSPM registration** scope. CrowdStrike also offers a Cloud Security scope, and it is easy to reach for by name — but it covers a different set of endpoints (cloud groups and cloud risks) that C1 does not expose, so it will not make these two tools work. If `list_ioms` returns 403 while your other tools return data, add CSPM registration to the API client.
 </Note>
 
 Scope changes take effect the next time C1 requests a token, so you don't need to re-register the server or reconnect after editing the API client.
