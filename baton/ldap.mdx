@@ -50,6 +50,28 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
   To use `create_ou`, the connector's bind account must have permission to add child entries under the target parent DN (by default, the configured base DN). For OpenLDAP and similar servers, this is write/add access on the parent container; for Active Directory, delegate the **Create Organizational Unit objects** right on the parent OU.
 </Note>
 
+**Resource-scoped actions (user):**
+
+| Action name | Additional fields | Description |
+| ----------- | ----------------- | ----------- |
+| `update_profile` | `user_id` (resource ID, required), `first_name` (string), `last_name` (string), `display_name` (string), `email` (string), `custom_attributes` (string map) | Set core profile fields (first name, last name, display name, email) and/or arbitrary custom LDAP attributes on an existing user. This action is scoped to the `user` resource type, which is what makes it discoverable and usable from C1's attribute-push-rule feature. It also backs C1's [push profile](/product/admin/account-provisioning) flow for LDAP users. |
+
+The `update_profile` action returns `success` (bool), `updated_user` (the user resource after the update, best-effort re-fetched; absent if the read-back failed, though the write itself still succeeded), `applied` (the number of attributes changed), and `skipped` (named fields or `custom_attributes` entries that were not written).
+
+<Note>
+  `update_profile` is intended for generic LDAP directories (Active Directory and FreeIPA have their own connectors). It applies the following rules:
+
+  - **Named fields:** `first_name` → `givenName`, `last_name` → `sn`, `display_name` → `displayName`, `email` → `mail`. A named field is applied only when present and non-empty; a present-but-empty named field cannot clear the attribute and is instead reported in `skipped`.
+  - **`inetOrgPerson` requirement:** only `last_name` (`sn`) is universal — it's a MUST attribute of the base `person` object class. `first_name` (`givenName`), `display_name` (`displayName`), and `email` (`mail`) are only defined by RFC 2798's `inetOrgPerson` object class, so writing one of them to an entry that doesn't carry `inetOrgPerson` fails loudly with LDAP result code 65 ("Object Class Violation") — an atomic, clearly-signaled failure with no partial write, not a silent no-op.
+  - **Custom attributes:** `custom_attributes` maps arbitrary raw LDAP attribute names to values; an empty value clears the attribute (unlike the named fields above, where empty just means "not supplied"). Keys are used **verbatim** as attribute names — the named-field mapping above applies only to the named arguments, never to `custom_attributes`. `{"user_id": "x"}` therefore writes an attribute literally named `user_id` (failing with LDAP result code 17, "Undefined Attribute Type", if the directory has no such attribute); it does not write `uid`. The same goes for baton profile field names such as `login` and `path`: they are attempted as literal attribute names rather than skipped.
+  - **Collisions:** a `custom_attributes` key is dropped (never merged with, or overwriting, a named field's slot) and reported once in `skipped` when it case-insensitively matches either one of the four named field names, or the LDAP attribute a supplied named field is writing (`givenName`, `sn`, `displayName`, `mail`). The latter only applies when that named field was actually supplied and non-empty; otherwise `{"givenName": "Jane"}` is an ordinary raw write.
+  - **Not modifiable:** password attributes (`userPassword`, or any name containing `password` — use credential rotation instead) and `objectClass` are rejected; the user's RDN attribute (for example `cn` when the DN is `cn=jdoe,...`) is skipped, since renaming requires a different operation.
+  - **Multi-valued attributes:** setting (not clearing) a value on an attribute that currently holds more than one value returns an error instead of silently discarding the extra values; clearing (an empty value) still removes all values.
+  - **Scope:** only entries within the configured user search scope (`user-search-dn`, falling back to `base-dn`) can be modified; out-of-scope or non-user DNs are rejected.
+
+  The connector's bind account must have permission to modify the target entry.
+</Note>
+
 
 ## Gather LDAP credentials 
 
