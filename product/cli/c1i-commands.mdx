@@ -29,14 +29,16 @@ c1i [command]
 | Command | Subcommands | Description |
 | :--- | :--- | :--- |
 | `docs` | `search` `page` `endpoints` `endpoint` `openapi` `skill` | Explore API documentation (no auth required). |
-| `auth` | `login` `logout` `status` `whoami` | Manage authentication. |
+| `auth` | `login` `logout` `status` `whoami` `token` | Manage authentication. |
 | `users` | `list` | Search and list C1 users. |
-| `apps` | `list` | List applications. |
+| `apps` | `list` `create` `delete` `set-owners` | Manage applications. |
 | `accounts` | `list` `set-owner` | Manage application accounts. |
 | `entitlements` | `list` | Search and list application entitlements. |
 | `tasks` | `list` `approve` `deny` `comment` | Manage access request tasks. |
 | `requests` | `create grant` `create revoke` | Create access requests. |
 | `connectors` | `list` | List connectors. |
+| `policies` | `list` `search` `get` `create` `update` `delete` `validate-cel` | Manage policies (approval, provisioning, and certification workflows). |
+| `mcp` | `gateway list-tools` `gateway call` | Call the C1 MCP gateway directly (list and invoke tools end to end). |
 | `api` | | Make raw C1 API requests. |
 | `version` | | Print the c1i version. |
 | `completion` | `bash` `fish` `powershell` `zsh` | Generate a shell completion script. |
@@ -166,6 +168,7 @@ c1i auth [command]
 | `logout` | Remove stored credentials for the current URL. |
 | `status` | Check if valid credentials are stored and report the storage backend. |
 | `whoami` | Show the authenticated principal's identity, roles, permissions, and feature flags. |
+| `token` | Print a short-lived OAuth2 bearer token for driving raw API calls yourself. |
 
 ### `login`
 
@@ -231,6 +234,29 @@ c1i auth whoami [flags]
 
 By default, `whoami` returns a compact summary. Use `--verbose` when you need the full role and permission lists.
 
+### `token`
+
+Mint and print a short-lived OAuth2 bearer token from your stored credentials, for driving raw API calls yourself (for example, with `curl`). A new token is minted on each invocation — it is not written to disk.
+
+**Usage:**
+
+```bash
+c1i auth token [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--json` | Also print the token type and absolute expiry (RFC3339), instead of just the access token. |
+
+By default only the access token is printed (newline-terminated), so it composes directly into another command:
+
+```bash
+curl -H "Authorization: Bearer $(c1i auth token)" \
+  https://your-tenant.conductor.one/api/v1/apps
+```
+
+The token is audience-scoped to the C1 API host.
+
 ## Credential storage
 
 c1i reads credentials from the first source that has them, in this order:
@@ -292,6 +318,63 @@ c1i apps list [flags]
 | `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
 | `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
+
+### `create`
+
+Create a new app — a plain, unmanaged container you can register MCP servers under. Only `--display-name` is required; app owners are managed separately via `set-owners`, not at create time.
+
+**Usage:**
+
+```bash
+c1i apps create --display-name <name> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | Display name for the new app. (Required.) |
+| `--description string` | Description for the new app. |
+
+The created app is returned as pretty JSON under an `app` key.
+
+**Example:**
+
+```bash
+APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
+```
+
+### `delete`
+
+Soft-delete an app by ID. The app is marked deleted and drops out of normal listings, but the record is retained for audit.
+
+**Usage:**
+
+```bash
+c1i apps delete <app-id>
+```
+
+### `set-owners`
+
+Set the complete list of owners for an app, replacing any existing owners.
+
+**Usage:**
+
+```bash
+c1i apps set-owners <app-id> --user-id <user-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--user-id strings` | C1 user ID to set as owner (repeatable; replaces the full owner list). (Required.) |
+| `--wait` | Block and poll until every requested owner appears, or `--wait-timeout` elapses. |
+| `--wait-timeout duration` | Max time to wait with `--wait` (default `4m`). |
+
+Owner changes are provisioned asynchronously — this command returns as soon as the request is accepted, but the new owners can take up to a few minutes to actually appear. Pass `--wait` to block until they do.
+
+**Example:**
+
+```bash
+c1i apps set-owners app_abc123 --user-id user_1 --user-id user_2 --wait
+```
 
 ## Accounts
 
@@ -503,6 +586,223 @@ c1i connectors list --app-id <app-id> [flags]
 | `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
 | `--page-token string` | Pagination token for manual pagination. |
 | `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
+
+## Policies
+
+Manage policies — the objects that describe how C1 processes a task (an access request, a certification, a provisioning action): who approves it, what happens on escalation or timeout, and how the underlying resource gets provisioned.
+
+**Usage:**
+
+```bash
+c1i policies [command]
+```
+
+| Subcommand | Description |
+| :--- | :--- |
+| `list` | List all policies. |
+| `search` | Search policies by display name, description, type, or deletion state. |
+| `get` | Get a single policy by ID. |
+| `create` | Create a new policy. |
+| `update` | Update a policy. |
+| `delete` | Soft-delete a policy. |
+| `validate-cel` | Check a CEL condition for compile errors. |
+
+<Warning>
+Creating or updating a policy with an empty (or missing) steps list succeeds with **no validation error**, and silently produces a deny-everything policy. The `create` and `update` commands refuse to send a request with empty or missing steps unless you pass `--allow-deny-all` to confirm that's what you want.
+</Warning>
+
+A policy's shape is deeply nested: `policySteps` holds an ordered list of steps, each one of several types (approval, accept, reject, wait, form), and an approval step's approver is itself one of several kinds (users, manager, group, app owners, self, entitlement owners, expression, webhook, resource owners, agent). Modeling all of that as flags would be unusable, so `create` and `update` take the nested pieces from a JSON file (or `-` for stdin), while flat top-level fields (display name, description, policy type) stay as flags.
+
+### `list`
+
+List every policy in the tenant, auto-paginating through the full result. Outputs NDJSON.
+
+Unlike most list commands, this takes no query filter at all — only pagination. Use `search` for filtering.
+
+**Usage:**
+
+```bash
+c1i policies list [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--page-size int` | Number of results per page (max 100). |
+| `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
+
+### `search`
+
+Search policies by a fuzzy query (display name + description), an exact display-name match, one or more policy types, or include soft-deleted policies. Outputs NDJSON.
+
+**Usage:**
+
+```bash
+c1i policies search [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--query string` | Fuzzy search on display name and description. |
+| `--display-name string` | Exact-ish (case-insensitive) display name match. |
+| `--policy-type strings` | Filter by policy type: `grant`, `revoke`, `certify` (repeatable). |
+| `--include-deleted` | Include soft-deleted policies. This is the only listing command that can find one. |
+| `--exclude-policy-id strings` | Policy ID to exclude from results (repeatable). |
+| `--page-size int` | Number of results per page (5–100). |
+| `--page-token string` | Pagination token for manual pagination. |
+| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
+
+### `get`
+
+Get a single policy by ID.
+
+**Usage:**
+
+```bash
+c1i policies get <policy-id>
+```
+
+Unlike `list` and the default `search`, `get` returns a soft-deleted policy too (with `deletedAt` populated) rather than filtering it out.
+
+### `create`
+
+Create a new policy.
+
+**Usage:**
+
+```bash
+c1i policies create --display-name <name> --policy-type <type> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | Display name for the new policy. |
+| `--description string` | Description for the new policy. |
+| `--policy-type string` | Policy type: `grant`, `revoke`, `certify`. |
+| `--steps-file string` | JSON array: the baseline `policySteps.steps` content (file, or `-` for stdin). |
+| `--rules-file string` | JSON array of routing rules: `[{"condition":"<CEL>","stepKey":"<key>"}]` (file, or `-` for stdin). |
+| `--body-file string` | Full request body, verbatim (file, or `-` for stdin); mutually exclusive with the flags above. |
+| `--allow-deny-all` | Allow creating a policy with no steps (or an explicit deny-all). |
+
+The created policy is returned as pretty JSON.
+
+### `update`
+
+Update a policy.
+
+**Usage:**
+
+```bash
+c1i policies update <policy-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | New display name. |
+| `--description string` | New description. |
+| `--policy-type string` | New policy type: `grant`, `revoke`, `certify` (rarely changed). |
+| `--steps-file string` | JSON array: replaces the baseline `policySteps.steps` content (file, or `-` for stdin). |
+| `--rules-file string` | JSON array: replaces `rules[]` (file, or `-` for stdin). |
+| `--body-file string` | Full policy JSON object, verbatim (file, or `-` for stdin); requires `--update-mask`. |
+| `--update-mask string` | Comma-separated field paths to update (required with `--body-file`; otherwise derived automatically). |
+| `--allow-deny-all` | Allow leaving or setting a policy with no steps. |
+
+Only the fields you pass are changed — this is a partial update, not a full replacement (unless you use `--body-file`).
+
+### `delete`
+
+Soft-delete a policy by ID. The row is retained with `deletedAt` set — this is not a hard delete, and the policy still returns from `get` afterward.
+
+**Usage:**
+
+```bash
+c1i policies delete <policy-id>
+```
+
+A policy referenced by another policy (as a rule's outcome, or as another policy's baseline) can't be deleted while that reference exists — the command reports the referencing policy instead.
+
+### `validate-cel`
+
+Check a CEL expression for compile errors, without creating or updating anything. Useful for testing a rule's `condition` before using it in `create` or `update`.
+
+**Usage:**
+
+```bash
+c1i policies validate-cel <condition>
+```
+
+**Example:**
+
+```bash
+c1i policies validate-cel 'subject.role == "admin"'
+```
+
+Exits `0` for a valid condition, `2` for an invalid one — so `c1i policies validate-cel '<cond>' && ...` only continues past a condition that compiles.
+
+<Note>
+This validates the CEL environment rules run in (`subject`, `account`, `entitlement`, `task`) — not the same environment an approval step's `expression` approver runs in. An expression that's valid in one may not compile in the other.
+</Note>
+
+## MCP gateway
+
+Call the C1 MCP gateway directly over its MCP transport — the same handshake an MCP host performs — to verify what a registered server actually exposes. This closes the configure-then-verify loop: register a server, approve its tools, then list or call them here.
+
+<Note>
+This covers only the `gateway` subcommand. `c1i mcp` also has `servers`, `tools`, `toolsets`, and `bindings` subcommands for managing the MCP surface itself; those aren't covered on this page yet.
+</Note>
+
+**Usage:**
+
+```bash
+c1i mcp gateway [command]
+```
+
+| Subcommand | Description |
+| :--- | :--- |
+| `list-tools` | List the tools the gateway exposes to you. |
+| `call` | Invoke a tool and print its result. |
+
+| Flag | Description |
+| :--- | :--- |
+| `--gateway-url string` | MCP gateway endpoint (default: derived from `--url` by inserting `-mcp` into the host — `https://acme.conductor.one` becomes `https://acme-mcp.conductor.one/v1`). |
+
+Authentication uses your stored c1i credentials — the standard API token is accepted by the gateway, so no extra setup is needed.
+
+### `list-tools`
+
+Run the MCP handshake against the gateway and list the tools it exposes to you. Outputs NDJSON: one row per tool (name, description).
+
+**Usage:**
+
+```bash
+c1i mcp gateway list-tools [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--full` | Include each tool's input JSON schema in the row. |
+
+### `call`
+
+Invoke a tool exposed by the gateway and print its raw MCP result.
+
+**Usage:**
+
+```bash
+c1i mcp gateway call <tool-name> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--args string` | Tool arguments as a JSON object (for example, `'{"id":"abc"}'`). |
+
+Find tool names and their input schemas with `c1i mcp gateway list-tools --full`.
+
+**Example:**
+
+```bash
+c1i mcp gateway call my_tool --args '{"id":"abc"}'
+```
 
 ## API
 
