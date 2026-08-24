@@ -1,0 +1,162 @@
+---
+title: Set up the Outreach MCP server
+description: Connect Outreach to C1 with per-user OAuth, then register the server and govern its tools.
+og:title: Set up the Outreach MCP server
+og:description: Connect Outreach to C1 with per-user OAuth, then register the server and govern its tools.
+sidebarTitle: Outreach
+---
+
+{/* Editor Refresh: 2026-08-24 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+The Outreach MCP server lets you govern access to your sales engagement records — prospects, accounts, opportunities, sequences, tasks, calls, and mailings — as tools your AI clients call through C1.
+
+Outreach authenticates with per-user OAuth. Each person authorizes with their own Outreach account, so every tool call runs under that user's Outreach identity and permissions.
+
+## How C1 connects to Outreach
+
+C1 hosts the Outreach MCP server, so your users' AI clients only ever see MCP tools — they never call Outreach directly. When an AI client calls one of these tools, C1 makes the matching request to the Outreach API using the credentials you configure here, then returns the result to the AI client.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- You need access to the [Outreach Development Portal](https://developers.outreach.io) and permission to create an app there.
+- Decide which scopes to grant before you create the app. Outreach applies scopes strictly — see [Outreach scopes](#outreach-scopes).
+
+## Create an Outreach app
+
+Create the app in Outreach and select its scopes before you configure authentication in C1.
+
+<Steps>
+<Step>
+Sign in to the [Outreach Development Portal](https://developers.outreach.io) and create a new app. See Outreach's [API access](https://developers.outreach.io/api/oauth) documentation for the full procedure.
+</Step>
+<Step>
+Set the **Redirect URI** exactly to:
+
+```
+https://accounts.conductor.one/auth/callback
+```
+
+The value must match character for character. A trailing slash causes the authorization to fail.
+</Step>
+<Step>
+On the app's **API access** tab, select every scope you plan to request. Start with the [default scopes](#default-scopes) below, and add optional scopes if you want the write or delete tools.
+</Step>
+<Step>
+Save the app, then copy its **Client ID** and **Client Secret**. Outreach shows the secret only once.
+</Step>
+</Steps>
+
+Your app is ready to authorize users once its scopes are selected and its redirect URI is saved.
+
+## Outreach scopes
+
+Outreach scope strings pair a record type with a permission — `prospects.read`, `prospects.write`, `prospects.delete`. Outreach applies them strictly, in ways that are easy to miss.
+
+<Note>
+Outreach rejects the **entire** authorization if any single requested scope is not selected on your app, and the error message names no scope:
+
+```
+The requested scope is invalid, unknown, or malformed.
+```
+
+Select every scope you plan to request before anyone tries to connect.
+</Note>
+
+- **Scopes are not additive.** Granting `prospects.write` does not also grant `prospects.read`. Select each permission you need.
+- **`all` is its own scope, not a shorthand.** Selecting `read`, `write`, and `delete` for a record type does not make `<record>.all` grantable — Outreach matches the requested scope against the exact strings selected on your app. C1 never requests `all`, so you do not need to select it.
+
+The lists below carry only the permissions C1 uses, so a record type C1 only reads appears with `read` and no `write`. That reflects the tools C1 exposes, not the permissions Outreach offers on that record type.
+
+### Default scopes
+
+C1 requests these 15 read scopes automatically. They cover the core sales engagement records and are read-only:
+
+`accountNotes.read`, `accounts.read`, `calls.read`, `emailAddresses.read`, `mailings.read`, `opportunities.read`, `prospectNotes.read`, `prospects.read`, `recipients.read`, `sequenceSteps.read`, `sequences.read`, `tasks.read`, `teams.read`, `templates.read`, `users.read`
+
+### Optional scopes
+
+C1 never requests these. To enable the tools they authorize, select the scope on your Outreach app **and** add it to the scopes field when you configure authentication in C1. Grant only what you need.
+
+**Read the remaining record types** — call and task settings, sequence states and templates, mailboxes, products, personas, audit logs, and more:
+
+`auditLogs.read`, `batches.read`, `callDispositions.read`, `callPurposes.read`, `contentCategories.read`, `events.read`, `favorites.read`, `kaiaRecordings.read`, `mailboxes.read`, `opportunityStages.read`, `personas.read`, `phoneNumbers.read`, `products.read`, `profiles.read`, `rulesets.read`, `sequenceStates.read`, `sequenceTemplates.read`, `snippets.read`, `stages.read`, `taskDispositions.read`, `taskPriorities.read`, `taskPurposes.read`
+
+**Create and update records:**
+
+`accountNotes.write`, `accounts.write`, `batches.write`, `callDispositions.write`, `callPurposes.write`, `calls.write`, `contentCategories.write`, `emailAddresses.write`, `favorites.write`, `mailboxes.write`, `mailings.write`, `opportunities.write`, `opportunityStages.write`, `personas.write`, `phoneNumbers.write`, `products.write`, `profiles.write`, `prospectNotes.write`, `prospects.write`, `recipients.write`, `rulesets.write`, `sequenceStates.write`, `sequenceSteps.write`, `sequenceTemplates.write`, `sequences.write`, `snippets.write`, `stages.write`, `taskDispositions.write`, `taskPurposes.write`, `tasks.write`, `teams.write`, `templates.write`, `users.write`
+
+**Delete records:**
+
+`accountNotes.delete`, `accounts.delete`, `callDispositions.delete`, `callPurposes.delete`, `calls.delete`, `contentCategories.delete`, `emailAddresses.delete`, `favorites.delete`, `mailboxes.delete`, `opportunities.delete`, `opportunityStages.delete`, `personas.delete`, `phoneNumbers.delete`, `products.delete`, `profiles.delete`, `prospectNotes.delete`, `prospects.delete`, `recipients.delete`, `rulesets.delete`, `sequenceStates.delete`, `sequenceTemplates.delete`, `sequences.delete`, `snippets.delete`, `stages.delete`, `taskDispositions.delete`, `taskPurposes.delete`, `tasks.delete`, `teams.delete`, `templates.delete`
+
+<Note>
+Scope changes take effect the next time a user connects. If you add a scope after users have already authorized, each user must reconnect their Outreach account to grant it.
+</Note>
+
+## Register the server in C1
+
+With your Outreach app ready, register the server and provide your credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Outreach** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your app's **client ID** and **client secret**.
+</Step>
+<Step>
+**Optional.** Add any [optional scopes](#optional-scopes) to the scopes field. The field is editable and is pre-filled with the default scopes.
+</Step>
+<Step>
+Save your changes.
+</Step>
+</Steps>
+
+The first time a user calls an Outreach tool from their AI client, they're redirected to Outreach to sign in and approve the connection, then returned to C1.
+
+## How Outreach credentials are shared
+
+Each user authorizes with their own Outreach account, so tool calls run under that user's Outreach identity and inherit only the access they already have. Outreach attributes each action to the individual user, and C1 attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Outreach. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call an Outreach tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if authentication isn't complete yet, so seeing discovered tools doesn't confirm a user has authorized or that credentials are valid. You confirm access when an approved user successfully calls an Outreach tool from their AI client.
+</Note>
+
+## Manage your Outreach credentials
+
+- **Rotate the client secret** in the Outreach Development Portal, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by changing the selected scopes on your Outreach app and updating the scopes field in C1 to match. Users reconnect to pick up the change.
+- **Revoke access** by deleting the app in the Outreach Development Portal, which invalidates every user's connection at once.
+
+## Frequently asked questions about the Outreach MCP server
+
+<AccordionGroup>
+  <Accordion title="Why does authorization fail with an invalid scope error?">
+    At least one requested scope is not selected on your Outreach app. Outreach rejects the whole request when any single scope is missing, and the message names no scope, so check the app's **API access** tab against the full list of scopes in C1's scopes field — including the default scopes.
+
+    Two mismatches cause this most often: requesting an `all` scope when only `read`, `write`, or `delete` are selected, and a record type where one permission was selected but another was not.
+  </Accordion>
+
+  <Accordion title="Can I request fewer than the default scopes?">
+    Yes. The scopes field is editable. Removing a `read` scope disables every tool that reads that record type, since Outreach scopes are not additive. To reduce the grant, remove whole record types rather than changing permission levels.
+  </Accordion>
+
+  <Accordion title="Do I need to select the all permission on my app?">
+    No. C1 never requests an `all` scope. Select `read`, `write`, and `delete` for the record types you want.
+  </Accordion>
+</AccordionGroup>
