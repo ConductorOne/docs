@@ -47,14 +47,28 @@ the project admin role covers all of these.
 - Paginates `/v2/mgmt/user/search` via the request-body `offset`/`limit`
   fields (page size 100), terminating on the response `total`.
 - Lists tenants, roles, and permissions in single unpaginated calls.
-- Resolves role and permission grants from the inline `roleNames`,
-  `userTenants[].roleNames`, and `permissionNames` fields on the synced
-  records (cached once per sync).
+- Resolves tenant and role grants with a server-side filtered
+  `/v2/mgmt/user/search` per resource — `tenantIds` for tenant membership,
+  `tenantRoleNames` for tenant-scoped roles, and `roleNames` for project-level
+  roles — so no full user directory is cached in the session store.
+- Reports tenant membership as direct membership only, via
+  `includeSubTenants: false`. A user's `userTenants[]` lists only the tenants
+  they belong to directly, so members of a child tenant are not reported
+  against its parent.
+- Re-checks project-level role holders against the user's project `roleNames`.
+  The `roleNames` filter matches a role name at any scope, so a user holding
+  the role only inside a tenant would otherwise be reported as holding the
+  project-level role of the same name.
+- Resolves permission grants from the inline `permissionNames` on the role
+  list (cached once per sync; the role list is small and bounded).
 - Treats HTTP 429 and 5xx as transient and retries with exponential back-off.
 - Caps concurrency at `maxParallelFetches: 6`.
 
 ## Provisioning
 
+- Every grant and revoke first resolves the principal's login via
+  `GET /v1/mgmt/user?userId=…`, because the mutation endpoints below take a
+  `loginId` while user resources are keyed on the stable `userId`.
 - **Role assignment** (`role` → `assigned`): grants and revokes project-level
   and tenant-scoped roles via `/v1/mgmt/user/update/role/add` and
   `/remove` (tenant-scoped roles include the `tenantId`).
