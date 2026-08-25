@@ -91,19 +91,15 @@ Read two fields from that response:
 
 ## Enable the Google Cloud APIs
 
-Enable all six. In the console, go to **APIs & Services** > **Library**, search for the API by the name in the first column, and select **Enable**. The service ID is the identifier you use with the `gcloud` CLI.
+Enable both. In the console, go to **APIs & Services** > **Library**, search for the API by the name in the first column, and select **Enable**. The service ID is the identifier you use with the `gcloud` CLI.
 
 | API to enable | Service ID | Why |
 | :--- | :--- | :--- |
-| Discovery Engine API | `discoveryengine.googleapis.com` | Backs Gemini Enterprise apps and data stores |
-| Connectors API | `connectors.googleapis.com` | Backs the tool actions a data connector exposes |
-| Application Integration API | `integrations.googleapis.com` | Backs the tool actions a data connector exposes |
-| Secret Manager API | `secretmanager.googleapis.com` | Stores the connector's OAuth credentials |
-| Identity and Access Management (IAM) API | `iam.googleapis.com` | Resolves the roles above |
+| Discovery Engine API | `discoveryengine.googleapis.com` | Backs Gemini Enterprise apps, data stores, and tool discovery |
 | Organization Policy API | `orgpolicy.googleapis.com` | Required to read or change the policy in the next section |
 
 <Note>
-Google's setup documentation for custom MCP servers does not list any APIs. Tool discovery fails until `connectors.googleapis.com`, `integrations.googleapis.com`, and `secretmanager.googleapis.com` are enabled, so enable all six.
+Google's setup documentation for custom MCP servers does not list any APIs, so this list was established by testing, and it is deliberately short. The Connectors, Application Integration, Secret Manager, and IAM APIs are **not** required. With all four disabled, creating the data connector, authorizing it, discovering tools, calling them, and running the role commands above all succeed.
 </Note>
 
 To enable them from the command line instead:
@@ -111,10 +107,6 @@ To enable them from the command line instead:
 ```bash
 gcloud services enable \
   discoveryengine.googleapis.com \
-  connectors.googleapis.com \
-  integrations.googleapis.com \
-  secretmanager.googleapis.com \
-  iam.googleapis.com \
   orgpolicy.googleapis.com \
   --project=YOUR_PROJECT_ID
 ```
@@ -125,7 +117,7 @@ To confirm which APIs are enabled on the project:
 gcloud services list --enabled --project=YOUR_PROJECT_ID
 ```
 
-Your project can now create data connectors and expose their tool actions.
+Your project can now create custom MCP data connectors.
 
 ## Allow custom MCP data connectors
 
@@ -204,13 +196,13 @@ If it is set, add the two hostnames your tenant uses, `<your-tenant>-mcp.conduct
 
 Gemini Enterprise authenticates each user to C1 with the OAuth 2.0 authorization code flow, and it needs an OAuth client that already exists. It does not register one itself, and it does not publish a client identity you can point at.
 
-Google is the party that should publish that document, since Gemini Enterprise is the client it describes. Today it does not: `/.well-known/oauth-client-metadata` returns `404` on `vertexaisearch.cloud.google.com`, `cloud.google.com`, `discoveryengine.googleapis.com`, and `accounts.google.com`. Google's instructions are to register the MCP server as an OAuth client with your identity provider and take a client ID from it.
+C1 does not hand out an opaque client ID from a registration form. Instead, the client ID **is** a URL: it points at a small public JSON file describing the client, called a *Client ID Metadata Document*. C1 fetches that URL to learn who the client is, which means someone has to host the document.
 
-Until Google publishes one, somebody else has to host it on Google's behalf.
+Google is the party that should host it, since Gemini Enterprise is the client it describes. Today it does not, and Google's own instructions are to register the MCP server as an OAuth client with your identity provider and take a client ID from it. Until Google publishes a document, somebody else has to host one on Google's behalf.
 
 | Who hosts it | Client ID | Status |
 | :--- | :--- | :--- |
-| Google | A Google-published URL | Not published. This is the outcome to prefer |
+| Google | A Google-published URL | Not published. The preferred outcome |
 | You | The URL you publish it at | Works today |
 | C1 | `https://<your-tenant>.conductor.one/auth/v1/client-metadata/gemini-enterprise` | Not available yet |
 
@@ -220,12 +212,6 @@ Host the document yourself for now. The C1-hosted document has not shipped, so e
 When Google publishes a client metadata document for Gemini Enterprise, use that URL as the client ID and retire whatever you were hosting.
 </Note>
 
-Whichever you use, confirm the URL resolves before you continue. It returns JSON whose `client_id` matches the URL you requested:
-
-```bash
-curl -s https://YOUR_CLIENT_METADATA_URL
-```
-
 <Tip>
 This client has no secret, so nothing expires and nothing needs rotating. Configure it once and it keeps working.
 
@@ -234,11 +220,13 @@ Do not register a client through C1's dynamic registration endpoint instead. An 
 
 <AccordionGroup>
 <Accordion title="Host the client metadata document yourself">
-Publish this JSON at any public HTTPS URL you control. The `client_id` inside the document must exactly equal the URL it is served from, and `redirect_uris` must contain Google's redirect endpoint verbatim.
+Publish this JSON at any public HTTPS URL you control. Two fields are unforgiving: `client_id` must exactly equal the URL the document is served from, and `redirect_uris` must contain Google's redirect endpoint verbatim.
+
+Save the file as `gemini-enterprise-oauth-client.json`. The Cloud Storage commands below serve it at `https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-client.json`, so set `client_id` to exactly that, with your own bucket name:
 
 ```json
 {
-  "client_id": "https://<your-domain>/gemini-enterprise-oauth-client.json",
+  "client_id": "https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-client.json",
   "client_name": "Gemini Enterprise",
   "client_uri": "https://cloud.google.com/gemini/enterprise",
   "redirect_uris": ["https://vertexaisearch.cloud.google.com/oauth-redirect"],
@@ -248,10 +236,13 @@ Publish this JSON at any public HTTPS URL you control. The `client_id` inside th
 }
 ```
 
-C1 fetches this document over the public internet, so it must be reachable without authentication. A Cloud Storage bucket works:
+C1 fetches this document over the public internet, so it must be reachable without authentication. A Cloud Storage bucket works. Replace `YOUR_BUCKET` with a bucket name you choose, which must be globally unique across all of Cloud Storage:
 
 ```bash
-gcloud storage buckets create gs://YOUR_BUCKET   --project=YOUR_PROJECT_ID --location=us-central1 --uniform-bucket-level-access
+gcloud storage buckets create gs://YOUR_BUCKET \
+  --project=YOUR_PROJECT_ID \
+  --location=us-central1 \
+  --uniform-bucket-level-access
 ```
 
 ```bash
@@ -259,16 +250,24 @@ gcloud storage cp gemini-enterprise-oauth-client.json gs://YOUR_BUCKET/
 ```
 
 ```bash
-gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET   --member=allUsers --role=roles/storage.objectViewer
+gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET \
+  --member=allUsers \
+  --role=roles/storage.objectViewer
 ```
 
-The object is then served at `https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-client.json`, which is the value you use as the client ID. Confirm it returns your JSON before continuing.
-
 Two organization policies can block that public binding. See **Allow public access to the document** below.
+
+Confirm the document resolves before you continue. It returns the JSON you published, and its `client_id` matches the URL you requested:
+
+```bash
+curl -s https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-client.json
+```
+
+That URL is the value you use as the client ID.
 </Accordion>
 
 <Accordion title="Allow public access to the document">
-Both of these are separate from the constraint in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors), and both need `roles/orgpolicy.policyAdmin`.
+The two constraints below are separate from the constraint in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors), and both need `roles/orgpolicy.policyAdmin`.
 
 **Domain restricted sharing.** If `constraints/iam.allowedPolicyMemberDomains` is enforced, granting `allUsers` fails with:
 
@@ -289,7 +288,25 @@ spec:
 This override is project-wide, not bucket-scoped. Any resource in the project can then be shared publicly. Publish the document from a project dedicated to it rather than one holding other data, and remove the override as soon as you stop hosting the document.
 </Warning>
 
-**Public access prevention.** If `constraints/storage.publicAccessPrevention` is enforced, the binding is refused regardless. Check both with `gcloud org-policies describe <constraint> --project=YOUR_PROJECT_ID --effective`.
+**Public access prevention.** If `constraints/storage.publicAccessPrevention` is enforced, the binding is refused regardless of the constraint above. Save this as `pap.yaml` and apply it with `gcloud org-policies set-policy pap.yaml`:
+
+```yaml
+name: projects/YOUR_PROJECT_ID/policies/storage.publicAccessPrevention
+spec:
+  rules:
+    - enforce: false
+```
+
+Check the effective value of either constraint with:
+
+```bash
+gcloud org-policies describe storage.publicAccessPrevention \
+  --project=YOUR_PROJECT_ID --effective
+```
+
+<Note>
+Organization policy changes take a minute or two to take effect, in both directions. After you apply the override, the binding can still fail with the same `412` for a short while, and `describe --effective` may report the new value before enforcement catches up. Retry the binding rather than assuming the override is wrong, and confirm success by fetching the document URL.
+</Note>
 </Accordion>
 </AccordionGroup>
 
@@ -347,14 +364,16 @@ Select **Verify Auth**. A window opens for you to sign in through your identity 
 Select **Continue**.
 </Step>
 <Step>
-Enter your **Data connector name**.
+Enter your **Data connector name**, then select **Continue**.
+
+Leave **Location** as it is, and leave **Sensitive data protection policy** empty unless your organization requires one.
 </Step>
 <Step>
-Select **Create**.
+On **Select the pricing model**, leave **General pricing** selected unless your organization has chosen a subscription, then select **Create**.
 </Step>
 </Steps>
 
-The form shows **Successfully logged in** after you authorize, and the connector reaches the **Active** state a minute or two after you create it.
+The form shows **Successfully logged in** after you authorize. The connector is created immediately and reaches the **Active** state within a minute.
 
 ## Enable the actions
 
@@ -427,9 +446,9 @@ Agent Registry gives your organization a catalog of approved MCP servers, and Ag
 Adding them does not change how these tool calls are governed. Google's documentation states that traffic to MCP servers added as a data connector does not pass through Agent Gateway, and Agent Gateway policies do not apply to it. C1 governs the tool calls. Use this path when you want the C1 gateway listed in a shared catalog alongside your other approved servers, not to add enforcement.
 </Note>
 
-<Warning>
+<Note>
 Register the server in the catalog, but do not import it as your data connector. Importing from Agent Registry produces a connector whose tool discovery fails. Create the connector from the **Custom MCP Server** card as described in [Create the data store](#create-the-data-store), and treat the catalog entry as a separate, listing-only exercise.
-</Warning>
+</Note>
 
 For the catalog entry, follow Google's own documentation, which stays current with the regional rules and command surface:
 
@@ -450,19 +469,19 @@ Four things that are easy to miss on that path:
 | `Operation denied by org policy ... disableCustomMcpServerConnector` | The organization policy blocks custom MCP data connectors, or the override has not propagated. | Turn the constraint off and wait several minutes. See [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors). |
 | The override is set but the denial persists | An enforced organization- or folder-level policy overrides your project setting. | Re-run the `describe --effective` command. If it still reports `enforce: true`, ask your organization policy administrator to add the project exception. |
 | `PERMISSION_DENIED` on `gcloud services enable` | The caller lacks `roles/serviceusage.serviceUsageAdmin` on the project. | Grant it. See [Required roles](#required-roles). |
-| `404` on the client metadata URL | Your tenant is not running a release that publishes the Gemini Enterprise client document. | [Contact the C1 support team](mailto:support@c1.ai). |
+| `404` on the client metadata URL | Nothing is hosting a document at that URL, or the file is not publicly readable. | Confirm you are using a URL you host yourself. The C1-hosted URL is not available yet. See [Get the OAuth client ID](#get-the-oauth-client-id). |
 | **We encountered some problems during authentication** | The client ID is wrong, or the sign-in window was closed or blocked. | Confirm the client ID resolves, allow popups for the console, and retry **Verify Auth**. |
 | The form will not accept an empty **Client Secret** | The console treats the field as required. | Enter `none`, as in [Create the data store](#create-the-data-store). C1 never reads it. |
 | **Failed to reload custom actions** on a connector imported from Agent Registry | Registry-imported connectors fail discovery with `FAILED_PRECONDITION`. | Recreate the data store from the **Custom MCP Server** card. See [Create the data store](#create-the-data-store). |
-| **Failed to reload custom actions** | The connector is still creating, or the tool action APIs are not enabled. | Wait for **Active**, then confirm `connectors.googleapis.com`, `integrations.googleapis.com`, and `secretmanager.googleapis.com` are enabled. |
+| **Failed to reload custom actions** | The connector is still creating, or `discoveryengine.googleapis.com` is not enabled. | Wait for the connector to reach **Active**, then confirm the API is enabled. See [Enable the Google Cloud APIs](#enable-the-google-cloud-apis). |
 | **Reload custom actions** shows no error and no actions | Most often the reload is still running. It takes about 30 seconds. | Wait for the **Custom actions reloaded** confirmation, then reload the page. |
 | The action list stays empty after the reload finishes | C1 returned an empty tool list for the authorizing user, which happens when that user has no toolset. | Assign the authorizing user an access profile that includes the tools you expect, then reload again. See [Tools and toolsets](/product/admin/tools-and-toolsets). |
 | The assistant answers that it has "no ConductorOne integration" | The user has not authorized the connector in the web app. Enabling actions authorizes nobody. | In the message box, open **Connectors** and select **Authorize** beside your connector. See [Verify the Gemini Enterprise connection](#verify-the-gemini-enterprise-connection). |
 | The assistant picks a web search instead of a C1 action | No enabled action matches the request, so nothing is callable. | Enable the actions the request needs, and name the connector in the prompt. |
 | A user's tool calls are denied while another user's succeed | C1 is enforcing that user's access profile. This is expected behavior. | Check the denial reason in the audit log. See [Audit AI tool usage](/product/admin/audit-ai-tool-usage). |
-| Authorization works, then breaks about an hour later | The connector uses a dynamically registered client whose secret expired. | Use the C1-published client ID. See [Get the OAuth client ID](#get-the-oauth-client-id). |
+| Authorization works, then breaks about an hour later | The connector uses a dynamically registered client whose secret expired. | Host a Client ID Metadata Document and use its URL as the client ID instead of registering dynamically. See [Get the OAuth client ID](#get-the-oauth-client-id). |
 | Tool calls fail immediately after a working **Verify Auth** | The token is not bound to your MCP endpoint. | Set **Authorization URL Parameters** to `&resource=https://<your-tenant>-mcp.conductor.one/v1`. |
-| `failed to fetch client metadata` | C1 fetches its own client metadata document over the public internet, and your tenant hostname does not resolve publicly. | This affects self-hosted installations rather than C1 cloud tenants. [Contact the C1 support team](mailto:support@c1.ai). |
+| `failed to fetch client metadata` | C1 fetches its own client metadata document over the public internet, and your tenant hostname does not resolve publicly. | This affects self-managed C1 deployments rather than C1 cloud tenants. [Contact the C1 support team](mailto:support@c1.ai). |
 
 <Note>
 To correct an authentication value, edit the existing connector's settings rather than recreating it. The connector name cannot be changed after creation, as noted in [Create the data store](#create-the-data-store), so changing it means creating a new data store and removing the old one.
