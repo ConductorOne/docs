@@ -462,13 +462,13 @@ Organization policy changes take a minute or two to take effect, in both directi
 Connect the C1 MCP gateway to your Gemini Enterprise app.
 
 <Note>
-This section and the next are console-only. The public Discovery Engine API refuses to create this connector:
+Creating the connector is the one step you cannot script. The public Discovery Engine API refuses it:
 
 ```text
 Data Connector parameters must be one of: oauth_access_token but got: instance_uri
 ```
 
-It accepts only a pre-obtained access token, not the OAuth client configuration, so it cannot run the per-user authorization this integration depends on. The method behind **Reload custom actions** is not on the public endpoint either. Every other step in this guide can be scripted.
+It accepts only a pre-obtained access token, not the OAuth client configuration, so it cannot run the per-user authorization this integration depends on. Discovering the tool list is console-only too, because the method behind **Reload custom actions** is not on the public endpoint. Choosing which actions are enabled, however, can be scripted once the tools are discovered. See [Enable the actions](#enable-the-actions).
 </Note>
 
 <Warning>
@@ -594,6 +594,59 @@ Select **Enable actions**.
 </Steps>
 
 The actions you selected are now enabled on the connector. No one can call them yet: each user must authorize the connector themselves, which is the first part of [Verify the Gemini Enterprise connection](#verify-the-gemini-enterprise-connection).
+
+### Set the enabled actions from the command line
+
+Once the tools are discovered, the enabled set is an ordinary field you can write, which is easier to keep consistent across environments than clicking through the table. Read the current list first:
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/collections/YOUR_COLLECTION_ID/dataConnector"
+```
+
+`dynamicTools` holds every discovered tool and `bapConfig.enabledActions` holds the enabled ones. Write a new set with a `PATCH`, sending the complete list, since it replaces rather than merges:
+
+```bash
+curl -s -X PATCH \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  -H "Content-Type: application/json" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/collections/YOUR_COLLECTION_ID/dataConnector?updateMask=bapConfig.enabledActions" \
+  -d '{
+    "bapConfig": {
+      "enabledActions": [
+        "search_tools",
+        "execute",
+        "list_guides",
+        "load_guide",
+        "create_vfs",
+        "create_vfs_artifact",
+        "list_vfs_files",
+        "get_vfs_download_url"
+      ]
+    }
+  }'
+```
+
+Your collection ID is the one shown as **Collection ID** on the data store's **Details** tab.
+
+### Reach every tool without spending your action budget
+
+The C1 gateway publishes far more tools than the 100 a data store can enable. Rather than choosing a hundred of them, enable the eight tools above. They let the agent find and run any tool your access profiles allow:
+
+| Tool | What it does |
+| :--- | :--- |
+| `search_tools` | Finds the right tool for a task across everything you can reach, and returns its input and output schema |
+| `execute` | Runs a short TypeScript program that calls those tools, so several calls happen in one step |
+| `list_guides`, `load_guide` | Fetch usage guides for the more involved flows |
+| `create_vfs`, `create_vfs_artifact`, `list_vfs_files`, `get_vfs_download_url` | Give that program a scratch filesystem, and hand results back as files |
+
+Add whichever named C1 actions your users ask for by name on top of those, and the rest stay reachable through `search_tools`.
+
+<Note>
+The enabled set still only decides what is offered. Every call is evaluated against the calling user's access profiles, so this changes what the agent can find, never what a person is allowed to do.
+</Note>
 
 <Tip>
 The console toast is not a reliable signal. To see whether a reload actually succeeded, read the audit log:
