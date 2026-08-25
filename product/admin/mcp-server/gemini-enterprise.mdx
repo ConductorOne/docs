@@ -24,7 +24,7 @@ Setup spans two products. Some stages depend on someone other than you, so line 
 | [Enable the Google Cloud APIs](#enable-the-google-cloud-apis) | Google Cloud | `roles/serviceusage.serviceUsageAdmin` |
 | [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors) | Google Cloud | An **organization** policy administrator |
 | [Prepare Gemini Enterprise](#prepare-gemini-enterprise) | Gemini Enterprise | A Gemini Enterprise subscription |
-| [Get the OAuth client ID](#get-the-oauth-client-id) | C1 | Nothing |
+| [Get the OAuth client ID](#get-the-oauth-client-id) | C1 and Google Cloud | `roles/storage.admin`, if you host the document yourself |
 | [Create the data store](#create-the-data-store) | Gemini Enterprise | `roles/discoveryengine.editor` |
 | [Sign in to the web app](#sign-in-to-the-web-app) | Gemini Enterprise | A licensed user |
 | [Enable the actions](#enable-the-actions) | Gemini Enterprise | Tool access already granted in C1 |
@@ -36,12 +36,42 @@ Confirm all of these before you start. The organization policy change in particu
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
 - **The users who will use Gemini Enterprise need C1 tool access already.** Their access profiles determine which tools they can call, and a user with no toolset sees no tools at all. See [Tools and toolsets](/product/admin/tools-and-toolsets).
-- A Google Cloud project with a Gemini Enterprise app already created. See Google's [Create a Gemini Enterprise app](https://docs.cloud.google.com/gemini/enterprise/docs/create-app) documentation.
-- A Gemini Enterprise subscription with licenses available to assign. A new app starts with no users licensed, and both steps in [Prepare Gemini Enterprise](#prepare-gemini-enterprise) must be done before you create the data store.
+- A Google Cloud project with a Gemini Enterprise app already created. In the console, open **Gemini Enterprise** and select **Create app**, or see Google's [Create a Gemini Enterprise app](https://docs.cloud.google.com/gemini/enterprise/docs/create-app) documentation. There is a command-line alternative in [Enable the Google Cloud APIs](#enable-the-google-cloud-apis).
+- A Gemini Enterprise subscription with licenses available to assign. A new app starts with no users licensed. The identity provider must be set before you create the data store, and licenses must be assigned before tool discovery will work. Both are in [Prepare Gemini Enterprise](#prepare-gemini-enterprise).
 - Someone who holds `roles/orgpolicy.policyAdmin` at the organization level. Project **Owner** does not include it, and a project-level grant is not sufficient for the policy change below.
 - **Optional.** The [gcloud CLI](https://cloud.google.com/sdk/docs/install), authenticated with `gcloud auth login`, if you prefer the command line for the Google Cloud steps.
 
-### Required roles
+## Collect the values you'll reuse
+
+The steps below reuse these values. Collect them once.
+
+| Value | Where to get it | Example |
+| :--- | :--- | :--- |
+| **Tenant** | The subdomain of your C1 URL. It is also the prefix of your MCP server URL. | `acme` |
+| **MCP server URL** | In C1, open your user profile menu and select **AI & API** > **AI connections**. Copy the URL shown at the top of the page. | `https://acme-mcp.conductor.one/v1` |
+| **Project ID** | The Google Cloud console project picker, or `gcloud config get-value project`. | `acme-gemini` |
+| **Project number** | `gcloud projects describe YOUR_PROJECT_ID --format="value(projectNumber)"`. This is not the same as the project ID, and a few API calls need it. | `514280176422` |
+| **Your email** | The Google identity you run these commands as, and the first person to be licensed. | `admin@acme.com` |
+| **App location** | At the top of the Gemini Enterprise **Apps** page, next to **Current location**. | `global` |
+
+<Note>
+The commands in this guide use `global`, which is what most setups run. If your app is in a different location, substitute it everywhere `locations/global` appears.
+</Note>
+
+Your OAuth endpoints follow from the tenant. Confirm them against your tenant's published metadata:
+
+```bash
+curl -s https://<your-tenant>-mcp.conductor.one/.well-known/oauth-authorization-server
+```
+
+Read two fields from that response:
+
+| Field in the response | Value for tenant `acme` |
+| :--- | :--- |
+| `authorization_endpoint` | `https://acme.conductor.one/auth/v1/authorize` |
+| `token_endpoint` | `https://acme.conductor.one/auth/v1/token` |
+
+## Required roles
 
 Grant these on the Google Cloud project, except where noted.
 
@@ -61,37 +91,13 @@ gcloud projects get-iam-policy YOUR_PROJECT_ID \
   --format="value(bindings.role)"
 ```
 
-To grant a project role:
+To grant a role in the console, go to **IAM & Admin** > **IAM**, select **Grant access**, enter the email, and choose the role. To grant one from the command line:
 
 ```bash
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="user:YOUR_EMAIL" \
   --role="roles/discoveryengine.editor"
 ```
-
-## Collect the values you'll reuse
-
-The steps below reuse these values. Collect them once.
-
-| Value | Where to get it | Example |
-| :--- | :--- | :--- |
-| **Tenant** | The subdomain of your C1 URL. It is also the prefix of your MCP server URL. | `acme` |
-| **MCP server URL** | In C1, open your user profile menu and select **AI & API** > **AI connections**. Copy the URL shown at the top of the page. | `https://acme-mcp.conductor.one/v1` |
-| **Project ID** | The Google Cloud console project picker, or `gcloud config get-value project`. | `acme-gemini` |
-| **App location** | At the top of the Gemini Enterprise **Apps** page, next to **Current location**. Needed only for [Optional: Govern the server through Agent Registry](#optional-govern-the-server-through-agent-registry). | `global` |
-
-Your OAuth endpoints follow from the tenant. Confirm them against your tenant's published metadata:
-
-```bash
-curl -s https://YOUR_TENANT-mcp.conductor.one/.well-known/oauth-authorization-server
-```
-
-Read two fields from that response:
-
-| Field in the response | Value for tenant `acme` |
-| :--- | :--- |
-| `authorization_endpoint` | `https://acme.conductor.one/auth/v1/authorize` |
-| `token_endpoint` | `https://acme.conductor.one/auth/v1/token` |
 
 ## Enable the Google Cloud APIs
 
@@ -124,6 +130,30 @@ gcloud services list --enabled --project=YOUR_PROJECT_ID
 ```
 
 Your project can now create custom MCP data connectors.
+
+<Accordion title="Create the Gemini Enterprise app from the command line">
+If you do not already have an app, create one after the APIs are enabled. There is no `gcloud` surface for this, so call the API directly:
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  -H "Content-Type: application/json" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/collections/default_collection/engines?engineId=c1-gemini-app" \
+  -d '{
+    "displayName": "c1-gemini-app",
+    "solutionType": "SOLUTION_TYPE_SEARCH",
+    "industryVertical": "GENERIC",
+    "appType": "APP_TYPE_INTRANET",
+    "searchEngineConfig": {
+      "searchTier": "SEARCH_TIER_ENTERPRISE",
+      "searchAddOns": ["SEARCH_ADD_ON_LLM"]
+    }
+  }'
+```
+
+An app created this way has no subscription attached. Add one under **Manage users** in the console before you assign licenses.
+</Accordion>
 
 ## Allow custom MCP data connectors
 
@@ -184,7 +214,7 @@ gcloud org-policies set-policy policy.yaml
 Re-run the `describe` command above. The effective policy reports `enforce: false`, and your project can create custom MCP data connectors.
 
 <Note>
-Allow several minutes for the change to propagate. Until it does, the console returns the same denial message, so a failure immediately after you apply the policy does not mean the policy is wrong.
+Organization policy changes take a minute or two to take effect. Until then the console returns the same denial message, so a failure immediately after you apply the policy does not mean the policy is wrong.
 </Note>
 
 <Accordion title="If your organization restricts outbound hostnames">
@@ -197,12 +227,22 @@ gcloud org-policies describe discoveryengine.allowedEgressFqdns \
 
 If the constraint has never been set, this command returns `NOT_FOUND: Requested entity was not found`. That is the healthy answer and means nothing is restricting egress.
 
-If it is set, add the two hostnames your tenant uses, `<your-tenant>-mcp.conductor.one` and `<your-tenant>.conductor.one`. Use hostnames only, not full URLs.
+If it is set, add the two hostnames your tenant uses. Use hostnames only, not full URLs. Save this as `egress.yaml` and apply it with `gcloud org-policies set-policy egress.yaml`, keeping any values your organization already allows:
+
+```yaml
+name: projects/YOUR_PROJECT_ID/policies/discoveryengine.allowedEgressFqdns
+spec:
+  rules:
+    - values:
+        allowedValues:
+          - <your-tenant>-mcp.conductor.one
+          - <your-tenant>.conductor.one
+```
 </Accordion>
 
 ## Prepare Gemini Enterprise
 
-Two Gemini Enterprise settings must be in place before you create the data store. A new app has neither, and the data store form blocks on the first one with **Create** greyed out.
+A new Gemini Enterprise app has neither of these, and both are needed. The identity provider blocks the data store form itself, with **Create** greyed out. Licenses do not block that form, but tool discovery fails later without them.
 
 ### Set the identity provider
 
@@ -236,8 +276,11 @@ curl -s -X PATCH \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
   -H "Content-Type: application/json" \
-  -d '{"name":"projects/YOUR_PROJECT_ID/locations/global/aclConfig","idpConfig":{"idpType":"GSUITE"}}' \
-  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/aclConfig"
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/aclConfig" \
+  -d '{
+    "name": "projects/YOUR_PROJECT_ID/locations/global/aclConfig",
+    "idpConfig": { "idpType": "GSUITE" }
+  }'
 ```
 
 The response echoes `"idpType": "GSUITE"` once it is set.
@@ -267,23 +310,33 @@ Enter the email addresses, choose the subscription, and select **Submit**.
 
 Each address now appears in the users list with a license and an assignment date.
 
-To assign licenses from the command line, use the project **number**, not the project ID, inside `licenseConfig`:
+To do the same from the command line, first list the subscriptions available to assign:
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/licenseConfigs"
+```
+
+Each returned `name` ends in the subscription ID, such as `free_trial_gemini`. Then assign it, using your project **number** inside `licenseConfig`:
 
 ```bash
 curl -s -X POST \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
   -H "Content-Type: application/json" \
-  -d '{"inlineSource":{"userLicenses":[{"userPrincipal":"YOUR_EMAIL","licenseConfig":"projects/YOUR_PROJECT_NUMBER/locations/global/licenseConfigs/YOUR_SUBSCRIPTION_ID","licenseAssignmentState":"ASSIGNED"}]}}' \
-  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/userStores/default_user_store:batchUpdateUserLicenses"
-```
-
-To list the subscriptions available to assign:
-
-```bash
-curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
-  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/licenseConfigs"
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/userStores/default_user_store:batchUpdateUserLicenses" \
+  -d '{
+    "inlineSource": {
+      "userLicenses": [
+        {
+          "userPrincipal": "YOUR_EMAIL",
+          "licenseConfig": "projects/YOUR_PROJECT_NUMBER/locations/global/licenseConfigs/YOUR_SUBSCRIPTION_ID",
+          "licenseAssignmentState": "ASSIGNED"
+        }
+      ]
+    }
+  }'
 ```
 
 ## Get the OAuth client ID
@@ -312,8 +365,8 @@ This client has no secret, so nothing expires and nothing needs rotating. Config
 Do not register a client through C1's dynamic registration endpoint instead. An unapproved dynamic registration's secret expires one hour after it is issued, and rotating it preserves the original expiry rather than extending it, so the connector fails at its first token refresh.
 </Tip>
 
-<AccordionGroup>
-<Accordion title="Host the client metadata document yourself">
+### Host the client metadata document yourself
+
 Publish this JSON at any public HTTPS URL you control. Two fields are unforgiving: `client_id` must exactly equal the URL the document is served from, and `redirect_uris` must contain Google's redirect endpoint verbatim.
 
 Save the file as `gemini-enterprise-oauth-client.json`. The Cloud Storage commands below serve it at `https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-client.json`, so set `client_id` to exactly that, with your own bucket name:
@@ -349,7 +402,7 @@ gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET \
   --role=roles/storage.objectViewer
 ```
 
-Two organization policies can block that public binding. See **Allow public access to the document** below.
+Two organization policies can block that public binding. If the next command fails, see **If an organization policy blocks the public binding** below.
 
 Confirm the document resolves before you continue. It returns the JSON you published, and its `client_id` matches the URL you requested:
 
@@ -358,10 +411,9 @@ curl -s https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-clien
 ```
 
 That URL is the value you use as the client ID.
-</Accordion>
 
-<Accordion title="Allow public access to the document">
-The two constraints below are separate from the constraint in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors), and both need `roles/orgpolicy.policyAdmin`.
+<Accordion title="If an organization policy blocks the public binding">
+The two constraints below are separate from the constraint in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors), and both need `roles/orgpolicy.policyAdmin`. To change either in the console, use the same **IAM & Admin** > **Organization policies** flow described there, searching for the constraint name below instead.
 
 **Domain restricted sharing.** If `constraints/iam.allowedPolicyMemberDomains` is enforced, granting `allUsers` fails with:
 
@@ -402,7 +454,6 @@ gcloud org-policies describe storage.publicAccessPrevention \
 Organization policy changes take a minute or two to take effect, in both directions. After you apply the override, the binding can still fail with the same `412` for a short while, and `describe --effective` may report the new value before enforcement catches up. Retry the binding rather than assuming the override is wrong, and confirm success by fetching the document URL.
 </Note>
 </Accordion>
-</AccordionGroup>
 
 ## Create the data store
 
@@ -485,9 +536,11 @@ The form shows **Successfully logged in** after you authorize. The connector is 
 
 **Do this before you reload the actions.** Tool discovery runs as the signed-in user, and it fails if that user has never opened the Gemini Enterprise web app. The console gives no hint that this is the cause: **Reload custom actions** simply reports **Failed to reload custom actions**.
 
-<Warning>
+<Note>
 This is the step most often missed, because nothing in the admin console mentions it and nothing about the connector looks wrong. The connector reads **Active**, every setting is correct, and discovery still fails until a licensed user has signed in once.
-</Warning>
+
+Signing in through **Verify Auth** while creating the connector does not count. That authorizes the connector; this is a separate sign-in to the web app itself.
+</Note>
 
 <Steps>
 <Step>
@@ -500,6 +553,8 @@ Copy the web app URL shown there. It looks like `https://vertexaisearch.cloud.go
 Open that URL as a licensed user and select **Get started** on the welcome panel.
 </Step>
 </Steps>
+
+One sign-in by one licensed user unblocks tool discovery for the whole connector. Each user still authorizes the connector separately later, in [Verify the Gemini Enterprise connection](#verify-the-gemini-enterprise-connection); that is a different action, and it cannot happen until the actions are enabled.
 
 To confirm the sign-in registered, check that `lastLoginTime` is present:
 
@@ -614,7 +669,7 @@ Four things that are easy to miss on that path:
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
-| `Operation denied by org policy ... disableCustomMcpServerConnector` | The organization policy blocks custom MCP data connectors, or the override has not propagated. | Turn the constraint off and wait several minutes. See [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors). |
+| **Operation denied by org policy** when you create the data store | The `disableCustomMcpServerConnector` constraint is enforced, or the override has not propagated. | Turn the constraint off and wait several minutes. See [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors). |
 | The override is set but the denial persists | An enforced organization- or folder-level policy overrides your project setting. | Re-run the `describe --effective` command. If it still reports `enforce: true`, ask your organization policy administrator to add the project exception. |
 | `PERMISSION_DENIED` on `gcloud services enable` | The caller lacks `roles/serviceusage.serviceUsageAdmin` on the project. | Grant it. See [Required roles](#required-roles). |
 | `PERMISSION_DENIED` on `gcloud storage buckets create` or the `allUsers` binding | The caller lacks `roles/storage.admin` on the project. | Grant it. See [Required roles](#required-roles). |
@@ -661,7 +716,7 @@ The client is a public OAuth client with no secret. Client ID Metadata Document 
 </Accordion>
 
 <Accordion title="Do I need Agent Gateway?">
-No. Google's documentation states that traffic to MCP servers added as a data connector does not pass through Agent Gateway, so adding it does not change how these tool calls are governed. C1 governs the tool calls. See [Optional: Govern the server through Agent Registry](#optional-govern-the-server-through-agent-registry).
+No. C1 governs the tool calls, and this was tested rather than taken on trust. See [Optional: Govern the server through Agent Registry](#optional-govern-the-server-through-agent-registry) for the evidence.
 </Accordion>
 
 <Accordion title="How do I cut off access in a hurry?">
