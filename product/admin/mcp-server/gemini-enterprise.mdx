@@ -81,6 +81,7 @@ Grant these on the Google Cloud project, except where noted.
 | `roles/discoveryengine.editor` | Project | Create the data store and authorize the connection |
 | `roles/orgpolicy.policyAdmin` | **Organization** | Allow custom MCP data connectors. Project **Owner** is not sufficient. |
 | `roles/storage.admin` | Project | Create the bucket that serves the client metadata document, and make it public. Needed only if you host the document yourself. |
+| `roles/discoveryengine.user` | Project | Use the Gemini Enterprise web app and call the actions. Grant this to **every end user**, not just to whoever runs the setup. |
 
 To check what you already hold on the project:
 
@@ -218,23 +219,24 @@ Organization policy changes take a minute or two to take effect. Until then the 
 </Note>
 
 <Accordion title="If your organization restricts outbound hostnames">
-Some organizations enforce `constraints/discoveryengine.allowedEgressFqdns`, which limits the hosts a data connector may reach. Check it the same way:
+Some organizations enforce `constraints/discoveryengine.managed.allowedEgressFqdns`, which limits the hosts a data connector may reach. It applies only to projects with VPC Service Controls enabled, or to projects your organization has added to the constraint's enforced list, so most setups never meet it. Check it with:
 
 ```bash
-gcloud org-policies describe discoveryengine.allowedEgressFqdns \
+gcloud org-policies describe discoveryengine.managed.allowedEgressFqdns \
   --project=YOUR_PROJECT_ID --effective
 ```
 
 If the constraint has never been set, this command returns `NOT_FOUND: Requested entity was not found`. That is the healthy answer and means nothing is restricting egress.
 
-If it is set, add the two hostnames your tenant uses. Use hostnames only, not full URLs. Save this as `egress.yaml` and apply it with `gcloud org-policies set-policy egress.yaml`, keeping any values your organization already allows:
+If it does apply, allow the two hostnames your tenant uses. Use hostnames only, not full URLs. This is a boolean constraint that takes parameters, not a list of allowed values. Save this as `egress.yaml` and apply it with `gcloud org-policies set-policy egress.yaml`, keeping any hostnames your organization already allows:
 
 ```yaml
-name: projects/YOUR_PROJECT_ID/policies/discoveryengine.allowedEgressFqdns
+name: projects/YOUR_PROJECT_ID/policies/discoveryengine.managed.allowedEgressFqdns
 spec:
   rules:
-    - values:
-        allowedValues:
+    - enforce: true
+      parameters:
+        allowedEgressFqdns:
           - <your-tenant>-mcp.conductor.one
           - <your-tenant>.conductor.one
 ```
@@ -630,7 +632,11 @@ Ask a question that needs a C1 tool, naming the connector, such as "Using the C1
 The assistant names the action it wants to call and waits. Select **Send** to confirm it.
 </Step>
 <Step>
-In C1, go to **AI access management** > **AI clients**. The Gemini Enterprise client appears, bound to that user. Users can see their own connections under their profile menu at **AI & API** > **AI connections**.
+In C1, go to **AI** > **C1 Gateway** and select the **AI clients** tab. Gemini Enterprise is listed with a registration type of **CIMD**, and **People connected** counts the users who have authorized it. The **AI connections** tab shows one row per user. Users can see their own connections under their profile menu at **AI & API** > **AI connections**.
+
+<Note>
+The **Verified** column shows the domain that serves your client metadata document, so a self-hosted document reads `storage.googleapis.com` rather than a Google domain. That is expected while you host the document yourself.
+</Note>
 </Step>
 <Step>
 Confirm the tool call was logged. Every call through C1 MCP records the end user, the tool, the result, and a denial reason when refused. See [Audit AI tool usage](/product/admin/audit-ai-tool-usage).
@@ -698,7 +704,7 @@ Agent Registry is a catalog of approved MCP servers. Listing the C1 gateway ther
 </Accordion>
 
 <Accordion title="How do I cut off access in a hurry?">
-In C1, open **AI access management** > **AI clients**, find the Gemini Enterprise client, and use its **kill switch**. It revokes all tokens for that client immediately, for every user. See [Manage AI clients](/product/admin/ai-clients).
+In C1, open **AI** > **C1 Gateway**, select the **AI clients** tab, find the Gemini Enterprise client, and use its **kill switch**. It revokes all tokens for that client immediately, for every user. To cut off one person instead, use **Revoke** on their row in the **AI connections** tab. See [Manage AI clients](/product/admin/ai-clients).
 </Accordion>
 
 <Accordion title="Can I see what tools Gemini Enterprise called?">
