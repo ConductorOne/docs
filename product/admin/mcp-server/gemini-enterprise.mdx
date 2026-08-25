@@ -189,9 +189,8 @@ Re-run the `describe` command above. The effective policy reports `enforce: fals
 Allow several minutes for the change to propagate. Until it does, the console returns the same denial message, so a failure immediately after you apply the policy does not mean the policy is wrong.
 </Note>
 
-### Optional: Allow the C1 hostnames
-
-If your organization restricts which external hosts a data connector may reach, it enforces `constraints/discoveryengine.allowedEgressFqdns`. Check it the same way:
+<Accordion title="If your organization restricts outbound hostnames">
+Some organizations enforce `constraints/discoveryengine.allowedEgressFqdns`, which limits the hosts a data connector may reach. Check it the same way:
 
 ```bash
 gcloud org-policies describe discoveryengine.allowedEgressFqdns \
@@ -199,32 +198,97 @@ gcloud org-policies describe discoveryengine.allowedEgressFqdns \
 ```
 
 If it is set, add the two hostnames your tenant uses, `<your-tenant>-mcp.conductor.one` and `<your-tenant>.conductor.one`. Use hostnames only, not full URLs.
+</Accordion>
 
 ## Get the OAuth client ID
 
-Gemini Enterprise authenticates each user to C1 with the OAuth 2.0 authorization code flow. It needs an OAuth client that already exists, because it does not register one itself.
+Gemini Enterprise authenticates each user to C1 with the OAuth 2.0 authorization code flow, and it needs an OAuth client that already exists. It does not register one itself, and it does not publish a client identity you can point at.
 
-C1 publishes a client metadata document for Gemini Enterprise. Its URL is your client ID:
+Neither does Google. There is no Google-hosted client metadata document for Gemini Enterprise: `/.well-known/oauth-client-metadata` returns `404` on `vertexaisearch.cloud.google.com`, `cloud.google.com`, `discoveryengine.googleapis.com`, and `accounts.google.com`. Google's own instructions are to register the MCP server as an OAuth client with your identity provider and take a client ID from it.
 
-```text
-https://<your-tenant>.conductor.one/auth/v1/client-metadata/gemini-enterprise
-```
+So the document has to be hosted somewhere. You have two options.
 
-Confirm it resolves before you continue. This returns JSON with a `client_id` field matching the URL you requested:
-
-```bash
-curl -s https://YOUR_TENANT.conductor.one/auth/v1/client-metadata/gemini-enterprise
-```
+| Option | Client ID | Status |
+| :--- | :--- | :--- |
+| C1 hosts it | `https://<your-tenant>.conductor.one/auth/v1/client-metadata/gemini-enterprise` | Not available yet |
+| You host it | The URL you publish it at | Works today |
 
 <Note>
-**This document is not available yet.** Every tenant returns a `404` from this URL until C1 ships it. [Contact the C1 support team](mailto:support@c1.ai) to confirm timing for your tenant before you continue, because the rest of this page depends on having a client ID.
+The C1-hosted document has not shipped. Every tenant returns a `404` from that URL until it does. [Contact the C1 support team](mailto:support@c1.ai) to confirm timing, and until then host the document yourself.
 </Note>
+
+Whichever you use, confirm the URL resolves before you continue. It returns JSON whose `client_id` matches the URL you requested:
+
+```bash
+curl -s https://YOUR_CLIENT_METADATA_URL
+```
 
 <Tip>
 This client has no secret, so nothing expires and nothing needs rotating. Configure it once and it keeps working.
 
-Do not register a client through C1's dynamic registration endpoint for this integration. An unapproved dynamic registration's secret expires one hour after it is issued, and rotating it preserves the original expiry rather than extending it, so the connector fails at its first token refresh.
+Do not register a client through C1's dynamic registration endpoint instead. An unapproved dynamic registration's secret expires one hour after it is issued, and rotating it preserves the original expiry rather than extending it, so the connector fails at its first token refresh.
 </Tip>
+
+<AccordionGroup>
+<Accordion title="Host the client metadata document yourself">
+Publish this JSON at any public HTTPS URL you control. The `client_id` inside the document must exactly equal the URL it is served from, and `redirect_uris` must contain Google's redirect endpoint verbatim.
+
+```json
+{
+  "client_id": "https://<your-domain>/gemini-enterprise-oauth-client.json",
+  "client_name": "Gemini Enterprise",
+  "client_uri": "https://cloud.google.com/gemini/enterprise",
+  "redirect_uris": ["https://vertexaisearch.cloud.google.com/oauth-redirect"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}
+```
+
+C1 fetches this document over the public internet, so it must be reachable without authentication. A Cloud Storage bucket works:
+
+```bash
+gcloud storage buckets create gs://YOUR_BUCKET   --project=YOUR_PROJECT_ID --location=us-central1 --uniform-bucket-level-access
+```
+
+```bash
+gcloud storage cp gemini-enterprise-oauth-client.json gs://YOUR_BUCKET/
+```
+
+```bash
+gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET   --member=allUsers --role=roles/storage.objectViewer
+```
+
+The object is then served at `https://storage.googleapis.com/YOUR_BUCKET/gemini-enterprise-oauth-client.json`, which is the value you use as the client ID. Confirm it returns your JSON before continuing.
+
+Two organization policies can block that public binding. See **Allow public access to the document** below.
+</Accordion>
+
+<Accordion title="Allow public access to the document">
+Both of these are separate from the constraint in [Allow custom MCP data connectors](#allow-custom-mcp-data-connectors), and both need `roles/orgpolicy.policyAdmin`.
+
+**Domain restricted sharing.** If `constraints/iam.allowedPolicyMemberDomains` is enforced, granting `allUsers` fails with:
+
+```text
+HTTPError 412: One or more users named in the policy do not belong to a permitted customer.
+```
+
+The constraint does not accept `allUsers` as an allowed value, so the override has to permit all values. Save this as `drs.yaml` and apply it with `gcloud org-policies set-policy drs.yaml`:
+
+```yaml
+name: projects/YOUR_PROJECT_ID/policies/iam.allowedPolicyMemberDomains
+spec:
+  rules:
+    - allowAll: true
+```
+
+<Warning>
+This override is project-wide, not bucket-scoped. Any resource in the project can then be shared publicly. Publish the document from a project dedicated to it rather than one holding other data, and remove the override once C1 hosts the document for you.
+</Warning>
+
+**Public access prevention.** If `constraints/storage.publicAccessPrevention` is enforced, the binding is refused regardless. Check both with `gcloud org-policies describe <constraint> --project=YOUR_PROJECT_ID --effective`.
+</Accordion>
+</AccordionGroup>
 
 ## Create the data store
 
