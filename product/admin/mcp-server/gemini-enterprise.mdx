@@ -641,30 +641,6 @@ The connection is working, and every tool call is attributed to the user who mad
 
 If the agent does not call a tool, returns nothing, or reports a denial, see [Troubleshoot Gemini Enterprise connection errors](#troubleshoot-gemini-enterprise-connection-errors). A denial that names a missing toolset or access profile is C1 working as configured, not a broken integration.
 
-## Optional: Govern the server through Agent Registry
-
-Agent Registry gives your organization a catalog of approved MCP servers, and Agent Gateway is the policy enforcement point for agent traffic. **Neither is required, and neither changes how these tool calls are governed.**
-
-<Note>
-This was verified rather than assumed. A working connector reports `use_agent_gateway_egress: false`, so its traffic does not pass through Agent Gateway at all, and a complete setup built with no gateway, no registry, and no authorization extension discovers tools and serves live tool calls normally. C1 governs the tool calls. Use this path only when you want the C1 gateway listed in a shared catalog alongside your other approved servers.
-</Note>
-
-<Note>
-Register the server in the catalog, but do not import it as your data connector. Importing from Agent Registry produces a connector whose tool discovery fails. Create the connector from the **Custom MCP Server** card as described in [Create the data store](#create-the-data-store), and treat the catalog entry as a separate, listing-only exercise.
-</Note>
-
-For the catalog entry, follow Google's own documentation, which stays current with the regional rules and command surface:
-
-- [Register MCP servers in Agent Registry](https://docs.cloud.google.com/agent-registry/register-mcp-servers)
-- [Set up an Agent Gateway](https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/set-up-agent-gateway)
-
-Four things that are easy to miss on that path:
-
-- **Your app, gateway, and registry regions must align**, and Google's import documentation has the current table. A `global` or `us` app pairs with a `us-central1` gateway; an `eu` app pairs with `europe-west1`. When they do not align, the server never appears in the data store list and no error explains why.
-- **Each app must be pointed at the gateway explicitly**, under **Security** > **Configuration** > **Agent Gateway configuration** in the app. Creating a gateway is not enough, and until an app is bound to one, no registered server appears in its data store list.
-- **Every tool in a `toolspec.json` needs an `inputSchema`.** Google's published example omits it, and registration fails with `invalid MCP tool spec content: tools.0: inputSchema is required`.
-- **The gateway denies egress until you authorize it.** By default it allows traffic only to resources explicitly authorized through IAM, so the identity making the call needs the egress role for each destination it should reach.
-
 ## Troubleshoot Gemini Enterprise connection errors
 
 | Symptom | Cause | Fix |
@@ -715,8 +691,10 @@ No. The client ID identifies Gemini Enterprise as an application, not as a user.
 The client is a public OAuth client with no secret. Client ID Metadata Document clients cannot use shared secrets, so C1 never reads the field. Security comes from the authorization code flow with PKCE, which you turn on with **Enable PKCE Support**.
 </Accordion>
 
-<Accordion title="Do I need Agent Gateway?">
-No. C1 governs the tool calls, and this was tested rather than taken on trust. See [Optional: Govern the server through Agent Registry](#optional-govern-the-server-through-agent-registry) for the evidence.
+<Accordion title="Do I need Agent Gateway or Agent Registry?">
+No, and this was tested rather than taken on trust. A working connector reports `use_agent_gateway_egress: false`, so its traffic never passes through Agent Gateway, and a setup built with no gateway and no registry discovers tools and serves live tool calls normally. C1 governs the tool calls.
+
+Agent Registry is a catalog of approved MCP servers. Listing the C1 gateway there is a separate exercise that changes nothing about this integration. If you do list it, still create your data connector from the **Custom MCP Server** card: a connector imported from the registry fails tool discovery.
 </Accordion>
 
 <Accordion title="How do I cut off access in a hurry?">
