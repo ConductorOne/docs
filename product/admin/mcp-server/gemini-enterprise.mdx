@@ -291,10 +291,12 @@ The form shows **Successfully logged in** after you authorize, and the connector
 
 ## Enable the actions
 
-Gemini Enterprise calls MCP tools *actions*, and imports every one of them turned off. Turn on only the actions your users need: a data store supports a maximum of 100 enabled actions, and a shorter list makes the agent's tool selection more accurate.
+Gemini Enterprise calls MCP tools *actions*, and imports every one of them turned off. Enable them on the data connector, not on the app's **Actions** page, which only redirects you here. Turn on only the actions your users need: a data store supports a maximum of 100 enabled actions, and a shorter list makes the agent's tool selection more accurate.
 
 <Note>
 Wait for the connector state to reach **Active** before you start. The reload fails while the connector is still creating.
+
+**Reload custom actions takes about 30 seconds.** Gemini Enterprise calls your MCP server for its tool list and holds the request open while it waits. The table stays empty until it finishes, which looks like a silent failure if you navigate away early. Wait for the **Custom actions reloaded** confirmation.
 </Note>
 
 <Steps>
@@ -320,10 +322,23 @@ Seeing actions listed does not confirm your credentials work. You confirm the se
 
 <Steps>
 <Step>
-Open your Gemini Enterprise app as an end user who has C1 tool access, and ask a question that needs a C1 tool, such as "Who has access to" followed by an application you have connected to C1.
+Open your Gemini Enterprise web app as an end user who has C1 tool access.
 </Step>
 <Step>
-Authorize the connection when prompted. Sign in through your identity provider and approve.
+In the message box, select the **Connectors** icon. Your connector is listed with an **Authorize** link beside it.
+</Step>
+<Step>
+Select **Authorize**, sign in through your identity provider, and approve. The connector then shows a toggle, switched on.
+
+<Warning>
+Every user does this once, for themselves. Enabling actions as an administrator does not authorize anyone. Until a user authorizes here, the assistant answers that it has no ConductorOne integration, even though the actions are enabled and the connector is **Active**.
+</Warning>
+</Step>
+<Step>
+Ask a question that needs a C1 tool, naming the connector, such as "Using the C1 connector, list the access reviews in ConductorOne."
+</Step>
+<Step>
+The assistant names the action it wants to call and waits. Select **Send** to confirm it.
 </Step>
 <Step>
 In C1, go to **AI access management** > **AI clients**. The Gemini Enterprise client appears, bound to that user. Users can see their own connections under their profile menu at **AI & API** > **AI connections**.
@@ -370,7 +385,10 @@ Three things that are easy to miss on that path:
 | The form will not accept an empty **Client Secret** | The console treats the field as required. | Enter any placeholder. C1 never reads it. |
 | **Failed to reload custom actions** on a connector imported from Agent Registry | Registry-imported connectors failed discovery in C1 testing with `FAILED_PRECONDITION`. | Recreate the data store from the **Custom MCP Server** card instead. See [Create the data store](#create-the-data-store). |
 | **Failed to reload custom actions** | The connector is still creating, or the tool action APIs are not enabled. | Wait for **Active**, then confirm `connectors.googleapis.com`, `integrations.googleapis.com`, and `secretmanager.googleapis.com` are enabled. |
-| **Reload custom actions** succeeds with no error but no actions appear | C1 returned an empty tool list for the authorizing user, which happens when that user has no toolset. Authentication is fine: the connection appears in C1 under **AI & API** > **AI connections**. | Assign the authorizing user an access profile that includes the tools you expect, then reload again. See [Tools and toolsets](/product/admin/tools-and-toolsets). |
+| **Reload custom actions** shows no error and no actions | Most often the reload is still running. It takes about 30 seconds. | Wait for the **Custom actions reloaded** confirmation, then reload the page. |
+| The action list stays empty after the reload finishes | C1 returned an empty tool list for the authorizing user, which happens when that user has no toolset. | Assign the authorizing user an access profile that includes the tools you expect, then reload again. See [Tools and toolsets](/product/admin/tools-and-toolsets). |
+| The assistant answers that it has no ConductorOne integration | The user has not authorized the connector in the web app. Enabling actions does not authorize anyone. | In the message box, open **Connectors** and select **Authorize** beside your connector. See [Verify the Gemini Enterprise connection](#verify-the-gemini-enterprise-connection). |
+| The assistant picks a web search instead of a C1 action | No enabled action matches the request, so nothing is callable. | Enable the actions the request needs, and name the connector in the prompt. |
 | A user's tool calls are denied while another user's succeed | C1 is enforcing that user's access profile. This is expected behavior. | Check the denial reason in the audit log. See [Audit AI tool usage](/product/admin/audit-ai-tool-usage). |
 | Authorization works, then breaks about an hour later | The connector uses a dynamically registered client whose secret expired. | Use the C1-published client ID. See [Get the OAuth client ID](#get-the-oauth-client-id). |
 | Tool calls fail immediately after a working **Verify Auth** | The token is not bound to your MCP endpoint. | Set **Authorization URL Parameters** to `&resource=https://<your-tenant>-mcp.conductor.one/v1`. |
