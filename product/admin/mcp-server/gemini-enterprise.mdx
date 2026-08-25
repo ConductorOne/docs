@@ -26,6 +26,7 @@ Setup spans two products. Some stages depend on someone other than you, so line 
 | [Prepare Gemini Enterprise](#prepare-gemini-enterprise) | Gemini Enterprise | A Gemini Enterprise subscription |
 | [Get the OAuth client ID](#get-the-oauth-client-id) | C1 | Nothing |
 | [Create the data store](#create-the-data-store) | Gemini Enterprise | `roles/discoveryengine.editor` |
+| [Sign in to the web app](#sign-in-to-the-web-app) | Gemini Enterprise | A licensed user |
 | [Enable the actions](#enable-the-actions) | Gemini Enterprise | Tool access already granted in C1 |
 | [Verify the connection](#verify-the-gemini-enterprise-connection) | Gemini Enterprise and C1 | A user with C1 tool access |
 
@@ -228,6 +229,19 @@ Select **Save**.
 
 The row for your location now names the provider instead of reading **Identity provider is not set up**.
 
+To do the same from the command line, for Google Workspace accounts:
+
+```bash
+curl -s -X PATCH \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"projects/YOUR_PROJECT_ID/locations/global/aclConfig","idpConfig":{"idpType":"GSUITE"}}' \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/aclConfig"
+```
+
+The response echoes `"idpType": "GSUITE"` once it is set.
+
 <Note>
 This page reports **You don't have permissions to fetch Workforce Pools** unless you hold a role that can read workforce pools at the organization level. The message is harmless if you are choosing **Google Identity**, which does not use them.
 </Note>
@@ -252,6 +266,25 @@ Enter the email addresses, choose the subscription, and select **Submit**.
 </Steps>
 
 Each address now appears in the users list with a license and an assignment date.
+
+To assign licenses from the command line, use the project **number**, not the project ID, inside `licenseConfig`:
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"inlineSource":{"userLicenses":[{"userPrincipal":"YOUR_EMAIL","licenseConfig":"projects/YOUR_PROJECT_NUMBER/locations/global/licenseConfigs/YOUR_SUBSCRIPTION_ID","licenseAssignmentState":"ASSIGNED"}]}}' \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/userStores/default_user_store:batchUpdateUserLicenses"
+```
+
+To list the subscriptions available to assign:
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/licenseConfigs"
+```
 
 ## Get the OAuth client ID
 
@@ -376,7 +409,13 @@ Organization policy changes take a minute or two to take effect, in both directi
 Connect the C1 MCP gateway to your Gemini Enterprise app.
 
 <Note>
-This section and the next have no `gcloud` or REST equivalent. The public Discovery Engine API rejects the parameters the console itself writes for a custom MCP connector, and the method behind **Reload custom actions** is not exposed on the public endpoint. Creating the data store, discovering actions, and enabling actions are console-only.
+This section and the next are console-only. The public Discovery Engine API refuses to create this connector:
+
+```text
+Data Connector parameters must be one of: oauth_access_token but got: instance_uri
+```
+
+It accepts only a pre-obtained access token, not the OAuth client configuration, so it cannot run the per-user authorization this integration depends on. The method behind **Reload custom actions** is not on the public endpoint either. Every other step in this guide can be scripted.
 </Note>
 
 <Warning>
@@ -442,6 +481,36 @@ Some versions of the console add a **Select the pricing model** step first. If y
 
 The form shows **Successfully logged in** after you authorize. The connector is created immediately and reaches the **Active** state within a minute.
 
+## Sign in to the web app
+
+**Do this before you reload the actions.** Tool discovery runs as the signed-in user, and it fails if that user has never opened the Gemini Enterprise web app. The console gives no hint that this is the cause: **Reload custom actions** simply reports **Failed to reload custom actions**.
+
+<Warning>
+This is the step most often missed, because nothing in the admin console mentions it and nothing about the connector looks wrong. The connector reads **Active**, every setting is correct, and discovery still fails until a licensed user has signed in once.
+</Warning>
+
+<Steps>
+<Step>
+In the Google Cloud console, open **Gemini Enterprise**, select your app, and open **Overview**.
+</Step>
+<Step>
+Copy the web app URL shown there. It looks like `https://vertexaisearch.cloud.google.com/home/cid/<id>`.
+</Step>
+<Step>
+Open that URL as a licensed user and select **Get started** on the welcome panel.
+</Step>
+</Steps>
+
+To confirm the sign-in registered, check that `lastLoginTime` is present:
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "X-Goog-User-Project: YOUR_PROJECT_ID" \
+  "https://discoveryengine.googleapis.com/v1alpha/projects/YOUR_PROJECT_ID/locations/global/userStores/default_user_store/userLicenses"
+```
+
+A user with a license but no `lastLoginTime` has never opened the web app, and tool discovery will fail for them.
+
 ## Enable the actions
 
 Gemini Enterprise calls MCP tools *actions*, and imports every one of them turned off. Enable them on the data connector, not on the app's **Actions** page, which only redirects you here. Turn on only the actions your users need: a data store supports a maximum of 100 enabled actions, and a shorter list makes the agent's tool selection more accurate.
@@ -468,6 +537,18 @@ Select **Enable actions**.
 </Steps>
 
 The actions you selected are now enabled on the connector. No one can call them yet: each user must authorize the connector themselves, which is the first part of [Verify the Gemini Enterprise connection](#verify-the-gemini-enterprise-connection).
+
+<Tip>
+The console toast is not a reliable signal. To see whether a reload actually succeeded, read the audit log:
+
+```bash
+gcloud logging read 'protoPayload.methodName:"RefreshDataConnectorTools"' \
+  --project=YOUR_PROJECT_ID --limit=5 --freshness=10m \
+  --format="value(timestamp,severity,protoPayload.status.message)"
+```
+
+A `401` entry on its own is normal: the console retries and a successful reload logs an entry with no error a few seconds later. Judge by that later entry, not by the first error.
+</Tip>
 
 ## Verify the Gemini Enterprise connection
 
@@ -507,10 +588,10 @@ If the agent does not call a tool, returns nothing, or reports a denial, see [Tr
 
 ## Optional: Govern the server through Agent Registry
 
-Agent Registry gives your organization a catalog of approved MCP servers, and Agent Gateway is the policy enforcement point for agent traffic. Neither is required here, and the setup above works without both.
+Agent Registry gives your organization a catalog of approved MCP servers, and Agent Gateway is the policy enforcement point for agent traffic. **Neither is required, and neither changes how these tool calls are governed.**
 
 <Note>
-Adding them does not change how these tool calls are governed. Google's documentation states that traffic to MCP servers added as a data connector does not pass through Agent Gateway, and Agent Gateway policies do not apply to it. C1 governs the tool calls. Use this path when you want the C1 gateway listed in a shared catalog alongside your other approved servers, not to add enforcement.
+This was verified rather than assumed. A working connector reports `use_agent_gateway_egress: false`, so its traffic does not pass through Agent Gateway at all, and a complete setup built with no gateway, no registry, and no authorization extension discovers tools and serves live tool calls normally. C1 governs the tool calls. Use this path only when you want the C1 gateway listed in a shared catalog alongside your other approved servers.
 </Note>
 
 <Note>
@@ -543,8 +624,8 @@ Four things that are easy to miss on that path:
 | **We encountered some problems during authentication** | The client ID is wrong, or the sign-in window was closed or blocked. | Confirm the client ID resolves, allow popups for the console, and retry **Verify Auth**. |
 | The form will not accept an empty **Client Secret** | The console treats the field as required. | Enter `none`, as in [Create the data store](#create-the-data-store). C1 never reads it. |
 | **Failed to reload custom actions** on a connector imported from Agent Registry | Registry-imported connectors fail discovery with `FAILED_PRECONDITION`. | Recreate the data store from the **Custom MCP Server** card. See [Create the data store](#create-the-data-store). |
-| **Failed to reload custom actions** | The connector is still creating, or `discoveryengine.googleapis.com` is not enabled. | Wait for the connector to reach **Active**, then confirm the API is enabled. See [Enable the Google Cloud APIs](#enable-the-google-cloud-apis). |
-| **Failed to reload custom actions** on a connector that is **Active** | Gemini Enterprise has no usable authorization for the connector. The console request returns `401`, and the app then fails to build a fresh authorization URL. | Confirm [Prepare Gemini Enterprise](#prepare-gemini-enterprise) is complete, since a project with no identity provider or no assigned licenses produces this. Then open the connector, select **Re-authenticate**, enter the client ID and `none`, select **Verify Auth**, and select **Update**. Wait two minutes for the credentials to propagate before you reload again. |
+| **Failed to reload custom actions** on a connector that is **Active** | The most common cause by far is that the signed-in user has never opened the Gemini Enterprise web app. | Open the web app as that user, then reload again. See [Sign in to the web app](#sign-in-to-the-web-app). |
+| **Failed to reload custom actions**, and the user has signed in | The connector is still creating, `discoveryengine.googleapis.com` is not enabled, the user holds no license, or no identity provider is set. | Wait for **Active**, then check each in turn. See [Prepare Gemini Enterprise](#prepare-gemini-enterprise). |
 | **Reload custom actions** shows no error and no actions | Most often the reload is still running. It takes about 30 seconds. | Wait for the **Custom actions reloaded** confirmation, then reload the page. |
 | The action list stays empty after the reload finishes | C1 returned an empty tool list for the authorizing user, which happens when that user has no toolset. | Assign the authorizing user an access profile that includes the tools you expect, then reload again. See [Tools and toolsets](/product/admin/tools-and-toolsets). |
 | The assistant answers that it has "no ConductorOne integration" | The user has not authorized the connector in the web app. Enabling actions authorizes nobody. | In the message box, open **Connectors** and select **Authorize** beside your connector. See [Verify the Gemini Enterprise connection](#verify-the-gemini-enterprise-connection). |
