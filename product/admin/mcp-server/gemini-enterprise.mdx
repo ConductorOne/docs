@@ -204,17 +204,20 @@ If it is set, add the two hostnames your tenant uses, `<your-tenant>-mcp.conduct
 
 Gemini Enterprise authenticates each user to C1 with the OAuth 2.0 authorization code flow, and it needs an OAuth client that already exists. It does not register one itself, and it does not publish a client identity you can point at.
 
-Neither does Google. There is no Google-hosted client metadata document for Gemini Enterprise: `/.well-known/oauth-client-metadata` returns `404` on `vertexaisearch.cloud.google.com`, `cloud.google.com`, `discoveryengine.googleapis.com`, and `accounts.google.com`. Google's own instructions are to register the MCP server as an OAuth client with your identity provider and take a client ID from it.
+Google is the party that should publish that document, since Gemini Enterprise is the client it describes. Today it does not: `/.well-known/oauth-client-metadata` returns `404` on `vertexaisearch.cloud.google.com`, `cloud.google.com`, `discoveryengine.googleapis.com`, and `accounts.google.com`. Google's instructions are to register the MCP server as an OAuth client with your identity provider and take a client ID from it.
 
-So the document has to be hosted somewhere. You have two options.
+Until Google publishes one, somebody else has to host it on Google's behalf.
 
-| Option | Client ID | Status |
+| Who hosts it | Client ID | Status |
 | :--- | :--- | :--- |
-| C1 hosts it | `https://<your-tenant>.conductor.one/auth/v1/client-metadata/gemini-enterprise` | Not available yet |
-| You host it | The URL you publish it at | Works today |
+| Google | A Google-published URL | Not published. This is the outcome to prefer |
+| You | The URL you publish it at | Works today |
+| C1 | `https://<your-tenant>.conductor.one/auth/v1/client-metadata/gemini-enterprise` | Not available yet |
 
 <Note>
-The C1-hosted document has not shipped. Every tenant returns a `404` from that URL until it does. [Contact the C1 support team](mailto:support@c1.ai) to confirm timing, and until then host the document yourself.
+Host the document yourself for now. The C1-hosted document has not shipped, so every tenant returns a `404` from that URL, and it is a stopgap rather than the end state: a client identity carries the most weight when the client's own vendor publishes it. [Contact the C1 support team](mailto:support@c1.ai) for timing.
+
+When Google publishes a client metadata document for Gemini Enterprise, use that URL as the client ID and retire whatever you were hosting.
 </Note>
 
 Whichever you use, confirm the URL resolves before you continue. It returns JSON whose `client_id` matches the URL you requested:
@@ -283,7 +286,7 @@ spec:
 ```
 
 <Warning>
-This override is project-wide, not bucket-scoped. Any resource in the project can then be shared publicly. Publish the document from a project dedicated to it rather than one holding other data, and remove the override once C1 hosts the document for you.
+This override is project-wide, not bucket-scoped. Any resource in the project can then be shared publicly. Publish the document from a project dedicated to it rather than one holding other data, and remove the override as soon as you stop hosting the document.
 </Warning>
 
 **Public access prevention.** If `constraints/storage.publicAccessPrevention` is enforced, the binding is refused regardless. Check both with `gcloud org-policies describe <constraint> --project=YOUR_PROJECT_ID --effective`.
