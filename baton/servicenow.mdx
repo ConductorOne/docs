@@ -18,6 +18,12 @@ The ServiceNow connector supports [automatic account provisioning](/product/admi
 
 This connector does not support full account deprovisioning. You can disable accounts using a connector action, but you must deprovision accounts directly in ServiceNow.
 
+<Note>
+C1 syncs only roles marked grantable in ServiceNow. Roles without that flag do not appear in C1, and you cannot grant or revoke them through it.
+
+C1 cannot revoke a role that a user inherits from a group. ServiceNow re-creates inherited role assignments from group membership, so the role returns on the next sync. Revoke the user's group membership instead.
+</Note>
+
 This connector can also be configured to automatically create and update ServiceNow tickets to track manual provisioning assignments. Go to [Configure ServiceNow as an external ticketing provider](/product/admin/external-ticketing#configure-servicenow-as-an-external-ticketing-provider) to learn more.
 
 ### Connector actions
@@ -28,6 +34,8 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 |-------------|-------------------|-------------|
 | enable_user | `userId` (string, required) | Enables a disabled ServiceNow user account |
 | disable_user     | `userId` (string, required) | Disables an active ServiceNow user account |
+
+Pass the user's ServiceNow `sys_id` as `userId` — a 32-character identifier, not the username or email address.
 
 ## Gather ServiceNow credentials 
 
@@ -251,6 +259,8 @@ Find the **Settings** area of the page and click **Edit**.
 
    To add multiple allowed domains, press **Enter** between each domain.
 
+   Accounts with no email address — including many ServiceNow service accounts — match no domain, so C1 excludes them and their membership grants.
+
    If you leave this field blank, C1 will sync all accounts and membership grants in your ServiceNow instance, regardless of the email domain associated with the account.
 </Step>
 <Step>
@@ -366,7 +376,7 @@ stringData:
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
 
-  # Optional: include if you want to limit syncing to accounts and membership grants associated with an email domain listed here
+  # Optional: include to limit syncing to accounts and membership grants associated with an email domain listed here
   # Note: include each allowed domain as a separate entry
   BATON_ALLOWED_DOMAINS: <Email domain, such as "acme.com">
   BATON_ALLOWED_DOMAINS: <Email domain, such as "contractors.acme.com">
@@ -425,4 +435,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your ServiceNow connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
