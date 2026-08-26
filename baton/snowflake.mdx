@@ -31,6 +31,29 @@ The Snowflake connector supports [account provisioning](/product/admin/account-p
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
 
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations.
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| Account lifecycle action | `enable_user`, `disable_user` | The step's own target-account selector — either the account in context or a specific account. C1 resolves `user_id` from that account. |
+
+Both actions accept the following fields:
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `enable_user` | `user_id` (string, required) | Reactivates a Snowflake user by setting `DISABLED = FALSE` |
+| `disable_user` | `user_id` (string, required) | Deactivates a Snowflake user by setting `DISABLED = TRUE`. Reverse it with `enable_user` |
+
+<Note>
+**`enable_user`/`disable_user` require `MODIFY` on the target user.** These actions run as the `USERADMIN` role. If that role holds neither `MODIFY` nor `OWNERSHIP` on the target user, Snowflake rejects the statement with `Insufficient privileges to operate on user '<name>'. Your primary role USERADMIN must have MODIFY granted on USER <name>.` Grant the privilege with `GRANT MODIFY ON USER <name> TO ROLE USERADMIN`, which does not transfer ownership.
+
+This restriction stays hidden when the service account keeps Snowflake's default `DEFAULT_SECONDARY_ROLES = ALL`: a higher secondary role such as `ACCOUNTADMIN` remains active alongside the `USERADMIN` primary role and supplies the privilege. Accounts restricted to `USERADMIN` alone are the ones that hit it.
+
+**`enable_user` does not clear an account lockout.** Snowflake can independently lock a user out after repeated failed logins (tracked via `SNOWFLAKE_LOCK`/`MINS_TO_UNLOCK`), separately from the `DISABLED` property these actions toggle. `enable_user` only clears `DISABLED` - a locked-out user stays locked, and the C1 resource still reports a disabled status (`details: "locked"`) until an administrator clears the lockout directly in Snowflake.
+</Note>
+
 ## Gather Snowflake credentials 
 
 Configuring the connector requires you to pass in credentials generated in Snowflake. Gather these credentials before you move on. 
