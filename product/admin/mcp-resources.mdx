@@ -1,0 +1,98 @@
+---
+title: Govern MCP resources
+description: Review MCP resources and URI templates discovered by C1, approve them, and inspect the access state that controls who can read them.
+og:title: Govern MCP resources - C1 docs
+og:description: Review MCP resources and URI templates discovered by C1, approve them, and inspect the access state that controls who can read them.
+---
+
+{/* Editor Refresh: 2026-08-25 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+An MCP server can expose more than tools. It can also expose static resources, such as a named document, and URI templates, which resolve a resource from a URI supplied by the client. C1 discovers these items when it discovers the MCP server and governs them independently from tools.
+
+This page describes how to review and manage discovered MCP resources. For tool governance, see [Govern tools and toolsets](/product/admin/tools-and-toolsets).
+
+## How resource access works
+
+Each approved MCP resource has its own read entitlement. A user can read a resource only when all of the following are true:
+
+- The resource is **Approved**.
+- Its linked entitlement is active.
+- The user has a grant for that entitlement.
+- The MCP server and tenant controls allow the request.
+
+A tool grant does not grant access to a resource. Resources are not added to toolsets or exposed as catalog items. C1 does not provide an end-user resource request flow.
+
+Resource content is returned only when the AI client explicitly reads the resource. C1 does not automatically add resource content to a tool call or an AI prompt. Resource access is the same whether the client uses Code Mode or direct tools.
+
+## View discovered resources
+
+To see the resources C1 discovered from a server, open the server's resource inventory.
+
+<Steps>
+<Step>
+Go to **AI > MCP**.
+</Step>
+<Step>
+Open a registered MCP server.
+</Step>
+<Step>
+Click the **Resources** tab.
+</Step>
+</Steps>
+
+The table lists static resources and URI templates that C1 discovered from the server. It includes each item's name, kind, URI or template, MIME type, state, access status, and last-discovered time.
+
+Use the search field to find a name, description, URI, or template. Filter by kind or state when you need to focus on a subset of the inventory. Open a resource to view its complete URI or template, metadata, linked entitlement, grant count, and discovery history.
+
+## Review and change resource state
+
+New resources begin in **Pending** state. They cannot be listed or read by an AI client until you approve them.
+
+| State | What it means |
+| :--- | :--- |
+| **Pending** | Newly discovered and not available to users. You can approve or disable it. |
+| **Approved** | Eligible for use, but each user still needs a grant for the linked read entitlement. |
+| **Disabled** | Not available to any user. You can approve it again when it is ready for use. |
+| **Removed** | The upstream server no longer advertises this resource or template. It is read-only and cannot be read. |
+
+To approve or disable a resource:
+
+<Steps>
+<Step>
+On the MCP server's **Resources** tab, open the resource's **...** (more actions) menu, or click the resource's name to open its details panel.
+</Step>
+<Step>
+Click **Approve** or **Disable**.
+</Step>
+</Steps>
+
+Only the lifecycle state is editable. C1 preserves the URI or URI template exactly as the MCP server advertised it. Changes to discovered metadata retain the resource's state. A changed URI or template is a new pending resource; the old resource is marked Removed.
+
+## Inspect resource access
+
+After you approve a resource, the resource details panel shows its linked read entitlement and grant count. Select either item to open the standard entitlement details page and inspect its current state. Resource entitlements are separate from toolsets and are not available through the end-user request catalog.
+
+The **Access** column identifies resources that are not ready for users:
+
+| Access status | What it means |
+| :--- | :--- |
+| **Entitlement missing** | C1 cannot use the resource until its linked entitlement is available. |
+| **Entitlement inactive** | The resource's linked entitlement is not active. |
+| **No grants** | The resource is approved, but no users can read it. |
+| **Grant count** | The number of grants for the resource's linked entitlement. |
+
+Revoking a grant takes effect on the next resource read, including for an existing MCP session.
+
+## Track discovery changes
+
+C1 repeats discovery on a schedule. Open **View history** from a resource's **...** (more actions) menu, or click the resource's name to open its details panel and select **View history** there. The history shows changes to the resource's metadata, lifecycle state, URI or template, entitlement, and discovery times.
+
+If an upstream server stops advertising a resource, C1 marks it **Removed**. If the server later advertises the same resource identity again, review its current state before it becomes available to users.
+
+## Audit resource reads
+
+C1 logs each allowed and denied resource read. The audit record identifies the caller, MCP server, resource, result, reason for a denial when applicable, latency, and response size. It does not store resource content. For audit-log details and export options, see [Audit AI tool usage](/product/admin/audit-ai-tool-usage).
