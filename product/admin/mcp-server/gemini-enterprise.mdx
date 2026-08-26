@@ -630,12 +630,16 @@ curl -s -X PATCH \
       "enabledActions": [
         "search_tools",
         "execute",
+        "get_execution",
         "list_guides",
         "load_guide",
         "create_vfs",
         "create_vfs_artifact",
         "list_vfs_files",
-        "get_vfs_download_url"
+        "get_vfs_download_url",
+        "find_api_objects",
+        "count_api_objects",
+        "query_metrics"
       ]
     }
   }'
@@ -645,16 +649,23 @@ Your collection ID is the one shown as **Collection ID** on the data store's **D
 
 ### Reach every tool without spending your action budget
 
-The C1 gateway publishes far more tools than the 100 a data store can enable. Rather than choosing a hundred of them, enable the eight tools above. They let the agent find and run any tool your access profiles allow:
+The C1 gateway publishes far more tools than the 100 a data store can enable. Rather than choosing a hundred of them, enable the twelve tools above. They let the agent find and run any tool your access profiles allow:
 
 | Tool | What it does |
 | :--- | :--- |
 | `search_tools` | Finds the right tool for a task across everything you can reach, and returns its input and output schema |
 | `execute` | Runs a short TypeScript program that calls those tools, so several calls happen in one step |
+| `get_execution` | Collects the result of a program that ran too long to answer inline |
 | `list_guides`, `load_guide` | Fetch usage guides for the more involved flows |
 | `create_vfs`, `create_vfs_artifact`, `list_vfs_files`, `get_vfs_download_url` | Give that program a scratch filesystem, and hand results back as files |
+| `find_api_objects`, `count_api_objects` | Look up and count C1 objects such as users, apps, and entitlements, without writing a program |
+| `query_metrics` | Return bucketed time series for reporting questions in one call |
 
 Add whichever named C1 actions your users ask for by name on top of those, and the rest stay reachable through `search_tools`.
+
+<Warning>
+Enable `get_execution` alongside `execute`. A program that runs longer than about 25 seconds returns a pending status and an execution ID instead of a result, and `get_execution` is what collects it. Without it those runs cannot be recovered and the agent reports a failure for work that actually succeeded.
+</Warning>
 
 <Note>
 The enabled set still only decides what is offered. Every call is evaluated against the calling user's access profiles, so this changes what the agent can find, never what a person is allowed to do.
