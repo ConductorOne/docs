@@ -107,7 +107,7 @@ Sidebar grouping in `docs.json` is independent of folder structure. You can visu
 - **Procedures**: Numbered steps starting with action verbs. One action per step — don't bundle two actions into one step unless they're truly inseparable. A `<Steps>` block must always be preceded by at least one sentence of intro text — never place `<Steps>` directly after a heading. Navigation to a page and clicking Save are steps, not intro prose.
 - **Outcome sentences**: After a procedure, state what changed as a plain sentence ("New tasks will now be automatically reassigned to your delegate."). Don't celebrate ("That's it!", "Done.", "You're all set!") — state the outcome instead.
 - **Optional steps**: Start with **Optional.** (e.g., "**Optional.** Configure advanced settings...")
-- **Callouts**: Start with context, not with the callout type. Don't write "Note that..." inside a `<Note>` or "Warning:" inside a `<Warning>` — the component signals that already. `<Warning>` is for destructive or irreversible actions only; `<Tip>` for helpful shortcuts or best practices; `<Note>` for context that applies in specific situations.
+- **Callouts**: Start with context, not with the callout type. Don't write "Note that..." inside a `<Note>` or "Warning:" inside a `<Warning>` — the component signals that already. `<Warning>` is for destructive or irreversible actions only; `<Tip>` for helpful shortcuts or best practices; `<Note>` for context that applies in specific situations. Don't use `<Info>` — it overlaps with `<Note>`; use `<Note>` instead.
 - **Optional sections**: Use `## Optional: Section name` for entire optional tasks or sections
 - **UI elements**: Bold formatting (**New profile**)
 - **Navigation paths**: **Admin** > **Access profiles** > **New profile**
@@ -150,7 +150,6 @@ Sidebar grouping in `docs.json` is independent of folder structure. You can visu
 <Tip>Helpful information</Tip>
 <Warning>Important warning</Warning>
 <Note>Additional context</Note>
-<Info>General information</Info>
 
 <Accordion title="Expandable section">
   Hidden content
