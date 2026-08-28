@@ -18,10 +18,29 @@ sidebarTitle: "Atlassian Confluence"
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Spaces | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Space permissions | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Space Roles (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Space Role Assignments (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 <Tip>
 To limit sync times, a limited list of Spaces entitlements and their associated grants are synced. See the [Spaces entitlements synced by default](/baton/confluence#spaces-entitlements-synced-by-default) section of this page for more information.
 </Tip>
+
+## RBAC space roles
+
+The Confluence connector supports two modes for syncing space access:
+
+- **Granular space permissions** (default): Syncs individual noun-verb permission pairs (for example, `read-space`, `administer-space`) per space. This is the default behavior.
+- **RBAC space roles**: Syncs Confluence's built-in space roles and their assignments instead of granular permissions. Enable this mode by setting the `--use-rbac` flag (or `BATON_USE_RBAC=true`).
+
+The connector uses one mode or the other — not both. When RBAC mode is enabled, granular space permissions are not synced, and the Space Roles and Space Role Assignments resource types become active.
+
+<Warning>
+**RBAC mode requires that Space Roles are enabled and entitled on your Confluence instance.** If the RBAC endpoints are unavailable (for example, because a trial or beta grant has expired), the connector's `Validate` step fails with the message:
+
+`RBAC data endpoints are unavailable (space-roles returned 404) — this can happen when a trial or beta grant for RBAC has expired`
+
+If you see this error, either disable `--use-rbac` or contact Atlassian to ensure Space Roles are enabled on your instance.
+</Warning>
 
 ## Gather Confluence credentials
 
@@ -187,6 +206,9 @@ stringData:
 
   # Optional: include to skip syncing personal spaces and their permissions
   BATON_SKIP_PERSONAL_SPACES: true
+
+  # Optional: include to use RBAC space roles instead of granular permissions
+  # BATON_USE_RBAC: true
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -241,13 +263,13 @@ spec:
 
 ## Spaces entitlements synced by default
 
-Each Confluence Space has its own set of permissions and allowed actions, which can result in a very large set of entitlement and grant access information in each Space. In order to reduce sync times, the Confluence connector only syncs a limited set of Spaces entitlements.
+Each Confluence Space has its own set of permissions and allowed actions, which can result in a very large set of entitlement and grant access information in each Space.
 
-By default, the Confluence connector syncs entitlements formed by valid pairs of the following targets (nouns) and operators (verbs), such as `administer-space` or `read-space`.
+The Confluence connector syncs entitlements formed by valid pairs of targets (nouns) and operators (verbs), such as `administer-space` or `read-space`.
 
-Default targets (nouns): `space`
-
-Default operators (verbs): `administer`, `create`, `delete`, `export`, `read`, `restrict_content`
+<Note>
+When configuring the connector in C1, the noun and verb fields are pre-filled with a suggested subset (`space` noun and 6 common verbs). These suggested values only pre-populate the configuration form — they are **not** automatically applied. If you leave the noun and verb fields empty (or do not set `--noun` / `--verb` flags), the connector syncs **all** available nouns and verbs listed below.
+</Note>
 
 All available targets (nouns):
 
@@ -270,6 +292,10 @@ All available operators (verbs):
 
 Not all target-operator (noun-verb) pairs are valid.
 
-To change or limit what the Confluence connector syncs to C1, use the `--noun` and `--verb` flags when setting up the Confluence connector in self-hosted mode. See the [baton-confluence repo's README](https://github.com/conductorone/baton-confluence) for more information.
+To limit what the Confluence connector syncs to C1, use the `--noun` and `--verb` flags when setting up the Confluence connector in self-hosted mode, or configure the noun and verb fields in the C1 UI for cloud-hosted connectors. See the [baton-confluence repo's README](https://github.com/conductorone/baton-confluence) for more information.
+
+<Note>
+Space permission entitlements are only synced when RBAC mode is **disabled** (the default). When `--use-rbac` is enabled, the connector syncs Space Roles and Space Role Assignments instead. See [RBAC space roles](/baton/confluence#rbac-space-roles) for details.
+</Note>
 
 
