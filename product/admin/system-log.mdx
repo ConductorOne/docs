@@ -5,7 +5,7 @@ og:description: Export system log data on every call made to the C1 API
 description: Access C1 system log via API or export log data for storage or usage in SIEM.
 sidebarTitle: System logs
 ---
-{/* Editor Refresh: 2026-01-07 */}
+{/* Editor Refresh: 2026-08-27 */}
 
 ## What's included in C1 system logs? 
 
@@ -96,5 +96,46 @@ C1 system logs use the Open Cybersecurity Schema Framework (OCSF) to format log 
    - "activity_id":2 - "Read" activity
    - "activity_id":3 - "Update" activity 
    - "activity_id":4 - "Delete" activity 
+
+### Actor type classification
+
+<Warning>
+**Breaking change, effective September 3, 2026:** the `actor.user.type_id` and `actor.user.type` values below are changing for events generated from that date forward. If your queries or automation filter on these values, update them before this date. Events logged before September 3, 2026 aren't affected — historical events aren't rewritten.
+</Warning>
+
+The `actor.user.type_id` field identifies what kind of actor triggered an event.
+
+| type_id | type | Meaning | Notes |
+| :--- | :--- | :--- | :--- |
+| 1 | `"user"` | User | Non-administrator human actor |
+| 2 | `"admin"` | Admin | Human actor holding an administrator-tier role. New as of September 3, 2026 — previously logged as `type_id` `1` / `type` `"user"`, the same as non-admin users. |
+| 4 | `"connector"`, `"function"`, etc. | Service | Connectors, managed connectors, functions, and tunnels. As of September 3, 2026, replaces `99` (Other) — `99` won't appear on any new event. |
+
+If you have queries that filter `type_id = 1` (or `type = "user"`) to capture all human activity, update them to `type_id IN (1, 2)` (or `type IN ("user", "admin")`) — admin-tier actors now log with both values changed. If you have automation that filters `type_id = 99` for machine identities, switch it to `type_id = 4`; the `type` string values for machine actors aren't changing, so filters on those strings are unaffected.
+
+Each actor's platform roles are listed by display name in `actor.user.groups[]`, with a stable `uid` for each role.
+
+### API operation audience
+
+API Activity events (`class_uid` 6003) include an `unmapped.audience` field describing who's allowed to call that operation: `basic_user`, `admin_only`, `super_admin_only`, `machine_only`, or `unassigned`. The same value is available as `audience=` in `api.request.flags`.
+
+API Activity events also now include `class_name` and `category_name` captions.
+
+### Identity & Access events
+
+C1 emits four Identity & Access event classes in addition to existing event types:
+
+| class_uid | Event type | Reports |
+| :--- | :--- | :--- |
+| 3001 | Account Change | User account changes, invitations |
+| 3004 | Entity Management | Role definition updates |
+| 3005 | User Access Management | Role and entitlement grants and revocations |
+| 3006 | Group Management | Group creation and deletion |
+
+If your pipeline routes events by `class_uid` and has a fallthrough or default handler, make sure these four classes are handled explicitly instead of falling into that default.
+
+Privilege-changing operations emit a paired API Activity event and Identity & Access event that share the same `metadata.correlation_uid`, so you can join them. This means privilege-changing operations now produce two events instead of one — if you have dashboards or metrics based on event volume, scope them to avoid double-counting.
+
+Most events are also modestly larger under the updated schema. If you meter ingest by volume, factor this in alongside the event-count changes above.
 
 
