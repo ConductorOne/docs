@@ -11,13 +11,37 @@ sidebarTitle: "ClickHouse"
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
 | Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Invitation | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Invitation | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Organization | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Role | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 **Additional functionality:**
 
 <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Supports [automatic account provisioning](/product/admin/account-provisioning)
+
+**Notes:**
+- Roles sync from the ClickHouse Cloud Role Management API and cover both built-in system roles and custom roles created in the ClickHouse console.
+- Invitations sync as pending accounts. An invited person becomes a member after accepting the invitation.
+- The connector governs the ClickHouse Cloud organization, not database-level users and roles. SQL users and SQL RBAC are outside its scope.
+
+## Understanding roles and account provisioning in ClickHouse Cloud
+
+ClickHouse Cloud assigns each organization member a set of roles rather than a single role. The connector reads that set live, so ten built-in system roles — Admin, Billing, Member, Organization API Reader, Service Admin, Service API Admin, Service API Reader, Service Reader, Basic Service API Reader, and Basic Service Reader — sync alongside every custom role an administrator creates in the ClickHouse console.
+
+Two profile fields carry role information on a synced account:
+
+- **`assigned_roles`** lists the roles the member currently holds. Build access rules on this field.
+- **`role`** is deprecated by ClickHouse. On an organization that has migrated to custom roles, ClickHouse freezes this field at its pre-migration value, so it can name a role the member does not hold. Do not build access rules on it.
+
+To provision an account, the connector sends a ClickHouse invitation instead of creating a user directly. Account provisioning takes three fields:
+
+| Field | Required | What to enter |
+| :--- | :--- | :--- |
+| **Email address** | Yes | The email address to invite. ClickHouse stores it in lowercase. |
+| **Organization ID** | Yes | The UUID of the ClickHouse organization to invite the person to. |
+| **Role IDs** | No | A comma-separated list of ClickHouse role UUIDs to assign on acceptance. Leave it empty to assign the Member role, which grants organization read access only. |
+
+Role UUIDs come from `GET /v1/organizations/{organizationId}/roles` in the ClickHouse Cloud API. The connector does not accept role names.
 
 ## Gather ClickHouse configuration information
 
