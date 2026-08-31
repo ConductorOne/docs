@@ -1,0 +1,245 @@
+---
+title: Set up the Snowflake MCP server
+description: Create a Snowflake role, connect with per-user OAuth or a programmatic access token, and register the Snowflake MCP servers so your AI clients query Snowflake through governed tools.
+og:title: Set up the Snowflake MCP server
+og:description: Create a Snowflake role, connect with per-user OAuth or a programmatic access token, and register the Snowflake MCP servers so your AI clients query Snowflake through governed tools.
+sidebarTitle: Snowflake
+---
+
+{/* Editor Refresh: 2026-08-31 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+<Note>
+**Beta.** The Snowflake MCP servers are in beta while we gather feedback. If your Snowflake setup differs from what this guide describes, [contact the C1 support team](mailto:support@c1.ai).
+</Note>
+
+The Snowflake MCP servers let you govern access to your Snowflake account — running SQL statements, inspecting databases, schemas, tables, and warehouses, and using Cortex AI features — as tools your AI clients call through C1.
+
+C1 publishes several Snowflake servers, and they all connect the same way:
+
+- **Snowflake (Data)** — run SQL statements and inspect schemas, tables, databases, and warehouses.
+- **Snowflake (Admin)** — manage accounts, databases, and warehouses.
+- **Snowflake Cortex** — Cortex Analyst natural-language questions over governed data, and Cortex Search.
+- **Snowflake Cortex Inference** — the Cortex large language model completion API.
+
+Set up the Snowflake side once, then register each server you want to use.
+
+## How C1 connects to Snowflake
+
+C1 hosts the Snowflake MCP servers, so your users' AI clients only ever see MCP tools — they never call Snowflake directly. When an AI client calls one of these tools, C1 makes the matching request to the Snowflake API using the credentials you configure here, then returns the result to the AI client.
+
+The credentials you set up below are what C1 uses to call Snowflake on your users' behalf.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- You need the ACCOUNTADMIN role in Snowflake, or a role with the privileges to create the objects below. Only ACCOUNTADMIN has the `CREATE INTEGRATION` privilege by default. See [CREATE SECURITY INTEGRATION](https://docs.snowflake.com/en/sql-reference/sql/create-security-integration-oauth-snowflake) in the Snowflake documentation.
+- You need your Snowflake account URL, including the scheme, such as `https://myorg-myaccount.snowflakecomputing.com`. Find it in Snowsight under your account details, or see [Account identifiers](https://docs.snowflake.com/en/user-guide/admin-account-identifier).
+
+## Create a Snowflake role for C1
+
+Snowflake OAuth has no per-API or per-resource scopes. There is no read scope or write scope to grant. What a tool can reach is decided entirely by the **Snowflake role** it runs as, and by what that role has been granted. This is true whichever authentication method you choose, so start here.
+
+Create the role and grant it only what your users need. A role needs `USAGE` on every container in the path plus the privilege on the object itself — `USAGE` alone does not grant access to data:
+
+```sql
+CREATE ROLE IF NOT EXISTS c1_mcp_role;
+
+GRANT USAGE ON WAREHOUSE my_wh TO ROLE c1_mcp_role;
+GRANT USAGE ON DATABASE my_db TO ROLE c1_mcp_role;
+GRANT USAGE ON SCHEMA my_db.my_schema TO ROLE c1_mcp_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA my_db.my_schema TO ROLE c1_mcp_role;
+```
+
+Tools need a warehouse to run queries, so `USAGE` on a warehouse is required for anything that executes SQL. To widen or narrow what tools can reach later, change the grants on this role rather than the server configuration. See [Overview of Access Control](https://docs.snowflake.com/en/user-guide/security-access-control-overview).
+
+## Choose how users authenticate
+
+Snowflake supports two methods, and the right one depends on a single question: **do the people using the AI client have their own Snowflake accounts?**
+
+- **Per-user OAuth.** Each person authorizes with their own Snowflake account, so every tool call runs under that user's Snowflake identity and returns only what their role allows. Snowflake attributes each query to the individual. Choose this when your users are Snowflake users.
+- **Programmatic access token.** You issue one token for a service user, and every tool call reaches Snowflake as that single identity. Choose this when your users don't have Snowflake accounts, or when you want all AI activity to run through one service identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+<Tabs>
+
+<Tab title="Per-user OAuth">
+
+Create a custom OAuth client in Snowflake, then grant your role to the people who will use the server. Each user authorizes once from their AI client.
+
+## Create a Snowflake OAuth security integration
+
+Run this in Snowsight as ACCOUNTADMIN.
+
+<Steps>
+<Step>
+Create the security integration. Set `OAUTH_CLIENT_TYPE` to `'CONFIDENTIAL'`, because C1 holds the client secret in a protected backend.
+
+```sql
+CREATE SECURITY INTEGRATION c1_mcp_oauth
+  TYPE = OAUTH
+  ENABLED = TRUE
+  OAUTH_CLIENT = CUSTOM
+  OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'
+  OAUTH_REDIRECT_URI = 'https://accounts.conductor.one/auth/callback'
+  OAUTH_ISSUE_REFRESH_TOKENS = TRUE
+  OAUTH_REFRESH_TOKEN_VALIDITY = 7776000;
+```
+
+Set the redirect URI to exactly `https://accounts.conductor.one/auth/callback`. Snowflake requires a TLS-protected redirect URI, and the value must not include query parameters.
+</Step>
+<Step>
+Retrieve the client ID and secret. Pass the integration name in uppercase.
+
+```sql
+SELECT SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('C1_MCP_OAUTH');
+```
+
+The result is a JSON object. Copy the `oauth_client_id` and `oauth_client_secret` values — you enter both in C1. Snowflake also returns `oauth_client_secret_2`, a second secret you can use to rotate credentials without downtime. See [SYSTEM$SHOW_OAUTH_CLIENT_SECRETS](https://docs.snowflake.com/en/sql-reference/functions/system_show_oauth_client_secrets).
+</Step>
+<Step>
+Grant the role to everyone who will use the server. A user can only authorize as a role they already hold, so this step is what makes per-user OAuth work.
+
+```sql
+GRANT ROLE c1_mcp_role TO USER jsmith;
+```
+</Step>
+</Steps>
+
+`OAUTH_REFRESH_TOKEN_VALIDITY` is measured in seconds. For a custom client, Snowflake accepts 86400 seconds (1 day) through 7776000 seconds (90 days), and defaults to 90 days. When the refresh token expires, users reconnect their Snowflake account.
+
+<Warning>
+Snowflake prevents the ACCOUNTADMIN, ORGADMIN, GLOBALORGADMIN, and SECURITYADMIN roles from authenticating over OAuth by default. Authorizing as one of those roles fails, which is a common first-time setup problem. Use a purpose-built role instead. To change this behavior, an account administrator sets the `OAUTH_ADD_PRIVILEGED_ROLES_TO_BLOCKED_LIST` account parameter to `FALSE`, which we do not recommend for an AI integration. See [CREATE SECURITY INTEGRATION](https://docs.snowflake.com/en/sql-reference/sql/create-security-integration-oauth-snowflake).
+</Warning>
+
+## Register the server with OAuth
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select the Snowflake server you want from the catalog, such as **Snowflake (Data)**.
+</Step>
+<Step>
+Enter your **Snowflake account URL**, such as `https://myorg-myaccount.snowflakecomputing.com`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter the security integration's **client ID** and **client secret**.
+
+To pin every session to one Snowflake role, add the `session:role:<ROLE_NAME>` scope, replacing `<ROLE_NAME>` with an uppercase Snowflake role name. Leave **Snowflake token type** empty — it applies only to programmatic access tokens.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Snowflake tool from their AI client, they're prompted to connect their Snowflake account.
+</Step>
+</Steps>
+
+Repeat for each Snowflake server you want to use. The same security integration and account URL apply to all of them.
+
+## How OAuth credentials are shared
+
+Each user authorizes with their own Snowflake account, so tool calls run under that user's Snowflake identity and the role they consented to. Snowflake attributes each query to the individual user, and C1 also attributes each call in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Manage your OAuth credentials
+
+- **Rotate the client secret.** `SYSTEM$SHOW_OAUTH_CLIENT_SECRETS` returns two secrets, so you can move C1 to the second one and then rotate the first without interrupting users.
+- **Change what tools can reach.** Adjust the grants on `c1_mcp_role`. Tools return Snowflake's own permission error when the role lacks a privilege.
+- **Revoke access for one person.** Revoke the role from that user with `REVOKE ROLE c1_mcp_role FROM USER jsmith`.
+- **Revoke access for everyone.** Disable the integration with `ALTER SECURITY INTEGRATION c1_mcp_oauth SET ENABLED = FALSE`.
+- **Scope changes take effect on the next authorization.** Existing connections keep the role they were granted until the user reconnects.
+
+</Tab>
+
+<Tab title="Programmatic access token">
+
+Create a dedicated service user, attach a network policy, and issue it a token. Every user's tool calls reach Snowflake as that one user.
+
+<Note>
+Snowflake requires the user to be subject to a network policy to generate or use a programmatic access token, and authentication fails without one. If your account has no network policy yet, plan for that before you start. See [Network policies](https://docs.snowflake.com/en/user-guide/network-policies).
+</Note>
+
+## Create a service user and token
+
+Run this in Snowsight as ACCOUNTADMIN.
+
+<Steps>
+<Step>
+Create the service user and grant it the role you set up above.
+
+```sql
+CREATE USER IF NOT EXISTS c1_mcp_user TYPE = SERVICE;
+GRANT ROLE c1_mcp_role TO USER c1_mcp_user;
+```
+</Step>
+<Step>
+Attach a network policy to the user.
+
+```sql
+ALTER USER c1_mcp_user SET NETWORK_POLICY = my_network_policy;
+```
+
+To create a policy first, see [Network policies](https://docs.snowflake.com/en/user-guide/network-policies).
+</Step>
+<Step>
+Generate the token, restricting it to the role your users should query as.
+
+```sql
+ALTER USER c1_mcp_user ADD PROGRAMMATIC ACCESS TOKEN c1_mcp_token
+  ROLE_RESTRICTION = 'C1_MCP_ROLE'
+  DAYS_TO_EXPIRY = 90;
+```
+
+Copy the token value when Snowflake displays it. You cannot retrieve it again. See [Using programmatic access tokens for authentication](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens).
+</Step>
+</Steps>
+
+## Register the server with a token
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select the Snowflake server you want from the catalog, such as **Snowflake (Data)**.
+</Step>
+<Step>
+Enter your **Snowflake account URL**, such as `https://myorg-myaccount.snowflakecomputing.com`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose the bearer token method and paste the token. Set **Snowflake token type** to `PROGRAMMATIC_ACCESS_TOKEN`.
+</Step>
+<Step>
+Save your changes. C1 starts a sync that discovers the tools the Snowflake server exposes.
+</Step>
+</Steps>
+
+<Warning>
+Leaving **Snowflake token type** empty, or setting it when you authenticate with OAuth, causes Snowflake to reject the credential with an empty authorization error. Set it to `PROGRAMMATIC_ACCESS_TOKEN` only when you authenticate with a programmatic access token.
+</Warning>
+
+Repeat for each Snowflake server you want to use. The same service user and token work for all of them.
+
+## How token credentials are shared
+
+Every user's tool calls use the one token you provided, so Snowflake sees a single shared identity and attributes every query to the service user. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+## Manage your token credentials
+
+- **Rotate the token.** Generate a replacement token, update the server's credentials in C1, then remove the old token in Snowflake.
+- **Change what tools can reach.** Adjust the grants on `c1_mcp_role`. Tools return Snowflake's own permission error when the role lacks a privilege.
+- **Revoke access.** Remove the token from the user in Snowflake, or disable the service user.
+- **Plan for expiry.** The token stops working at `DAYS_TO_EXPIRY`. Tool calls fail until you issue a replacement and update the credentials in C1.
+
+</Tab>
+
+</Tabs>
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Snowflake. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCP** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Snowflake tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Snowflake credentials when an approved user successfully calls a Snowflake tool from their AI client.
+</Note>
