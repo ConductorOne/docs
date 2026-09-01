@@ -263,10 +263,6 @@ The service account must have **Modify** access to `%PROGRAMDATA%\ConductorOne` 
 
     Carefully copy and save these credentials. You will need them when configuring the connector.
   </Step>
-
-  <Step>
-    Next to the **Not Connected** label, click on the word **Baton** to navigate to the application page. Click the pencil icon at the top of the page and rename the application to **Active Directory**. This updates the application name, connector name, and icon.
-  </Step>
 </Steps>
 
 ### Step 2: Install and configure `baton-active-directory`
@@ -491,6 +487,7 @@ bind-password: "secret"
 | `custom-user-attributes` | list of strings | — | Extra LDAP attributes to include in the user profile (for example, `githubUserName`) |
 | `sync-extension-attributes` | bool | `false` | Sync `extensionAttribute1`–`extensionAttribute15` on every user profile. Equivalent to listing all 15 names in `custom-user-attributes`. |
 | `use-display-name` | bool | `false` | Use the LDAP `displayName` attribute as the C1 resource label instead of `cn`. Falls back to `cn` when `displayName` is empty. Applies to user and gMSA resources. |
+| `locked-account-is-disabled` | bool | `true` | Map a locked-out account to `STATUS_DISABLED` in C1. Set to `false` to keep locked accounts `STATUS_ENABLED` and report lockout solely via the `account_locked` profile field. See [Incomplete-read attributes](#incomplete-read-attributes). |
 
 **gMSA:**
 
@@ -519,6 +516,12 @@ bind-password: "secret"
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `additional-domains` | list of maps | — | Additional trusted domains to sync. **YAML-only** — not exposed as a CLI flag or environment variable. See [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync). |
+
+**Password generation:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `password-config` | map | — | Shape of randomly generated passwords (length and per-charset minimum counts). **YAML-only** — not exposed as a CLI flag or environment variable. See [Password generation](#password-generation). |
 
 Run `baton-active-directory --help` to see every flag with its current default.
 
@@ -657,6 +660,40 @@ Common failures:
 
 Each additional domain adds to the sync cycle. The connector completes one domain fully before moving on; LDAP pagination (1000 entries per page) is used throughout; total sync time scales linearly with the number of domains and objects.
 
+Separately, a principal's own grant listing is paginated once it holds a large number of memberships (1,000 grants per page) — this is unrelated to the LDAP-level paging above, and only affects principals with very large numbers of group memberships (previously a principal in more than roughly 2,400 groups could fail to sync at all). It costs extra LDAP round trips per page and is otherwise invisible; no configuration is needed.
+
+### Password generation
+
+When the connector generates a random password — during account creation and password rotation — the optional `password-config` setting controls its shape so generated passwords satisfy your domain's password policy:
+
+```yaml
+password-config:
+  length: 20                 # required when constraints are set; 8-64
+  constraints:               # optional; minimum counts per character set
+    - char-set: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      min-count: 2
+    - char-set: "abcdefghijklmnopqrstuvwxyz"
+      min-count: 2
+    - char-set: "0123456789"
+      min-count: 2
+    - char-set: "!@#$%^&*"
+      min-count: 1
+```
+
+Like `additional-domains`, this setting is YAML-only — it cannot be set via CLI flags, environment variables, or the C1 connector settings UI. It can also be edited in the [GUI Configuration Editor](#gui-configuration-editor) (Advanced tab).
+
+Behavior:
+
+- When present and C1 requests a random password, `password-config` replaces the requested password parameters. When absent, behavior is unchanged. "No password" and admin-supplied (encrypted) password flows are never altered.
+- Constraints are *minimums* — the remainder of the password is drawn from the full character set (upper/lower/digits/symbols). Making the min-counts sum to `length` leaves no remainder, so your char-sets become the entire alphabet; see the character-class rule below before doing that.
+- **Character-class guarantee.** Active Directory's default policy requires three of upper, lower, digit and non-alphanumeric. Without constraints the generator already guarantees one of each; with constraints it emits your minimums and fills the rest at random, which guarantees nothing. So when your char-sets cover fewer than three classes, the connector adds a `min-count: 1` constraint for missing classes until three are covered — your own minimums are never changed, and a class you already cover is never added. A symbol is never added: three classes are always reached from upper, lower and digit first, so a deliberately symbol-free policy stays symbol-free. A generated password therefore always satisfies the policy, rather than satisfying it most of the time and leaving an orphaned account object behind when it does not.
+- **A char-set only guarantees a class if it contains nothing else.** The connector draws each `min-count` character at random from your set, so `char-set: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"` with `min-count: 10` does *not* guarantee a digit — it produces one only by chance, and emits none about 69% of the time. Only a set confined to a single class makes its `min-count` a guarantee. Write one constraint per class rather than one wide set.
+- **The config that is refused** is one whose min-counts leave no room to guarantee a missing class. The rule is `sum-of-min-counts + (3 - classes-you-already-guarantee) <= length`: each missing class needs one character to guarantee it. `length: 12` with a single 11-character min-count is refused for that reason even though 11 is less than 12. The error says how many characters to free up. Lower a min-count, or add a char-set for a class you do not already cover.
+- `length` is required whenever `constraints` are set, so the length the platform requested is never silently replaced.
+- Character sets must be printable ASCII (no spaces). The config is validated at startup and the connector fails fast with a clear error if invalid.
+- The connector cannot validate against your domain's password policy — ensure the configured shape satisfies it (complexity, minimum length), or AD rejects the password-set operation.
+- The setting is global: it applies to password generation for all configured domains.
+
 ### gMSA sync
 
 To sync Group Managed Service Accounts, enable the flag in your config:
@@ -758,6 +795,23 @@ Six booleans are surfaced on every user profile:
 | `password_expired` | computed `msDS-User-Account-Control-Computed` | Live state — accounts for max-password-age policy |
 
 The four static flags come from the stored UAC bits set by an admin. The two live-state flags come from AD's server-computed UAC attribute, which is re-evaluated each time the connector reads the user.
+
+#### Incomplete-read attributes
+
+Two further fields appear on a user, group, or gMSA profile **only when a read came back incomplete**. On a healthy sync they are absent, so their presence is itself the signal.
+
+| Field | Meaning |
+|---|---|
+| `incomplete_attribute_read` | `true` when at least one attribute on this object could not be read in full |
+| `unreadable_attributes` | The affected attribute names, `;`-joined (for example `whenCreated;uSNChanged`) |
+
+Three kinds of name can appear there:
+
+- **Read-completeness sentinels** — `whenCreated`, `whenChanged`, `uSNCreated`, `uSNChanged`. AD writes these on every object of every class, so their absence can only mean the bind account cannot read them. They are the usual sign of a permission problem.
+- **A range-restricted attribute whose walk stopped early** — one of `memberOf`, `managedObjects`, `servicePrincipalName`, or `proxyAddresses`. These are the attributes the connector walks when AD returns them in chunks; seeing one here means the value set was too large to return in a single read and could not be walked to completion. It is not a permission problem.
+- **`userAccountControl`** — reported separately, since account status is derived from it.
+
+The object is still emitted rather than dropped, so the account remains visible instead of silently disappearing — but values derived from those attributes should be treated as partial. This matters most for `memberOf`: group memberships, and any access derived from them, may be understated, so an access review reading such a record could conclude a user has less access than they actually do.
 
 By default, locked-out accounts also map to `STATUS_DISABLED` in C1 (backwards-compatible). To keep locked accounts as `STATUS_ENABLED` and report lockout state solely via the `account_locked` field above, set:
 
@@ -924,10 +978,47 @@ For multi-domain setups, `test-ldaps` checks every entry in `additional-domains`
 
 ### DPAPI secrets encryption
 
-On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, and `bind-password`) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup. The GUI Configuration Editor encrypts secrets by default when you save; you can also encrypt an existing config manually:
+On Windows, the connector can encrypt sensitive config values (`client-id`, `client-secret`, `bind-password`, and the `bind-password` of every `additional-domains` entry) using Windows DPAPI machine-scoped encryption. Encrypted values are prefixed `dpapi:` in the YAML config and are decrypted transparently at startup.
+
+Secrets are encrypted for you on the paths that write the config: `setup` encrypts any plaintext secrets before it locks the file down (pass `--no-encrypt` to skip, for troubleshooting), and the GUI Configuration Editor encrypts on save. You only need to run this manually if you edited `config.yaml` by hand or generated it with your own tooling:
 
 ```console
 baton-active-directory.exe encrypt-config
+```
+
+It is idempotent — already-encrypted values are skipped — so it is safe to re-run.
+
+<Note>
+DPAPI here is **machine-scoped** (`CRYPTPROTECT_LOCAL_MACHINE`). Any process on the same host can decrypt these values, which is what lets the service — including one running as a gMSA — read them without a per-user key. It protects the secrets if the file leaves the machine (backups, file shares, support bundles), **not** from other accounts on the machine. The file's permissions are what restrict local access: `setup` applies those automatically, and `encrypt-config` warns if the file is readable by ordinary users.
+
+If a host's `config.yaml` has been readable by `BUILTIN\Users` — check with `icacls "C:\ProgramData\ConductorOne\baton-active-directory\config.yaml"` — then every local account on that server could read *and* decrypt its secrets. Encrypting or locking the file now does not undo that: **rotate the C1 client credentials and the AD bind password**, then store the new values with `setup` or `encrypt-config`.
+
+Machine scope also means **an encrypted config is not portable**. Do not copy a config that has been through `setup` or `encrypt-config` to another server, or capture it into a golden image or a config repository that redeploys it — the connector cannot decrypt it there and will fail at startup. Distribute the plaintext config and let each host encrypt its own copy.
+</Note>
+
+#### Restricting the config directory
+
+`setup` locks down `config.yaml` itself. The directory containing it keeps the permissions it inherits from `%PROGRAMDATA%`, which include `BUILTIN\Users:(RX)` — so `baton.log` is readable by any account on the server. To restrict the whole directory:
+
+```console
+baton-active-directory.exe setup --lock-config-dir
+```
+
+This is **opt-in**. It limits the directory to `NT AUTHORITY\SYSTEM`, `BUILTIN\Administrators` and the service account, so anything else that reads it as a non-administrator — a log shipper, monitoring agent, or backup job — loses access. A service account changed later through `services.msc` rather than by re-running `setup` will not be in the resulting ACL either, and will fail at startup when it cannot open `baton.log` (SCM reports this as error 1053); re-run `setup` after changing the account. When setup runs on a console and the directory is open, it reports this and offers to restrict it, defaulting to No. The prompt is skipped when stdin is not a terminal, so scripted installs are unaffected.
+
+To apply it later without reinstalling the service (add the `/grant:r` line for your service account only if the service does not run as LocalSystem):
+
+```console
+icacls "C:\ProgramData\ConductorOne\baton-active-directory" /inheritance:r ^
+  /grant:r "NT AUTHORITY\SYSTEM:(OI)(CI)(F)" ^
+  /grant:r "BUILTIN\Administrators:(OI)(CI)(F)" ^
+  /grant:r "DOMAIN\svc-baton-ad$:(OI)(CI)(M)"
+```
+
+To undo it and restore inheritance:
+
+```console
+icacls "C:\ProgramData\ConductorOne\baton-active-directory" /inheritance:e
 ```
 
 ### GUI Configuration Editor
@@ -938,7 +1029,7 @@ The connector includes a native Windows GUI for managing configuration without e
 baton-active-directory.exe config-editor
 ```
 
-The editor exposes every YAML config field across a tabbed layout (Connection, Authentication, Sync Scope, Multi-Domain, gMSA, Advanced). Notable toggles on the Advanced tab include `Lockout Status Behavior` (`locked-account-is-disabled`), `Sync Extension Attributes` (`sync-extension-attributes`), and `Use displayName as Resource Label` (`use-display-name`). Secret fields (bind passwords, client secret) are write-only — entering a new value encrypts it via DPAPI on save; leaving a field blank preserves the existing encrypted value.
+The editor exposes every YAML config field across a tabbed layout (Connection, Authentication, Search, gMSA, Multi-Domain, Advanced). Notable toggles on the Advanced tab include `Lockout Status Behavior` (`locked-account-is-disabled`), `Sync Extension Attributes` (`sync-extension-attributes`), and `Use displayName as Resource Label` (`use-display-name`). Secret fields (bind passwords, client secret) are write-only — entering a new value encrypts it via DPAPI on save, and leaving a field blank keeps the stored value. A stored value that is still plaintext (from a hand-edited config) is encrypted on the next save; the cue next to each field shows which state it is in.
 
 ## What's next?
 
