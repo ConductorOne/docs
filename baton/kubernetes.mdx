@@ -20,13 +20,219 @@ This connector requires network access to your Kubernetes API server. If your cl
 | Kubernetes groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
 | Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
 | Cluster roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| Nodes | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| Pods | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| Deployments | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| StatefulSets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| DaemonSets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| Secrets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
-| ConfigMaps | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Nodes | Opt-in | |
+| Pods | Opt-in | |
+| Deployments | Opt-in | |
+| StatefulSets | Opt-in | |
+| DaemonSets | Opt-in | |
+| Secrets | Opt-in | |
+| ConfigMaps | Opt-in | |
+| Cluster | Opt-in | |
+| Role assignments | Opt-in | |
+| API resources | Opt-in | |
+
+<Note>
+Workload and configuration resource types (Nodes, Pods, Deployments, StatefulSets, DaemonSets, Secrets, ConfigMaps) are excluded from the default sync. To include them, pass the full set of resource type IDs to sync with the standard `--sync-resource-types` flag (or the `BATON_SYNC_RESOURCE_TYPES` environment variable). An explicit selection replaces the default set, so list every type you want. For example:
+
+```
+baton-kubernetes --sync-resource-types namespace,service_account,role,cluster_role,kube_user,kube_group,pod,node
+```
+</Note>
+
+**Notes:**
+- Bindings whose subject name contains `system:` are excluded from grants. This covers groups such as `system:masters` and `system:serviceaccounts:<namespace>`, and users such as `system:kube-controller-manager` — subjects that belong to Kubernetes' own control plane. Roles and cluster roles named `system:*` are still synced; the exclusion applies to the subject side of a binding. If your cluster binds a `system:` group to real users, that binding produces no grant in C1.
+
+## Cluster role assignments
+
+By default, each cluster role declares one entitlement per namespace plus one cluster-wide entitlement. That is the number of cluster roles multiplied by the number of namespaces, and nearly all of those entitlements are permanently empty — a cluster with 70 cluster roles and 50 namespaces declares around 3,500 entitlements to express a few dozen real bindings.
+
+Turning on **Sync cluster role assignments** (`--use-role-assignments`, or `BATON_USE_ROLE_ASSIGNMENTS`) switches to a sparse model. Instead of every possible combination, the connector syncs one **role assignment** resource for each cluster role and scope pair that actually has a binding, each with a single `assigned` entitlement:
+
+| Kubernetes object | Role | Scope |
+| :--- | :--- | :--- |
+| ClusterRoleBinding | The cluster role | The cluster |
+| RoleBinding referencing a cluster role | The cluster role | That namespace |
+
+The **Cluster** resource is a single resource standing for the cluster itself. It exists so that cluster-wide assignments have a scope to point at.
+
+The two models are mutually exclusive. With the setting on, cluster roles stop reporting their own entitlements and grants, so the same access is never counted twice. Namespaced roles are unaffected: a role can only be bound inside its own namespace, so the sparse form would not reduce anything.
+
+Where several bindings grant the same cluster role in the same scope, they are combined into one role assignment. The names, kinds and creation timestamps of every contributing binding are kept on the resource under `contributingBindings`, so you can still see which objects produce the access.
+
+The `system:` subject exclusion above applies here too: a pair whose only subjects are `system:` users or groups is synced as a role assignment but reports no grants.
+
+<Warning>
+**Cluster** and **Role assignments** are opt-in resource types. If you also narrow which resource types the connector syncs, you must select both of them alongside this setting.
+
+If the setting is on but those two types are not selected, cluster roles stop reporting their entitlements and grants while nothing syncs the role assignments meant to replace them, and **no cluster role access is reported at all**. Leaving the resource type selection untouched avoids this — the connector's own default already includes them.
+</Warning>
+
+## Role permissions
+
+Membership reports *who holds a role*. Permissions report *what the role permits*, as access you
+can review and filter rather than as text on the role. There is no separate setting: selecting a
+resource type is what asks for its access data, and **API resources** — which carries the
+permissions over classes of objects, such as *pods in team-a* or *secrets cluster-wide* — is
+selected by default.
+
+Every API resource named by an RBAC rule that some binding actually applies becomes an
+**API resource** resource, with one entitlement per verb that rule grants — so "who can
+create pods in team-a" becomes a question you can ask of the resource directly. The roles
+conferring the permission hold those entitlements, and the users, groups and service accounts
+holding the role inherit them.
+
+| Resource | What it is | Parent |
+| :--- | :--- | :--- |
+| `core:pods@team-a` — *pods in team-a* | Pods, in one namespace | The namespace |
+| `core:pods@*` — *pods cluster-wide* | Pods, in every namespace including ones created later | The cluster |
+| `core:pods/exec@team-a` — *pods/exec in team-a* | Shell access into pods, a distinct RBAC resource rather than a verb on pods | The namespace |
+| `*:*` — *All API resources* | What a wildcard rule such as `cluster-admin`'s grants | The cluster |
+
+Scope always comes from the binding, never from the role: the same cluster role bound by a
+ClusterRoleBinding reaches every namespace, while bound by a RoleBinding it reaches only that
+one.
+
+Only what a rule names is synced. A verb no rule mentions is never declared, so there are no
+permanently empty entitlements, and a role nobody binds produces nothing — its rules remain
+visible in its own profile. Wildcard rules stay wildcards rather than being expanded across
+the cluster's whole API surface, so a `cluster-admin` binding costs one resource; filter on
+**All API resources** to find who holds one. Rules that Kubernetes ignores are left out:
+a role or role binding cannot grant access to a cluster-scoped resource such as nodes, so
+such a rule is not reported as access.
+
+Where a rule narrows to named objects with `resourceNames`, the permission is reported against
+those names rather than against the resource as a whole — *secrets "app-db-password" in team-a*,
+not *secrets in team-a* — so a role that can read one secret never appears to hold access to all
+of them. Only verbs that identify an object by name are reported: a request such as **list**
+carries no name, so Kubernetes does not apply the rule to it. The permission is also reported on
+the object itself, for example the **update** permission on the `cluster-info` config map,
+whenever that resource type is being synced and the object exists.
+
+### Permissions on individual objects
+
+When you also sync a workload or configuration type, its objects carry the permissions rules
+confer on them, so **who can read this secret** or **who can exec into this pod** is answered on
+the object itself.
+
+Each type declares the same set of permissions for all of its objects: the permissions that
+address an object — **get**, **update**, **patch**,
+**delete** and the like — plus one per subresource, plus **impersonate** on service accounts.
+A permission is declared whether or not any role currently confers it, because a permission
+nobody holds is a reviewable fact, and because a permission that appeared and disappeared as
+RBAC changed would disturb every campaign, request and policy referring to it.
+
+**list**, **watch** and **deletecollection** are permissions over a collection rather than over
+any one member, so they stay on the API resource. Permission on a subresource keeps the
+subresource's name — a pod shows **create exec** rather than **create**, which would read as
+permission to create the pod — and a wildcard rule over a subresource only reaches the kinds that
+actually have it, so the autoscaler's rule over `*/scale` reaches deployments but not secrets.
+
+<Note>
+The permission set for each type is fixed and the same for every object of that type, so what
+you can review does not change as the cluster's roles change — only who holds it does.
+</Note>
+
+Kubernetes' own control-plane roles are left out of the object layer. Every `system:` cluster role is
+bound across the whole cluster, so each one would otherwise appear on every object of every type —
+the large majority of what this layer would report, none of it anything a reviewer acts on. What
+those roles permit is still shown on the API resources. Turn on **Include control-plane permissions
+on objects** (`--include-system-object-permissions`) if you want them back on the objects too.
+
+<Warning>
+Object-level permissions scale with the number of objects. Because each type declares a fixed set,
+every object carries it whether or not anyone holds it — a pod declares 25 permissions, a secret or
+config map 5 — so consider what selecting Pods means on a cluster running thousands of them. Pods
+are marked as a resource type whose count may legitimately fall between syncs, so a rollout
+replacing every pod is not reported as missing data.
+</Warning>
+
+<Warning>
+**API resources** and **Cluster** are selected by default. If you narrow which resource types the
+connector syncs, keep both: API resources is the only place a permission over a *class* of
+objects can be reported, and permissions such as **list**, **watch** and **create** appear
+nowhere else, so dropping it makes "who can create pods in this namespace" unanswerable. Cluster
+goes with it because cluster-wide permissions are reported as children of that single resource.
+
+Keep **Roles**, **Cluster roles** and — if you use **Sync cluster role assignments** — **Role
+assignments** selected as well. Permissions are held by roles, so deselecting the role that holds
+one removes the access entirely: the permissions are still listed, but nobody appears to hold
+them.
+</Warning>
+
+This is independent of **Sync cluster role assignments**, which decides how membership is
+modelled rather than what a role permits.
+
+## Understanding Kubernetes identity
+
+Kubernetes does not have a built-in user store. Identity is determined at authentication time by the method used to connect to the API server:
+
+- **x509 client certificates** — The certificate's `CN=` field is the username; `O=` fields are group memberships.
+- **Service account tokens** — Bound to a namespace; group is always `system:serviceaccounts:<namespace>`.
+- **OIDC tokens** — Username and groups come from JWT claims configured on the API server.
+- **Webhook authenticators** — Username and groups are returned by an external service.
+- **Bearer tokens** — Used for service accounts and bootstrap tokens.
+
+Access control is defined through RBAC: Roles and ClusterRoles define permissions, and RoleBindings and ClusterRoleBindings assign those permissions to users, groups, or service accounts.
+
+## Group membership limitations
+
+Kubernetes group membership is not a native API object. Groups only exist as claims inside authentication credentials and are never persisted in the cluster. The connector can discover group membership for one authentication method only:
+
+**x509 client certificates stored in kubeconfig Secrets** — when a Secret contains a kubeconfig with embedded `client-certificate-data`, the connector parses the certificate's `O=` (Organization) fields as group names and emits `kube_group:<group>:member → kube_user:<cn>` grants.
+
+The following authentication methods are **not supported** for group membership discovery:
+
+| Auth method | Why membership is invisible |
+| :--- | :--- |
+| OIDC / OAuth2 | Group claims live in the ID token issued at login time; the cluster never stores them |
+| Webhook authenticators | Group assignment happens outside the cluster at auth time |
+| Bootstrap tokens | No persistent user or group identity |
+| In-cluster service account tokens | Group is always `system:serviceaccounts:<namespace>`, inferred from the token's namespace |
+
+**What this means for access reviews:** RBAC bindings to groups are fully visible. If `ClusterRole:admin` is bound to group `developers`, that grant is synced. However, the list of users in `developers` is only complete if those users authenticate via x509 client certificates whose kubeconfigs are stored as Secrets in the cluster. Users authenticating via OIDC or webhook will appear as grant targets on Roles and ClusterRoles if they have direct bindings, but not as members of their groups.
+
+To resolve those memberships from the directory that does hold them, attach an identity source.
+
+## Matching cluster identities to a directory
+
+A cluster authorizes identities it does not store, so a `User` or `Group` subject in an RBAC binding is only a string the authenticator asserted: an OIDC claim, an x509 `CN=`/`O=` field, a Microsoft Entra object ID, an AWS IAM ARN. The directory that knows who that principal is belongs to a different app in C1.
+
+Selecting that app as this connector's **identity source** lets C1 resolve the two. Each `User` and `Group` subject the connector reports is matched against the identity source's principals, and a matched group is expanded through the directory's own membership, so `Group developers → ClusterRole admin` becomes reviewable person by person — the membership Kubernetes itself cannot supply.
+
+Matching is attempted two ways at once, because which one fits depends on the directory rather than on Kubernetes:
+
+- against the external resource's **ID**, for directories whose identifiers the cluster uses verbatim, such as Microsoft Entra group object IDs or AWS IAM role ARNs
+- against a **profile field**, for the OIDC case where the subject is a human-readable name or email address
+
+The defaults suit a cluster federated through an OIDC issuer and need no configuration. Change them when the cluster federates against something else:
+
+| Setting | Default | Change it to |
+| :--- | :--- | :--- |
+| External user match key | `email`, which also matches a user's email addresses | `userPrincipalName` for Microsoft Entra |
+| External group match key | `display_name`, where Microsoft Entra publishes a group's name | `sAMAccountName` to match Active Directory directly rather than through Entra |
+
+Resolving a matched group to the accounts inside it needs no setting: the connector targets the membership entitlement Microsoft Entra publishes, which is the identity source it is built to federate against.
+
+<Note>
+**Group access stays reviewable whether or not an identity source is attached.** Matching adds a resolved view of each group; it never replaces the group itself. A group that matches nothing in the directory — or a connector with no identity source selected at all — still reports the group as a first-class grantee you can attest in a campaign.
+</Note>
+
+## Understanding how the connector selects a cluster
+
+The connector resolves its target cluster in this order:
+
+1. **`--kubeconfig`** — the connector reads this file. The path must exist, or the connector exits with `specified kubeconfig file does not exist: <path>`.
+2. **`--server`** — with no `--kubeconfig`, the connector connects to this URL directly. Supply credentials separately with `--token`, or with `--client-certificate` and `--client-key`, or rely on an in-cluster service account.
+3. **The environment** — with neither flag set, the connector requires one of the following to be present, and the standard Kubernetes client loading rules then decide which one applies:
+   - the `KUBECONFIG` environment variable, a `:`-separated list of paths whose first existing file wins
+   - the default kubeconfig at `$HOME/.kube/config`
+   - an in-cluster service account token, mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token`
+
+   When none of the three exists, the connector exits with `no kubeconfig available: <path> does not exist and no in-cluster service account found`.
+
+<Warning>
+Name the target cluster explicitly when you run the connector outside a cluster. With neither `--kubeconfig` nor `--server` set, the connector follows the current context of your default kubeconfig, which may point at a different cluster than the one you intend to sync. Confirm the context with `kubectl config current-context` before the first sync.
+</Warning>
 
 ## Before you begin
 
@@ -98,6 +304,16 @@ Save this as `baton-rbac.yaml` and apply it:
 ```bash
 kubectl apply -f baton-rbac.yaml
 ```
+
+<Note>
+The connector also reads the cluster's API discovery endpoints, which it uses to tell namespaced
+resources from cluster-scoped ones and to know which subresources exist. No extra rule is needed:
+every cluster binds `system:discovery` to `system:authenticated` by default. If your cluster has
+removed that binding, grant `get` on the non-resource URLs `/api`, `/api/*`, `/apis` and
+`/apis/*`. Without discovery the connector still syncs permissions; it just cannot tell that a
+rule naming a cluster-scoped resource inside a namespace is inert, so such rules are reported
+rather than dropped.
+</Note>
 
 ## Configure the Kubernetes connector
 
@@ -271,6 +487,8 @@ Add the connector in C1 and enter the credentials you collected in the previous 
     In the **Settings** area, click **Edit** and enter:
     - **Server**: your API server URL
     - **Token**: the bearer token generated above
+
+    Optionally turn on **Sync cluster role assignments** — see [Cluster role assignments](#cluster-role-assignments) for what it changes and the resource types it needs.
     </Step>
     <Step>
     Click **Save**. The connector's label changes to **Syncing**, then **Connected**.

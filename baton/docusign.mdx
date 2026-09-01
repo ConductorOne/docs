@@ -15,15 +15,25 @@ sidebarTitle: "Docusign"
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
 | Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Signing groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Signing groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Permission profiles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| CLM members, roles & groups** | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | Groups only |
+| CLM folders & folder security** | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| CLM permission sets** | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#c937ae"/> |
+| CLM workflow queues** | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#c937ae"/> |
 
 The Docusign connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
 Every Docusign account must be assigned at least one permission profile. If all other permission profiles are revoked, the account will be automatically assigned the **DocuSign Viewer** profile, which cannot be revoked.
 
-*By default, signing groups are not synced. You can configure the connector to sync signing groups, if desired.
+*By default, signing groups are not synced. Enable the **Include Signing Groups** setting to sync signing groups. Once enabled, your account must actually have the signing groups feature — ConductorOne doesn't validate this before letting you turn the setting on, so enabling it without the feature will fail the sync rather than silently sync no signing groups.
+
+**DocuSign CLM (Contract Lifecycle Management) is a separate, separately-licensed DocuSign product. CLM resources are opt-in — enable each CLM resource type in your sync configuration to turn them on. Once enabled, your DocuSign account must have a CLM production subscription and the credential must have been granted the OAuth scopes CLM needs; enabling a CLM resource type without them will fail the sync rather than silently sync no data, since ConductorOne doesn't validate the underlying subscription before letting you opt in. CLM permission sets and workflow queues sync for visibility only; DocuSign's CLM API has no endpoint to assign or unassign a permission set, and no endpoint to grant or revoke workflow queue membership (only work-item assign/unassign, which isn't synced here). CLM workflow queues also require CLM members to be enabled — queues are discovered per member, not via a standalone list endpoint.
+
+<Warning>
+If you use **OAuth Authentication** (the default, managed method), syncing CLM data requires ConductorOne's managed OAuth app to be granted the CLM API scopes on the platform side. If CLM data doesn't appear after setup, contact ConductorOne. This doesn't apply to **Custom App (Demo Environment)**, where the connector requests the CLM scopes directly using your own DocuSign app credentials.
+</Warning>
 
 ## Gather Docusign credentials
 
@@ -50,12 +60,16 @@ A user with access to the **Docusign Admin console** must perform this task.
   </Step>
   <Step>
   On the app configuration screen, carefully copy and save the **Client ID** (also called an integration key).
+
+  You'll be asked to classify the integration key. This choice affects production billing and [can't be changed later](https://developers.docusign.com/platform/go-live/#ik-classifications). The key is created and used against your own DocuSign account in both hosting modes, so **Private custom integration** — DocuSign's description is *"used internally by your employees or your customers' employees"* — matches most setups. If you're going through C1's **Custom App (Demo Environment)** field group, you may instead consider **Third-party integration key** — *"using a partner integration that requires your own integration key"* — since C1 is the party invoking it on your behalf; confirm with DocuSign which classification fits your situation before proceeding, since it isn't reversible.
   </Step>
   <Step>
   Click **Add Secret Key**, then carefully copy and save the client secret.
   </Step>
   <Step>
-  In the **Redirect URI** field, enter any URI of your choice (such as http://example.com/callback) and click **Add**.
+  In the **Redirect URI** field:
+    - If you're configuring a **self-hosted** connector, enter any URI of your choice (such as http://example.com/callback) and click **Add**. Nothing needs to be listening at that address — the `--configure` flow prints an authorization URL, and after you authorize, DocuSign redirects your browser there; copy the `code` parameter from the resulting (unreachable) URL and paste it when prompted. Whatever value you register here must also be passed as `--redirect-uri` / `BATON_REDIRECT_URI`, or the authorization and token exchange will fail.
+    - If you're configuring a **Cloud-hosted (demo environment)** connector, enter `https://accounts.conductor.one/oauth/callback` and click **Add**. C1 completes the OAuth flow through this URL; DocuSign rejects the authorization request if it isn't registered here.
   </Step>
   <Step>
   Under **Authentication**, enable **Authorization Code Grant**.
@@ -83,6 +97,8 @@ To complete this task, you'll need the **Connector Administrator** or **Super Ad
 - To sync access data (READ): Read users, groups, and permissions.
 
 - To sync access data and provision accounts (READ/WRITE): Create users plus read users, groups, and permissions.
+
+- To sync CLM data: your DocuSign account needs a CLM production subscription, and the credential used must have read (and, for folder security and CLM group provisioning, write) access to CLM folders, groups, and members.
 </Warning>
 
 <Tabs>
@@ -123,7 +139,7 @@ To complete this task, you'll need the **Connector Administrator** or **Super Ad
   **If you selected Custom App (Demo Environment):** Enter the **Client ID** and **Client Secret** from your DocuSign developer app.
   </Step>
   <Step>
-  **Optional.** Click to **Sync signing groups**, if desired.
+  **Optional.** Click to **Sync signing groups**, if your account has the feature enabled and you'd like to sync them.
   </Step>
   <Step>
   **Optional.** If your organization has multiple DocuSign accounts under the same tenant, enter the **API Account ID** (UUID) of the account you want to sync. Leave blank to use your default account. To sync multiple accounts, create a separate connector for each one.

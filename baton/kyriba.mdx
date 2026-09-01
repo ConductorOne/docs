@@ -22,6 +22,21 @@ The Kyriba connector syncs the following resources:
 
 {/* AUTO-GENERATED:END - capabilities */}
 
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. Which automation step offers an action is determined by the action itself — you cannot choose:
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| Account lifecycle action | `enable_user`, `disable_user` | The step's own **Target account** selector — either the account in context or a specific account. |
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `enable_user` | `user_id` (string, required) | Reactivates a previously disabled Kyriba user without affecting any other data |
+| `disable_user` | `user_id` (string, required) | Deactivates a Kyriba user without deleting them — the user record, their profile, and their access assignments are preserved and can be restored with `enable_user` |
+
+The connector passes `user_id` to Kyriba unchanged. Kyriba's `/v1/users/{ref}` accepts either the user's UUID or their `code`, and C1's account selector supplies the UUID.
+
 ## Gather Kyriba credentials
 
 <Warning>
@@ -45,15 +60,15 @@ The connector authenticates using OAuth2 client credentials. You will need:
   </Step>
 
   <Step>
-    Grant the following OAuth scopes to enable full sync and provisioning:
+    Grant the following access permissions to enable full sync and provisioning:
 
-    | Scope | Used for |
+    | Access permission | Used for |
     | :--- | :--- |
     | `user-scope` | Sync users and access profiles; create and delete users; assign data permission profiles |
     | `user-group-scope` | Sync user groups; add and remove members |
     | `data-permission-profile-scope` | Sync data permission profiles |
 
-    For sync-only (read) access, all three scopes are still required. Provisioning requires write permissions on the relevant scopes: `user-scope` for account creation/deletion and data permission profile assignment; `user-group-scope` for group membership changes. Note that user **update and deletion** — used for data-permission-profile assignment (`PUT /v1/users/{ref}`) and account deprovisioning (`DELETE /v1/users/{ref}`) — require broader user-management permission than user creation. A credential granted only create + read access may sync and create users successfully but return `403 Forbidden` on updates and deletes; grant full user-management permission if you need deprovisioning or data-permission-profile assignment.
+    These are Kyriba access permissions granted to the API user, not OAuth `scope` parameters — the connector does not send a `scope` value on the token request. For sync-only (read) access, all three are still required. Provisioning requires write access on the relevant permissions: `user-scope` for account creation/deletion, the `enable_user`/`disable_user` actions, and data permission profile assignment; `user-group-scope` for group membership changes. Note that user **update and deletion** — used for the `enable_user`/`disable_user` actions and data-permission-profile assignment (`PUT /v1/users/{ref}`), and account deprovisioning (`DELETE /v1/users/{ref}`) — require broader user-management permission than user creation. A credential granted only create + read access may sync and create users successfully but return `403 Forbidden` on updates, deletes, and the enable/disable actions; grant full user-management permission if you need deprovisioning, enable/disable, or data-permission-profile assignment.
   </Step>
 
   <Step>
@@ -102,8 +117,8 @@ The connector authenticates using OAuth2 client credentials. You will need:
       <Step>
         Enter the required configuration:
 
-        - **Kyriba URL**: The base URL of your Kyriba instance (for example, `https://api.kyriba.com`)
-        - **Token URL**: The OAuth2 token endpoint URL (for example, `https://api.kyriba.com/gateway/oauth/token`)
+        - **Kyriba URL**: The base URL of your Kyriba instance, including the tenant-specific API gateway path (for example, `https://<your-tenant-host>/api` or `https://<your-tenant-host>/gateway/api`)
+        - **Token URL**: The OAuth2 token endpoint URL (for example, `https://<your-tenant-host>/gateway/oauth/token`; the host may differ from the API host)
         - **Kyriba Client ID**: Your OAuth2 client ID from the Kyriba Developer Portal
         - **Kyriba Client Secret**: Your OAuth2 client secret from the Kyriba Developer Portal
       </Step>

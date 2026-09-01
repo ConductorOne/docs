@@ -6,6 +6,14 @@ og:description: "Connectors can be hosted in your own infrastructure."
 sidebarTitle: "Deploy self-hosted connectors"
 ---
 
+## Self-hosted connector network architecture
+
+The following diagram shows how a self-hosted connector runs inside your network, how it reaches the systems it syncs, and how it communicates with C1 over an outbound-only connection.
+
+<Frame>
+<img src="/images/baton/assets/self-hosted-connectors-arch.png" alt="Reference architecture diagram of self-hosted connector network topology. On the left, a customer network trust boundary contains a Baton connector (running as a Docker container, Kubernetes deployment, systemd unit, or Windows service, optionally supervised by baton-runner) alongside a customer secret store (env vars, Kubernetes Secret, AWS Secrets Manager, or HashiCorp Vault) and the target systems it syncs, such as Active Directory/LDAP, SQL Server or PostgreSQL, Jira/Confluence/Bitbucket, and internal HTTP APIs. The connector reaches target systems over private network protocols like LDAPS, TDS, and HTTPS, and writes an ephemeral sync.c1z file and debug log to a local working directory. On the right, the C1 cloud (multi-tenant SaaS) exposes an OAuth 2.0 token endpoint and a connector API/task queue. The only connection crossing the corporate firewall is outbound HTTPS on TCP 443 using TLS 1.2+ and gRPC to *.conductorone.com — no inbound ports, VPN, or DMZ host are required, and it works behind NAT and egress proxies. This is a pull model: the connector always initiates, calling Hello (registers host ID, version, capabilities), GetTask/GetTasks (long-polls for work), Heartbeat (keepalive during a task), UploadAsset (streams sync.c1z in 512KB chunks), and FinishTask (reports success or failure); the task assignment response rides the same outbound connection rather than a new inbound one. Task types include full sync, grant/revoke entitlement, create account, delete resource, rotate credentials, issue credential, create/get ticket, event feed, and debug. Target-system credentials are never transmitted to C1. For high availability, multiple connector replicas share one client ID and C1 distributes tasks round-robin. A separate diagram section shows the alternative periodic upload mode: a baton-<app> CLI run on a schedule (such as cron) produces a sync.c1z file with no persistent connection, which is either manually uploaded in the C1 UI or placed in a customer-owned S3 bucket that C1 polls hourly." />
+</Frame>
+
 ## Should I use self-hosted connectors?
 
 You might want to self-host and deploy connectors in your own environment if one or more of the following is true:
