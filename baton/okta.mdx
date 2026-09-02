@@ -98,6 +98,10 @@ Run the `enable_user` action against the account to finish activating it.
 </Note>
 
 <Note>
+**A deprovisioned login cannot be reused by Create Account.** If the login you are creating already belongs to a **Deprovisioned** (deactivated) Okta account, the create fails with an error instead of returning that account. The connector cannot reactivate a deprovisioned user, so returning it would hand back an account that can never be used. Reactivate the user directly in Okta, or delete and recreate the account, to reuse the login.
+</Note>
+
+<Note>
 **Password Change Required on Login**, **Create Inactive**, and **Send Activation Email** are all string fields with a `True` / `False` placeholder (same schema shape). Map them as the strings `"true"` / `"false"` (case-insensitive). The connector also accepts a real boolean at runtime, but provisioning mappings that treat these three fields the same way are the supported pattern. **Additional Attributes** must return a map. Account creation fails with an error when a mapped value has the wrong type, so the account is never created without the values you asked for. Leaving a field unmapped uses its default.
 </Note>
 
@@ -124,8 +128,14 @@ In the Perform connector action step, actions are listed under their resource ty
 | disable_user | `user_id` (string, required) | Suspends an Okta user account. Returns success without calling Okta when the account is already suspended, deactivated, or still staged. |
 | deactivate_user | `user_id` (Okta user resource, required) | Destructively deprovisions the selected user from assigned applications and leaves the Okta user record in `DEPROVISIONED`. A user already in that state succeeds without another mutation. |
 | delete_user | `user_id` (Okta user resource, required) | Ensures the selected user is deactivated, then permanently deletes the user. A user that is already absent succeeds so workflow retries are safe. |
+| update_profile | `user_id` (resource ID, required), 18 optional profile fields (`login`, `email`, `secondEmail`, `firstName`, `lastName`, `middleName`, `displayName`, `title`, `department`, `division`, `organization`, `employeeNumber`, `costCenter`, `userType`, `primaryPhone`, `mobilePhone`, `countryCode`, `managerId`), `additionalAttributes` (map) | Updates an existing Okta user's profile attributes. At least one profile field must be provided. |
+| update_user | `user_id` (string, required), `user_profile` (JSON object, required) | Updates a user's profile from a JSON object of Okta profile attributes — accepts any attribute, not limited to update_profile's curated list. This is the action C1's automated profile-push pipeline uses. |
 | create | `name` (string, required), `description` (string), `userMembers` (resource ID list) | Creates a new Okta group with optional initial members |
 | modify_group | `group_id` (string, required), `name` (string), `description` (string) | Updates the name and/or description of an existing Okta group. Returns success without calling the Okta API if the supplied values already match the group's current name and description (idempotent). |
+
+<Note>
+`update_user` (global action, takes `user_profile` as a JSON object) is the action required for C1's automated profile-push pipeline — a push rule that syncs Okta profile fields specifically looks up this global action shape. `update_profile` (resource-scoped, individual typed fields) is for manual/UX invocation from a workflow step; it does not satisfy the push-rule lookup on its own. Named profile fields and `user_profile` JSON keys use Okta's camelCase attribute names (e.g. `firstName`, not `first_name`).
+</Note>
 
 <Warning>
 `deactivate_user`, `delete_user`, and C1 account deprovisioning are destructive. Deactivation removes the user's assigned-app provisioning and can destroy downstream data such as email or files. Deletion permanently removes the Okta user and cannot be recovered. Use workflow approval gates where appropriate.
