@@ -1,0 +1,211 @@
+---
+title: "Set up a FreeIPA connector"
+og:title: "Set up a FreeIPA connector"
+description: "C1 provides identity governance and just-in-time provisioning for FreeIPA. Integrate your FreeIPA deployment with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for FreeIPA. Integrate your FreeIPA deployment with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "FreeIPA"
+---
+
+The FreeIPA connector reads your directory over LDAP. It works with FreeIPA and with Red Hat Identity Management, which ships the same server components.
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Groups (`ipaUserGroup` in IPA) | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles (`groupOfNames` in IPA) | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Hosts (`ipaHost` in IPA) | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Host groups (`ipaHostGroup` in IPA) | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+This table is hand-maintained, not generated from `baton_capabilities.json` — it adds IPA object-class annotations the JSON doesn't carry, and the JSON's own `CAPABILITY_RESOURCE_DELETE` on `user` has no column here since account deletion doesn't work end to end today (see notes below).
+
+**Notes:**
+
+- Groups offer two entitlements: **member** and **manager**. Roles offer **member**, and a role membership can be granted to a user, a group, a host, or a host group.
+- Host access comes from your HBAC rules rather than from a fixed entitlement. Host groups additionally offer **member** and **manager** entitlements, on top of the HBAC-derived ones. Each rule that names a host or host group becomes an entitlement on that resource, so what C1 shows follows the rules you have written.
+- A rule that applies to every host or every user — one whose `hostCategory` or `userCategory` is set to `all`, such as the `allow_all` rule FreeIPA ships — appears in C1 as a grant against a single **Any** or **Anyone** resource, rather than being expanded across your whole estate.
+- Group and role memberships expand. When a group is granted a role, C1 resolves the group's members through to that role, including members reached through nested groups.
+- Account deprovisioning by deletion is not yet supported end to end: the resource ID the connector stores for a user (`ipaUniqueID`) doesn't match what the delete path expects (a DN), so a delete call currently errors instead of removing the entry. The connector does not create accounts.
+- Last login comes from the Kerberos `krbLastSuccessfulAuth` attribute, which is an operational attribute. Setting `--disable-operational-attrs` turns off both last login and created-at for every account.
+
+## Gather FreeIPA credentials
+
+<Warning>
+To configure the FreeIPA connector you need an account that can read your directory over LDAP. To let C1 provision access, that account also needs write access to the group and role membership attributes.
+</Warning>
+
+<Steps>
+  <Step>
+    Choose the account the connector will bind as.
+
+    <Tip>
+    Create a dedicated service account rather than reusing `admin`. It keeps the connector's access reviewable and lets you scope it to read-only if you do not want C1 to provision access.
+    </Tip>
+  </Step>
+
+  <Step>
+    Record the account's full distinguished name and password.
+
+    The distinguished name is the complete path to the entry, for example `uid=c1-service,cn=users,cn=accounts,dc=example,dc=com`.
+  </Step>
+
+  <Step>
+    Grant the account read access to the parts of the directory you want C1 to see: the user, group and role containers, your hosts and host groups, and your HBAC rules.
+  </Step>
+
+  <Step>
+    To let C1 provision access, grant the account write access to the `member` and `memberManager` attributes on the groups and roles you want it to manage.
+
+    <Warning>
+    Write access is used by C1 when automatically provisioning access. **If you do not want C1 to perform these tasks, grant read access only.**
+    </Warning>
+  </Step>
+
+  <Step>
+    Record the URL of your FreeIPA server, using either the `ldap:` or `ldaps:` scheme and optionally a port, for example `ldaps://ipa.example.com:636`.
+
+    <Warning>
+    Prefer `ldaps:` in production. The connector binds with a password, and a plain `ldap:` connection sends it unencrypted.
+    </Warning>
+  </Step>
+</Steps>
+
+**Done.** Next, move on to the connector configuration instructions.
+
+## Configure the FreeIPA connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    **Follow these instructions to use a built-in, no-code connector hosted by C1.**
+
+    *Cloud-hosted connector not currently available.*
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [FreeIPA](https://github.com/conductorone/baton-ipa) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+    ### Step 1: Set up a new FreeIPA connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new FreeIPA connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your FreeIPA connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-ipa-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-ipa-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # FreeIPA credentials
+      BATON_URL: <Your FreeIPA server URL, for example ldaps://ipa.example.com:636>
+      BATON_BIND_DN: <The distinguished name the connector binds as>
+      BATON_PASSWORD: <That account's password>
+      BATON_BASE_DN: <The distinguished name to search under>
+
+      # Optional: include if you want C1 to provision access using this connector
+      BATON_PROVISIONING: "true"
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-ipa.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-ipa
+      labels:
+        app: baton-ipa
+    spec:
+      selector:
+        matchLabels:
+          app: baton-ipa
+      template:
+        metadata:
+          labels:
+            app: baton-ipa
+            baton: "true"
+            baton-app: ipa
+        spec:
+          containers:
+          - name: baton-ipa
+            image: public.ecr.aws/conductorone/baton-ipa:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-ipa
+            envFrom:
+            - secretRef:
+                name: baton-ipa-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the FreeIPA connector to. FreeIPA data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your FreeIPA connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+<Tip>
+Looking for a specific version of this connector? Browse the available releases at [dist.conductorone.com/ConductorOne/baton-ipa](https://dist.conductorone.com/ConductorOne/baton-ipa).
+</Tip>
