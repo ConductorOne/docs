@@ -1,9 +1,9 @@
 ---
-title: "Agent guardrails reference"
-og:title: "Agent guardrails reference - C1 docs"
-description: "Technical reference for agent guardrails: object model, rule and tool gate fields, CEL variables, enforcement surfaces, evaluation order, constraints, and troubleshooting."
-og:description: "Technical reference for agent guardrails: object model, rule and tool gate fields, CEL variables, enforcement surfaces, evaluation order, constraints, and troubleshooting."
-sidebarTitle: "Agent guardrails reference"
+title: "Agent classifiers reference"
+og:title: "Agent classifiers reference - C1 docs"
+description: "Technical reference for agent classifiers: object model, rule and tool gate fields, CEL variables, enforcement surfaces, evaluation order, constraints, and troubleshooting."
+og:description: "Technical reference for agent classifiers: object model, rule and tool gate fields, CEL variables, enforcement surfaces, evaluation order, constraints, and troubleshooting."
+sidebarTitle: "Agent classifiers reference"
 ---
 
 {/* Editor Refresh: 2026-07-30 */}
@@ -16,16 +16,16 @@ sidebarTitle: "Agent guardrails reference"
 
 | Object | What it is | Scope |
 | :--- | :--- | :--- |
-| **Guardrail** | A named, ordered cascade of rules, plus the surface it may bind to | Tenant; many per tenant |
-| **Guardrail rule** | One entry in a cascade. Stored inline on the guardrail, not separately reusable | Per guardrail |
-| **Guardrail binding** | Attaches one guardrail to one enforcement target. The only object that puts a guardrail into effect | One per target |
+| **Classifier** | A named, ordered cascade of rules, plus the surface it may bind to | Tenant; many per tenant |
+| **Classifier rule** | One entry in a cascade. Stored inline on the classifier, not separately reusable | Per classifier |
+| **Classifier binding** | Attaches one classifier to one enforcement target. The only object that puts a classifier into effect | One per target |
 | **Tool gate** | Standalone approval requirement: a filter plus a grant policy | Tenant; reusable across rules |
 | **Hook** | Standalone interceptor that inspects, rewrites, or denies a payload | Tenant; reusable across rules |
 
-How they relate: a binding points a `(surface, target)` pair at one guardrail. The guardrail holds the cascade, and each rule in it references the gates and hooks it dispatches.
+How they relate: a binding points a `(surface, target)` pair at one classifier. The classifier holds the cascade, and each rule in it references the gates and hooks it dispatches.
 
 ```
-Guardrail
+Classifier
  └─ rules[]  (ordered)
      ├─ tool gate ids
      ├─ pre-tool hook ids
@@ -33,23 +33,23 @@ Guardrail
      └─ pre-output hook ids
 ```
 
-Rules live inline on the guardrail because an ordered cascade is configuration, not a reusable unit. Tool gates and hooks are the reusable primitives — a rule references them by ID, and the same gate or hook can be selected by rules in different guardrails.
+Rules live inline on the classifier because an ordered cascade is configuration, not a reusable unit. Tool gates and hooks are the reusable primitives — a rule references them by ID, and the same gate or hook can be selected by rules in different classifiers.
 
 <Warning>
-A binding is the only thing that activates a guardrail. Creating a guardrail, authoring rules, and wiring up gates and hooks changes nothing about live traffic until a binding points at it.
+A binding is the only thing that activates a classifier. Creating a classifier, authoring rules, and wiring up gates and hooks changes nothing about live traffic until a binding points at it.
 </Warning>
 
 ## Enforcement surfaces
 
 | Surface | Governs | Bind at | Available CEL variables |
 | :--- | :--- | :--- | :--- |
-| **Agent** | C1AI agents | **AI > Guardrails** → **Default C1AI Guardrail policy**, or an agent's **Guardrails** tab | `ctx.private_data`, `ctx.untrusted_content`, `ctx.exfiltration`, `ctx.tool_name` |
-| **Gateway** | External AI clients through the C1 Gateway | **AI > C1 Gateway > Settings** → **Default C1 Gateway Guardrail policy** | `ctx.private_data`, `ctx.exfiltration`, `ctx.tool_name` |
+| **Agent** | C1AI agents | **AI > Classifiers** → **Default C1AI Classifier policy**, or an agent's **Classifiers** tab | `ctx.private_data`, `ctx.untrusted_content`, `ctx.exfiltration`, `ctx.tool_name` |
+| **Gateway** | External AI clients through the C1 Gateway | **AI > C1 Gateway > Settings** → **Default C1 Gateway Classifier policy** | `ctx.private_data`, `ctx.exfiltration`, `ctx.tool_name` |
 
 **Applies to** is a two-way choice — **Agent** or **Gateway**. There is no option to target both.
 
 <Warning>
-You may see a guardrail whose surface displays as **Any surface**. That's the unset value, kept for guardrails carried over from the older single-policy model; it isn't offered when you create or edit one. A guardrail in that state appears in **neither** binding selector, so it can't be bound from the admin UI at all — edit it and set **Applies to** to **Agent** or **Gateway** first.
+You may see a classifier whose surface displays as **Any surface**. That's the unset value, kept for classifiers carried over from the older single-policy model; it isn't offered when you create or edit one. A classifier in that state appears in **neither** binding selector, so it can't be bound from the admin UI at all — edit it and set **Applies to** to **Agent** or **Gateway** first.
 </Warning>
 
 Binding resolution on the agent surface tries the specific agent's binding first, then falls back to the tenant default agent binding. The gateway surface resolves a single tenant-wide binding — there is no per-client or per-connection gateway granularity.
@@ -58,18 +58,18 @@ Binding resolution on the agent surface tries the specific agent's binding first
 `ctx.untrusted_content` is **not available on the Gateway surface**. The untrusted-content score comes from the judge, which runs inside a C1AI session; there is no equivalent for an external client. A gateway rule written against `ctx.untrusted_content` will not behave as intended.
 </Note>
 
-If no binding resolves for a surface — none configured, or it points at a deleted guardrail — that surface falls back to an empty policy with no rules. It does **not** fall back to another surface's guardrail.
+If no binding resolves for a surface — none configured, or it points at a deleted classifier — that surface falls back to an empty policy with no rules. It does **not** fall back to another surface's classifier.
 
-## Guardrail fields
+## Classifier fields
 
 | Field | Notes |
 | :--- | :--- |
 | **Name** | Required. Up to 128 characters. |
 | **Description** | Optional. Up to 1024 characters. |
-| **Applies to** | **Agent** or **Gateway**. Determines which variables rules can read, and which binding selector the guardrail appears in. |
-| **Managed by** | **Tenant** for guardrails you author — freely editable. **System** marks a C1-curated guardrail, which is read-only. |
+| **Applies to** | **Agent** or **Gateway**. Determines which variables rules can read, and which binding selector the classifier appears in. |
+| **Managed by** | **Tenant** for classifiers you author — freely editable. **System** marks a C1-curated classifier, which is read-only. |
 
-## Guardrail rule fields
+## Classifier rule fields
 
 | Field | Notes |
 | :--- | :--- |
@@ -84,7 +84,7 @@ If no binding resolves for a surface — none configured, or it points at a dele
 | **Mode** | **Enforce**, **Observe**, or **Disabled**. |
 | **Deny reason** | Optional. Up to 256 characters. Shown to the caller on denial. |
 
-Only hooks and tool gates with **Managed by guardrails** enabled are selectable in the hook and gate pickers, and each picker only offers hooks whose event matches it.
+Only hooks and tool gates with **Managed by classifiers** enabled are selectable in the hook and gate pickers, and each picker only offers hooks whose event matches it.
 
 <Note>
 Audit records identify a matched rule by its **ID**, not its name. Renaming a rule doesn't change what earlier records point at — but it also means a rule's name isn't what you search on when tracing a decision.
@@ -135,16 +135,16 @@ A rule whose CEL expression fails to evaluate is **skipped**, and the cascade co
 
 ## Evaluation order on a tool call
 
-1. **Resolve the binding** for the surface, and walk the guardrail's rules top to bottom, first match wins.
+1. **Resolve the binding** for the surface, and walk the classifier's rules top to bottom, first match wins.
 2. If the matched rule's action is **Block** → deny. **Gates and hooks never run.**
-3. Otherwise run **tool gates**: the gates the rule selected, plus every gate with **Managed by guardrails** off. Only the [first matching gate](#only-the-first-matching-gate-runs) runs. A gate that requests approval or denies short-circuits here — **hooks and the tool never run.**
-4. Run **pre-tool hooks**: those the rule selected, plus every pre-tool hook with **Managed by guardrails** off. A denial blocks the call.
+3. Otherwise run **tool gates**: the gates the rule selected, plus every gate with **Managed by classifiers** off. Only the [first matching gate](#only-the-first-matching-gate-runs) runs. A gate that requests approval or denies short-circuits here — **hooks and the tool never run.**
+4. Run **pre-tool hooks**: those the rule selected, plus every pre-tool hook with **Managed by classifiers** off. A denial blocks the call.
 5. **The tool executes.**
 6. Run **post-tool hooks**, same union rule. A denial blocks the result from reaching the caller.
 
-If no rule matches, the call proceeds with no guardrail-curated gates or hooks — unmanaged gates and hooks still apply.
+If no rule matches, the call proceeds with no classifier-curated gates or hooks — unmanaged gates and hooks still apply.
 
-A guardrail with no rules, or one whose every rule is **Disabled**, matches nothing. At call time it is indistinguishable from an unbound surface: bound-but-empty and not-bound-at-all behave identically.
+A classifier with no rules, or one whose every rule is **Disabled**, matches nothing. At call time it is indistinguishable from an unbound surface: bound-but-empty and not-bound-at-all behave identically.
 
 <Warning>
 **A call that matches no rule writes no `guardrail_decision` event.** Only a matched rule produces a durable record. So in the system log you cannot tell *"traffic reached this surface and matched nothing"* apart from *"no traffic reached this surface at all"* — both look like silence. Keep that in mind when a rule you expected to fire shows no records.
@@ -188,7 +188,7 @@ Mode works exactly as it does on the tool-call path: **Disabled** and unset are 
 `ctx.tool_name` is **unset** here.
 
 <Warning>
-`ctx.untrusted_class` (pre-output hook filter) and `ctx.untrusted_content` (guardrail rule) are the same underlying risk score exposed under different names *and* different types — an uppercase string versus an ordered level. A hook filter needs `ctx.untrusted_class == "HIGH"`; a rule needs `ctx.untrusted_content == HIGH`. Writing the rule form in a hook filter fails to evaluate, and a failed hook filter **denies** — so the mistake withholds responses rather than erroring visibly.
+`ctx.untrusted_class` (pre-output hook filter) and `ctx.untrusted_content` (classifier rule) are the same underlying risk score exposed under different names *and* different types — an uppercase string versus an ordered level. A hook filter needs `ctx.untrusted_class == "HIGH"`; a rule needs `ctx.untrusted_content == HIGH`. Writing the rule form in a hook filter fails to evaluate, and a failed hook filter **denies** — so the mistake withholds responses rather than erroring visibly.
 </Warning>
 
 ### A Block output hook with no surfaces is inert
@@ -205,7 +205,7 @@ An empty surface list means no surface at all, not all of them. Select **Slack**
 | **Filter (CEL expression)** | Optional. See the variables below. |
 | **Priority** | 0–1000. Lower matches first. |
 | **Enabled** | Default on. |
-| **Managed by guardrails** | Default **off** — the gate always evaluates. On — only when a rule selects it. |
+| **Managed by classifiers** | Default **off** — the gate always evaluates. On — only when a rule selects it. |
 
 ### Only the first matching gate runs
 
@@ -217,7 +217,7 @@ The order is:
 2. Then ascending **Priority** (lower first)
 3. Then oldest first
 
-The set evaluated is the gates the matched rule selected **plus** every gate with **Managed by guardrails** off, so an unmanaged gate with a lower priority can win ahead of one your rule explicitly selected.
+The set evaluated is the gates the matched rule selected **plus** every gate with **Managed by classifiers** off, so an unmanaged gate with a lower priority can win ahead of one your rule explicitly selected.
 
 <Warning>
 This makes **Priority** load-bearing whenever more than one gate could match the same call. Two gates with different grant policies and overlapping filters will not both apply — the call is approved under whichever gate sorts first, and the other is silently skipped. If you need a stricter approver to take precedence, give that gate the lower priority number.
@@ -225,7 +225,7 @@ This makes **Priority** load-bearing whenever more than one gate could match the
 
 ### Gate filter variables
 
-A tool gate filter is evaluated against a different variable set than a guardrail rule — it sees the call's identity and target rather than the risk axes:
+A tool gate filter is evaluated against a different variable set than a classifier rule — it sees the call's identity and target rather than the risk axes:
 
 | Variable | Notes |
 | :--- | :--- |
@@ -259,7 +259,7 @@ The in-product helper text on the filter field mentions only `ctx.tool_name` and
 | What it does | Scores agent input and tool output for prompt-injection risk on every turn |
 | Produces | `ctx.untrusted_content`, as `LOW`, `MEDIUM`, or `HIGH` |
 | Default | On |
-| Configuration | A single on/off toggle at **AI > Guardrails > Settings** |
+| Configuration | A single on/off toggle at **AI > Classifiers > Settings** |
 | When off | The dimension **always scores as low risk** and the judge never runs |
 | When it can't be reached at the start of a run | C1 seeds a cautious **MEDIUM** untrusted-content floor rather than treating the turn as low risk |
 | When a mid-run rescore fails | The existing floor is kept; no new score is synthesized |
@@ -282,31 +282,31 @@ Disabling the judge does not disable rules that read `ctx.untrusted_content` —
 | Gate filter variables | Nine — see [Gate filter variables](#gate-filter-variables). Distinct from the rule variable set. |
 | Gate ordering | Enabled first, then priority ascending, then oldest first |
 | Priority range | 0–1000 for gates and hooks; lower first |
-| Tenant defaults | No guardrail, binding, or rule is created for a new tenant |
+| Tenant defaults | No classifier, binding, or rule is created for a new tenant |
 
 ## Troubleshooting
 
-### My guardrail isn't doing anything
+### My classifier isn't doing anything
 
 Check, in order:
 
-1. **Is it bound?** An unbound guardrail is evaluated on zero calls. Check **Default C1AI Guardrail policy** (agent) or **Default C1 Gateway Guardrail policy** (gateway), and any per-agent override that might be shadowing the default.
-2. **Does the surface match?** An Agent guardrail won't appear in the gateway selector, and vice versa.
+1. **Is it bound?** An unbound classifier is evaluated on zero calls. Check **Default C1AI Classifier policy** (agent) or **Default C1 Gateway Classifier policy** (gateway), and any per-agent override that might be shadowing the default.
+2. **Does the surface match?** An Agent classifier won't appear in the gateway selector, and vice versa.
 3. **Are the rules in Observe?** Observe logs and falls through by design.
 4. **Are the rules Disabled?** An unset mode behaves as disabled.
 5. **Is an earlier rule matching first?** A broad rule above a narrow one makes the narrow one unreachable.
 
 ### A rule that reads `ctx.untrusted_content` never matches
 
-Either the guardrail is bound to the **Gateway** surface, where that variable isn't available, or the **untrusted content judge** is turned off, which pins the value to low risk.
+Either the classifier is bound to the **Gateway** surface, where that variable isn't available, or the **untrusted content judge** is turned off, which pins the value to low risk.
 
 ### A hook or tool gate I created isn't selectable in a rule
 
-Its **Managed by guardrails** toggle is off. Turn it on from the hook or gate form, or from the toggle column in the table.
+Its **Managed by classifiers** toggle is off. Turn it on from the hook or gate form, or from the toggle column in the table.
 
 ### A hook fires even though no rule selects it
 
-That's the documented behavior for **Managed by guardrails** off: the hook always evaluates. Turn the toggle on to bring it under rule control.
+That's the documented behavior for **Managed by classifiers** off: the hook always evaluates. Turn the toggle on to bring it under rule control.
 
 ### Calls are being denied and I can't tell which layer did it
 
@@ -320,7 +320,7 @@ Distinguish the three denial shapes:
 
 Observe records a match, and only a match. A call that matches no rule writes no event at all — so "traffic arrived and matched nothing" and "no traffic arrived" produce identical silence, and you can't tell them apart from the log. Check both: widen the condition, and independently confirm traffic is reaching the bound surface.
 
-Also confirm the guardrail is bound, and that your severity filter isn't excluding informational records.
+Also confirm the classifier is bound, and that your severity filter isn't excluding informational records.
 
 ### A rule matches calls I expected it to ignore
 
