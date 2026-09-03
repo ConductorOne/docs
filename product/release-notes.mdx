@@ -12,7 +12,7 @@ sidebarTitle: Release notes
 
 ## Product digest: September 4, 2026
 
-{/* DRAFT STATUS: built from PR digest chunk 1 of 2 (period Aug 21-28), plus colleague-provided copy for two docs-update projects (Agent classifiers, Govern MCP resources). Awaiting chunk 2 (Aug 28-Sept 4) before final section ordering, headline-item selection, and the Session 2 verify/polish pass. */}
+{/* DRAFT STATUS: Session 1 complete. Built from both PR digest chunks (Aug 21-28 and Aug 28-Sept 3), colleague-provided copy for two docs-update projects (Agent classifiers, Govern MCP resources), a docs update for the guided MCP connect flow (ductone/c1#24062/#24638), and a system-log schema note (ConductorOne/docs#511). All inputs for this cycle are in as of 2026-09-03. Remaining before publish: final section ordering/headline-item selection, and the Session 2 verify/polish pass resolving every inline TODO/QUESTION comment. */}
 
 ### Agent classifiers
 
@@ -73,6 +73,40 @@ See [Govern MCP resources](/product/admin/mcp-resources) for how to review, appr
   {/* PR #24144 */}
   {/* TODO: check MS Teams campaign-messages flag status in ductone/c1 (features_*.go) before publishing - source material notes this is behind a flag. */}
 
+- **Bulk actions match what single-row actions already did**: "Select all X in filter" on a campaign's task list no longer offers a bulk Cancel or Skip step when the filtered set includes closed tasks — matching the row-level "Select 100" behavior. When a bulk action finishes with some failures, the banner now says "N succeeded, M failed" instead of a generic "Bulk action completed," and progress bars and task counts refresh automatically afterward.
+
+  {/* PR #24707 */}
+
+- **Mid-campaign reassignments show up in submissions**: When a certifier resolves a task directly from the task execution plan — for example, after a mid-campaign reassignment — that action now appears in the campaign report's Submissions tab and export, alongside batch submissions, with the certifier's name, date, and approve/deny counts. Previously these resolutions were recorded but invisible in Submissions.
+
+  {/* PR #24651 */}
+
+- **Bulk review actions keep your place**: Completing a bulk certify, deny, or discard in a campaign no longer sends reviewers back to the first page of the task list — they stay where they were working.
+
+  {/* PR #23801 */}
+
+- **Request access for an already-enrolled user without touching automation**: Access Profile administrators can now create a request for a user already enrolled in a profile without first changing the profile's membership automation setting.
+
+  {/* PR #24037 */}
+  {/* TODO: verify "Access Profile administrators" is the exact role/permission gate, not a broader admin role - see house rule on permission claims. */}
+
+### Authentication and SSO
+
+- **Fewer silent session reuses on sensitive SSO requests**: SSO applications can now honor OIDC requests for silent or fresh authentication, and SAML passive requests. A request that can't be completed safely — such as SAML forced authentication without verifiable upstream evidence — now returns a standards-based protocol error instead of silently reusing an existing session. An expired upstream sign-in can recover once without losing the original request context.
+
+  {/* PR #23464 */}
+
+### Automation and workflows
+
+- **Push rule history opens without leaving the page**: Push rule execution history now opens in a drawer, so you can review and filter results while keeping the list of push rules visible.
+
+  {/* PR #24553 */}
+
+- **Breaking change: automation expressions must reference workflow context directly**: Automation expressions that reached the workflow context indirectly — rather than naming the step and field directly — no longer validate. If an automation's expressions were written this way, they'll need to be rewritten to a static path (naming the step and field explicitly) before they'll save or run.
+
+  {/* PR #24042 */}
+  {/* TODO: confirm effective/enforcement date and whether existing automations with indirect expressions are grandfathered, blocked on save, or blocked on run - source PR text doesn't specify. Also confirm whether this needs its own customer broadcast (like the OCSF change) rather than just a digest mention. */}
+
 ### Connector management
 
 - **Add an account attribute the app hasn't discovered yet**: The Account attribute field previously only offered app-user profile keys the app had already discovered, and disabled itself entirely for apps with none. It now accepts any key typed by hand.
@@ -113,6 +147,18 @@ See [Govern MCP resources](/product/admin/mcp-resources) for how to review, appr
 
   {/* PR #24086 */}
 
+- **No more redundant daily attribute pushes**: Connector attribute pushes no longer re-send an update when every pushed attribute already matches the value from the last sync — previously this ran thousands of no-op pushes a day for users whose attributes hadn't changed. Pushes still fire whenever the previous value is unknown or actually differs.
+
+  {/* PR #24481 */}
+
+- **A revoke that can't actually deprovision no longer reports success**: Revoking access on a connector that can't deprovision a given entitlement used to close the task as "Revoked" while nothing changed at the source — and the next sync would re-import the access. These revokes now route to manual deprovisioning instead, so the task reflects what actually happened.
+
+  {/* PR #24463 */}
+
+- **See which rows a file-import sync skipped**: A file-import connector's Audit trail now records how many rows a sync skipped because their User ID was empty, with the row numbers of the first ten. Previously those rows — and any access they granted — were dropped without a trace, and the sync still reported success.
+
+  {/* PR #24357 */}
+
 ### Findings
 
 - **Reprocess findings against your current rules**: Findings can now be reprocessed against your org's current transformation/routing rules — individually, in bulk, or from a finding's detail view — with the option to keep or reset any manual changes.
@@ -122,6 +168,10 @@ See [Govern MCP resources](/product/admin/mcp-resources) for how to review, appr
 - **A finding when a connector's sync keeps failing**: Two consecutive failed full syncs on a connector now raise a "Connector sync failing" finding, which auto-resolves on the next successful sync. Can be turned off per tenant.
 
   {/* PR #22952 */}
+
+- **Findings get an "Assignee," not an "Owner"**: The "Owner" column, filter, and detail field on findings are now labeled "Assignee" — how findings actually get assigned hasn't changed. If you consume the Finding object via API or webhook, `computed_owner`/`assigned_owner` are deprecated and no longer populated; use `assignee_identity_user_id` going forward. If you consume the audit log or feed it to a SIEM, the finding event previously logged as `OWNER_CHANGED` (with `old_owner`/`new_owner` keys) is now `ASSIGNEE_CHANGED` (with `old_assignee`/`new_assignee` keys) — only newly emitted events use the new name; historical rows are unaffected.
+
+  {/* PR #24617 */}
 
 ### Role mining
 
@@ -182,11 +232,19 @@ See [Govern MCP resources](/product/admin/mcp-resources) for how to review, appr
   {/* PR #24025 */}
   {/* TODO: verify the exact permission gate (app owner vs. Application Admin, and which one if not both) against the current permission check before publishing - see house rule on permission claims. */}
 
+- **Locked notification preferences are now visible**: Personal notification settings now show which preferences your admin has locked, matching how locks already appear in org settings.
+
+  {/* PR #24349 */}
+
+- **External Slack accounts can no longer bind to a C1 user**: Slack accounts from outside your workspace — including Slack Connect members — can no longer be linked to a C1 user account by email match. Previously, an external member whose Slack email happened to match a C1 user's email would have bot interactions and notifications treated as that C1 user. Legitimate workspace members are unaffected; a C1 user whose only Slack match is external now has notifications skipped with a warning instead of silently misdelivered.
+
+  {/* PR #24324 */}
+
 ### System log event schema updates
 
-The system log adds four new Identity & Access event classes — Account Change, Entity Management, User Access Management, and Group Management — plus a `groups[]` field naming each actor's platform roles and a shared `correlation_uid` linking the paired events a privilege change now produces. Admin-tier actors also log a new actor type value as of September 3, 2026, distinguishing them from non-admin users for the first time; affected customers were notified separately ahead of this change. See the [system log reference](/product/admin/system-log) for the full event catalog.
+The system log adds four new Identity & Access event classes — Account Change, Entity Management, User Access Management, and Group Management — plus a `groups[]` field naming each actor's platform roles and a shared `correlation_uid` linking the paired events a privilege change now produces. Every event's actor now also lists the platform roles that person held, and machine identities (connectors, tunnels, functions) are reported with the standard "Service" account type instead of "Other." Admin-tier actors also log a new actor type value as of September 3, 2026, distinguishing them from non-admin users for the first time; affected customers were notified separately ahead of this change. See the [system log reference](/product/admin/system-log) for the full event catalog.
 
-{/* SOURCE: docs PR #511 (ConductorOne/docs), merged 2026-08-31, not from the PR digest. Breaking change (actor.user.type_id remap) already covered in a customer broadcast per user - kept brief here, general-awareness/historic-record entry only. */}
+{/* SOURCE: docs PR #511 (ConductorOne/docs), merged 2026-08-31, not from the PR digest. Merged in ductone/c1 PR #23955 from the chunk-2 digest per user - same underlying change (actor platform roles, audience, paired standard-type events, Service account type); only the "Service" detail was new, added here rather than as a separate item. Breaking change (actor.user.type_id remap) already covered in a customer broadcast per user - kept brief here, general-awareness/historic-record entry only. */}
 
 ### API and developer tools
 
@@ -203,6 +261,25 @@ The system log adds four new Identity & Access event classes — Account Change,
 
   {/* PR #23826 */}
   {/* TODO: confirm endpoint is live in the generated API reference before linking. */}
+
+- **Check a session policy's blast radius before enforcing it**: Three new read-only API endpoints let admins see which session policy applies to a given user and why (direct assignment, group membership, or tenant default), and list every user a policy applies to — direct and group-conferred, with the conferring group named. These are diagnostic reads only; there's no change to session evaluation, enforcement, or assignment behavior.
+
+  {/* PR #24521 */}
+  {/* QUESTION: worth a public API reference link once the endpoints are confirmed live? */}
+
+- **Real descriptions for 23 API operations**: The public API reference for 23 operations — spanning hooks, LLM gateway keys and provider credentials, reports, role-mining custom analysis, organization contacts, and app entitlement routing rules — now explains what each call actually does, instead of a placeholder. Generated SDKs and the Terraform provider pick up the same wording.
+
+  {/* PR #24311 */}
+
+### Vaults and secrets
+
+- **See secret activity and vault inventory in Analytics**: The Vaults tab in Analytics now shows Paper secret history, internal/external creation activity, and burned-secret totals. Tenants with Latchkey enabled also see Multipass vault inventory, reveal activity, and device readiness. Analytics failures don't block secret retrieval, and historical Multipass analytics only start accumulating after enablement — earlier periods show no data rather than a misleading zero.
+
+  {/* PR #24696 */}
+
+- **Headless enrollment codes actually redeem now**: Enrollment codes created through the CLI enrollment-code endpoint were bound to the wrong client type and always rejected by the CLI's device-authorization step with an "invalid, expired, or already used" error. Headless (multipass) enrollment now succeeds.
+
+  {/* PR #24508 */}
 
 ### Usability improvements
 
