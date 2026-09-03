@@ -8,6 +8,92 @@ sidebarTitle: Release notes
 ---
 {/* Editor Refresh: 2026-08-21 */}
 
+<Update label="September 4, 2026">
+
+## Product digest: September 4, 2026
+
+### Agent classifiers
+
+Access profiles for AI agents only know whether a tool is reachable — not whether calling it right now is risky. An agent holding customer data, exposed to untrusted content, and able to send email is a very different risk than the same agent an hour earlier, even though it's calling the same tool.
+
+**Classifiers** evaluate that combination at call time. They write rules over private-data sensitivity, untrusted-content exposure, and exfiltration capability, then route matches to a hook, a human approval, or an outright block. Roll your classifiers out safely with **Observe mode**, which logs what a rule would have caught before it can deny anything.
+
+See [Agent classifiers](/product/admin/agent-classifiers) for details.
+
+### MCP improvements
+
+- **A guided flow for connecting MCP servers**: Registering an MCP server now walks through one question at a time — which server, where it's hosted, the URL, who can use it and when, what happens to newly discovered tools, and how it authenticates — instead of a single multi-step form.
+
+- **Admins can now review and approve MCP resources and URI templates**: When C1 discovers a server that exposes static resources or URI templates, these appear on a new **Resources** tab where an admin can approve them. Each approved resource gets its own read entitlement, so access to a resource is governed separately from tool and toolset access — a user needs an explicit grant to read it. See [Govern MCP resources](/product/admin/mcp-resources) for details.
+
+### Role mining
+
+- **We've improved the role mining experience**: Set a shared-access threshold to focus results on what your cohort actually has in common, fine-tune the entitlement list before acting on it, and optionally route automatic profile enrollments through an access request task for approval. See [Role mining](/product/admin/role-mining) for details.
+
+  <Frame>
+  <img src="/images/product/assets/role-mining-filters.png" alt="The role mining Filter section with multiple filters applied and the Select shared access section below it, showing the threshold slider, histogram, and summary cards."/>
+  </Frame>
+
+### Access request and review improvements
+
+- **Set bulk request limits**: Admins can now set their own max number of entitlements a user can request at once in bulk (1-100, default 10) from **Governance > Forms**. See [Configure tenant-wide request settings](/product/admin/customize-requests#configure-tenant-wide-request-settings).
+
+- **Duration limits shown in request forms**: Requests now display the entitlement's duration limit up front: "Indefinite" doesn't appear as an option when a max is set, and invalid existing durations are auto-adjusted.
+
+- **See account status right on the request**: Access-request flows now flag when the target user — or the holder of "already granted" access — is suspended.
+
+- **Campaign bulk actions are more reliable and accurate**: "Select all in filter" no longer offers a bulk Cancel or Skip option when the filtered set includes closed tasks, and a bulk action's result banner now reports "N succeeded, M failed" instead of a generic "completed" message when something fails.
+
+### Findings improvements
+
+- **Reprocess findings against your current rules**: Findings can now be reprocessed against your org's current transformation/routing rules — individually, in bulk, or from a finding's detail view — with the option to keep or reset any manual changes.
+
+- **Connector sync failure finding type**: Two consecutive failed full syncs on a connector now raise a "Connector sync failing" finding, which auto-resolves on the next successful sync. Can be turned off per tenant. See the [finding catalog reference](/product/admin/findings#finding-catalog-reference).
+
+### Slack app improvements
+
+- **External Slack accounts can no longer bind to a C1 user**: Slack accounts from outside your workspace — including Slack Connect members — can no longer be linked to a C1 user account by email match. Legitimate workspace members are unaffected; a C1 user whose only Slack match is external now has notifications skipped with a warning.
+
+- **Slack notifications are more reliable**: A stale Approve/Deny/Provision click now shows an "expired" message instead of failing the workflow and paging oncall, stale or unresolvable interactions fail fast instead of retrying forever, and user-submitted text renders cleanly instead of showing artifacts like trailing asterisks.
+
+### Usability improvements
+
+- **See and manage the full owner list**: From an app's details page, click **Edit owners** — the picker now has an "All users / Owners" toggle, so admins can see and manage the complete current owner list, including suspended or otherwise filtered-out users.
+
+- **Accurate AI adoption numbers**: The "Access profile enrollments" chart on the **AI & MCP** analytics tab previously counted every access profile. It now counts only enrollments in profiles with at least one MCP tool or toolset.
+
+- **Push rules are more trustworthy**: "Last push" only updates when a push rule actually executes during a sync, and connector attribute pushes no longer re-send no-op updates when every attribute already matches — previously this ran thousands of redundant pushes a day for users whose attributes hadn't changed.
+
+- **Bind entitlements within the same app**: The entitlement binding picker now shows other entitlements from the same app, so same-app bindings (e.g. Salesforce Admin -> Salesforce Editor) are possible. Binding an entitlement to itself is still blocked.
+
+- **Reorder provisioning steps in place**: Provisioning steps on an entitlement can now be moved up or down directly, instead of being removed and re-added to change order.
+
+- **A revoke that can't actually deprovision no longer reports success**: Revoking access on a connector that can't deprovision a given entitlement used to close the task as "Revoked" while nothing changed at the source — and the next sync would re-import the access. These revokes now route to manual deprovisioning instead, so the task reflects what actually happened.
+
+- **Fewer silent session reuses on sensitive SSO requests**: SSO applications can now honor OIDC requests for silent or fresh authentication, and SAML passive requests. A request that can't be completed safely — such as SAML forced authentication without verifiable upstream evidence — now returns an error instead of silently reusing an existing session.
+
+### System log updates
+
+The system log adds four new Identity & Access event classes — Account Change, Entity Management, User Access Management, and Group Management — plus a `groups[]` field naming each actor's platform roles and a shared `correlation_uid` linking the paired events a privilege change now produces. Every event's actor now also lists the platform roles that person held, and machine identities (connectors, tunnels, functions) are reported with the standard "Service" account type instead of "Other." See the [system log reference](/product/admin/system-log) for the full event catalog.
+
+### API and developer tools
+
+- **New devices get a working API credential automatically**: Registering a new desktop device now auto-creates a full-access API credential shown right on the success screen.
+
+- **Check a session policy's blast radius before enforcing it**: Four new read-only API endpoints let admins preview which session policy applies to a given user and why (direct assignment, group membership, or tenant default), and list every user a policy applies to — direct and group-conferred, with the conferring group named.
+
+### Breaking changes
+
+- **Breaking change: Automation expressions must reference workflow context directly**: An expression consisting of the bare workflow context, or one that passes it to a function, no longer compiles — name the step and field directly instead. This is a save-time check: an automation already running is unaffected until you next edit and save it, at which point an indirect-reference expression will need to be rewritten to a static path before it saves.
+
+- **Breaking change: Findings get an "Assignee," not an "Owner"**: The "Owner" column, filter, and detail field on findings are now labeled "Assignee" — how findings actually get assigned hasn't changed. If you consume the Finding object via API or webhook, or feed the audit log to a SIEM, see [Work with a finding](/product/admin/findings#work-with-a-finding) for the field and event-name changes.
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
+
 <Update label="August 21, 2026">
 
 ## Product digest: August 21, 2026
