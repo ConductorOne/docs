@@ -8,6 +8,222 @@ sidebarTitle: Release notes
 ---
 {/* Editor Refresh: 2026-08-21 */}
 
+<Update label="September 4, 2026">
+
+## Product digest: September 4, 2026
+
+{/* DRAFT STATUS: built from PR digest chunk 1 of 2 (period Aug 21-28), plus colleague-provided copy for two docs-update projects (Agent classifiers, Govern MCP resources). Awaiting chunk 2 (Aug 28-Sept 4) before final section ordering, headline-item selection, and the Session 2 verify/polish pass. */}
+
+### Agent classifiers
+
+{/* SOURCE: colleague docs-update copy, not from PR digest. Doc page (product/admin/agent-classifiers.mdx) carries its own "Early access" warning banner - matches precedent for EA framing elsewhere in this file. Could not confirm a single matching feature-flag ID in ductone/c1 (closest candidates: AIGOV_AGENT_GUARDRAILS = SKU_ALL/GA, AI_GOVERNANCE_FEATURES_PREVIEW = SKU_MANUAL); flagging for a tighter check in Session 2 if needed. */}
+
+Access profiles for AI agents only know whether a tool is reachable — not whether calling it right now is risky. An agent holding customer data, exposed to untrusted content, and able to send email is a very different risk than the same agent an hour earlier, even though it's calling the same tool.
+
+**Classifiers** evaluate that combination at call time: write rules over private-data sensitivity, untrusted-content exposure, and exfiltration capability, then route matches to a hook, a human approval, or an outright block. Roll out safely with **Observe mode**, which logs what a rule would have caught before it can deny anything.
+
+*Early access.* See [Agent classifiers](/product/admin/agent-classifiers) for how rules, hooks, and Observe mode fit together.
+
+### Govern MCP resources
+
+{/* SOURCE: colleague docs-update copy, not from PR digest. TODO: gated FEATURE_FLAG_ID_MCP_RESOURCE_SURFACE = SKU_MANUAL as of 2026-09-03 ("resource governance is in development"); doc page carries an "Activation required - contact support" note. User is confirming rollout status before publish - remove this section if it hasn't GA'd. */}
+
+Admins can now review and approve MCP resources and URI templates, not just tools. When C1 discovers a server that exposes static resources or URI templates, they appear on a new **Resources** tab with a **Pending** state until an admin approves them. Each approved resource gets its own read entitlement, so access to a resource is governed separately from tool and toolset access — a user needs an explicit grant to read it. C1 also logs every allowed and denied resource read in the audit log.
+
+See [Govern MCP resources](/product/admin/mcp-resources) for how to review, approve, and audit discovered resources.
+
+### C1 MCP improvements
+
+- **A guided flow for connecting MCP servers**: Registering an MCP server now walks through one question at a time — which server, where it's hosted, the URL, who can use it and when, what happens to newly discovered tools, and how it authenticates — instead of a single multi-step form. Auth questions adapt automatically: a self-registering (DCR) server asks nothing extra, since C1 probes its OAuth configuration for you.
+
+  {/* SOURCE: ductone/c1 PR #24638, making the guided V2 flow (PR #24062) the default at both registration entry points. #24062 is gated on AI_GOVERNANCE_FEATURES_PREVIEW (SKU_MANUAL as of 2026-09-03) and its own Release Notes section says "no release notes needed"; #24638 keeps that flag/SKU mapping intact per its description and was still OPEN as of 2026-09-03. Added on the user's PM-sourced info that this ships today - user is re-checking this afternoon and will pull this item if #24638 hasn't landed or the flow isn't actually broadly available. See also the Warning added to product/admin/mcp-servers.mdx about the access-profile-selection gap. */}
+
+### Access requests and reviews
+
+- **Set bulk request limits per tenant**: The number of entitlements a user could request at once in bulk used to be a single fixed limit for every tenant. Admins can now set their own max (1-100, default 10) from the Forms settings drawer, and the limit is enforced server-side so an over-limit request fails instead of silently succeeding.
+
+  {/* PR #23942, #23936, #23932 */}
+
+- **Duration limits apply before submission, not after**: A request could previously select "Indefinite" access, or an invalid duration, even when the entitlement had a max-duration policy — only to fail or get silently adjusted later. Requests now respect the entitlement's duration limit up front: "Indefinite" doesn't appear as an option when a max is set, and invalid existing durations are auto-adjusted.
+
+  {/* PR #23931 */}
+
+- **See account status right on the request**: Access-request flows now show a status label (e.g. "Suspended") next to the target user, and flag when "already granted" access actually belongs to a suspended account.
+
+  {/* PR #23858 */}
+
+- **"Certify All" only counts what's actually certified**: The count next to a campaign's "Certify All" action used to include tasks that were pending but never submitted, overstating how much a reviewer had actually finished. It now reflects only tasks that will actually be certified.
+
+  {/* PR #24027 */}
+
+- **Fewer false "still open" prompts when ending a campaign**: Ending a campaign showed a "not everything is reviewed yet" warning even when every review was already in a terminal state, including cancelled ones. That prompt no longer fires in that case.
+
+  {/* PR #24019 */}
+
+- **No more duplicate review notifications**: Access-review notifications now go only through the newer (V2) dispatch path; reviewers no longer get a duplicate notification from the legacy path alongside it.
+
+  {/* PR #24017 */}
+
+- **Tell apart same-named app accounts on audit reports**: The access review audit report can now include an optional "Subject username" column, so two app accounts sharing a display name don't get confused with each other.
+
+  {/* PR #23838 */}
+
+- **Campaign notifications can go to Microsoft Teams**: Campaign notification templates now show a Microsoft Teams channel option alongside Slack.
+
+  {/* PR #24144 */}
+  {/* TODO: check MS Teams campaign-messages flag status in ductone/c1 (features_*.go) before publishing - source material notes this is behind a flag. */}
+
+### Connector management
+
+- **Add an account attribute the app hasn't discovered yet**: The Account attribute field previously only offered app-user profile keys the app had already discovered, and disabled itself entirely for apps with none. It now accepts any key typed by hand.
+
+  {/* PR #24289 */}
+  {/* TODO: confirm exact nav path and field label (source says Settings -> User data sources -> Attributes -> Add attribute) against current UI/screenshot before publishing. */}
+
+- **"Last push" now means a push actually happened**: The "Last push" timestamp on a push-rule configuration now only populates when a push rule actually executes during a sync, so the field is trustworthy evidence the rule is working.
+
+  {/* PR #24143 */}
+
+- **AI-suggested CSV mappings confirm when applied**: Clicking "Apply mappings" on the AI agent's suggested column mapping used to leave the button sitting there, looking like the click had failed. It now shows a green "Mappings applied" confirmation and hides the button.
+
+  {/* PR #24139 */}
+
+- **Custom entitlement slugs stick on V2 connectors**: Custom entitlement slugs (e.g. on Azure DevOps) used to silently reset to the connector's default on the next sync. They no longer do, and the access-request catalog picker shows the entitlement's display name instead of a generic slug when none is set.
+
+  {/* PR #24117 */}
+
+- **Bind entitlements within the same app**: The entitlement binding picker now shows other entitlements from the same app, so same-app bindings (e.g. Salesforce Admin -> Salesforce Editor) are possible. Binding an entitlement to itself is still blocked.
+
+  {/* PR #24115 */}
+
+- **Connector error digests reach the right people**: The daily "Connector Errors" digest used to go to every Application Admin and System Owner. It now reaches only the actual owners of the affected connector.
+
+  {/* PR #24109 */}
+
+- **Reorder provisioning steps in place**: Provisioning steps on an entitlement can now be moved up or down directly, instead of being removed and re-added to change order.
+
+  {/* PR #24083 */}
+
+- **File-based connectors require a User ID mapping up front**: Saving a file-based connector now requires a User ID mapping; the mapping assistant proposes one automatically. Existing connectors missing this mapping will start surfacing an error until it's mapped.
+
+  {/* PR #23950 */}
+  {/* QUESTION: does this need a callout for existing customers who'll suddenly see a new error on a previously-saved connector? */}
+
+- **MCP server URLs are locked after first sync**: An MCP server connector's server URL can no longer be changed after its first successful sync — register a new MCP server to point at a different endpoint instead.
+
+  {/* PR #24086 */}
+
+### Findings
+
+- **Reprocess findings against your current rules**: Findings can now be reprocessed against your org's current transformation/routing rules — individually, in bulk, or from a finding's detail view — with the option to keep or reset any manual changes.
+
+  {/* PR #24165 */}
+
+- **A finding when a connector's sync keeps failing**: Two consecutive failed full syncs on a connector now raise a "Connector sync failing" finding, which auto-resolves on the next successful sync. Can be turned off per tenant.
+
+  {/* PR #22952 */}
+
+### Role mining
+
+- **We've improved the role mining experience**: Set a shared-access threshold to focus results on what your cohort actually has in common, fine-tune the entitlement list before acting on it, and optionally route automatic profile enrollments through an access request task for approval.
+
+  <Frame>
+  <img src="/images/product/assets/role-mining-filters.png" alt="The role mining Filter section with multiple filters applied and the Select shared access section below it, showing the threshold slider, histogram, and summary cards."/>
+  </Frame>
+
+  {/* SOURCE: docs PR #522 (ConductorOne/docs), open as of 2026-09-03; user will merge before this release notes PR merges. Rolled up per user request from 5 detailed bullets (shared-access threshold, entitlements-tab fine-tuning, approval-routed enrollment, Done-button behavior, suggested-refinements removal) - see PR history for full detail if needed later. */}
+
+- **Large cohorts load progressively instead of stalling**: Role mining's member list previously could block or time out entirely for large cohorts. It now loads the member list immediately, filling in per-user entitlement coverage as it becomes available.
+
+  {/* PR #24271 */}
+
+- **See up to 1000 shared entitlements, not 100**: Custom role-mining analysis silently capped shared entitlements at 100 per cohort. The cap is now 1000.
+
+  {/* PR #23848 */}
+
+### Task and notification handling
+
+- **Stale Slack buttons fail gracefully**: Clicking Approve/Deny/Provision on an access-request message in Slack after it had gone stale used to fail the workflow outright and page oncall. It now shows the user an "expired" message instead.
+
+  {/* PR #24145 */}
+
+- **Slack stops retrying interactions that can't succeed**: Stale clicks, duplicate submissions, and missing-auth interactions used to be retried by Slack action handling even though they could never succeed. They now fail fast instead.
+
+  {/* PR #24112 */}
+
+- **Slack messages render user text cleanly**: User-submitted text in access-request Slack notifications now renders with a bold label and plain value, fixing artifacts like trailing asterisks showing up in URLs.
+
+  {/* PR #24108 */}
+
+- **Accept-step messages now reach the requester**: A policy accept step's configured message used to be recorded only in ticket history. It's now also sent to the requester via Slack, matching how reject steps already behave.
+
+  {/* PR #24046 */}
+
+- **Revoke tasks link back to the grant that created them**: Revoke tasks created when timed access expires now link back to their originating grant task under "Related Tasks."
+
+  {/* PR #17692 */}
+
+- **Audit views hold up on large histories**: The task audit view now shows accurate totals and page ranges even on tickets with large audit histories.
+
+  {/* PR #24122 */}
+
+### User and access administration
+
+- **Deleting a user cleans up their Slack binding too**: Deleting a C1 user now also removes their Slack user binding, preventing bot failures tied to that account.
+
+  {/* PR #24133 */}
+
+- **See and manage the full owner list**: The "Select owners" picker now has an "All users / Owners" toggle, so admins can see and manage the complete current owner list, including suspended or otherwise filtered-out users.
+
+  {/* PR #23832 */}
+
+- **Owner mutations are scoped to the app they belong to**: Owner-mutation endpoints for app resources are now app-scoped, matching how the equivalent v1 endpoints already worked — only that app's owners or an Application Admin can mutate its owner list.
+
+  {/* PR #24025 */}
+  {/* TODO: verify the exact permission gate (app owner vs. Application Admin, and which one if not both) against the current permission check before publishing - see house rule on permission claims. */}
+
+### System log event schema updates
+
+The system log adds four new Identity & Access event classes — Account Change, Entity Management, User Access Management, and Group Management — plus a `groups[]` field naming each actor's platform roles and a shared `correlation_uid` linking the paired events a privilege change now produces. Admin-tier actors also log a new actor type value as of September 3, 2026, distinguishing them from non-admin users for the first time; affected customers were notified separately ahead of this change. See the [system log reference](/product/admin/system-log) for the full event catalog.
+
+{/* SOURCE: docs PR #511 (ConductorOne/docs), merged 2026-08-31, not from the PR digest. Breaking change (actor.user.type_id remap) already covered in a customer broadcast per user - kept brief here, general-awareness/historic-record entry only. */}
+
+### API and developer tools
+
+- **New devices get a working API credential automatically**: Registering a new desktop device now auto-creates a full-access API credential shown right on the success screen, instead of leaving the API credentials page empty.
+
+  {/* PR #24096 */}
+
+- **Mint CLI enrollment codes without interactive approval**: A new RPC lets a CLI mint a one-time, 10-minute, single-use device enrollment code without needing interactive approval.
+
+  {/* PR #24074 */}
+  {/* QUESTION: does this warrant its own API/CLI reference doc link, or a mention on an existing enrollment page? */}
+
+- **Entitlement list endpoint gets camelCase params and fuzzy search**: The entitlement list endpoint now accepts camelCase pagination params (pageSize/pageToken) alongside the existing snake_case ones, and supports fuzzy search plus filtering by app-user ID.
+
+  {/* PR #23826 */}
+  {/* TODO: confirm endpoint is live in the generated API reference before linking. */}
+
+### Usability improvements
+
+- **See the real group count**: The C1 Groups table now shows the exact total group count instead of capping the display at "more than 25."
+
+  {/* PR #24111 */}
+
+- **Chart legends behave the way you'd expect**: Single-series charts no longer show a redundant legend; on multi-series charts, clicking a legend item now isolates that series instead of removing it.
+
+  {/* PR #24110 */}
+
+- **Accurate AI adoption numbers**: The "Access profile enrollments" chart on the AI & MCP analytics tab previously counted every access profile, overstating AI adoption. It now counts only enrollments in profiles with at least one MCP tool or toolset.
+
+  {/* PR #23713 */}
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
+
 <Update label="August 21, 2026">
 
 ## Product digest: August 21, 2026
