@@ -1,0 +1,288 @@
+---
+title: "Configure agent classifiers"
+og:title: "Configure agent classifiers - C1 docs"
+description: "Create a classifier, bind it to a surface, author rules, attach hooks and tool gates, and promote rules from Observe to Enforce."
+og:description: "Create a classifier, bind it to a surface, author rules, attach hooks and tool gates, and promote rules from Observe to Enforce."
+sidebarTitle: "Configure agent classifiers"
+---
+
+{/* Editor Refresh: 2026-09-02 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Everything on this page lives under **AI > Classifiers**. The **General** tab holds classifiers, hooks, and tool gates; the **Settings** tab holds the untrusted content judge.
+
+The order below is deliberate: create the classifier, bind it, then author rules in **Observe** mode and promote them to **Enforce** once you've seen what they catch on real traffic.
+
+## Step 1: Create a classifier
+
+Start from **AI > Classifiers**, where every classifier you create is listed alongside its bindings, rules, hooks, and tool gates.
+
+<Steps>
+<Step>
+Go to **AI > Classifiers** and click **Create classifier**.
+</Step>
+<Step>
+Enter a **Name** (required, up to 128 characters) and optionally a **Description** (up to 1024 characters).
+</Step>
+<Step>
+Set **Applies to** — **Agent** or **Gateway**. Choose deliberately: it determines which risk signals your rules can read, and which selector the classifier appears in when you bind it.
+</Step>
+<Step>
+Click **Create classifier**. C1 creates it and opens its detail page.
+</Step>
+</Steps>
+
+A new classifier has no rules, so it matches nothing yet. Bind it first (Step 2), then add rules (Step 3) — that way the first rule you author is live in Observe mode immediately and starts producing signal.
+
+<Note>
+To rename a classifier or change its description or surface later, click **Edit** on the **Details** card on its detail page.
+</Note>
+
+## Step 2: Bind the classifier
+
+<Warning>
+A classifier does nothing until it's bound. This is the step people skip — a carefully authored cascade that was never bound is evaluated on exactly zero calls.
+</Warning>
+
+Where you bind depends on the surface the classifier applies to.
+
+### Agent surface
+
+For a tenant-wide default across your C1AI agents:
+
+<Steps>
+<Step>
+Go to **AI > Classifiers**.
+</Step>
+<Step>
+Under **Default C1AI Classifier policy**, open the dropdown — it reads **No default classifier selected** until you set one.
+</Step>
+<Step>
+Pick your classifier.
+</Step>
+</Steps>
+
+To override the default for one agent, open that agent from **AI > Agents**, go to its **Classifiers** tab, and select a classifier there. Choosing **Use the default agent classifier** clears the override.
+
+<Note>
+Only classifiers whose **Applies to** is **Agent** appear in these dropdowns. The match is exact — a classifier left at the legacy **Any surface** value appears in neither selector.
+</Note>
+
+### Gateway surface
+
+For external AI clients connecting through the C1 Gateway:
+
+<Steps>
+<Step>
+Go to **AI > C1 Gateway > Settings**.
+</Step>
+<Step>
+Under **Default C1 Gateway Classifier policy**, select your classifier.
+</Step>
+</Steps>
+
+The classifier is now bound and evaluated on every call to that surface — but with no rules yet, it matches nothing.
+
+## Step 3: Author a rule
+
+A classifier's cascade is empty until you add rules to it. Each rule you create is appended to the bottom of the cascade, so order them deliberately (see [Order the cascade](#order-the-cascade) below).
+
+<Steps>
+<Step>
+On the classifier's detail page, click **New classifier rule**.
+</Step>
+<Step>
+Enter a **Name** and optional **Description**. Name it for the behavior it prevents — this string is what you'll be reading in audit logs later.
+</Step>
+<Step>
+Enter a **Condition (CEL)**. Leave it empty to match every tool call. Available variables:
+
+| Variable | Values |
+| :--- | :--- |
+| `ctx.private_data` | `LOW`, `MEDIUM`, `HIGH` |
+| `ctx.untrusted_content` | `LOW`, `MEDIUM`, `HIGH` — Agent surface only |
+| `ctx.exfiltration` | `LOW`, `MEDIUM`, `HIGH` |
+| `ctx.tool_name` | string |
+
+For example, to match the untrusted-content exfiltration pattern:
+
+```
+ctx.untrusted_content == HIGH
+  && ctx.exfiltration == HIGH
+```
+</Step>
+<Step>
+Choose an **Action**:
+
+- **Block** — deny the call immediately. Gates and hooks are skipped, and the hook/gate pickers disappear from the form.
+- **Evaluate hooks** — run the gates and hooks you select below, and let their outcome decide.
+</Step>
+<Step>
+If you chose **Evaluate hooks**, select what this rule dispatches:
+
+| Picker | When it runs |
+| :--- | :--- |
+| **Pre-tool hooks** | Before the tool call |
+| **Post-tool hooks** | After the tool call |
+| **Pre-output hooks** | Before the assistant's response is delivered |
+| **Tool gates** | Must grant before the tool call executes |
+
+Only hooks and gates with **Managed by classifiers** turned on appear in these lists, and each picker only offers hooks whose event matches it. If something you expect is missing, that's why — see Step 5.
+
+**Pre-output hooks** behave differently from the other three: a rule only takes effect on the outgoing response if it uses **Evaluate hooks** *and* selects at least one pre-output hook. A **Block** rule never applies to outgoing responses. See [Pre-output hooks](/product/admin/agent-classifiers-reference#pre-output-hooks).
+</Step>
+<Step>
+Set **Mode** to **Observe** for now. (**Enforce** applies the outcome; **Disabled** skips the rule.)
+</Step>
+<Step>
+Optionally enter a **Deny reason** (up to 256 characters). It's shown to the caller when this rule denies a call, so write it for whoever hits it — a bare "policy violation" leaves the agent's user with nothing to act on.
+</Step>
+<Step>
+Click **Create**.
+</Step>
+</Steps>
+
+The rule is appended to the bottom of the cascade in **Observe** mode, where it logs matches without blocking anything.
+
+### Order the cascade
+
+Rules evaluate **top to bottom, first match wins**. Click **Manage classifier rules** to reorder them with the move controls, or to edit and delete individual rules.
+
+<Warning>
+Put narrow rules above broad ones. A catch-all rule with an empty condition matches every call, so anything below it is unreachable.
+</Warning>
+
+Each rule renders as an **IF** / **THEN** card showing its condition and its action and mode chips, so you can read the cascade top-down without opening each rule.
+
+## Step 4: Add a tool gate for approval
+
+A tool gate turns a matching call into an approval request instead of a failure.
+
+<Steps>
+<Step>
+In the **Tool gates** section on **AI > Classifiers**, click **New tool gate**.
+</Step>
+<Step>
+Enter a **Name** (1–100 characters) and optional **Description**.
+</Step>
+<Step>
+Pick a **Grant policy** — this determines who approves and how. Required.
+</Step>
+<Step>
+Enter a **Filter (CEL expression)**. Gate filters read a different variable set than classifier rules — the call's identity and target rather than the risk axes. The field's helper text names `ctx.tool_name` and `ctx.tool_input`; see the [full list](/product/admin/agent-classifiers-reference#gate-filter-variables). Leave it empty to gate every call the gate sees, apart from the exclusions below.
+</Step>
+<Step>
+Review **Exclusions** — two checkboxes, both on by default, that add to the filter rather than replace it: **Exclude task result read-backs** (leaves `c1_task_service_get` ungated, so an agent can read the result of an action it was already approved for) and **Exclude built-in tools** (leaves the agent's own object-search, code-mode, and file-workspace tools ungated; a connector tool sharing one of those names still gates). Turn one off to bring those calls back under this gate. Your own condition above stays intact either way — toggling an exclusion never rewrites what you typed.
+</Step>
+<Step>
+Set **Priority** (0–1000, lower matches first) and leave **Enabled** on.
+</Step>
+<Step>
+Turn **Managed by classifiers** **on** so this gate only fires when a rule selects it, then click **Create**.
+</Step>
+<Step>
+Go back to your rule and select the gate under **Tool gates**.
+</Step>
+</Steps>
+
+<Warning>
+If a rule selects more than one tool gate, they don't all apply — **only the first gate whose filter matches runs**, and its grant policy decides the call. Order is enabled-first, then ascending **Priority**, then oldest first, across the gates your rule selected *plus* every gate with **Managed by classifiers** off. Give the gate whose approver should win the lower priority number. See [Only the first matching gate runs](/product/admin/agent-classifiers-reference#only-the-first-matching-gate-runs).
+</Warning>
+
+<Note>
+Leaving **Managed by classifiers** **off** means the gate evaluates on every matching call independently of any classifier. That's sometimes what you want — a blanket approval requirement — but it makes the gate invisible to your rule cascade.
+</Note>
+
+## Step 5: Attach hooks
+
+Hooks do the inspection and rewriting. Create them in the **Hooks** section of **AI > Classifiers** — see [Tool call hooks](/product/admin/tool-call-hooks) for the full field reference and the built-in patterns.
+
+To make a hook selectable by a classifier rule, turn on its **Managed by classifiers** toggle, either in the hook form or directly from the toggle column in the hooks table.
+
+<Warning>
+Hooks are **fail-closed**: if a hook errors, times out, or its filter expression fails to evaluate, the call is **denied**. A hook selected by an Enforce-mode rule can therefore block traffic because it's broken, not because it matched. Check the recorded status rather than assuming a denial means the classifier worked.
+</Warning>
+
+## Step 6: Promote from Observe to Enforce
+
+Until you do this, a rule in **Observe** is a reporting mechanism, not a control.
+
+<Steps>
+<Step>
+Leave the rule in **Observe** and run real traffic through it.
+</Step>
+<Step>
+Review what it would have caught — see [Where to find Observe results](#where-to-find-observe-results) below.
+</Step>
+<Step>
+Check both directions: rules that would have fired on calls you consider legitimate (too broad), and risky calls that matched nothing (too narrow).
+</Step>
+<Step>
+Edit the rule and set **Mode** to **Enforce**.
+</Step>
+</Steps>
+
+Because an Observe match falls through to the next rule, you can safely stage a whole cascade in Observe and promote it rule by rule.
+
+### Where to find Observe results
+
+Every rule that matches a call — enforcing or observing — writes an event to the [C1 system log](/product/admin/system-log). There is no per-classifier activity view in C1, so the system log is where you read Observe results.
+
+<Warning>
+C1 does not surface these events in the admin UI, and nothing notifies you when an Observe rule would have fired. To read them you need a [system log exporter](/product/admin/system-log#sync-c1-system-logs-into-your-siem) configured to your SIEM or data source. Set that up **before** you start an Observe rollout, or the traffic you were staging against passes unrecorded from your point of view.
+</Warning>
+
+In the exported OCSF events, classifier decisions carry:
+
+| Field | Value |
+| :--- | :--- |
+| `activity_name` | `guardrail_decision` |
+| `api.operation` | `aigov.guardrail.decision` |
+| `would_have_fired` | `true` for an Observe match; absent or `false` when a rule actually acted |
+| `policy_rule_id` | Which rule matched — the rule's ID, not its name |
+| `guardrail_id` | Which classifier the rule belongs to |
+| `mode`, `action` | The rule's mode and action at evaluation time |
+| `tool_name`, `session_id` | What was called, and in which session |
+| `a1_private`, `a2_untrusted`, `a3_exfiltration` | The three risk scores as evaluated |
+
+<Note>
+These event names still use the internal `guardrail`/`aigov.guardrail` identifiers. Only the admin UI and API were renamed to Classifiers; the underlying audit event schema wasn't.
+</Note>
+
+To count what a rule would have caught, filter on `activity_name = "guardrail_decision"` plus `would_have_fired = true` and your `policy_rule_id`.
+
+<Note>
+Observe records are written at **informational** severity — only an actual block is raised above that. A severity filter tuned to warnings and above will exclude exactly the records you're staging against.
+</Note>
+
+System log events are retained for 365 days by default.
+
+## Step 7: Configure the untrusted content judge
+
+The judge produces the `ctx.untrusted_content` signal. It's on by default and needs no setup — but you can turn it off.
+
+<Steps>
+<Step>
+Go to **AI > Classifiers** and open the **Settings** tab.
+</Step>
+<Step>
+Under **Untrusted content judge**, click **Edit** and toggle it.
+</Step>
+</Steps>
+
+<Warning>
+Turning the judge off doesn't just stop the scoring — `ctx.untrusted_content` then **always evaluates as low risk**. Any rule that gates on it silently stops matching, so a cascade that looks correct is no longer protecting anything. Leave it on unless you have a specific reason, and if you do turn it off, disable the rules that depend on it rather than leaving them in place.
+</Warning>
+
+## Delete a classifier
+
+Open the classifier and click **Delete** in the top bar. The confirmation dialog names the classifier and warns the deletion can't be undone. Any binding that pointed at it stops applying.
+
+## Next steps
+
+- Rule fields, CEL variables, and evaluation order: [Agent classifiers reference](/product/admin/agent-classifiers-reference).
+- Hook configuration and built-in patterns: [Tool call hooks](/product/admin/tool-call-hooks).
+- Controlling which tools exist to be gated at all: [Govern tools and toolsets](/product/admin/tools-and-toolsets).

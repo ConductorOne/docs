@@ -5,7 +5,7 @@ og:title: Enable AI access management - C1 docs
 og:description: Turn on AIAM for your tenant and configure tenant-wide defaults for MCP servers, tools, and AI clients.
 ---
 
-{/* Editor Refresh: 2026-05-08 */}
+{/* Editor Refresh: 2026-09-02 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
@@ -50,9 +50,11 @@ Controls which categories of AI client are allowed to register against your tena
 | Type | What it is | Default |
 | :--- | :--- | :--- |
 | **Personal** | Tied to a single human user (for example, Claude Desktop on their laptop) | Allowed |
-| **Shared** | Used by multiple humans behind a single registration (for example, a team workspace agent) | Disallowed |
-| **Service** | Machine-to-machine, no human in the loop (CI/CD, batch agents) | Disallowed |
-| **Ephemeral** | Short-lived, single-session (one-off scripts, sandbox runs) | Disallowed |
+| **Shared** | Used by multiple humans behind a single registration (for example, a team workspace agent) | Allowed |
+| **Service** | Machine-to-machine, no human in the loop (CI/CD, batch agents) | Allowed |
+| **Ephemeral** | Short-lived, single-session (one-off scripts, sandbox runs) | Allowed |
+
+The underlying setting is a list of allowed client types. By default that list is **empty**, which means every client type is allowed to register. **Recommendation:** restrict this list to the client types your organization actually uses (typically Personal and Shared) — this is a hardening step you opt into, not the out-of-the-box behavior.
 
 To change which types are allowed:
 
@@ -77,7 +79,7 @@ Any in-flight client of a now-disallowed type continues to function until its ex
 When C1 discovers a new tool on a registered MCP server, it assigns the tool this initial state. Until an admin reviews and approves the tool, it cannot be added to a toolset and end users cannot request it.
 
 - **State**: Pending Review / Unset (recommended — keeps every newly-discovered tool out of end-user reach until you've reviewed it)
-- **Classification**: Unclassified (recommended)
+- **Classification**: Sensitive (default)
 
 To change the defaults:
 
@@ -104,24 +106,26 @@ When on, every newly-discovered tool starts in **Pending Review** and must be ap
 Turning this off does not bypass access profile approval — end users still go through the access profile's approval policy when they request a toolset.
 </Note>
 
-### Client lifecycle inactivity policy
+### Client lifecycle policy
 
-C1 tracks how long it's been since each registered AI client made a tool call. After configurable thresholds, the client transitions through three states:
+C1 tracks how long it's been since each registered AI client made a tool call, and how long it's been since a client's credentials were closed. Three thresholds control what happens to an inactive client:
 
-| State | What changes for the user | Default threshold |
+| Field label | Helper text | Default |
 | :--- | :--- | :--- |
-| **Hidden** | Client is hidden from the end user's connected-clients list, but tokens still work if presented | 1 day |
-| **Closed** | Tokens are revoked; client must re-authenticate to be used again | 7 days |
-| **Deleted** | Client registration is removed; user must register again from scratch | 90 days |
+| **Hide inactive clients after** | How long after last activity before the client is hidden from the default list. Set to zero to disable. | 1 day |
+| **Close credentials after** | How long after last activity before OAuth credentials are closed. Set to zero to disable. | 1 month |
+| **Delete closed clients after** | How long after close before the client registration is deleted. Set to zero to disable. | 3 months |
+
+**Delete closed clients after** is measured from when the client's credentials were closed, **not** from the client's last activity.
 
 To change the thresholds:
 
 <Steps>
 <Step>
-In **AI > C1 Gateway > Settings**, find **Client lifecycle**.
+In **AI > C1 Gateway > Settings**, find **Client governance**.
 </Step>
 <Step>
-Set the inactivity threshold for each state.
+Set each threshold.
 </Step>
 <Step>
 Click **Save**.
@@ -147,4 +151,22 @@ In **Settings > System management**, find **Disable system features**.
 Toggle **Disable MCP traffic**.
 </Step>
 </Steps>
+
+### Per-server kill switch
+
+Each registered MCP server also has its own kill switch, independent of the tenant-wide one. Flipping it blocks all MCP requests for that connector only — other servers keep working.
+
+<Steps>
+<Step>
+Open the MCP server's configuration tab.
+</Step>
+<Step>
+Toggle the kill switch.
+</Step>
+<Step>
+Click **Save**.
+</Step>
+</Steps>
+
+Combined with the per-tool kill switch ([Govern tools and toolsets](/product/admin/tools-and-toolsets)) and the per-client kill switch ([Manage AI clients](/product/admin/ai-clients)), C1 offers kill switches at four scopes: tenant, server, tool, and client.
 
