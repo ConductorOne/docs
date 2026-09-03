@@ -216,6 +216,35 @@ When documenting features that are in early access, add a standardized warning c
 - Include the explanation of what early access means
 - Use "share feedback" (not "have any feedback")
 
+## Hosting region references (default instance vs. EU data residency)
+
+C1 runs two hosting options — a **default instance** (`conductor.one`) and an **EU data residency instance** (`c1eu.ai`). A tenant is provisioned in one region, and every tenant-specific URL, hostname, or IP address reflects it. See the "Hosting regions" table in [Create a C1 tenant](/product/how-to/qs-set-up-c1) for the canonical explainer — link there rather than re-explaining the concept on other pages.
+
+Anywhere a region-specific value appears, use one of the two treatments below based on how the value is used — not on which section of the docs it's in.
+
+**Single fixed values the reader pastes somewhere** (an OAuth redirect URI, an MCP callback URL, a firewall allowlist entry) — show both values explicitly, labeled by instance, instead of printing only the default:
+
+```mdx
+- Default instance: `https://accounts.conductor.one/auth/callback`
+- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
+```
+
+Lead into the pair with wording that tells the reader how to choose — "whichever matches your C1 tenant's domain" — rather than assuming they already know which hosting option they're on. This applies even when the value is tenant-specific (contains a placeholder like `<tenantName>` or `YOUR_DOMAIN`): show both domain suffixes, not just `conductor.one`.
+
+Don't use this pattern for a value the reader copies directly from their own C1 account (for example, an MCP server URL shown on an "AI connections" page) — the product already displays the tenant's real, region-correct value, so there's nothing to disambiguate.
+
+**Reference and example-heavy pages** (API docs, CLI docs, service-principal/workload-federation guides) where `conductor.one` appears repeatedly inside code blocks or curl examples — don't rewrite every example. Add one callout near the section the examples belong to instead:
+
+```mdx
+<Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
+```
+
+- Place the callout immediately before the section whose examples it covers, not at the top of the page if the examples don't start until much later — "these examples" should mean the ones the reader is about to see.
+- If a page has more than one cluster of examples separated by unrelated content, repeat the callout at each cluster rather than relying on one mention to cover the whole page.
+- Reserve this pink `<Callout>` (`icon="globe"`, `color="#c937ae"`) for hosting-region notes specifically. Standard content notes still use `<Note>`, `<Tip>`, `<Warning>`, or `<Info>`.
+
+**Choosing between the two**: is this a single value the reader picks once and pastes into a form field or config (dual-value), or a domain suffix baked into many illustrative examples across a section (callout)? A page can need both — a one-time setup step plus a pile of reference examples further down.
+
 ## Navigation (docs.json)
 
 - Pages map to MDX files (no extension)
