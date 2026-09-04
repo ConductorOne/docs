@@ -37,15 +37,21 @@ CrowdStrike issues a client ID and client secret to an API client, which C1 exch
 
 <Steps>
 <Step>
-In the Falcon console, go to **Support and resources** > **API clients and keys** and select **Add new API client**.
+In the Falcon console, go to **Support and resources** > **API clients and keys**.
 
 {/* REVIEWER NOTE — needs a verified docs link for generating credentials */}
 </Step>
 <Step>
-Give the client a recognizable name such as `C1`, then grant only the **API scopes** you need, such as **Read** access to Detections, Incidents, and Hosts.
+Select **Add new API client**.
 </Step>
 <Step>
-Select **Create**, then copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
+Give the client a recognizable name such as `C1`, then grant **Read** on the API scopes covering the tools you want. See [Choose API scopes](#choose-api-scopes) for the mapping.
+</Step>
+<Step>
+Select **Create**.
+</Step>
+<Step>
+Copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
 </Step>
 <Step>
 Note your Falcon cloud's API base URL, such as `https://api.crowdstrike.com` or your region-specific endpoint.
@@ -54,7 +60,43 @@ Note your Falcon cloud's API base URL, such as `https://api.crowdstrike.com` or 
 </Step>
 </Steps>
 
+You now have a client ID, client secret, and base URL to enter when you register the server in C1.
+
 For a shared production setup, use a dedicated API client so activity is attributable to C1 rather than a person.
+
+## Choose API scopes
+
+Each tool reads a different Falcon API, and each API has its own scope. Grant **Read** on the scopes for the tools you want. A tool whose scope is missing returns CrowdStrike's authorization error rather than an empty result, so an unexpected 403 usually means the scope is absent from the API client.
+
+| Tools | Falcon API scope |
+|---|---|
+| `list_hosts` | Hosts |
+| `list_alerts` | Alerts |
+| `list_incidents` | Incidents |
+| `list_ioc_indicators` | IOC Manager |
+| `list_device_control_policies` | Device control policies |
+| `list_vulnerabilities`, `list_remediations` | Vulnerabilities (Falcon Spotlight) |
+| `list_intel_actors`, `list_intel_indicators`, `list_intel_reports` | Falcon Intelligence |
+| `list_zero_trust_assessments` | Zero Trust Assessment |
+| `list_discover_applications` | Falcon Discover |
+| `list_ioms`, `list_iom_details` | CSPM registration |
+
+{/* REVIEWER NOTE — the tool names are exact, taken from the server's own tool list. The right-hand column needs a check against the Falcon console's own scope labels, which I could not verify without a tenant. */}
+
+Four tools take action in CrowdStrike and need **Write** as well:
+
+| Tools | Falcon API scope |
+|---|---|
+| `contain_host`, `lift_containment`, `hide_host` | Hosts (Write) |
+| `create_ioc_indicator` | IOC Manager (Write) |
+
+Leaving Write off the API client is a deliberate way to keep the connection read-only: those four tools then return CrowdStrike's authorization error, and the rest keep working.
+
+<Note>
+`list_ioms` and `list_iom_details` need the **CSPM registration** scope. CrowdStrike also offers a Cloud Security scope, and it is easy to reach for by name — but it covers a different set of endpoints (cloud groups and cloud risks) that C1 does not expose, so it will not make these two tools work. If `list_ioms` returns 403 while your other tools return data, add CSPM registration to the API client.
+</Note>
+
+Scope changes take effect the next time C1 requests a token, so you don't need to re-register the server or reconnect after editing the API client.
 
 ## How CrowdStrike credentials are shared
 
@@ -96,4 +138,4 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 ## Manage your CrowdStrike credentials
 
 - **Rotate the client secret** by resetting it on the API client in the Falcon console, then update the secret on the server's authentication settings in C1.
-- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike.
+- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike. See [Choose API scopes](#choose-api-scopes).
