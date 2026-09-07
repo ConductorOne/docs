@@ -1,0 +1,160 @@
+---
+title: "Common multi-step API tasks"
+description: "Worked examples for API tasks that require more than one call, chaining IDs from one response into the next request."
+sidebarTitle: "Common tasks"
+---
+
+The [Endpoints reference](/api-reference) documents every C1 API endpoint individually. Some real-world tasks require chaining two or more of those endpoints together — for example, looking up an object's ID before you can act on it, or triggering a job and then checking its result. This page walks through those multi-step tasks.
+
+For single-endpoint tasks (creating an object, fetching a record by ID, and so on), go directly to the [Endpoints reference](/api-reference) — most single calls are self-explanatory there.
+
+<Warning>
+A few steps below are marked **Needs verification**. These are our best reconstruction of the correct call sequence from the API reference, but haven't been confirmed against a live tenant. Confirm these with an engineer before publishing.
+</Warning>
+
+## Add an entitlement to an access profile
+
+An access profile is a named bundle of requestable entitlements — in the API, this is a **request catalog**. To add an entitlement to one, you need the catalog's ID first.
+
+<Steps>
+<Step title="Find the catalog ID for the access profile">
+List or search request catalogs to find the `catalog_id` matching the access profile's display name.
+
+```bash curl
+curl -X GET "https://${TENANT}/api/v1/catalogs" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+</Step>
+<Step title="Add the entitlement to that catalog">
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/catalogs/${CATALOG_ID}/requestable_entries" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appEntitlements": [
+      { "appId": "${APP_ID}", "id": "${ENTITLEMENT_ID}" }
+    ],
+    "createRequests": false
+  }'
+```
+
+Set `createRequests` to `true` if you want C1 to automatically create access requests for the entitlement on behalf of everyone already enrolled in the access profile.
+</Step>
+</Steps>
+
+## Check how many users have completed provisioning for an access profile
+
+There's no single "provisioning status" endpoint. Instead, find the entitlement(s) backing the access profile, then count tasks against them.
+
+<Steps>
+<Step title="Find the entitlement(s) backing the access profile">
+```bash curl
+curl -X GET "https://${TENANT}/api/v1/catalogs/${CATALOG_ID}/requestable_entitlements" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+</Step>
+<Step title="Search grant tasks for those entitlements">
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/search/tasks" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appEntitlementIds": ["${ENTITLEMENT_ID}"],
+    "taskTypes": ["TASK_TYPE_GRANT"],
+    "pageSize": 10
+  }'
+```
+
+Compare `taskStates: OPEN` (still provisioning) against `taskStates: CLOSED` (done) counts to get an "x of y" figure. Request a small `pageSize` (10 or fewer) — each task record is large.
+</Step>
+</Steps>
+
+<Warning>
+**Needs verification:** confirm the exact `taskTypes` value that represents an access-profile-driven grant, and whether a `CLOSED` task always means successful provisioning (versus closed-but-denied/failed).
+</Warning>
+
+## Set an entitlement's risk level
+
+<Steps>
+<Step title="Create the risk level value, if it doesn't already exist">
+Risk levels are a shared, tenant-wide list of values — check whether the one you want already exists before creating a duplicate.
+
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/attributes/risk_levels" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{ "value": "High" }'
+```
+
+The response includes the new value's `id` — save it for the next step.
+</Step>
+<Step title="Apply the risk level to the entitlement">
+<Warning>
+**Needs verification:** we could not confirm the endpoint/body that attaches an attribute value to a specific entitlement from the reference alone. Confirm with an engineer whether this is a field on the entitlement update call or a separate binding endpoint.
+</Warning>
+</Step>
+</Steps>
+
+## Extend or remove a grant's expiration date
+
+You need the specific grant (the binding between a user and an entitlement) before you can change its expiration — you can't do it by user or entitlement ID alone.
+
+<Steps>
+<Step title="Find the grant">
+Search grants for the entititlement to find the specific user's binding.
+
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/apps/${APP_ID}/entitlements/${ENTITLEMENT_ID}/search-grants" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{ "query": "${USER_EMAIL}" }'
+```
+</Step>
+<Step title="Update or remove the expiration">
+To set a new expiration:
+
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/apps/${APP_ID}/entitlements/${ENTITLEMENT_ID}/users/${APP_USER_ID}/update-grant-duration" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{ "newDeprovisionAt": "2026-12-31T00:00:00Z" }'
+```
+
+To remove the expiration entirely (make the grant permanent), use the equivalent `remove-grant-duration` endpoint on the same binding instead.
+</Step>
+</Steps>
+
+## Trigger a workflow automation via the API and confirm it ran
+
+Executing an automation and checking its result are two separate calls — the execute call only returns an execution ID, not a result.
+
+<Steps>
+<Step title="Execute the automation">
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/automations/${AUTOMATION_ID}/execute" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+The response contains an `executionId`.
+</Step>
+<Step title="Check the execution's status">
+```bash curl
+curl -X GET "https://${TENANT}/api/v1/automation_executions/${EXECUTION_ID}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+Check the `state` field on the returned execution object.
+</Step>
+</Steps>
+
+<Warning>
+**Needs verification:** confirm the full set of `state` values an execution can return and which ones represent success versus failure.
+</Warning>
+
+## Add a service principal as an app owner
+
+<Warning>
+**Needs verification:** the reference documentation for `POST /api/v1/apps/{app_id}/owners/{user_id}` does not state whether `user_id` accepts a service principal's ID, or whether app ownership is restricted to human users via the API. Confirm with an engineer before documenting this as supported — if it isn't, this section should instead document the limitation.
+</Warning>
