@@ -31,13 +31,21 @@ Configuring the connector requires you to pass in information from LaunchDarkly.
 Here's the information you'll need:
 
 - API Access Token
+- Base URL (optional) — only needed for non-US tenants. Use `https://app.eu.launchdarkly.com` for EU tenants or `https://app.launchdarkly.us` for Federal tenants. Leave unset for US commercial tenants (defaults to `https://app.launchdarkly.com`). The value must be exactly one of those three URLs — LaunchDarkly's regions are subdomains, not paths, so a form like `https://app.launchdarkly.com/eu` is rejected at startup rather than treated as a valid EU host.
 
 See the LaunchDarkly docs for information on how to acquire credentials: [View the documentation](https://launchdarkly.com/docs/home/account/api-create#create-access-tokens)
 
 This connector requires an access token with one of the following permission sets:
 
-  - **Reader** base role (sufficient for read-only sync of members, teams, and custom roles).
-  - **Admin** base role (or a custom role granting `createMember`, `updateMember`, and `deleteMember` on `member/*`) is required to also use the member create / delete and custom-role grant / revoke capabilities.
+  - **Reader** base role (sufficient for read-only sync). Note that syncing teams and custom roles additionally requires an Enterprise plan — see the warning below; no base role substitutes for it.
+  - **Admin** base role, or a custom role granting `createMember`, `deleteMember`, `updateRole`, and `updateCustomRole` on `member/*` plus `updateTeamMembers` on `team/*`, is required to also create and delete members, assign base roles and custom roles, and change team membership.
+
+<Warning>
+This connector requires a LaunchDarkly **Enterprise** plan. A token's base role cannot substitute for the plan.
+
+- **Sync.** Teams and custom roles are Enterprise-only features, so on the Developer and Foundation plans `GET /api/v2/teams` and `GET /api/v2/roles` return `403 Forbidden` regardless of the access token's role, and the sync fails.
+- **Base-role deprovisioning.** Unassigning a base role is performed by assigning the **No access** role, because LaunchDarkly members always hold exactly one base role and there is no removal operation. On a plan that does not offer No access, every base-role revoke fails with `400 {"message":"Invalid role: no_access"}`.
+</Warning>
 
 ## Configure the LaunchDarkly connector
 
@@ -158,6 +166,8 @@ stringData:
 
   # LaunchDarkly config
   BATON_LAUNCHDARKLY_API_TOKEN: <LaunchDarkly API Access Token>
+  # Optional: set for EU or Federal tenants; omit for US commercial
+  BATON_LAUNCHDARKLY_BASE_URL: <EU or Federal base URL>
 
 ```
 
