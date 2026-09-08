@@ -252,7 +252,7 @@ For more information, see [link to vendor docs].
 
     <Steps>
       <Step>
-        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+        In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
       </Step>
 
       <Step>
@@ -309,7 +309,7 @@ For more information, see [link to vendor docs].
 
     <Steps>
       <Step>
-        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+        In C1, navigate to **Apps** > **Connectors** > **Add connector**.
       </Step>
 
       <Step>
@@ -458,7 +458,7 @@ Replace these consistently throughout:
 ### UI Elements
 - Bold all UI elements: **Connectors**, **Add connector**, **Settings**
 - Use exact text from the UI
-- Navigation paths: Use ">" for menu paths: **Integrations** > **Connectors**
+- Navigation paths: Use ">" for menu paths: **Apps** > **Connectors**
 
 ### Code and Credentials
 - Use backticks for code elements: `ConductorOne`, `BATON_CLIENT_ID`
@@ -540,7 +540,7 @@ Before finalizing, verify:
 - [ ] Each `<Step>` contains only one primary action
 - [ ] All UI elements are bolded
 - [ ] Credentials section has clear warnings about required permissions
-- [ ] Cloud-hosted tab uses **Integrations** > **Connectors** navigation
+- [ ] Cloud-hosted tab uses **Apps** > **Connectors** navigation
 - [ ] Self-hosted tab searches for **Baton**
 - [ ] Self-hosted tab has "Step 1, Step 2, Step 3" structure
 - [ ] YAML files use `-secrets` suffix and `envFrom` pattern
