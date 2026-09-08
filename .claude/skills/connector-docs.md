@@ -309,7 +309,7 @@ For more information, see [link to vendor docs].
 
     <Steps>
       <Step>
-        In C1, navigate to **Apps** > **Connectors** > **Add connector**.
+        In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
       </Step>
 
       <Step>
