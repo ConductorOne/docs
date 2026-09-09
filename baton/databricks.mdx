@@ -19,9 +19,15 @@ sidebarTitle: "Databricks"
 
 The Databricks connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
-<Note>
-Provisioning **account groups** requires OAuth authentication. It is not available when authenticating with a workspace token, because the Databricks API does not allow provisioning account groups from a workspace token. Workspace-scoped groups can still be provisioned with a workspace token.
-</Note>
+## Authentication methods
+
+The connector authenticates with **OAuth** — an account-level service principal's client ID and secret. This is the only method currently offered.
+
+<Warning>
+**Workspace-token (personal access token) authentication is temporarily unavailable.** It is not offered when configuring the connector, and configurations that specify it are rejected at startup. Use OAuth instead.
+
+The connector's PAT implementation is intact and the method is expected to return; it is withheld while a platform-side defect is resolved. The defect is not in this connector: a credential declared as a list of secrets is not treated as secret by the configuration layer, so a workspace token supplied through the UI would be stored unencrypted and displayed in clear text.
+</Warning>
 
 ## Gather Databricks credentials
 
@@ -47,7 +53,7 @@ A user with the **Account admin** role in each Databricks workspace you want to 
 
 ### Generate Databricks credentials
 
-You have two authentication choices when setting up the Databricks connector:
+The Databricks connector authenticates with OAuth:
 
 - **OAuth** (syncs info from all Databricks workspaces)
 
@@ -60,31 +66,15 @@ You have two authentication choices when setting up the Databricks connector:
     </Step>
   </Steps>
 
-- **Personal access token** (syncs info from one or more Databricks workspaces)
-
-  <Steps>
-    <Step>
-    In Databricks, navigate to **Settings** > **Developer** > **Access tokens** and click **Manage**.
-    </Step>
-    <Step>
-    Click **Generate new token** and create a new token.
-    </Step>
-    <Step>
-    Carefully copy and save the token.
-    </Step>
-  </Steps>
-
 **Done.** Here's the set of credentials you'll need when setting up the connector:
 
 - Account ID
 - OAuth client ID
 - OAuth client secret
 
-OR
-
-- Account ID
-- One or more personal access tokens
-- Deployment name of each Databricks workspace you're syncing (the subdomain in the workspace URL, not the workspace ID), listed in the same order as the corresponding tokens
+<Note>
+Personal access token (workspace token) authentication is **temporarily unavailable** and is not offered when configuring the connector, so there is no need to generate one. See [Authentication methods](#authentication-methods) above.
+</Note>
 
 Next, move on to the instructions for your chosen setup method.
 
@@ -127,13 +117,10 @@ To complete this task, you'll need:
   Find the **Settings** area of the page and click **Edit**.
   </Step>
   <Step>
-  Select whether you're authenticating with **OAuth** or a **Personal access token**.
-  </Step>
-  <Step>
   Paste the account ID you looked up in Step 1 into the **Account ID** field.
   </Step>
   <Step>
-  Enter the required OAuth or token credentials into the other two fields.
+  Enter your OAuth client ID and client secret into the **OAuth2 Client ID** and **OAuth2 Client Secret** fields.
   </Step>
   <Step>
   **Google Cloud Platform and Azure Databricks customers only:** Enter your Databricks account hostname and hostname in the relevant fields.
@@ -217,33 +204,30 @@ stringData:
   # Databricks account ID (required for both credential options below)
   BATON_ACCOUNT_ID: <Databricks account ID>
 
-  # Databricks credentials, option 1: OAuth (syncs the account and all workspaces)
+  # Databricks credentials: OAuth
   BATON_DATABRICKS_CLIENT_ID: <OAuth client ID>
   BATON_DATABRICKS_CLIENT_SECRET: <OAuth client secret>
-  # Optional (OAuth only): comma-separated workspaces to exclude from sync
-  # (workspace name, deployment name, or numeric ID). Cannot be combined with BATON_WORKSPACES.
-  BATON_DATABRICKS_EXCLUDE_WORKSPACES: <workspace-a,workspace-b>
 
-  # Databricks credentials, option 2: workspace token (syncs only the listed workspaces)
-  BATON_AUTH_METHOD: workspace-token
-  # BATON_WORKSPACE_TOKENS and BATON_WORKSPACES pair up by position: the Nth token
-  # authenticates the Nth workspace, so both lists must have the same length and order.
-  BATON_WORKSPACE_TOKENS: <token for workspace-a,token for workspace-b>
-  BATON_WORKSPACES: <deployment name of workspace-a,deployment name of workspace-b>
+  # Optional: limit the sync to specific workspaces, by deployment name.
+  # Mutually exclusive with BATON_DATABRICKS_EXCLUDE_WORKSPACES — set one or the other, never both.
+  # BATON_WORKSPACES: <deployment name of workspace-a,deployment name of workspace-b>
+
+  # Optional: exclude specific workspaces from the sync
+  # (workspace name, deployment name, or numeric ID).
+  # Mutually exclusive with BATON_WORKSPACES — set one or the other, never both.
+  BATON_DATABRICKS_EXCLUDE_WORKSPACES: <workspace-a,workspace-b>
 
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
 ```
 
-<Note>
-**Choose one credential option, not both.** Use OAuth (option 1) or workspace tokens (option 2). `BATON_DATABRICKS_EXCLUDE_WORKSPACES` is mutually exclusive with `BATON_WORKSPACES`, so it only applies to OAuth.
-</Note>
-
 <Warning>
-**Workspace-token auth syncs less than OAuth.** A workspace token cannot reach the Databricks account API, so the sync is scoped to the listed workspaces only: it emits no account-level entitlements or grants and no workspace-membership entitlements, and users, groups, service principals and roles are parented under their workspace instead of the account. For full account and cross-workspace coverage, use OAuth.
-
-OAuth requires a reachable account API. If the account API check fails at startup, the connector fails validation instead of falling back to a workspace-only sync, even when `BATON_WORKSPACES` is set.
+**`BATON_WORKSPACES` and `BATON_DATABRICKS_EXCLUDE_WORKSPACES` cannot both be set.** They are mutually exclusive, and a config carrying both is rejected at startup before any API call. Choose one.
 </Warning>
+
+<Note>
+OAuth requires a reachable account API. If the account API check fails at startup, the connector fails validation instead of falling back to a workspace-only sync, even when `BATON_WORKSPACES` is set.
+</Note>
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
 
