@@ -1,8 +1,8 @@
 ---
 title: "Set up a New Relic connector"
 og:title: "Set up a New Relic connector"
-description: "C1 provides identity governance and just-in-time provisioning for New Relic. Integrate your New Relic instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
-og:description: "C1 provides identity governance and just-in-time provisioning for New Relic. Integrate your New Relic instance with C1 to run user access reviews (UARs) and enable just-in-time access requests."
+description: "C1 provides identity governance and just-in-time provisioning for New Relic. Integrate your New Relic instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for New Relic. Integrate your New Relic instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 sidebarTitle: "New Relic"
 ---
 
@@ -10,10 +10,55 @@ sidebarTitle: "New Relic"
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Organizations | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Users | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+
+The New Relic connector supports account provisioning: creating and deleting users, and adding or removing users from groups.
+
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| update_user | `user_id` (resource reference, required), `name` (string, optional), `email` (string, optional), `user_type` (string, optional: `BASIC_USER_TIER`, `CORE_USER_TIER`, or `FULL_USER_TIER`) | Updates a New Relic user's full name, email address, and/or user tier. At least one of `name`, `email`, or `user_type` must be provided; any field left blank is unchanged. Returns `success` (boolean) and `user_id` (the ID of the updated user). |
+
+### Find your authentication domain ID
+
+New Relic organizes users into authentication domains, and every new user must be created within one. C1 needs this domain's ID before it can create New Relic accounts.
+
+<Steps>
+<Step>
+From the New Relic user menu, go to **Administration > Authentication domains**.
+</Step>
+<Step>
+Select the authentication domain you want new users created in.
+</Step>
+<Step>
+Copy the domain ID shown at the top of the authentication domain page. You'll use it in the next section.
+</Step>
+</Steps>
+
+See New Relic's [authentication domains documentation](https://docs.newrelic.com/docs/accounts/accounts-billing/new-relic-one-user-management/authentication-domains-saml-sso-scim-more/) for more detail.
+
+### Set up account provisioning mappings
+
+C1 creates a New Relic account when a user requests access to this app. The account details come from the app's provisioning mappings, which you set up on the app's **Overview** page — see [Configure account provisioning](/product/admin/account-provisioning) for the full procedure.
+
+The New Relic connector requires four mappings:
+
+| Destination value | Source value |
+| :--- | :--- |
+| `name` | A CEL expression resolving to the user's full name, such as `subject.display_name` |
+| `email` | A CEL expression resolving to the user's email address, such as `subject.email` |
+| `user_type` | The New Relic tier new accounts receive, as a quoted string: `"BASIC_USER_TIER"`, `"CORE_USER_TIER"`, or `"FULL_USER_TIER"` |
+| `authentication_domain_id` | The domain ID you copied above, as a quoted string |
+
+Enter `user_type` and `authentication_domain_id` as quoted CEL string literals — `"BASIC_USER_TIER"`, not `BASIC_USER_TIER`.
+
+These two are fixed values rather than expressions, so every account this app creates lands in the same tier and the same authentication domain. Set up a separate app for each tier or domain you need to provision into.
 
 ## Gather New Relic credentials 
 
@@ -21,6 +66,8 @@ Configuring the connector requires you to pass in credentials generated in New R
 
 <Warning>
 A user who is a **full platform user** in New Relic must perform this task.
+
+To use account provisioning (create/delete users or add users to groups), the API key owner must also have the **Authentication domain manager** role in New Relic. See [New Relic user management](https://docs.newrelic.com/docs/apis/nerdgraph/examples/nerdgraph-manage-users/) for details.
 </Warning>
 
 ### Create a user API key
@@ -52,7 +99,7 @@ Click the **...** menu and select **Copy key**. Carefully save the API key.
 </Step>
 </Steps> 
 
-**Done.** Next, move on to the connector configuration instructions. 
+**That's it!** Next, move on to the connector configuration instructions. 
 
 ## Configure the New Relic connector
 
@@ -105,7 +152,7 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 </Step>
 </Steps>
 
-**Done.** Your New Relic connector is now pulling access data into C1.
+**That's it!** Your New Relic connector is now pulling access data into C1.
 </Tab>
 
 <Tab title="Self-hosted">
@@ -115,7 +162,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 ### Resources 
 
-[Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
+[Contact C1's support team](mailto:support@conductorone.com) to download the latest version of the connector.
 
 ### Step 1: Set up a new New Relic connector
 
@@ -224,10 +271,6 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 </Step>
 </Steps>
 
-**Done.** Your New Relic connector is now pulling access data into C1.
+**That's it!** Your New Relic connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
-
-

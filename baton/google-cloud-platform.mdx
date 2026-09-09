@@ -8,36 +8,63 @@ sidebarTitle: "Google Cloud Platform with Google Workspace"
 
 ## Capabilities
 
-| Resource                            | Sync                  | Provision             |
-| :--- | :--- | :--- |
-| Accounts                            | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |                       |
-| Groups                              | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Folders                             | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Roles                               | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Projects                            | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Organizations                       | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |                       |
-| Workforce Identity pools\*          | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |                       |
-| Workforce Identity pool providers\* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |                       |
-| Secrets - API keys                  | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |                       |
-| Secrets - Service account keys      | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |                       |
-| Secrets - Secret Manager secrets    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Buckets                             | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| IAM Role Assignments\*\*            | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Resource                            | Sync                                                          | Provision                                                     |
+| :---------------------------------- | :------------------------------------------------------------ | :------------------------------------------------------------ |
+| Accounts                            | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |                                                               |
+| Groups                              | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Folders                             | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles                               | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Projects                            | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Organizations                       | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |                                                               |
+| Workforce Identity pools\*          | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Workforce Identity pool providers\* | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |                                                               |
+| Secrets - API keys                  | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |                                                               |
+| Secrets - Service account keys      | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |                                                               |
+| Secrets - Secret Manager secrets    | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Buckets                             | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| IAM Role Assignments\*\*            | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 
 \*Workforce Identity Federation support is optional and must be configured when you set up the connector.
+
+<Note>
+**What Workforce Identity provisioning covers.** Entitlements on a Workforce Identity pool are the administrative roles bound on the pool itself — who may manage the pool and its providers. Reading them requires `iam.workforcePools.getIamPolicy`, and granting or revoking them additionally requires `iam.workforcePools.setIamPolicy`. The three roles GCP predefines for this (`roles/iam.workforcePoolAdmin`, `roles/iam.workforcePoolEditor`, `roles/iam.workforcePoolViewer`) always appear as entitlements, so a newly created pool can be administered from C1 straight away, and any other role the pool binds appears alongside them. C1 shows who holds each of those roles, including principals GCP grants only while an IAM condition holds. Granting a pool role writes an unconditional binding. If the principal also holds that role under a condition — either by itself or alongside an unconditional binding — C1 refuses the revoke before making any policy change. Remove the conditional binding in GCP, then retry the revoke in C1 to remove any remaining unconditional binding.
+
+Separately, federated identities can be granted and revoked IAM roles on organizations, folders, projects, buckets, and secrets. The connector writes the appropriate GCP principal for each shape — `principal://…/subject/…` for a single user, and `principalSet://…/group/…`, `principalSet://…/attribute.NAME/…` or `principalSet://…/*` for the set-based bindings. Across these resource roles and the pool administrative roles above, when a Shared identity source matches the same identity through more than one workforce pool, C1 refuses a revoke that would remove only one binding and leave the matched identity's access in place through another pool. Remove the duplicate binding in GCP, sync the connector, and retry the revoke.
+
+Granting access to a **federated group** must be done in GCP. GCP identifies such a group by the value its provider asserts in the `google.groups` claim, which varies by identity provider and cannot be derived from the group itself, so the connector refuses the grant rather than writing a binding that would match no one. Once the `principalSet://…/group/…` binding exists in GCP, the connector syncs it and can revoke it. With a **Shared identity source** configured, C1 matches the asserted group to the group from that source and shows the binding's inherited IAM access for its members in Inventory and access reviews. Configure the Shared identity source when you enable Workforce Identity Federation so group-derived access includes those members. Without it, C1 still shows access held by the federated group binding itself.
+
+Bindings that address an **open-ended set** of identities — `principalSet://…/attribute.NAME/…` and `principalSet://…/*` — are synced as read-only. C1 shows them against every identity they match, so removing the binding to revoke one person would cut access for everyone matching it; the connector refuses that revoke instead of performing it. Remove those bindings in GCP directly. Subject and group bindings revoke normally, since each maps to exactly one identity or one group.
+
+**Pool membership itself cannot be provisioned.** GCP exposes no API to add or remove identities from a Workforce Identity pool — subjects and groups come from the identity provider's assertion at sign-in. To change who reaches Google Cloud through a pool, manage the user or group in the upstream IdP (for example, in Microsoft Entra ID or Okta) and govern it in C1 through that connector, using the pool's `principalSet://…/group/…` bindings for the mapping.
+
+**Pools and providers have a lifecycle of their own.** A pool can be created under an organization and deleted; a provider can be deleted from its pool. Deleting either is a soft delete: it stops authenticating immediately, but GCP keeps the record for 30 days, during which it can be restored in GCP and its ID cannot be reused. Deleting a pool cuts off every identity that signs in through it, not just one person's access. Creating a **provider** is not offered: GCP requires the provider's full OIDC or SAML configuration (issuer URI and client ID/secret, or the identity provider's SAML metadata, plus the attribute mapping), which is not part of what C1 sends when it creates a resource, so it must be created in GCP. Providers hold no IAM policy of their own, so they have no entitlements or grants either way.
+
+</Note>
 
 \*\*IAM Role Assignments use the RBAC model. This resource type is opt-in and requires enabling the **Cloud Infrastructure Access: Use RBAC** option when configuring the connector. When enabled, IAM role assignments are synced as scope binding resources instead of flat grants on projects, folders, and organizations.
 
 <Note>
-GCP IAM bindings can carry a **condition** (a CEL expression that GCP evaluates at request time, e.g. to grant access only during a time window or only for resources with a certain tag). Neither the flat grants model nor the Sparse ACL (RBAC) model evaluates these expressions — a synced grant may reflect access that, in GCP, only actually applies when its condition holds. If the precise, currently-in-effect state of a conditional binding matters, verify it directly in GCP (Console or `gcloud`).
+  GCP IAM bindings can carry a **condition** (a CEL expression that GCP
+  evaluates at request time, e.g. to grant access only during a time window or
+  only for resources with a certain tag). On organizations, folders, and
+  projects, both the flat-grants model and the IAM Role Assignments model show a
+  conditional binding as access held, so a grant there can represent access GCP
+  applies only while its condition holds — check the binding in GCP (Console or
+  `gcloud`) when its exact, currently-in-effect state matters. On Workforce
+  Identity pools, C1 also shows condition-scoped administrative access as the
+  recovered role held, matching organizations, folders, and projects — check the
+  binding in GCP when its currently-in-effect state matters. A pool Grant or
+  Revoke rewrites the full policy after a GCP read that omits the CEL
+  expression, so the connector cannot guarantee that an existing pool condition
+  will be preserved by an otherwise unrelated provisioning operation.
 </Note>
 
 <Warning>
-**Revoking conditional access deletes the condition.** A condition is stored on the IAM binding itself, and GCP does not allow a binding with no members. So when a revoke removes the last member of a conditional binding, GCP deletes the binding and its CEL expression along with it — the same thing `gcloud remove-iam-policy-binding` does. The connector cannot restore the expression afterwards, and it is not visible in the resulting policy.
+**Revoking conditional access on an organization, folder, or project deletes the condition.** A condition is stored on the IAM binding itself, and GCP does not allow a binding with no members. So when a revoke removes the last member of a conditional binding, GCP deletes the binding and its CEL expression along with it — the same thing `gcloud remove-iam-policy-binding` does.
 
-The connector logs the full expression at `WARN` when this happens, so it can be recovered from connector logs. If a conditional binding's CEL expression is something you need to keep, revoke that access directly in GCP rather than through C1, or ensure the binding retains at least one other member.
+The connector logs the full expression at `WARN` when this happens, so the connector logs are where the expression survives and can be recovered from. If a conditional binding's CEL expression is something you need to keep, revoke that access directly in GCP rather than through C1, or ensure the binding retains at least one other member.
 
-This follows from C1 having no way to represent an IAM condition, so both provisioning operations treat access as unconditional: **granting** access always writes a plain, unconditional binding — so granting a role to someone who already holds it under a condition widens their access — and **revoking** it removes the principal from every binding for that role, conditional or not. A revoke followed by a re-grant therefore leaves the principal with unconditional access where they previously had conditional access. If conditions are part of how you control access to a scope, manage those bindings in GCP.
+On the IAM Role Assignments model, a grant writes an unconditional binding, so a principal who already holds the role under a condition ends up with unconditional access. On the flat-grants model, a grant joins an existing binding for that role — including a conditional one, when that is the binding already on the policy. A revoke targets the role, so it removes the principal from every binding for that role, conditional ones included. After a revoke that deleted the last member of a conditional binding, a re-grant writes a new unconditional binding. Manage those bindings in GCP when conditions are part of how you control access to an organization, folder, or project.
 </Warning>
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
@@ -105,7 +132,10 @@ Search for each of the following APIs and click **Enable**:
 Complete this section only if you want the connector to sync secrets (API keys, service account keys, Secret Manager secrets) or Cloud Storage buckets.
 
 <Warning>
-Secrets and bucket permissions are configured per project in GCP. If the connector is not filtering by project and the service account doesn't have permissions across all projects, the sync will fail. We recommend using the **Project IDs** filter to explicitly specify which projects to sync.
+  Secrets and bucket permissions are configured per project in GCP. If the
+  connector is not filtering by project and the service account doesn't have
+  permissions across all projects, the sync will fail. We recommend using the
+  **Project IDs** filter to explicitly specify which projects to sync.
 </Warning>
 
 **Required organization-level role:**
@@ -116,10 +146,10 @@ Grant the service account the `roles/cloudasset.viewer` role at the organization
 
 Enable these APIs for each project you want to sync (or only for the projects specified in the **Project IDs** filter):
 
-* Secrets - API Keys: **API Keys API**
-* Secrets - Service account keys: **IAM API**
-* Secrets - Secret Manager secrets: **Secret Manager API**
-* Buckets: **Cloud Storage API**
+- Secrets - API Keys: **API Keys API**
+- Secrets - Service account keys: **IAM API**
+- Secrets - Secret Manager secrets: **Secret Manager API**
+- Buckets: **Cloud Storage API**
 
 ### Create a service account
 
@@ -165,6 +195,10 @@ secretmanager.secrets.list
 secretmanager.secrets.getIamPolicy
 storage.buckets.list
 storage.buckets.getIamPolicy
+iam.workforcePools.list
+iam.workforcePools.getIamPolicy
+iam.workforcePoolProviders.get
+iam.workforcePoolProviders.list
 ```
 
 To also provision access (READ/WRITE), add these permissions to the role:
@@ -175,9 +209,26 @@ resourcemanager.organizations.setIamPolicy
 resourcemanager.projects.setIamPolicy
 secretmanager.secrets.setIamPolicy
 storage.buckets.setIamPolicy
+iam.workforcePools.setIamPolicy
+iam.workforcePools.create
+iam.workforcePools.get
+iam.workforcePools.delete
+iam.workforcePoolProviders.delete
 iam.serviceAccountKeys.create
 iam.serviceAccountKeys.delete
 ```
+
+The `iam.workforcePool*` permissions are only needed when Workforce Identity Federation is enabled. `iam.workforcePools.getIamPolicy` belongs to the READ set because the pool's own allow policy is what the connector reads to sync pool entitlements and grants — without it the sync fails rather than returning an empty pool. `iam.workforcePools.setIamPolicy` is only needed to grant and revoke those administrative roles. `iam.workforcePools.create`, `iam.workforcePools.delete` and `iam.workforcePoolProviders.delete` are only needed to create or delete the pools and providers themselves, and `iam.workforcePools.get` goes with them because creating or deleting a pool reads it back to confirm the result. Leave all four out to keep the connector able to govern access without being able to change the federation setup.
+
+<Warning>
+  **If you already had Workforce Identity Federation enabled, add
+  `iam.workforcePools.getIamPolicy` to the role before upgrading.** Earlier
+  versions synced pools without reading their allow policy; the connector now
+  reads it on every sync to produce each pool's entitlements and grants. Without
+  the permission the sync fails — deliberately, because reporting an empty
+  policy instead would make C1 treat every pool grant it had already synced as
+  revoked. The error names the permission to add.
+</Warning>
 
 `iam.serviceAccountKeys.list` is required when service-account key secret sync is enabled. Credential issuance additionally requires `iam.serviceAccountKeys.create`, and revoking a synced or issued key additionally requires `iam.serviceAccountKeys.delete`.
 
@@ -282,6 +333,7 @@ To complete this task, you'll need:
 
 - The **Connector Administrator** or **Super Administrator** role in C1
 - Access to the set of Google Cloud Platform with Google Workspace credentials generated by following the instructions above
+
 </Warning>
 
 <Tabs>
@@ -340,7 +392,7 @@ In the **Credentials (JSON)** area, click **Choose file** and upload the JSON ke
 <Step>
 **Optional.** Check the box to **Enable Workforce Identity Federation**, which allows the connector to sync Workforce Identity pools and pool providers.
 
-- If you want the connector to provision Workforce Identity pools, enter the relevant **Workforce Identity Pool ID** and **Workforce Identity Pool Provider ID** in the relevant fields.
+- Enter the **Workforce Identity Pool ID** and **Workforce Identity Pool Provider ID**. The connector reads the provider's `google.subject` attribute mapping to work out which identity provider claim to write when it grants a federated user access, so these must point at the pool and provider your users actually sign in through. Revoking a synced grant targets the pool recorded on the binding it was synced from. If a Shared identity source matches the same identity through multiple pools, the safeguard described above prevents removing only one binding while another keeps granting access.
 
 <Tip>
 If you enable Workforce Identity Federation, complete the **Shared identity source** configuration in the next step before finishing.
@@ -391,7 +443,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 ### Resources
 
-* [Official download center](https://dist.conductorone.com/ConductorOne/baton-google-cloud-platform): For stable binaries (Windows/Linux/macOS) and container images.
+- [Official download center](https://dist.conductorone.com/ConductorOne/baton-google-cloud-platform): For stable binaries (Windows/Linux/macOS) and container images.
 
 ### Step 1: Set up a new Google Cloud Platform with Google Workspace connector
 
@@ -405,16 +457,17 @@ Search for **Baton** and click **Add**.
 <Step>
 Choose how to set up the new Google Cloud Platform with Google Workspace connector:
 
-   * Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
 
-   * Add the connector to a managed app (select from the list of existing managed apps)
+- Add the connector to a managed app (select from the list of existing managed apps)
 
-   * Create a new managed app
+- Create a new managed app
 </Step>
 <Step>
 Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
 
-   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+
 </Step>
 <Step>
 Click **Next**.
@@ -426,6 +479,7 @@ In the **Settings** area of the page, click **Edit**.
 Click **Rotate** to generate a new Client ID and Secret.
 
 Carefully copy and save these credentials. We'll use them in Step 2.
+
 </Step>
 </Steps>
 
@@ -512,26 +566,30 @@ spec:
         baton-app: google-cloud-platform
     spec:
       containers:
-      - name: baton-google-cloud-platform
-        image: public.ecr.aws/conductorone/baton-google-cloud-platform:latest
-        imagePullPolicy: IfNotPresent
-        env:
-        - name: BATON_HOST_ID
-          value: baton-google-cloud-platform
-        envFrom:
-        - secretRef:
-            name: baton-google-cloud-platform-secrets
+        - name: baton-google-cloud-platform
+          image: public.ecr.aws/conductorone/baton-google-cloud-platform:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BATON_HOST_ID
+              value: baton-google-cloud-platform
+          envFrom:
+            - secretRef:
+                name: baton-google-cloud-platform-secrets
 ```
 
 ### Step 3: Deploy the connector
 
 <Steps>
-<Step>
-Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
-</Step>
-<Step>
-Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the Google Cloud Platform with Google Workspace connector to. Data should be found on the **Entitlements** and **Accounts** tabs.
-</Step>
+  <Step>
+    Create a namespace in which to run C1 connectors (if desired), then apply
+    the secret config and deployment config files.
+  </Step>
+  <Step>
+    Check that the connector data uploaded correctly. In C1, click **Apps**. On
+    the **Managed apps** tab, locate and click the name of the application you
+    added the Google Cloud Platform with Google Workspace connector to. Data
+    should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
 </Steps>
 
 **Done.** Your Google Cloud Platform with Google Workspace connector is now pulling access data into C1.

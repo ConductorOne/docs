@@ -14,11 +14,16 @@ sidebarTitle: "Databricks"
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Service principals | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Users | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Workspaces | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 The Databricks connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
 [This connector syncs non-human identities](/product/admin/nhi) and displays them on the **Identities & NHI** dashboard.
+
+<Note>
+Provisioning **account groups** requires OAuth authentication. It is not available when authenticating with a workspace token, because the Databricks API does not allow provisioning account groups from a workspace token. Workspace-scoped groups can still be provisioned with a workspace token.
+</Note>
 
 ## Gather Databricks credentials
 
@@ -44,7 +49,7 @@ A user with the **Account admin** role in each Databricks workspace you want to 
 
 ### Generate Databricks credentials
 
-You have three authentication choices when setting up the Databricks connector:
+You have two authentication choices when setting up the Databricks connector:
 
 - **OAuth** (syncs info from all Databricks workspaces)
 
@@ -53,14 +58,11 @@ You have three authentication choices when setting up the Databricks connector:
     Follow the [Databricks OAuth authentication documentation](https://docs.databricks.com/en/dev-tools/auth/oauth-m2m.html) to create a service principal and create an OAuth secret.
     </Step>
     <Step>
-    Assign the service principal as an admin to each Databricks workspace you want to sync. The connector can only sync and provision a workspace's data if the service principal has admin access to that workspace.
-    </Step>
-    <Step>
     Carefully copy and save the OAuth client ID and secret.
     </Step>
   </Steps>
 
-- **Personal access token** (syncs info from a single Databricks workspace)
+- **Personal access token** (syncs info from one or more Databricks workspaces)
 
   <Steps>
     <Step>
@@ -74,14 +76,6 @@ You have three authentication choices when setting up the Databricks connector:
     </Step>
   </Steps>
 
-  <Note>
-  Group provisioning isn't supported with a personal access token, because the Databricks API doesn't allow provisioning account groups this way. To provision groups, use the OAuth setup method instead.
-  </Note>
-
-- **Username and password** (syncs info from all Databricks workspaces)
-
-  You do not need to generate any additional credentials to use this method.
-
 **Done.** Here's the set of credentials you'll need when setting up the connector:
 
 - Account ID
@@ -91,14 +85,8 @@ You have three authentication choices when setting up the Databricks connector:
 OR
 
 - Account ID
-- Personal access token
-- Workspace ID for the Databricks workspace you're syncing
-
-OR
-
-- Account ID
-- Username
-- Password
+- One or more personal access tokens
+- Deployment name of each Databricks workspace you're syncing (the subdomain in the workspace URL, not the workspace ID), listed in the same order as the corresponding tokens
 
 Next, move on to the instructions for your chosen setup method.
 
@@ -141,13 +129,13 @@ To complete this task, you'll need:
   Find the **Settings** area of the page and click **Edit**.
   </Step>
   <Step>
-  Select whether you're authenticating with **OAuth**, a **Personal access token**, or your **Username and password**.
+  Select whether you're authenticating with **OAuth** or a **Personal access token**.
   </Step>
   <Step>
   Paste the account ID you looked up in Step 1 into the **Account ID** field.
   </Step>
   <Step>
-  Enter the required OAuth, token, or username and password credentials into the other two fields.
+  Enter the required OAuth or token credentials into the other two fields.
   </Step>
   <Step>
   **Google Cloud Platform and Azure Databricks customers only:** Enter your Databricks account hostname and hostname in the relevant fields.
@@ -228,27 +216,36 @@ stringData:
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
   
-  # Databricks credentials, option 1
+  # Databricks account ID (required for both credential options below)
   BATON_ACCOUNT_ID: <Databricks account ID>
+
+  # Databricks credentials, option 1: OAuth (syncs the account and all workspaces)
   BATON_DATABRICKS_CLIENT_ID: <OAuth client ID>
   BATON_DATABRICKS_CLIENT_SECRET: <OAuth client secret>
-
-  # Databricks credentials, option 2
-  BATON_ACCOUNT_ID: <Databricks account ID>
-  BATON_WORKSPACE_TOKENS: <Personal access token>
-  BATON_WORKSPACES: <Workspace ID for the Databricks workspace you're syncing>
-
-  # Databricks credentials, option 3
-  BATON_ACCOUNT_ID: <Databricks account ID>
-  BATON_USERNAME: <Username for the Databricks account>
-  BATON_PASSWORD: <Password for the Databricks account>
-
-  # Optional: comma-separated workspaces to exclude from sync (workspace name, deployment name, or numeric ID)
+  # Optional (OAuth only): comma-separated workspaces to exclude from sync
+  # (workspace name, deployment name, or numeric ID). Cannot be combined with BATON_WORKSPACES.
   BATON_DATABRICKS_EXCLUDE_WORKSPACES: <workspace-a,workspace-b>
+
+  # Databricks credentials, option 2: workspace token (syncs only the listed workspaces)
+  BATON_AUTH_METHOD: workspace-token
+  # BATON_WORKSPACE_TOKENS and BATON_WORKSPACES pair up by position: the Nth token
+  # authenticates the Nth workspace, so both lists must have the same length and order.
+  BATON_WORKSPACE_TOKENS: <token for workspace-a,token for workspace-b>
+  BATON_WORKSPACES: <deployment name of workspace-a,deployment name of workspace-b>
 
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
 ```
+
+<Note>
+**Choose one credential option, not both.** Use OAuth (option 1) or workspace tokens (option 2). `BATON_DATABRICKS_EXCLUDE_WORKSPACES` is mutually exclusive with `BATON_WORKSPACES`, so it only applies to OAuth.
+</Note>
+
+<Warning>
+**Workspace-token auth syncs less than OAuth.** A workspace token cannot reach the Databricks account API, so the sync is scoped to the listed workspaces only: it emits no account-level entitlements or grants and no workspace-membership entitlements, and users, groups, service principals and roles are parented under their workspace instead of the account. For full account and cross-workspace coverage, use OAuth.
+
+OAuth requires a reachable account API. If the account API check fails at startup, the connector fails validation instead of falling back to a workspace-only sync, even when `BATON_WORKSPACES` is set.
+</Warning>
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
 

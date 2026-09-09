@@ -1,8 +1,8 @@
 ---
 title: "Set up Cisco Meraki connector"
 og:title: "Set up Cisco Meraki connector"
-description: "C1 provides identity governance for Cisco Meraki. Integrate your Cisco Meraki instance with C1 for unified visibility and governance over user access."
-og:description: "C1 provides identity governance for Cisco Meraki. Integrate your Cisco Meraki instance with C1 for unified visibility and governance over user access."
+description: "C1 provides identity governance and just-in-time provisioning for Cisco Meraki. Integrate your Cisco Meraki instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Cisco Meraki. Integrate your Cisco Meraki instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 sidebarTitle: "Cisco Meraki"
 ---
 
@@ -10,21 +10,73 @@ sidebarTitle: "Cisco Meraki"
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Organization | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Role | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Organization | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Role | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Network | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Auth User | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 **Additional functionality:**
+The Cisco Meraki connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
-*None.*
+**Notes:**
+- Organization admin access can be revoked but not granted. Revoking an Organization grant deletes that administrator from the organization outright; new Meraki admins are created through the Create account flow instead.
+- Auth users flagged as Meraki administrators are excluded from Auth User sync, so they are not counted twice against dashboard admins.
+- Revoking an org-access role from an admin who holds no network or tag access deletes that administrator from the organization. Meraki requires every admin to hold organization, network, or tag access, so no-access is not a state an admin can remain in.
+- Granting the Enterprise Role requires an organization that supports enterprise admins. Organizations without that support reject the grant.
+- Account delete is org-scoped. If Meraki still shows the same admin ID in other organizations after the target org membership is gone, C1 treats the requested delete as complete. The CLI delete path (no parent org) refuses to guess when the same admin ID appears in multiple orgs.
+
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| update_org_admin_profile | `admin_id` (string, required), `org_id` (string, required), `name` (string, required) | Updates the display name of an organization admin. Preserves the admin's existing access level, network access, and tag access. |
+
+Both `admin_id` and `org_id` are Cisco Meraki native identifiers, not email addresses or C1 resource IDs. Read them from the account's profile attributes in C1.
+
+<Note>
+Cisco Meraki org admins can have an organization access level of `full`, `read-only`,
+`enterprise`, `none`, or `camera-sensor`. An admin with `none` access has no organization-level
+permissions in Meraki, so C1 does not create a role grant for that admin — granting or revoking
+a no-access role would have no effect upstream. Admins with `none` org access show one fewer
+role grant than admins with real access. The `camera-sensor` level syncs as a role resource and
+appears on grants for visibility, but Meraki treats it as read-only on write: C1 cannot
+grant `camera-sensor`. Revoking a synced `camera-sensor` grant still runs the normal role
+revoke path (demote org access to `none`, or delete the admin if they hold no network/tag
+scope), because revoke keys off the principal's current access rather than the role slug.
+</Note>
+
+<Note>
+**Granting org-access roles:** When you grant the **full** org-access role to an admin who
+already has network- or tag-scoped access, C1 clears that scoped access. This matches Meraki
+Dashboard: promoting an admin to full organization access replaces their network/tag scope
+rather than adding to it. Meraki's API rejects attempts to keep both full org access and
+network/tag scope at the same time. Granting **read-only** or **enterprise** org access
+preserves any existing network and tag scope on the admin.
+
+Because that clear is permanent, revoking **full** afterward from an admin who no longer holds
+network or tag access deletes the administrator from the organization. Meraki requires every
+admin to keep organization, network, or tag access, so demoting to `none` with empty scope is
+not allowed and the connector falls back to delete.
+</Note>
 
 ## Gather Cisco Meraki configuration information
 
 Configuring the connector requires you to pass in information from Cisco Meraki. Gather these configuration details before you move on.
 
-Here's the information you'll need:
+Here is the information you need:
 
 - API Key
+
+<Warning>
+Generate the API key from an account that does not authenticate through SAML or SSO. Meraki does not allow SAML users to generate API keys.
+</Warning>
+
+To create the key, navigate to **Organization** > **Configure** > **API & Webhooks**, open the **API keys and access** tab, and click **Generate API Key**. The key inherits the permissions of the administrator who generates it, so use an account with full organization access when C1 provisions access. Meraki displays the key once and allows a maximum of two keys per administrator.
+
+Cisco Meraki rate-limits the API to ten requests per second per organization.
 
 See the Cisco Meraki docs for information on how to acquire credentials: [View the documentation](https://documentation.meraki.com/General_Administration/Other_Topics/Cisco_Meraki_Dashboard_API)
 
@@ -75,6 +127,16 @@ Click **Save**.
 <Step>
 The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
 </Step>
+<Step>
+Open the connector and find the **Resource capabilities** area. Enable **Auth User** and **Network**.
+
+   C1 disables these two resource types by default. Until you enable them, no network or auth user data syncs, and deleting an auth user is unavailable.
+</Step>
+<Step>
+To let users request Cisco Meraki access, open the app's **Entitlements** tab, select an entitlement, and turn on **Make requestable to standard audience** under **Access requests**.
+
+   Synced entitlements are not requestable by default, and the app does not appear in the access request catalog until at least one entitlement is requestable.
+</Step>
 </Steps>
 
 **Done.** Your Cisco Meraki connector is now pulling access data into C1.
@@ -88,7 +150,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 ### Resources 
 
-[Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
+[Contact C1's support team](mailto:support@conductorone.com) to download the latest version of the connector.
 
 ### Step 1: Set up a new Cisco Meraki connector
 
@@ -143,6 +205,9 @@ stringData:
 
   # Cisco Meraki config
   BATON_MERAKI_API_KEY: <Meraki API Key>
+
+  # Optional: include if you want C1 to provision access using this connector
+  BATON_PROVISIONING: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -165,7 +230,7 @@ spec:
     metadata:
       labels:
         app: baton-cisco-meraki
-        baton: true
+        baton: "true"
         baton-app: cisco-meraki
     spec:
       containers:
@@ -195,5 +260,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 
 </Tab>
 </Tabs>
-
-
