@@ -1,6 +1,6 @@
 # Using Code Mode
 
-ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP servers. In **code mode**, the gateway does not list each upstream tool as its own named tool. It exposes two entrypoints, and the agent invokes upstream tools by writing a short TypeScript program.
+ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP sources. In **code mode**, the gateway does not list each upstream tool as its own named tool. It exposes two entrypoints, and the agent invokes upstream tools by writing a short TypeScript program.
 
 | Entrypoint | Purpose |
 |------------|---------|

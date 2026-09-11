@@ -1,6 +1,6 @@
 # C1 as an MCP Gateway
 
-ConductorOne (C1) is an MCP gateway. An AI client connects to one C1 MCP endpoint, and C1 sits in front of the organization's approved MCP servers and integrations. Agents do not connect to those upstream servers directly.
+ConductorOne (C1) is an MCP gateway. An AI client connects to one C1 MCP endpoint, and C1 sits in front of the organization's approved MCP sources. Agents do not connect to those upstream MCP servers directly.
 
 Mental model: **one MCP connection, many governed systems behind it.**
 
@@ -9,23 +9,23 @@ Mental model: **one MCP connection, many governed systems behind it.**
 1. **Authenticates the caller.** C1 resolves the human or workload identity behind the agent. Every tool call carries that identity — the gateway is identity-aware, not an anonymous relay.
 2. **Checks governance.** The tool must be **Enabled** by an admin, and the caller must hold a **grant** for it. Both conditions are required. Enabling a tool does not grant it to anyone.
 3. **Runs hooks.** Admin-configured pre-tool-use hooks may rewrite the input or deny the call.
-4. **Routes upstream.** C1 forwards the call to the correct upstream server using that server's configured auth mode, so the agent never handles upstream credentials.
+4. **Routes upstream.** C1 forwards the call to the correct MCP source using its configured auth mode, so the agent never handles upstream credentials.
 5. **Runs post hooks.** Post-tool-use hooks may rewrite, redact, or deny the returned output.
-6. **Writes an audit log entry** with identity, client, server, tool, result, denial reason, and latency.
+6. **Writes an audit log entry** with identity, client, source, tool, result, denial reason, and latency.
 
-## Upstream Server Types
+## MCP source types
 
 The agent cannot tell these apart and does not need to. All appear as tools behind the same endpoint.
 
-| Upstream | What it is |
+| Source type | What it is |
 |----------|------------|
-| Hosted catalog server | An MCP server C1 hosts and registers on the org's behalf |
-| Vendor MCP server | A third-party MCP server registered by an admin |
-| Bridged server | A private or on-premises MCP server reached through C1's MCP bridge |
+| Catalog MCP source | A source selected from C1's available catalog |
+| External MCP source | A customer- or vendor-provided upstream endpoint |
+| External MCP source through a bridge | A private or on-premises endpoint reached through C1's MCP bridge |
 
 ## Toolsets, Access Profiles, and Grants
 
-- A **tool** is one capability exposed by an upstream MCP server (for example, `github_create_issue`).
+- A **tool** is one capability exposed by an MCP source (for example, `github_create_issue`).
 - Discovered tools start in an unreviewed state. An admin approves/enables them and may classify them by action (read / write / delete) and risk.
 - Approved tools are bundled into a **toolset** — either C1-maintained ("All approved", "Read-only") or an admin-curated custom toolset.
 - A toolset is bound to an **access profile**, which carries the approval policy, approvers, and expiry.
@@ -48,7 +48,7 @@ Consequence for agents: a call can be denied by policy, or return output that ha
 
 ## Kill Switches
 
-Admins can immediately block calls regardless of grants, at tenant, server, tool, or client level. A client kill switch revokes the client's tokens and forces re-authentication. A tool kill switch blocks that tool for everyone. These take effect mid-session.
+Admins can immediately block calls regardless of grants, at tenant, source, tool, or client level. A client kill switch revokes the client's tokens and forces re-authentication. A source kill switch blocks every tool from that source. A tool kill switch blocks that tool for everyone. These take effect mid-session.
 
 ## Client Types
 
