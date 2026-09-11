@@ -1,14 +1,14 @@
 ---
-title: Set up a Google Cloud project for MCP servers
-description: Create and configure the Google Cloud project that every Google MCP server shares — enable APIs, grant users permission to use the project, and create OAuth credentials.
-og:title: Set up a Google Cloud project for MCP servers
-og:description: Create and configure the Google Cloud project that every Google MCP server shares — enable APIs, grant users permission to use the project, and create OAuth credentials.
+title: Set up a Google Cloud project for MCP sources
+description: Create and configure the Google Cloud project that every Google MCP source shares — enable APIs, grant users permission to use the project, and create OAuth credentials.
+og:title: Set up a Google Cloud project for MCP sources
+og:description: Create and configure the Google Cloud project that every Google MCP source shares — enable APIs, grant users permission to use the project, and create OAuth credentials.
 sidebarTitle: Google Cloud project setup
 ---
 
 {/* Editor Refresh: 2026-07-16 */}
 
-Set up one Google Cloud project and reuse it for every Google MCP server — Google Drive, Docs, Sheets, Slides, Gmail, Calendar, and the rest. Each Google server connects through a **Google Cloud project** that you own, and a single project can back all of them.
+Set up one Google Cloud project and reuse it for every Google MCP source — Google Drive, Docs, Sheets, Slides, Gmail, Calendar, and the rest. Each source connects through a **Google Cloud project** that you own, and a single project can back all of them.
 
 ## Before you begin
 
@@ -22,9 +22,9 @@ When a user's AI client calls a Google tool, C1 makes the matching request to th
 
 | What | Why it matters |
 | :--- | :--- |
-| **Enabled APIs** | Each connector calls a specific Google API (for example, the Gmail API). That API must be enabled in your project. |
+| **Enabled APIs** | Each source calls a specific Google API (for example, the Gmail API). That API must be enabled in your project. |
 | **OAuth client** | The client ID and secret C1 uses to let each user authorize with their own Google account. |
-| **Quota project** | The project that Google attributes each request's quota and billing to. You enter this as the **Google Cloud Quota Project ID** when you register the server, and every caller must be allowed to use it. |
+| **Quota project** | The project that Google attributes each request's quota and billing to. You enter this as the **Google Cloud Quota Project ID** when you add the source, and every caller must be allowed to use it. |
 
 The third item is the one most often missed — see [Grant users permission to use the project](#grant-users-permission-to-use-the-project). Skipping it is the most common cause of a failed Google connection.
 
@@ -37,18 +37,18 @@ Pick the project that will own your OAuth credentials and receive API quota. It 
 Sign in to the [Google Cloud console](https://console.cloud.google.com/).
 </Step>
 <Step>
-Create a new project for C1, or select an existing one. Note its **Project ID** (for example, `acme-c1-mcp`) — you'll enter this exact value when you register each Google server.
+Create a new project for C1, or select an existing one. Note its **Project ID** (for example, `acme-c1-mcp`) — you'll enter this exact value when you add each Google source.
 </Step>
 <Step>
 **Optional.** The Workspace APIs in this guide don't require a billing account. If you plan to use a billing-gated Google API or need higher quota limits, link a billing account to the project.
 </Step>
 </Steps>
 
-## Enable the APIs for your connectors
+## Enable the APIs for your MCP sources
 
-Enable one API per Google connector you plan to use. In the console, go to **APIs & Services** > **Library**, search for the API by name, and select **Enable**. The service ID is the identifier you use with the `gcloud` CLI.
+Enable one API per Google MCP source you plan to use. In the console, go to **APIs & Services** > **Library**, search for the API by name, and select **Enable**. The service ID is the identifier you use with the `gcloud` CLI.
 
-| Connector | API to enable | Service ID |
+| MCP source | API to enable | Service ID |
 | :--- | :--- | :--- |
 | Google Drive | Google Drive API | `drive.googleapis.com` |
 | Google Docs | Google Docs API | `docs.googleapis.com` |
@@ -66,7 +66,7 @@ Enable one API per Google connector you plan to use. In the console, go to **API
 | Google Analytics Admin | Google Analytics Admin API | `analyticsadmin.googleapis.com` |
 
 <Note>
-Enable only the APIs for the connectors you actually register. If a connector's API isn't enabled, its tool calls fail with a `SERVICE_DISABLED` error telling you to enable that API in the project.
+Enable only the APIs for the sources you actually add. If a source's API isn't enabled, its tool calls fail with a `SERVICE_DISABLED` error telling you to enable that API in the project.
 </Note>
 
 To enable the APIs from the command line instead, pass the service IDs to `gcloud`. This example enables the full set — drop any you don't need:
@@ -98,7 +98,7 @@ gcloud services list --enabled --project=YOUR_PROJECT_ID
 
 ## Grant users permission to use the project
 
-When you register a Google server with **per-user OAuth**, each person authenticates as themselves — so *each user* is the caller Google checks. Because you set a **Quota Project ID**, every request carries that project as its quota project, and Google requires the caller to hold the `serviceusage.services.use` permission on it.
+When you add a Google MCP source with **per-user OAuth**, each person authenticates as themselves — so *each user* is the caller Google checks. Because you set a **Quota Project ID**, every request carries that project as its quota project, and Google requires the caller to hold the `serviceusage.services.use` permission on it.
 
 If a user doesn't have it, their tool calls fail with:
 
@@ -114,7 +114,7 @@ Because every user needs this, grant it to a **Google group** that contains all 
 
 <Steps>
 <Step>
-Create (or choose) a Google group that contains everyone who will use your Google MCP servers — for example, an all-employees group.
+Create (or choose) a Google group that contains everyone who will use your Google MCP sources — for example, an all-employees group.
 </Step>
 <Step>
 In the Google Cloud console, go to **IAM & Admin** > **IAM**, select **Grant access**, enter the group's email as the principal, and assign the **Service Usage Consumer** role. See Google's [Grant a role](https://cloud.google.com/iam/docs/grant-role-console) documentation.
@@ -153,7 +153,7 @@ Choose the audience:
 - **External** — any Google account. Broad Google Workspace scopes are **restricted** and require Google verification before an External app can be used outside your organization.
 </Step>
 <Step>
-Add the scopes your connectors need — see [OAuth scopes by connector](#oauth-scopes-by-connector) for the full list per connector. Request only the scopes you need; for read-only use, prefer the narrower `.readonly` scopes. See Google's [Configure the OAuth consent screen](https://developers.google.com/workspace/guides/configure-oauth-consent) documentation.
+Add the scopes your sources need — see [OAuth scopes by source](#oauth-scopes-by-source) for the full list per source. Request only the scopes you need; for read-only use, prefer the narrower `.readonly` scopes. See Google's [Configure the OAuth consent screen](https://developers.google.com/workspace/guides/configure-oauth-consent) documentation.
 </Step>
 </Steps>
 
@@ -185,9 +185,9 @@ Select **Create**, then copy the **Client ID** and **Client secret**. Google sho
 
 If your users are on Google Workspace, an administrator may also need to allow the OAuth client under **Admin Console** > **Security** > **Access and data control** > **API controls** > **App access control**.
 
-## OAuth scopes by connector
+## OAuth scopes by source
 
-Add the scopes for each connector you use — to the consent screen for per-user OAuth, or to domain-wide delegation for a service account. Each list below is the full set that connector's tools can use. Grant only what your deployment needs, and prefer the `.readonly` scopes for read-only use.
+Add the scopes for each source you use — to the consent screen for per-user OAuth, or to domain-wide delegation for a service account. Each list below is the full set that source's tools can use. Grant only what your deployment needs, and prefer the `.readonly` scopes for read-only use.
 
 <AccordionGroup>
 <Accordion title="Google Drive">
@@ -386,29 +386,29 @@ In the Google Cloud console, go to **APIs & Services** > **Credentials** > **Cre
 Note the service account's numeric **Unique ID**.
 </Step>
 <Step>
-As a Workspace administrator, go to **Admin Console** > **Security** > **Access and data control** > **API controls** > **Domain-wide delegation**, select **Add new**, and enter the Unique ID along with the scopes your connectors need.
+As a Workspace administrator, go to **Admin Console** > **Security** > **Access and data control** > **API controls** > **Domain-wide delegation**, select **Add new**, and enter the Unique ID along with the scopes your sources need.
 </Step>
 <Step>
 Grant the service account the **Service Usage Consumer** role on your project (see [Grant users permission to use the project](#grant-users-permission-to-use-the-project)) so its requests can use the quota project.
 </Step>
 </Steps>
 
-## Register your Google servers
+## Add your Google MCP sources
 
-With the project ready, register each Google MCP server. During [authentication setup](/product/admin/mcp-servers#configure-authentication), you provide:
+With the project ready, add each Google MCP source. During [authentication setup](/product/admin/mcp-servers#configure-authentication), you provide:
 
 - The **Google Cloud Quota Project ID** — the Project ID from [Create or select a project](#create-or-select-a-project).
 - For per-user OAuth: the **client ID**, **client secret**, and the **scopes** you configured.
 - For a service account: the **JSON key** and the scopes you delegated.
 
-Then follow the connector-specific page for anything unique to that server:
+Then follow the source-specific page for anything unique to that source:
 
 - [Google Drive](/product/admin/mcp-server/google-drive)
 - [Google Analytics](/product/admin/mcp-server/google-analytics)
 - [Google Analytics Admin](/product/admin/mcp-server/google-analytics-admin)
 
 <Note>
-Connectors without a dedicated page above use the same [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) flow. If a Google connector you want isn't in your catalog yet, [contact the C1 support team](mailto:support@c1.ai).
+MCP sources without a dedicated page above use the same [Add an MCP source](/product/admin/mcp-servers#add-an-mcp-source) flow. If a Google source you want isn't in your catalog yet, [contact the C1 support team](mailto:support@c1.ai).
 </Note>
 
 ## Troubleshoot Google Cloud project errors
@@ -416,7 +416,7 @@ Connectors without a dedicated page above use the same [Register an MCP server](
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
 | `PERMISSION_DENIED: Caller does not have required permission to use project ...` | The caller lacks `serviceusage.services.use` on the quota project. | Grant the **Service Usage Consumer** role — see [Grant users permission to use the project](#grant-users-permission-to-use-the-project). |
-| `SERVICE_DISABLED` / "API has not been used in project ... before or it is disabled" | The connector's API isn't enabled in the quota project. | Enable it — see [Enable the APIs for your connectors](#enable-the-apis-for-your-connectors). |
+| `SERVICE_DISABLED` / "API has not been used in project ... before or it is disabled" | The MCP source's API isn't enabled in the quota project. | Enable it — see [Enable the APIs for your MCP sources](#enable-the-apis-for-your-mcp-sources). |
 | Authorization flow fails after the user consents | The redirect URI doesn't match. | Set it to exactly `https://accounts.conductor.one/auth/callback` — see [Create the client credentials](#create-the-client-credentials). |
 | A restricted-scope warning blocks External users | The app needs Google verification for restricted scopes. | Use an **Internal** consent screen for Workspace-only use, or complete Google's verification for External use. |
 | "Google hasn't verified this app" blocks sign-in | The External app isn't verified and the user isn't a test user. | Add the user as a **test user** on the consent screen, or complete Google's verification. |

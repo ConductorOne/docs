@@ -1,8 +1,8 @@
 ---
-title: Connect a private MCP server through a bridge
-description: Route AI tool calls to an MCP server running in your private network — no inbound firewall rules needed.
-og:title: Connect a private MCP server through a bridge - C1 docs
-og:description: Route AI tool calls to an MCP server running in your private network — no inbound firewall rules needed.
+title: Connect a private MCP server as an External MCP source
+description: Add an MCP server running in your private network as an External MCP source — no inbound firewall rules needed.
+og:title: Connect a private MCP server as an External MCP source - C1 docs
+og:description: Add an MCP server running in your private network as an External MCP source — no inbound firewall rules needed.
 sidebarTitle: Private bridge
 ---
 
@@ -17,14 +17,14 @@ If your MCP server runs in a private network — a laptop, a VM, or a cluster �
 Setup has two halves that must match each other:
 
 1. A **bridge config** (YAML) that tells `bridge-client` where your MCP servers are and what to advertise to C1.
-2. An **MCP server registration** in C1, one per advertised service, that points C1 at that service over the bridge.
+2. An **External MCP source** in C1, one per advertised service, that points C1 at that service over the bridge.
 
 ## Before you begin
 
 - Your MCP server must be running and reachable from wherever you'll run `bridge-client`. Have its `host:port`, endpoint path (typically `/mcp`), and transport (`streamable-http` or `sse`) ready.
 - Download `bridge-client` from the [C1 download center](https://dist.conductorone.com/ConductorOne/bridge-client). Linux and macOS binaries and container images are available there.
 - **Creating a bridge** requires the **Connector Administrator** or **Super Administrator** role.
-- **Registering the MCP server** requires the **Editor** role on the destination app.
+- **Adding the External MCP source** requires the **Editor** role on the destination app.
 
 ## Step 1: Create a bridge in C1
 
@@ -75,13 +75,13 @@ bridge:
 | :--- | :--- | :--- |
 | `listen_port` | Yes | Port advertised on the bridge (1–65535). Must be unique within the config. |
 | `backend` | Yes | Local `host:port` that `bridge-client` dials — where your MCP server listens. |
-| `name` | Recommended | Service name shown in C1. You select this name when registering the MCP server. Must be unique within the config. |
+| `name` | Recommended | Service name shown in C1. You select this name when adding the External MCP source. Must be unique within the config. |
 | `service_type` | No | `MCP_NATIVE` (native MCP server), `HOSTED` (hosted HTTP MCP), or `RAW` (opaque TCP). |
 | `service_path` | No | The MCP endpoint path, for example `/mcp`. |
 | `transport_type` | No | `streamable-http` or `sse` for an MCP server, or `http` for a hosted HTTP service. |
 
 <Note>
-The `service_path` and `transport_type` you set here are what C1 uses when routing tool calls. The registration wizard in Step 4 doesn't let you override them, so set them correctly now.
+The `service_path` and `transport_type` you set here are what C1 uses when routing tool calls. The source setup wizard in Step 4 doesn't let you override them, so set them correctly now.
 </Note>
 
 ### Expose multiple MCP servers on one bridge
@@ -108,7 +108,7 @@ bridge:
       transport_type: streamable-http
 ```
 
-Each service appears separately on the bridge detail page, and you register each one as its own MCP server in C1 (Step 4), selecting it by its `name`.
+Each service appears separately on the bridge detail page, and you add each one as its own External MCP source in C1 (Step 4), selecting it by its `name`.
 
 ### Other ways to supply config
 
@@ -243,18 +243,18 @@ kubectl apply -f bridge-deployment.yaml
 
 After a few seconds, the bridge status changes to **Connected** in **Settings** > **Bridges**, and the service you configured appears on the bridge detail page.
 
-## Step 4: Register the MCP server in C1
+## Step 4: Add the External MCP source in C1
 
-With the bridge running, register the server in C1 so its tools are available for governance.
+With the bridge running, add an External MCP source in C1 so its tools are available for governance.
 
 <Steps>
 <Step>
-Open the app you want the MCP server registered under, go to its **MCP servers** tab, and click **Add MCP server**.
+Open the app you want the MCP source linked to, go to its **MCP Sources** tab, and click **Add MCP source**.
 
-If you're starting from the tenant-wide MCP servers page (**AI** > **MCPs**) instead, the wizard adds a **Choose app** step so you can pick or create the destination app.
+If you're starting from the tenant-wide MCP Sources page (**AI** > **MCP Sources**) instead, the wizard adds a **Choose app** step so you can pick or create the destination app.
 </Step>
 <Step>
-Under **Choose a server**, select **External MCP server** — "Connect to an external MCP server by URL."
+Under **Choose a source**, select **External MCP source** — "Connect to an external MCP server by URL."
 </Step>
 <Step>
 Under **Connectivity**, select **Private bridge** — "Route through a C1 Bridge running in your network." Then set:
@@ -263,21 +263,21 @@ Under **Connectivity**, select **Private bridge** — "Route through a C1 Bridge
 - **Service** — the service your bridge advertised, which is the `name` field from `bridge.yaml` (`my-mcp` in the example).
 </Step>
 <Step>
-Under **Configure**, enter a display name for the server. The **Server URL** field is read-only — it's resolved automatically from the bridge service you selected.
+Under **Configure**, enter a display name for the source. The **Server URL** field is read-only — it's resolved automatically from the bridge service you selected.
 
-In the **Authentication** section, pick the **Authentication method** C1 uses to reach your server — **Bearer token**, **Custom header**, **Basic auth**, or **OAuth2** — and enter the credentials it requires. Then click **Add server**.
+In the **Authentication** section, pick the **Authentication method** C1 uses to reach your server — **Bearer token**, **Custom header**, **Basic auth**, or **OAuth2** — and enter the credentials it requires. Then click **Add source**.
 </Step>
 </Steps>
 
 C1 connects to your server over the bridge and begins tool discovery.
 
 <Note>
-A user can only call a tool once they're an **app user** of the app the server is registered under. New external apps start with no app users. When you register from an existing app that has none, the wizard inserts a **Link users** step to populate them by linking an entitlement from another app. When you start from the tenant-wide MCP servers page instead, you get the **Choose app** step (not **Link users**) — populate app users afterward from the app's settings. See [Calling the tools from an AI client](#calling-the-tools-from-an-ai-client) for the full set of ways to do this.
+A user can only call a tool once they're an **app user** of the app the source is linked to. New external apps start with no app users. When you add a source from an existing app that has none, the wizard inserts a **Link users** step to populate them by linking an entitlement from another app. When you start from the tenant-wide MCP Sources page instead, you get the **Choose app** step (not **Link users**) — populate app users afterward from the app's settings. See [Calling the tools from an AI client](#calling-the-tools-from-an-ai-client) for the full set of ways to do this.
 </Note>
 
 ## Step 5: Review discovered tools
 
-After you click **Add server**, C1 connects to your MCP server over the bridge and pulls its tool list. The wizard's final step shows these discovered tools.
+After you click **Add source**, C1 connects to your MCP server over the bridge and pulls its tool list. The wizard's final step shows these discovered tools.
 
 C1 records each tool's name, description, and input schema exactly as your MCP server advertises them, and surfaces that text to AI clients during discovery. The agent relies on it to decide which tool fits a request — so clear, accurate tool descriptions and schemas on your server directly affect how reliably the right tool gets found and called.
 
@@ -287,7 +287,7 @@ Each tool:
 - Is **auto-classified** in the **Classification** column; you can change the classification.
 - Starts with **State** set to **Unset**. Flip the toggle to **Enabled** to allow calls to that tool, or **Disabled** to block it for everyone.
 
-You don't need to finish reviewing tools in the wizard. Click **Done** to close it, or **Open server** to go to the server detail page. New tools added to the server appear there automatically after discovery — there's no manual sync button, so if a tool isn't showing yet, wait a moment and refresh.
+You don't need to finish reviewing tools in the wizard. Click **Done** to close it, or **Open source** to go to the source detail page. New tools added to the server appear there automatically after discovery — there's no manual sync button, so if a tool isn't showing yet, wait a moment and refresh.
 
 <Note>
 Setting a tool's state to **Enabled** makes it callable only by users who hold a grant for it — it doesn't grant access on its own. To grant access, add the tool to an MCP access profile and assign that profile to users. See [Govern tools and toolsets](/product/admin/tools-and-toolsets).
@@ -296,8 +296,8 @@ Setting a tool's state to **Enabled** makes it callable only by users who hold a
 ## Step 6: Verify the connection
 
 - In **Settings** > **Bridges**, the bridge shows **Connected**, with your service listed.
-- On the server's **Tools** tab in C1, the discovered tools appear.
-- On the server's **Details** tab, **Test credentials** succeeds and reports the number of tools discovered over the bridge.
+- On the source's **Tools** tab in C1, the discovered tools appear.
+- On the source's **Details** tab, **Test credentials** succeeds and reports the number of tools discovered over the bridge.
 
 If something looks off, check the `bridge-client` logs. For a binary deployment, logs go to stdout/stderr. For Kubernetes:
 
@@ -312,7 +312,7 @@ Once the bridge is running and tools are approved, your users reach them from th
 By default, these clients use **code mode**: instead of listing each tool as its own named tool, C1 exposes discovery and execution entrypoints (`describe` and `execute`), and the agent finds the tools it needs and invokes them by writing short code. Your bridged tools won't appear one by one in the client's tool list — that's expected, not a discovery failure. Governance is unchanged: every underlying call still runs the same per-tool checks — the tool must be **Enabled** and the caller must hold a grant. Code mode is a tenant-level AI governance setting (on by default); with it off — or for **Service** and **Ephemeral** client types — C1 instead exposes each enabled tool as a directly named tool. See [Code mode](/product/admin/code-mode) for how agents discover and call tools through these entrypoints.
 
 <Note>
-A call only executes when the requesting user is an **app user** of the server's app and holds a grant for the tool. If the caller isn't yet an app user, the call opens an access request instead of running. App users come from the destination app's account sources. Populate them by linking an entitlement from another app (the **Link users** step during registration, or linked entitlements later in the app's settings), by importing a CSV of app users, or — if the app is backed by a connector — by syncing them from the connector.
+A call only executes when the requesting user is an **app user** of the source's app and holds a grant for the tool. If the caller isn't yet an app user, the call opens an access request instead of running. App users come from the destination app's account sources. Populate them by linking an entitlement from another app (the **Link users** step while adding the source, or linked entitlements later in the app's settings), by importing a CSV of app users, or — if the app is backed by a connector — by syncing them from the connector.
 </Note>
 
 For end-user setup instructions, see [Connect your MCP client to C1](/product/how-to/connect-mcp-client).
@@ -344,7 +344,7 @@ The `backend` `host:port` in your config is wrong, or the MCP server isn't runni
 </Accordion>
 <Accordion title="Connected, but tool calls return errors">
 
-Check `service_path` and `transport_type` in `bridge.yaml`. The `service_path` must match the actual endpoint path your MCP server serves (for example, `/mcp`), and `transport_type` must match its transport. These values come from the config — the registration wizard doesn't let you override them. Also confirm you selected the right service in Step 4.
+Check `service_path` and `transport_type` in `bridge.yaml`. The `service_path` must match the actual endpoint path your MCP server serves (for example, `/mcp`), and `transport_type` must match its transport. These values come from the config — the source setup wizard doesn't let you override them. Also confirm you selected the right service in Step 4.
 
 </Accordion>
 </AccordionGroup>

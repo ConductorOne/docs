@@ -1,6 +1,6 @@
 # Handling Access-Request Envelopes
 
-ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP servers, enforcing governance on every call. A tool call only executes when the tool is **Enabled** by an admin and the caller holds a **grant** for it. When the caller lacks access, the gateway does not fail opaquely — it returns a structured envelope in place of domain data.
+ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP sources, enforcing governance on every call. A tool call only executes when the tool is **Enabled** by an admin and the caller holds a **grant** for it. When the caller lacks access, the gateway does not fail opaquely — it returns a structured envelope in place of domain data.
 
 This applies to any `tools.<toolName>()` call inside an `execute` program, and to directly named tool calls where code mode is off.
 
@@ -89,7 +89,7 @@ Report it as an access request awaiting approval, not as an error or an empty re
 
 ## Agent Behavior After `denied`
 
-State the `reason` and stop. There is no access path to wait on. If the user believes the denial is wrong, the escalation path is their IT or security team — not a retry, and not another tool. Common causes: the tool is disabled or under a kill switch, the client type is not allowed for that tool, a fail-closed hook denied the call, or the caller is not an app user of the upstream server's app.
+State the `reason` and stop. There is no access path to wait on. If the user believes the denial is wrong, the escalation path is their IT or security team — not a retry, and not another tool. Common causes: the tool is disabled or under a kill switch, the client type is not allowed for that tool, a fail-closed hook denied the call, or the caller is not an app user of the MCP source's app.
 
 ## Governance Working, Not Malfunctioning
 

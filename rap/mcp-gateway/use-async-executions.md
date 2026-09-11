@@ -1,6 +1,6 @@
 # Async Executions and Polling
 
-ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP servers. In code mode, the agent runs work by passing a TypeScript program to `execute`. A program that runs longer than the synchronous wait window does not fail — it continues server-side and is collected by polling.
+ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP sources. In code mode, the agent runs work by passing a TypeScript program to `execute`. A program that runs longer than the synchronous wait window does not fail — it continues server-side and is collected by polling.
 
 ## The Contract
 

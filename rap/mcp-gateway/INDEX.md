@@ -2,7 +2,7 @@
 
 Documentation for interacting with ConductorOne (C1) as an MCP gateway, and for the code-mode interface agents use to call governed tools through it. Request relevant sections based on the user's question.
 
-C1 is an MCP gateway: an AI client connects to one C1 MCP endpoint, and C1 sits in front of the organization's approved MCP servers. Agents do not connect to those upstream servers directly. Every call is identity-aware, governed per tool, and audit logged.
+C1 is an MCP gateway: an AI client connects to one C1 MCP endpoint, and C1 sits in front of the organization's approved MCP sources. Agents do not connect to those upstream MCP servers directly. Every call is identity-aware, governed per tool, and audit logged.
 
 ## How to Use
 
