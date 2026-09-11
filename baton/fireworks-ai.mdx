@@ -1,0 +1,118 @@
+---
+title: "Set up a Fireworks AI connector"
+og:title: "Set up a Fireworks AI connector"
+description: "Connect Fireworks AI to C1 to govern users, service accounts, roles, and API keys."
+og:description: "Connect Fireworks AI to C1 to govern users, service accounts, roles, and API keys."
+sidebarTitle: "Fireworks AI"
+---
+
+C1 provides identity governance for Fireworks AI. The connector syncs account
+members, machine identities, role assignments, and API key metadata.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create|
+|Service accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create|
+|Roles and assignments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Assign|
+|API keys|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Delete|
+
+## Gather Fireworks AI credentials
+
+<Warning>
+The API key must belong to a Fireworks AI account administrator. Other roles
+can view users and service accounts, but only administrators can manage users,
+access, and other users' API keys.
+</Warning>
+
+<Steps>
+  <Step>
+    Sign in to Fireworks AI and open the
+    [API keys page](https://app.fireworks.ai/account/api-keys).
+  </Step>
+
+  <Step>
+    Create an API key for an account administrator and copy it. Fireworks only
+    shows the complete key when it is created.
+  </Step>
+
+  <Step>
+    Copy the Fireworks account ID. You can find it in the account selector or
+    run `firectl account get`.
+  </Step>
+</Steps>
+
+## Configure the Fireworks AI connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use the connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Fireworks AI** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the connector, set its owner, and click **Next**.
+      </Step>
+
+      <Step>
+        In **Settings**, click **Edit** and enter:
+
+        - **Account ID**: The Fireworks account ID to sync.
+        - **API key**: The API key owned by an account administrator.
+        - **Base URL**: Leave empty unless C1 support gives you a different Fireworks API URL.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**.
+        Review the connector logs if the status does not change to **Connected**.
+      </Step>
+    </Steps>
+
+    **Done.** The Fireworks AI connector is now pulling identity and access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Configure the connector with these environment variables:
+
+    - `BATON_ACCOUNT_ID`: The Fireworks account ID to sync.
+    - `BATON_TOKEN`: The API key owned by an account administrator.
+    - `BATON_BASE_URL`: Optional API base URL override. The default is `https://api.fireworks.ai`.
+
+    Deploy the connector using your standard self-hosted connector process.
+  </Tab>
+</Tabs>
+
+## Provisioning behavior
+
+- Creating a user requires an email address. You can optionally provide
+  `profile.role`; Fireworks uses the `user` role by default. A `custom` role
+  also requires `profile.permission_preset`.
+- Creating a service account requires `login` or `profile.user_id`. You can
+  optionally provide `profile.role` and `profile.display_name`. A `custom`
+  role also requires `profile.permission_preset`.
+- Assigning a standard role replaces the principal's current Fireworks role.
+  Custom role assignments are sync-only because the public API does not expose
+  the permission presets required to configure them. Fireworks requires every
+  user and service account to have exactly one role, so the connector does not
+  offer a role-only revoke operation.
+- Deleting an API key removes the key permanently.
+
+Fireworks exposes user deletion through `firectl`, but its public REST API does
+not document a delete-user operation. The connector therefore does not delete
+users or service accounts.
+
+Fireworks groups are provisioned from an identity provider through SCIM and do
+not have a public list API. This connector does not sync groups.
