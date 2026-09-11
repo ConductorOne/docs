@@ -1,0 +1,311 @@
+---
+title: "Set up a Servicedesk Plus connector"
+og:title: "Set up a Servicedesk Plus connector"
+description: "C1 provides identity governance and just-in-time provisioning for Servicedesk Plus. Integrate your Servicedesk Plus instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Servicedesk Plus. Integrate your Servicedesk Plus instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Servicedesk Plus"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Servicedesk Plus connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Support groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Sites | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-xmark" iconType="solid" color="#dfdfdf"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+Account provisioning creates new Servicedesk Plus **requesters**. The connector also supports C1 external ticketing, so you can create and read Servicedesk Plus requests from ConductorOne automations.
+
+## Known limitations
+
+<Warning>
+ServiceDesk Plus has no user status field, so every synced user reports as **Enabled**.
+
+This is not a gap in the connector — ServiceDesk Plus does not model a disabled user. An account
+either exists or is deleted, and deleting one removes it from the API, so ConductorOne drops the
+account on the next full sync. Offboarding is therefore reflected by the account disappearing
+rather than by a status change.
+
+`login_user` may look like a status but is not one: it records whether an account has sign-in
+access. Active requesters routinely have it set to false, because a requester can raise tickets by
+email without ever logging in.
+</Warning>
+
+- **No deprovisioning.** Servicedesk Plus exposes no writable status field, and its `DELETE` endpoint for users has undocumented soft-delete-versus-hard-delete behavior. The connector never disables, suspends, or deletes a Servicedesk Plus account.
+- **Roles and support groups are technician-only.** Only technicians can hold a role or support-group membership; requesters cannot. Because account creation always creates a requester, a newly created account cannot be granted a role or support-group membership until a Servicedesk Plus administrator promotes it to technician.
+- **On-premise Servicedesk Plus is not supported.** This connector covers Servicedesk Plus Cloud only. The on-premise edition uses a structurally different resource model — different membership fields, no identity status field at all, different write endpoints — and is out of scope for this version.
+
+## Gather Servicedesk Plus credentials
+
+<Warning>
+To configure the Servicedesk Plus connector, you need administrator permissions in Servicedesk Plus and access to the [Zoho API Console](https://api-console.zoho.com) for the same data center as your Servicedesk Plus tenant.
+</Warning>
+
+Servicedesk Plus Cloud authenticates through a Zoho OAuth **self-client**, not an API key. C1 needs a client ID, a client secret, and a refresh token.
+
+<Steps>
+  <Step>
+    In the Zoho API Console for your data center, create a **Self Client** and note its **Client ID** and **Client Secret**.
+  </Step>
+
+  <Step>
+    On the **Generate Code** tab, enter this scope string exactly, as a single comma-separated line with no spaces:
+
+    ```
+    SDPOnDemand.requests.ALL,SDPOnDemand.users.ALL,SDPOnDemand.setup.READ,SDPOnDemand.general.READ
+    ```
+
+    | Scope | Grants |
+    | :--- | :--- |
+    | `SDPOnDemand.users.ALL` | users, technicians, requesters, roles, support groups, sites; creating requesters; role and group provisioning |
+    | `SDPOnDemand.requests.ALL` | reading and creating requests, and reading request templates and field metadata for ticketing |
+    | `SDPOnDemand.setup.READ` | request templates and picklist values |
+    | `SDPOnDemand.general.READ` | shared lookup data |
+
+    <Warning>
+      `SDPOnDemand.users` is absent from Servicedesk Plus Cloud's published scope list even though the identity endpoints require it and Zoho accepts it at consent. Omit it and the connector authenticates successfully, then syncs zero users, zero roles, and zero groups **without reporting an error**. Use `.ALL` rather than `.READ` on `users` and `requests` if you intend to provision or create tickets — `.READ` is enough to sync but silently insufficient to write.
+    </Warning>
+
+    Set the token expiry to 10 minutes and choose your Servicedesk Plus portal, then click **Create**. The grant code is single-use and expires quickly, so exchange it in the next step right away.
+  </Step>
+
+  <Step>
+    Exchange the grant code for a **refresh token**, substituting your own values and your data center's accounts host.
+
+    The console never shows you a refresh token — the value you copied on the **Generate Code** tab is the grant code, and it is not what C1 needs. This one-time exchange is the only thing that mints a refresh token:
+
+    ```bash
+    curl -X POST https://accounts.zoho.com/oauth/v2/token \
+      -d grant_type=authorization_code \
+      -d client_id=<CLIENT_ID> \
+      -d client_secret=<CLIENT_SECRET> \
+      -d code=<GRANT_CODE>
+    ```
+
+    The response's `refresh_token` is what C1 needs. It is returned **only on this first exchange** — if you lose it, generate a new grant code and repeat.
+
+    The refresh token does not expire. Store it as securely as a password: a leaked refresh token grants standing API access until it is manually revoked with `POST /oauth/v2/token/revoke`. Note also that Zoho throttles token issuance to **10 requests per 10 minutes**; the connector caches its access token for the full hour, but rapid connector restarts during testing can trip the limit and surface as an authentication failure.
+  </Step>
+
+  <Step>
+    Note your Servicedesk Plus **data center**. It must match the Zoho API Console you registered the self-client in — an OAuth client is scoped to one data center, so a client created in the US console will not authenticate against an EU tenant.
+
+    | Data center | Accounts host (for the exchange above) | Servicedesk Plus host |
+    | :--- | :--- | :--- |
+    | `com` | `accounts.zoho.com` | `sdpondemand.manageengine.com` |
+    | `eu` | `accounts.zoho.eu` | `sdpondemand.manageengine.eu` |
+    | `in` | `accounts.zoho.in` | `sdpondemand.manageengine.in` |
+    | `com.au` | `accounts.zoho.com.au` | `servicedeskplus.net.au` |
+    | `jp` | `accounts.zoho.jp` | `servicedeskplus.jp` |
+    | `ca` | `accounts.zohocloud.ca` | `servicedeskplus.ca` |
+    | `uk` | `accounts.zoho.uk` | `servicedeskplus.uk` |
+    | `sa` | `accounts.zoho.sa` | `servicedeskplus.sa` |
+
+    If your account has more than one portal, also note the **portal name** from the `/app/<portal>/` segment of your Servicedesk Plus URL. Portal names are case-sensitive — `ITDesk` and `itdesk` are not interchangeable, and the wrong case returns a 403. Leave it blank for single-portal accounts.
+  </Step>
+</Steps>
+
+## Configure the Servicedesk Plus connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Servicedesk Plus** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Servicedesk Plus connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Data center** (required): The Zoho data center hosting your Servicedesk Plus tenant
+        - **Zoho client ID** (required): Client ID of the Zoho OAuth self-client
+        - **Zoho client secret** (required, secret): Client secret of the Zoho OAuth self-client
+        - **Refresh token** (required, secret): Zoho OAuth refresh token generated from the self-client grant
+        - **Portal**: Portal name from the `/app/<portal>/` URL segment. Leave blank for single-portal accounts. Case-sensitive
+        - **Enable external ticket provisioning**: Must be set to enable ticketing support
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Servicedesk Plus connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Servicedesk Plus](https://github.com/conductorone/baton-servicedesk-plus) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Servicedesk Plus connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Servicedesk Plus connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Servicedesk Plus connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-servicedesk-plus-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-servicedesk-plus-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Servicedesk Plus credentials
+      BATON_DATA_CENTER: <Zoho data center, e.g. com>
+      BATON_ZOHO_CLIENT_ID: <Zoho self-client ID>
+      BATON_ZOHO_CLIENT_SECRET: <Zoho self-client secret>
+      BATON_REFRESH_TOKEN: <Zoho OAuth refresh token>
+      BATON_PORTAL: <portal name, omit for single-portal accounts>
+
+      # Optional: include if you want C1 to provision role and support-group
+      # membership, and create Servicedesk Plus accounts, using this connector
+      BATON_PROVISIONING: "true"
+
+      # Optional: include if you want C1 to create and read Servicedesk Plus
+      # requests through external ticketing
+      BATON_TICKETING: "true"
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-servicedesk-plus.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-servicedesk-plus
+      labels:
+        app: baton-servicedesk-plus
+    spec:
+      selector:
+        matchLabels:
+          app: baton-servicedesk-plus
+      template:
+        metadata:
+          labels:
+            app: baton-servicedesk-plus
+            baton: "true"
+            baton-app: servicedesk-plus
+        spec:
+          containers:
+          - name: baton-servicedesk-plus
+            image: public.ecr.aws/conductorone/baton-servicedesk-plus:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-servicedesk-plus
+            envFrom:
+            - secretRef:
+                name: baton-servicedesk-plus-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Servicedesk Plus connector to. Servicedesk Plus data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Servicedesk Plus connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-servicedesk-plus).
+</Tip>
