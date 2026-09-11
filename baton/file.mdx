@@ -1,0 +1,116 @@
+---
+title: "Set up a File connector"
+description: "C1 provides identity governance for systems without a native API by syncing identity and access data from a file. Integrate a file-based source with C1 to run user access reviews (UARs)."
+og:title: "Set up a File connector"
+og:description: "C1 provides identity governance for systems without a native API by syncing identity and access data from a file. Integrate a file-based source with C1 to run user access reviews (UARs)."
+sidebarTitle: "File"
+---
+
+## Overview
+
+The File connector (`baton-file`) is a **read-only** connector that syncs identity and access data from a local file into C1. It is designed for systems that have no native API: you export users, resources, entitlements, and grants to a file using the baton-file template, and C1 syncs it like any other connector.
+
+Supported input formats: **YAML**, **JSON / JSONC**, **CSV**, and **Excel (XLSX)**. All formats share the same five-section data model — `users`, `resources`, `entitlements`, `direct_user_grants`, and `grant_inheritance_mappings`. See the format-specific guides (`docs/yaml_instructions.md`, `docs/json_instructions.md`, `docs/csv_instructions.md`, `docs/excel_instructions.md`) for the exact schema.
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | — |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | — |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | — |
+| Apps | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | — |
+| Secrets | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | — |
+
+Resource types are defined by the input file (via each row's `trait`), so the exact set that appears in C1 depends on your data. The connector is **sync-only** — it does not provision, deprovision, or run actions.
+
+**Additional functionality:**
+
+- **Grant inheritance.** In addition to direct user grants, the connector supports resource-to-resource inheritance mappings with configurable depth (`full` or `shallow`), modeled as grant expansion in C1.
+- **Rich user attributes.** MFA/SSO status, employee IDs, login aliases, additional emails, and status details are synced when present in the file.
+
+**Notes:**
+
+- **Read-only.** The connector cannot create, modify, revoke, or deprovision access in the source system — it only reads what the file describes.
+- **Full sync only.** Every sync reads the entire file; there is no incremental/targeted sync.
+- **File-defined data.** C1 only knows what the file contains. Resource IDs must be globally unique across users and resources.
+- **File edits apply on the next sync.** When the connector runs as a long-lived service, changes to the file's data — users, resources, entitlements, grants, and inheritance mappings — are picked up automatically at the start of the next sync, with no restart needed. Adding a new resource type, or changing an existing type's trait, does require restarting the connector. If an edited file fails validation, the sync fails with the validation error and the connector keeps serving the last successfully loaded data. A file with no data rows is valid: the connector syncs empty and picks up rows as they are added. If the file is rewritten repeatedly while a sync is running, the sync may fail with a "rewritten faster than syncs can read it" or "kept changing while being loaded" error — the next sync starts fresh; avoid continuous rewrites during syncs. If the file is invalid when the connector first starts (rather than edited mid-run), fix the file and restart the connector.
+
+## Gather File connector credentials
+
+<Warning>
+The File connector does not call a vendor API, so there are no third-party credentials to gather. You only need the C1 **Client ID** and **Client Secret** generated in the Configure section below, plus an input file (YAML, JSON/JSONC, CSV, or XLSX) built from the baton-file template.
+</Warning>
+
+## Configure the File connector
+
+<Warning>
+**To complete this task, you'll need:**
+
+- The **Connector Administrator** or **Super Administrator** role in C1
+- An input file (YAML, JSON/JSONC, CSV, or XLSX) built from the baton-file template
+</Warning>
+
+<Tabs>
+<Tab title="Cloud-hosted">
+
+*Cloud-hosted connector not currently available.* The File connector reads a file from your own environment, so it must be self-hosted.
+
+</Tab>
+<Tab title="Self-hosted">
+
+The File connector is **self-hosted** — it runs in your own environment and reads a file you provide. It is registered through the generic **Baton** self-hosted connector tile.
+
+### Resources
+
+* [Official download center](https://dist.conductorone.com/ConductorOne/baton-file): For stable binaries (Windows/Linux/macOS) and container images.
+
+### Step 1: Set up a new File connector
+
+<Steps>
+    <Step>
+    In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+    </Step>
+    <Step>
+    Search for **Baton** and click **Add**.
+    </Step>
+    <Step>
+    Choose how to set up the new connector:
+
+	- Add the connector to a currently unmanaged app
+	- Add the connector to a managed app
+	- Create a new managed app
+    </Step>
+    <Step>
+    Set the owner for this connector, then click **Next**.
+    </Step>
+    <Step>
+    In the **Settings** area of the page, click **Edit**, then click **Rotate** to generate a new Client ID and Secret. Carefully copy and save these credentials — we'll use them in Step 2.
+    </Step>
+</Steps>
+
+### Step 2: Run the connector
+
+Run the connector binary with your rotated C1 credentials and the path to your input file:
+
+```bash
+baton-file \
+  --client-id "<C1 client ID>" \
+  --client-secret "<C1 client secret>" \
+  --input /path/to/your-data.xlsx
+```
+
+The connector maintains an ongoing connection with C1, syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+You can also run baton-file locally in file mode to produce a `.c1z` bundle without C1:
+
+```bash
+baton-file --input /path/to/your-data.yaml   # writes sync.c1z
+```
+
+See the connector's README or run `baton-file --help` for all available flags and environment variables.
+
+**Done.** Your File connector is now pulling access data into C1.
+
+</Tab>
+</Tabs>

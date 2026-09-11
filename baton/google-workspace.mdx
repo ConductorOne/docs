@@ -27,9 +27,16 @@ The Google Workspace connector supports [automatic account provisioning and depr
 
 The connector also supports group creation (via the `create_group` connector action) and deletion, [continuous sync](/baton/faq#syncing), and targeted sync for accounts, groups, and roles.
 
+[This connector syncs non-human identities](/product/admin/nhi) and displays them on the **Identities overview** dashboard.
+
 ### Connector actions
 
-Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. Which automation step offers an action is determined by the action itself — you cannot choose:
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| [Account lifecycle action](/product/admin/automations-steps-reference#account-lifecycle-action) | `enable_user`, `disable_user` | The step's own **Target account** selector — either the account in context or a specific account. |
+| [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) | Every other action in the table below | Varies by action; most take a plain `user_id` or `resource_id` field. |
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
@@ -58,6 +65,38 @@ The synced user profile exposes the job title under both `title` and `job_title`
 <Note>
 `update_user_profile`/`update_user` never clear an assigned manager through this action (matching `update_user_manager`), so an empty or invalid `manager_email` is not applied — but unlike other invalid fields, it does not fail the whole call when at least one other provided field is valid. The response's `success: true` only means the call completed; check the `skipped_fields` return field (comma-separated, naming any provided field that wasn't applied and why) to detect this — a caller checking `success` alone will not be told that `manager_email` specifically was skipped.
 </Note>
+
+### Example automations
+
+The following examples show how to sequence connector actions for common Google Workspace workflows. Enabling and disabling accounts uses the [Account lifecycle action](/product/admin/automations-steps-reference#account-lifecycle-action) step, with its own **Target account** selector. Every other action listed maps to a [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) step in the C1 automation builder.
+
+#### Employee offboarding
+
+This sequence revokes access, transfers data, and disables the account:
+
+| Step | Action | Fields |
+|------|--------|--------|
+| 1 | `sign_out_user` | `user_id`: departing user's email or ID |
+| 2 | `delete_all_oauth_tokens` | `user_id`: departing user's email or ID |
+| 3 | `delete_all_application_passwords` | `user_id`: departing user's email or ID |
+| 4 | `transfer_user_drive_files` | `resource_id`: departing user; `target_resource_id`: manager or archive account; `privacy_levels`: `shared` |
+| 5 | `transfer_user_calendar` | `resource_id`: departing user; `target_resource_id`: manager or archive account; `release_resources`: `true` |
+| 6 | `offboarding_profile_update` | `user_id`: departing user; `archive_account`: `true` |
+| 7 | `disable_user` (via **Account lifecycle action** step) | Target account: departing user |
+
+Steps 1–3 should run before data transfer to ensure the user cannot access or modify files during the transfer. Set `archive_account: true` in step 6 if your organization retains archived accounts for compliance.
+
+#### Employee onboarding
+
+This sequence activates the account and places the user in the correct structure:
+
+| Step | Action | Fields |
+|------|--------|--------|
+| 1 | `enable_user` (via **Account lifecycle action** step) | Target account: new hire |
+| 2 | `change_user_org_unit` | `user_id`: new hire; `org_unit_path`: for example, `/Engineering` or `/Sales` |
+| 3 | `update_user_manager` | `user_id`: new hire; `manager_email`: manager's email address |
+
+Use `enable_user` when accounts are pre-created in a suspended state (a common pattern for managing start-date access). The `change_user_org_unit` step ensures the user inherits the correct group policies and settings for their team.
 
 ## Before you begin
 
@@ -444,29 +483,24 @@ This task requires either the **Connector Administrator** or **Super Administrat
 
 <Steps>
 <Step>
-In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
 </Step>
 <Step>
 Search for **Google Workspace v2** and click **Add**.
 </Step>
 <Step>
-Choose how to set up the new Google Workspace connector:
+Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-
-   - Add the connector to a managed app (select from the list of existing managed apps)
-
-   - Create a new managed app
+   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+Set the connector's **Name** and, optionally, a **Description**.
 </Step>
 <Step>
-Click **Next**.
-
-   - **If you are the connector owner**, go on to the next step.
-
-   - **If someone else is the connector owner**, you can stop here. C1 will notify the connector owner by email that their help is needed to complete the setup process.
+Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+</Step>
+<Step>
+Click **Add**. The connector is created and its configuration page opens.
 </Step>
 <Step>
 Find the **Settings** area of the page and click **Edit**.
@@ -509,19 +543,24 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
 <Step>
-In C1, navigate to **Integrations** **Connectors** > **Add connector**
+In C1, navigate to **Apps** > **Connectors** > **Add connector**
 </Step>
 <Step>
 Search for **Baton** and click **Add**
 </Step>
 <Step>
-Choose whether to add to an existing application or create new
+Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
+
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
-Set the connector owner(s)
+Set the connector's **Name** and, optionally, a **Description**.
 </Step>
 <Step>
-Click **Create and add details**
+Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+</Step>
+<Step>
+Click **Add**. The connector is created and its configuration page opens.
 </Step>
 <Step>
 In the **Settings** area, click **Edit**
