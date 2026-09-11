@@ -11,15 +11,15 @@ Mental model: **one MCP connection, many governed systems behind it.**
 3. **Runs hooks.** Admin-configured pre-tool-use hooks may rewrite the input or deny the call.
 4. **Routes upstream.** C1 forwards the call to the correct MCP source using its configured auth mode, so the agent never handles upstream credentials.
 5. **Runs post hooks.** Post-tool-use hooks may rewrite, redact, or deny the returned output.
-6. **Writes an audit log entry** with identity, client, source, tool, result, denial reason, and latency.
+6. **Writes an audit log entry** with identity, client, MCP source, tool, result, denial reason, and latency.
 
 ## MCP source types
 
 The agent cannot tell these apart and does not need to. All appear as tools behind the same endpoint.
 
-| Source type | What it is |
+| MCP source type | What it is |
 |----------|------------|
-| Catalog MCP source | A source selected from C1's available catalog |
+| Catalog MCP source | An MCP source selected from C1's available catalog |
 | External MCP source | A customer- or vendor-provided upstream endpoint |
 | External MCP source through a bridge | A private or on-premises endpoint reached through C1's MCP bridge |
 
