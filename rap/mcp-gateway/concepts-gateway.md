@@ -48,7 +48,7 @@ Consequence for agents: a call can be denied by policy, or return output that ha
 
 ## Kill Switches
 
-Admins can immediately block calls regardless of grants, at tenant, source, tool, or client level. A client kill switch revokes the client's tokens and forces re-authentication. A source kill switch blocks every tool from that source. A tool kill switch blocks that tool for everyone. These take effect mid-session.
+Admins can immediately block calls regardless of grants, at tenant, MCP source, tool, or client level. A client kill switch revokes the client's tokens and forces re-authentication. An MCP source kill switch blocks every tool from that MCP source. A tool kill switch blocks that tool for everyone. These take effect mid-session.
 
 ## Client Types
 
