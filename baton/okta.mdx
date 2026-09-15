@@ -63,6 +63,17 @@ Use this attribute in policies and access profiles to verify that bindings and g
 | Roles | Membership changes: role grant/revoke via privilege events |
 </Note>
 
+<Note>
+**Skip app groups changes how app access is attributed.** When a group is assigned to an app, C1 records that group as the source of each member's access. Skipping `APP_GROUP` groups means they are never synced, so access conferred by one has no group to point at. Rather than dropping that access, the connector reports it as a direct assignment on the app.
+
+Two things this does *not* do:
+
+- **It does not flatten all group-based access on the app.** An `OKTA_GROUP` assigned to the same app still expands to its members normally, and those grants still name the group as the source.
+- **It applies per app, not per group.** On an app assigned both an `APP_GROUP` and an `OKTA_GROUP`, members of the `OKTA_GROUP` keep their group-sourced access *and* gain an additional direct assignment they would not have otherwise.
+
+On such an app, the direct assignments produced this way are marked immutable, because removing that access means changing group membership rather than the app assignment. Members who came only from a skipped `APP_GROUP` have no source recorded at all.
+</Note>
+
 The Okta connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
 The Okta connector supports account deprovisioning through C1 resource deletion. It first deactivates the user to the `DEPROVISIONED` state and then permanently deletes the user. The same operations are available separately through the `deactivate_user` and `delete_user` connector actions. These operations require an API token or OAuth app with `okta.users.manage` scope.
@@ -117,12 +128,12 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 
 | Automation step | Actions offered | How the target is selected |
 |-----------------|-----------------|----------------------------|
-| [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) | `deactivate_user`, `delete_user`, `create`, `modify_group` | Varies by action. The two user actions use a resource selector on the **User** resource type. `modify_group` takes the Okta group ID as a plain text field, and `create` has no target at all. |
+| [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) | `deactivate_user`, `delete_user`, `update_profile`, `create`, `modify_group` | Varies by action. The three user actions use a resource selector on the **User** resource type. `modify_group` takes the Okta group ID as a plain text field, and `create` has no target at all. |
 | Account lifecycle action | `enable_user`, `disable_user` | The step's own **Target account** selector — either the account in context or a specific account. |
 
-In the Perform connector action step, actions are listed under their resource type and display name rather than their raw action name: `deactivate_user` and `delete_user` appear as **`user - Deactivate User`** and **`user - Delete User`**, and `modify_group` as **`group - Modify Group`**. An action with no display name registered falls back to its raw name, so `create` appears as **`group - create`**.
+In the Perform connector action step, actions are listed under their resource type and display name rather than their raw action name: `deactivate_user`, `delete_user`, and `update_profile` appear as **`user - Deactivate User`**, **`user - Delete User`**, and **`user - Update User Profile`**, and `modify_group` as **`group - Modify Group`**. An action with no display name registered falls back to its raw name, so `create` appears as **`group - create`**.
 
-`enable_user` and `disable_user` take `user_id` as a plain string, and `modify_group` takes `group_id` the same way. Pass the raw Okta ID (for example `00u1abc2def3GHI4jk5`), not the C1 resource ID — the connector sends the value to Okta unchanged, and a C1 resource ID returns a not-found error. `deactivate_user` and `delete_user` take a resource selector instead, so the Okta ID is resolved for you.
+`enable_user`, `disable_user` and `update_user` take `user_id` as a plain string, and `modify_group` takes `group_id` the same way. Pass the raw Okta ID (for example `00u1abc2def3GHI4jk5`), not the C1 resource ID — the connector sends the value to Okta unchanged, and a C1 resource ID returns a not-found error. `deactivate_user`, `delete_user`, and `update_profile` take a resource selector instead, so the Okta ID is resolved for you.
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
@@ -134,10 +145,6 @@ In the Perform connector action step, actions are listed under their resource ty
 | update_user | `user_id` (string, required), `user_profile` (JSON object, required) | Updates a user's profile from a JSON object of Okta profile attributes — accepts any attribute, not limited to update_profile's curated list. This is the action C1's automated profile-push pipeline uses. |
 | create | `name` (string, required), `description` (string), `userMembers` (resource ID list) | Creates a new Okta group with optional initial members |
 | modify_group | `group_id` (string, required), `name` (string), `description` (string) | Updates the name and/or description of an existing Okta group. Returns success without calling the Okta API if the supplied values already match the group's current name and description (idempotent). |
-
-<Note>
-`update_user` (global action, takes `user_profile` as a JSON object) is the action required for C1's automated profile-push pipeline — a push rule that syncs Okta profile fields specifically looks up this global action shape. `update_profile` (resource-scoped, individual typed fields) is for manual/UX invocation from a workflow step; it does not satisfy the push-rule lookup on its own. Named profile fields and `user_profile` JSON keys use Okta's camelCase attribute names (e.g. `firstName`, not `first_name`).
-</Note>
 
 <Warning>
 `deactivate_user`, `delete_user`, and C1 account deprovisioning are destructive. Deactivation removes the user's assigned-app provisioning and can destroy downstream data such as email or files. Deletion permanently removes the Okta user and cannot be recovered. Use workflow approval gates where appropriate.
@@ -359,9 +366,9 @@ Navigate to the **Okta API Scopes** tab and grant the scopes required for your u
 
    - `okta.users.read` and `okta.groups.read` (required for sync)
    - `okta.roles.read` and `okta.apps.read` (required for sync)
-   - `okta.logs.read` (required for continuous sync — see [Capabilities](#capabilities))
    - `okta.users.manage`, `okta.groups.manage`, `okta.roles.manage`, `okta.apps.manage` (required for provisioning)
-   - `okta.apiTokens.read` (required when **Sync secrets** is enabled)
+   - `okta.logs.read` (required for the event feed)
+   - `okta.apiTokens.read` (required when **Sync secrets** is enabled or the **API Token** resource type is enabled)
    - `okta.devices.read` (required when the **Device** resource type is enabled)
 
 <Note>
@@ -387,7 +394,23 @@ If a sync finishes cleanly with no accounts, check the app's **Admin Roles** tab
 You'll need the **Client ID**, **Private Key**, and **Private Key ID** when configuring the connector.
 
 <Note>
-**Private key format.** The connector accepts a PEM-encoded **RSA** private key in either format, so no conversion is needed:
+**Private key format.** The **Okta Private Key** field in the C1 connector form holds a single line. Pasting a multi-line PEM into it replaces the line breaks with spaces, and the connector rejects the result with `oktaauth: parse private key: no PEM block found`.
+
+Enter the key on one line, writing each line break as a literal `\n`:
+
+```
+-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\n-----END PRIVATE KEY-----
+```
+
+Convert a PEM file to that form with:
+
+```bash
+awk 'BEGIN{ORS="\\n"} {print}' key.pem | sed 's/\\n$//'
+```
+
+Running the connector self-hosted, pass the key unchanged: `BATON_OKTA_PRIVATE_KEY` and `--okta-private-key` accept the multi-line PEM as it is. The single-line form is a property of the connector form, not of the connector.
+
+Either PEM encoding works, and converting between them is not necessary:
 
 - **PKCS#1** — header line `-----BEGIN RSA PRIVATE KEY-----`
 - **PKCS#8** — header line `-----BEGIN PRIVATE KEY-----` (what OpenSSL 3.0+ produces by default)
@@ -442,7 +465,7 @@ Enter your Okta domain hostname, e.g. `<YOUR DOMAIN>.okta.com`, into the **Okta 
 Enter your credentials:
 
    - For **API Token**: paste your API token into the **API token** field.
-   - For **OAuth 2.0 Private Key**: enter your **Okta Client ID**, **Okta Private Key ID**, and paste the **Okta Private Key** (PEM-encoded).
+   - For **OAuth 2.0 Private Key**: enter your **Okta Client ID** and **Okta Private Key ID**, then enter your RSA private key into **Okta Private Key** on a single line, with each line break written as `\n`. See **Private key format** above.
 </Step>
 <Step>
 **Optional.** If desired, click the checkbox to **Sync custom roles**.
@@ -452,12 +475,16 @@ Enter your credentials:
 </Step>
 <Step>
 **Optional.** If desired, click the checkbox to **Skip app groups** to exclude Okta push groups (APP\_GROUP type) from sync. This is useful when push groups created by SCIM-integrated apps are not needed for access management workflows.
+
+<Note>
+This setting also changes how app access from those groups is attributed. Access conferred by a skipped group is reported as a direct assignment on the app, since the group is no longer synced to point at. Groups of other types assigned to the same app still expand to their members normally. See **Capabilities** above for the full behavior.
+</Note>
 </Step>
 <Step>
 **Optional.** Inactive (disabled) Okta applications are synced by default. Clear the **Sync inactive apps** checkbox to exclude them.
 </Step>
 <Step>
-**Optional.** Enable **Sync secrets** to display them on the [Inventory page](/product/admin/inventory).
+**Optional.** Enable the **API Token** resource type in the connector's sync configuration to display Okta API tokens on the [Inventory page](/product/admin/inventory).
 </Step>
 <Step>
 **Optional.** Enter a list of user email domains that will be included in the connector's sync. If you do not specify any domains here, the connector will sync all available accounts regardless of email domain.
