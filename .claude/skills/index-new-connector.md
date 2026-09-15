@@ -64,7 +64,7 @@ Common pitfall: names starting with the same letters need careful comparison.
 - "SonarQube" (S-o-n-a-**r**) sorts before "Sonatype" (S-o-n-a-**t**) because r < t
 - "ADP" (A-D-**P**) sorts after "Adobe" (A-D-**o**) because o < P
 
-### 4. Add to intro.mdx in four places
+### 4. Add to intro.mdx in three places
 
 #### A) A-Z tab (alphabetical, same rules as above)
 
@@ -72,11 +72,7 @@ Common pitfall: names starting with the same letters need careful comparison.
 grep -n "^\s*- \[" baton/intro.mdx | grep -i "<nearby name>"
 ```
 
-#### B) New this month tab
-
-Add the connector to the **top** of the `<Tab title="New this month">` list — newest connector always goes first.
-
-#### C) By category — pick one section
+#### B) By category — pick one section
 
 Common categories and what goes in them:
 
@@ -95,7 +91,7 @@ Common categories and what goes in them:
 
 Find the right alphabetical position within the chosen section.
 
-#### D) (Optional) By category — secondary section
+#### C) (Optional) By category — secondary section
 
 If the connector clearly fits a second category (e.g., a tool that is both a developer tool and a security tool), add it there too. When in doubt, skip.
 
