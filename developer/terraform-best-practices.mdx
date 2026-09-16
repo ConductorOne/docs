@@ -1,30 +1,30 @@
 ---
-title: "C1 Terraform best practices"
-og:title: "C1 Terraform best practices - C1"
-og:description: "Best practices for using the C1 Terraform provider, including creating groups, entitlements, access profiles, and policies."
-description: "Best practices for using the C1 Terraform provider, including creating groups, entitlements, access profiles, and policies."
+title: "C1.ai Terraform best practices"
+og:title: "C1.ai Terraform best practices - C1.ai"
+og:description: "Best practices for using the C1.ai Terraform provider, including creating groups, entitlements, access profiles, and policies."
+description: "Best practices for using the C1.ai Terraform provider, including creating groups, entitlements, access profiles, and policies."
 sidebarTitle: "Terraform best practices"
 ---
 
 {/* Editor Refresh: 2026-04-29 */}
 
-This guide covers best practices for Terraform practitioners managing C1 resources. Each section is self-contained, so you can read them in any order.
+This guide covers best practices for Terraform practitioners managing C1.ai resources. Each section is self-contained, so you can read them in any order.
 
 <Note>
-Before you begin, make sure the C1 Terraform provider is installed and configured. See [C1 Terraform provider](/developer/terraform).
+Before you begin, make sure the C1.ai Terraform provider is installed and configured. See [C1.ai Terraform provider](/developer/terraform).
 </Note>
 
-## Creating groups in C1
+## Creating groups in C1.ai
 
-Creating a group in C1 requires three resources working together:
+Creating a group in C1.ai requires three resources working together:
 
 1. **An app resource** — the group object itself
 2. **A custom app entitlement** — defines the "member" role that users can request
 3. **An entitlement automation** — evaluates a CEL expression against user attributes and automatically grants or revokes group membership, with no manual access request required
 
-### Example: create a C1 group with dynamic membership
+### Example: create a C1.ai group with dynamic membership
 
-The following example creates a group in the C1 application and automatically adds any user whose `department` attribute contains "engineering."
+The following example creates a group in the C1.ai application and automatically adds any user whose `department` attribute contains "engineering."
 
 ```hcl
 # Look up the C1 app. You can also store this ID as a local variable
@@ -78,24 +78,24 @@ resource "conductorone_app_entitlement_automation" "dynamic_group_expression" {
 
 ### Keep in mind
 
-- **Don't create a new resource type.** The resource type for groups already exists in C1. Creating a duplicate will cause a conflict.
-- **The C1 app ID is stable within your tenant.** You can look it up once with a data source, or store it as a local variable if you reference it in multiple places.
+- **Don't create a new resource type.** The resource type for groups already exists in C1.ai. Creating a duplicate will cause a conflict.
+- **The C1.ai app ID is stable within your tenant.** You can look it up once with a data source, or store it as a local variable if you reference it in multiple places.
 - **Consider wrapping this pattern in a reusable Terraform module.** You'll repeat these same three resources for every group you create.
 
 ---
 
 ## Custom app entitlements vs app entitlements
 
-There are two Terraform resources for managing entitlements. Choosing the right one depends on whether the entitlement already exists in C1.
+There are two Terraform resources for managing entitlements. Choosing the right one depends on whether the entitlement already exists in C1.ai.
 
-- Use `conductorone_custom_app_entitlement` to **create** a new entitlement that does not yet exist in C1 — for virtual entitlements, or when pre-creating an IDP group before a connector sync.
+- Use `conductorone_custom_app_entitlement` to **create** a new entitlement that does not yet exist in C1.ai — for virtual entitlements, or when pre-creating an IDP group before a connector sync.
 - Use `conductorone_app_entitlement` to **configure or update** an entitlement that a connector already manages. This resource is update-only; it cannot create or delete entitlements.
 
 ### Creating virtual entitlements
 
 Use [conductorone_custom_app_entitlement](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/custom_app_entitlement) when you need to create a virtual entitlement for a permission not yet discovered by a connector.
 
-This resource also supports the `match_baton_id` field, which links the Terraform resource to an external ID (such as an Okta group ID). When the connector syncs, C1 merges the two rather than creating a duplicate.
+This resource also supports the `match_baton_id` field, which links the Terraform resource to an external ID (such as an Okta group ID). When the connector syncs, C1.ai merges the two rather than creating a duplicate.
 
 ```hcl
 data "conductorone_app" "okta_app" {
@@ -151,12 +151,12 @@ Use [conductorone_app_entitlement](https://registry.terraform.io/providers/Condu
 This resource is also used to manage the app access entitlement, a static entitlement that exists on every app.
 
 <Warning>
-`conductorone_app_entitlement` is update-only. Running `terraform destroy` removes the resource from Terraform state, but the entitlement still exists in C1. To roll back a change, run a subsequent `terraform apply` with the previous configuration values.
+`conductorone_app_entitlement` is update-only. Running `terraform destroy` removes the resource from Terraform state, but the entitlement still exists in C1.ai. To roll back a change, run a subsequent `terraform apply` with the previous configuration values.
 </Warning>
 
 ### Example: configure app access with account provisioning
 
-Use this pattern when you want C1 to provision a new account in the target system when access is granted, rather than assigning an existing account.
+Use this pattern when you want C1.ai to provision a new account in the target system when access is granted, rather than assigning an existing account.
 
 ```hcl
 resource "conductorone_app_entitlement" "app_access" {
@@ -216,7 +216,7 @@ resource "conductorone_app_entitlement" "test_entitlement_update_multistep" {
 
 - **Terraform import is not required.** Reference the entitlement by ID using a data source lookup.
 - **JSON encoding is required** for `multi_step` provisioning and `account_provision` config blocks.
-- **Entitlement owners** are managed with a separate resource, [conductorone_app_entitlement_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement_owner). Owners are always a list of C1 users — the resource accepts `user_ids` only, and setting the list replaces any existing owners for that entitlement. See the example below.
+- **Entitlement owners** are managed with a separate resource, [conductorone_app_entitlement_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement_owner). Owners are always a list of C1.ai users — the resource accepts `user_ids` only, and setting the list replaces any existing owners for that entitlement. See the example below.
 - **App-level owners** are managed with [conductorone_app_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_owner), which takes an `app_id` and a `user_ids` list. Setting `user_ids` replaces any existing owners for the app, and changing either field forces the resource to be replaced.
 
 ### Example: manage entitlement owners
@@ -259,7 +259,7 @@ When looking up users, the [conductorone_user](https://registry.terraform.io/pro
 
 ## Creating access profiles
 
-Access profiles group multiple entitlements into a single requestable bundle. The C1 UI calls these "access profiles," but the Terraform provider and API use the term "catalog" — you'll see `catalog_id` as a field name throughout these resources.
+Access profiles group multiple entitlements into a single requestable bundle. The C1.ai UI calls these "access profiles," but the Terraform provider and API use the term "catalog" — you'll see `catalog_id` as a field name throughout these resources.
 
 A fully configured access profile requires five related resources:
 
@@ -444,7 +444,7 @@ Policies define the approval workflow for access requests — who reviews, in wh
 ### Always include a baseline rule
 
 <Warning>
-Every policy must include a `grant` key with at least one step. Without it, any request that does not match a named rule's condition will fail or get stuck in an undefined state. Terraform does not validate this requirement — C1 enforces it at runtime.
+Every policy must include a `grant` key with at least one step. Without it, any request that does not match a named rule's condition will fail or get stuck in an undefined state. Terraform does not validate this requirement — C1.ai enforces it at runtime.
 </Warning>
 
 The `grant` key is the catch-all baseline rule. It runs for every request that does not match any named rule's condition. In the examples below, it rejects those unmatched requests by default, so only requests satisfying `my_policy_key`'s condition are auto-approved.
@@ -518,7 +518,7 @@ resource "conductorone_policy" "auto_approve_policy" {
 
 ### Use built-in policies as templates
 
-Terraform does not validate policy structure the same way the C1 UI does. The safest starting point is to generate HCL from an existing, working policy.
+Terraform does not validate policy structure the same way the C1.ai UI does. The safest starting point is to generate HCL from an existing, working policy.
 
 <Steps>
   <Step title="Import the policy">
@@ -558,7 +558,7 @@ Terraform does not validate policy structure the same way the C1 UI does. The sa
 
 ## Related resources
 
-- [C1 Terraform provider](/developer/terraform)
+- [C1.ai Terraform provider](/developer/terraform)
 - [CEL expressions](/product/admin/expressions)
 - [CEL expressions reference](/product/admin/expressions-reference)
 - [conductorone_policy on the Terraform Registry](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/policy)

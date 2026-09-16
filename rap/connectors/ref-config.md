@@ -28,8 +28,8 @@ CLI wins over env, env wins over file.
 
 | Flag | Description |
 |------|-------------|
-| `--client-id` | C1 OAuth client ID (enables daemon mode) |
-| `--client-secret` | C1 OAuth client secret |
+| `--client-id` | C1.ai OAuth client ID (enables daemon mode) |
+| `--client-secret` | C1.ai OAuth client secret |
 | `--skip-full-sync` | Disable full sync in daemon mode |
 
 ### Provisioning

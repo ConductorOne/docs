@@ -1,15 +1,15 @@
-# C1 as an MCP Gateway
+# C1.ai as an MCP Gateway
 
-ConductorOne (C1) is an MCP gateway. An AI client connects to one C1 MCP endpoint, and C1 sits in front of the organization's approved MCP servers and integrations. Agents do not connect to those upstream servers directly.
+ConductorOne (C1.ai) is an MCP gateway. An AI client connects to one C1.ai MCP endpoint, and C1.ai sits in front of the organization's approved MCP servers and integrations. Agents do not connect to those upstream servers directly.
 
 Mental model: **one MCP connection, many governed systems behind it.**
 
 ## What the Gateway Does on Every Call
 
-1. **Authenticates the caller.** C1 resolves the human or workload identity behind the agent. Every tool call carries that identity — the gateway is identity-aware, not an anonymous relay.
+1. **Authenticates the caller.** C1.ai resolves the human or workload identity behind the agent. Every tool call carries that identity — the gateway is identity-aware, not an anonymous relay.
 2. **Checks governance.** The tool must be **Enabled** by an admin, and the caller must hold a **grant** for it. Both conditions are required. Enabling a tool does not grant it to anyone.
 3. **Runs hooks.** Admin-configured pre-tool-use hooks may rewrite the input or deny the call.
-4. **Routes upstream.** C1 forwards the call to the correct upstream server using that server's configured auth mode, so the agent never handles upstream credentials.
+4. **Routes upstream.** C1.ai forwards the call to the correct upstream server using that server's configured auth mode, so the agent never handles upstream credentials.
 5. **Runs post hooks.** Post-tool-use hooks may rewrite, redact, or deny the returned output.
 6. **Writes an audit log entry** with identity, client, server, tool, result, denial reason, and latency.
 
@@ -19,17 +19,17 @@ The agent cannot tell these apart and does not need to. All appear as tools behi
 
 | Upstream | What it is |
 |----------|------------|
-| Hosted catalog server | An MCP server C1 hosts and registers on the org's behalf |
+| Hosted catalog server | An MCP server C1.ai hosts and registers on the org's behalf |
 | Vendor MCP server | A third-party MCP server registered by an admin |
-| Bridged server | A private or on-premises MCP server reached through C1's MCP bridge |
+| Bridged server | A private or on-premises MCP server reached through C1.ai's MCP bridge |
 
 ## Toolsets, Access Profiles, and Grants
 
 - A **tool** is one capability exposed by an upstream MCP server (for example, `github_create_issue`).
 - Discovered tools start in an unreviewed state. An admin approves/enables them and may classify them by action (read / write / delete) and risk.
-- Approved tools are bundled into a **toolset** — either C1-maintained ("All approved", "Read-only") or an admin-curated custom toolset.
+- Approved tools are bundled into a **toolset** — either C1.ai-maintained ("All approved", "Read-only") or an admin-curated custom toolset.
 - A toolset is bound to an **access profile**, which carries the approval policy, approvers, and expiry.
-- A user requests the access profile from the C1 catalog (web, Slack, or from their AI client). Once approved, the grant makes the toolset's tools callable by that user's clients.
+- A user requests the access profile from the C1.ai catalog (web, Slack, or from their AI client). Once approved, the grant makes the toolset's tools callable by that user's clients.
 
 Consequence for agents: the tool surface is per-caller, not per-tenant. Two agents connected to the same gateway can see and call different sets of tools.
 
@@ -71,7 +71,7 @@ Governance is identical in both shapes. Code mode changes the calling interface,
 
 When the caller lacks access to a tool, the gateway does not fail with a generic error. It returns a structured envelope:
 
-- `{status: 'request_created', tool, task_id, task_number, task_url, entitlement_id}` — the tool is requestable. C1 opened an access request; the upstream API was **not** called. Once the request is approved, the same call executes.
+- `{status: 'request_created', tool, task_id, task_number, task_url, entitlement_id}` — the tool is requestable. C1.ai opened an access request; the upstream API was **not** called. Once the request is approved, the same call executes.
 - `{status: 'denied', reason}` — no access path exists for this caller.
 
 This is the gateway's signature behavior and the thing agents most often misread. A `request_created` result is not a failure and not an empty result set — it means a request was filed and the human needs the task link.
@@ -80,7 +80,7 @@ Correct agent behavior: check for these envelopes before touching any domain fie
 
 ## Two Governance Paths, One Platform
 
-C1 governs MCP access two ways. The gateway path (this document) proxies the agent's tool calls through C1. In **enterprise-managed authorization**, C1 instead issues a short-lived scoped token and the agent calls the MCP server directly. Code mode, `describe`/`execute`, and access-request envelopes belong to the gateway path only.
+C1.ai governs MCP access two ways. The gateway path (this document) proxies the agent's tool calls through C1.ai. In **enterprise-managed authorization**, C1.ai instead issues a short-lived scoped token and the agent calls the MCP server directly. Code mode, `describe`/`execute`, and access-request envelopes belong to the gateway path only.
 
 ## Also in This Domain
 

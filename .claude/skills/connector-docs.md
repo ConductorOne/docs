@@ -1,13 +1,13 @@
 ---
 name: c1-connector-docs
-description: Write connector documentation for C1 following the established template structure. Use when creating new connector docs in /baton/, updating existing connector pages, or reviewing connector documentation. Ensures consistency with the standardized connector doc format including capabilities tables, credential gathering, and cloud/self-hosted configuration tabs.
+description: Write connector documentation for C1.ai following the established template structure. Use when creating new connector docs in /baton/, updating existing connector pages, or reviewing connector documentation. Ensures consistency with the standardized connector doc format including capabilities tables, credential gathering, and cloud/self-hosted configuration tabs.
 ---
 
-# C1 Connector Documentation
+# C1.ai Connector Documentation
 
 > **Heads up:** A copy of this skill also lives in [`ConductorOne/baton-admin`](https://github.com/ConductorOne/baton-admin/blob/main/pkg/files/.claude/skills/connector/build-connector-docs.md). If you update this file, copy the changes there too.
 
-Write connector documentation for the `/baton/` directory following C1's standardized template.
+Write connector documentation for the `/baton/` directory following C1.ai's standardized template.
 
 ## When to Use This Skill
 
@@ -19,7 +19,7 @@ Use this skill when:
 
 ## File Format
 
-**Location:** Connector docs live in the connector's GitHub repository in the [C1 organization](https://github.com/ConductorOne), not in this docs repo. Search for the connector repo by name (e.g., `baton-okta`, `baton-salesforce`) to find the right repo.
+**Location:** Connector docs live in the connector's GitHub repository in the [C1.ai organization](https://github.com/ConductorOne), not in this docs repo. Search for the connector repo by name (e.g., `baton-okta`, `baton-salesforce`) to find the right repo.
 
 **Naming:** The doc file should be named `docs.mdx` and placed in the root or a `docs/` directory of the connector repo, following the convention already established in that repo.
 
@@ -156,7 +156,7 @@ The [App Name] connector supports [automatic account provisioning](/product/admi
 
 ### Connector Actions Section (if applicable)
 
-Some connectors support custom actions that can be used in C1 automations. Add this section after the Capabilities table if the connector supports actions.
+Some connectors support custom actions that can be used in C1.ai automations. Add this section after the Capabilities table if the connector supports actions.
 
 ```mdx
 ### Connector actions
@@ -359,15 +359,15 @@ For more information, see [link to vendor docs].
       name: baton-[connector-name]-secrets
     type: Opaque
     stringData:
-      # C1 credentials
-      BATON_CLIENT_ID: <C1 client ID>
-      BATON_CLIENT_SECRET: <C1 client secret>
+      # C1.ai credentials
+      BATON_CLIENT_ID: <C1.ai client ID>
+      BATON_CLIENT_SECRET: <C1.ai client secret>
 
       # [App Name] credentials
       BATON_[APP]_[CREDENTIAL_1]: <Your [credential 1]>
       BATON_[APP]_[CREDENTIAL_2]: <Your [credential 2]>
 
-      # Optional: include if you want C1 to provision access using this connector
+      # Optional: include if you want C1.ai to provision access using this connector
       BATON_PROVISIONING: true
     ```
 

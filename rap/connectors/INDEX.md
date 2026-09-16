@@ -1,6 +1,6 @@
 # Baton Connector Documentation Index
 
-Documentation for building C1 Baton connectors. Request relevant sections based on user's question.
+Documentation for building C1.ai Baton connectors. Request relevant sections based on user's question.
 
 ## How to Use
 
@@ -72,7 +72,7 @@ Documentation for building C1 Baton connectors. Request relevant sections based 
 |---------|------|--------|
 | SDK interfaces | `ref-sdk.md` | ConnectorBuilder, ResourceSyncer, Provisioner |
 | Configuration | `ref-config.md` | Flags, env vars, field types |
-| C1 API | `ref-c1api.md` | Task types, lifecycle, heartbeat |
+| C1.ai API | `ref-c1api.md` | Task types, lifecycle, heartbeat |
 | FAQ | `ref-faq.md` | Common questions |
 | Glossary | `ref-glossary.md` | Term definitions |
 
@@ -128,7 +128,7 @@ Documentation for building C1 Baton connectors. Request relevant sections based 
 
 **Architecture**
 - SDK interfaces -> `ref-sdk.md`
-- C1 communication -> `ref-c1api.md`
+- C1.ai communication -> `ref-c1api.md`
 
 ---
 

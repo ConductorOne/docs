@@ -11,8 +11,8 @@ Common questions about baton connectors.
 | Tool | Purpose | User |
 |------|---------|------|
 | baton-sdk | Go SDK for building connectors | Connector developers |
-| cone | CLI for C1 platform ops | End users (requests, approvals) |
-| conductorone-sdk-go | Go SDK for C1 API | App integrators |
+| cone | CLI for C1.ai platform ops | End users (requests, approvals) |
+| conductorone-sdk-go | Go SDK for C1.ai API | App integrators |
 
 Building a connector? Use baton-sdk.
 

@@ -1,16 +1,16 @@
 ---
 name: c1-docs-writer
-description: Write documentation for C1's website following established voice, tone, and style guidelines. Use when creating new documentation pages, updating existing docs, writing how-to guides, or any content for conductorone.com/docs. Ensures consistency with C1's direct, action-oriented documentation style.
+description: Write documentation for C1.ai's website following established voice, tone, and style guidelines. Use when creating new documentation pages, updating existing docs, writing how-to guides, or any content for conductorone.com/docs. Ensures consistency with C1.ai's direct, action-oriented documentation style.
 ---
 
-# C1 Documentation Writer
+# C1.ai Documentation Writer
 
-Write C1 documentation that matches the established voice, tone, and style of the existing docs site.
+Write C1.ai documentation that matches the established voice, tone, and style of the existing docs site.
 
 ## When to Use This Skill
 
 Use this skill when:
-- Creating new documentation pages for C1
+- Creating new documentation pages for C1.ai
 - Writing or updating how-to guides
 - Drafting admin guides or end-user documentation
 - Creating quickstart guides
@@ -18,11 +18,11 @@ Use this skill when:
 
 ## The docs voice
 
-Documentation has a different job than marketing. Marketing makes a case for C1. Docs assume the reader already chose C1 — they're here to get something done. The voice shifts accordingly: less energetic, more instructive.
+Documentation has a different job than marketing. Marketing makes a case for C1.ai. Docs assume the reader already chose C1.ai — they're here to get something done. The voice shifts accordingly: less energetic, more instructive.
 
 **Outside-in framing.** Lead with what the reader is trying to accomplish, not with the feature name or how it works internally. "If you run recurring campaigns, use a template to avoid reconfiguring from scratch each time" is outside-in. "Campaign templates are a feature that allows..." is not. The opening sentence of every page should tell the reader what they can *do* after reading it — not what the feature *is*.
 
-**Declarative, not hedged.** If something is true, say it plainly. Don't write "C1 can help streamline the approval process." Write "C1 auto-approves requests that meet policy." Hedging makes docs feel uncertain; readers lose confidence in the product.
+**Declarative, not hedged.** If something is true, say it plainly. Don't write "C1.ai can help streamline the approval process." Write "C1.ai auto-approves requests that meet policy." Hedging makes docs feel uncertain; readers lose confidence in the product.
 
 **Peer-level respect.** The reader is a security or IT professional. They know why access reviews matter. They need to know how to run one. Skip context they already have and get to the task.
 
@@ -31,7 +31,7 @@ Documentation has a different job than marketing. Marketing makes a case for C1.
 - Do: "New tasks will now be automatically reassigned to your delegate."
 - Don't: "That's it! Tasks will now be assigned to your delegate."
 
-**Active voice, specific verbs.** "C1 sends a notification" not "a notification is sent." "Click **Save**" not "the Save button should be clicked."
+**Active voice, specific verbs.** "C1.ai sends a notification" not "a notification is sent." "Click **Save**" not "the Save button should be clicked."
 
 **Avoid hedging verbs.** These drain sentences of authority:
 - "helps you to" → use a direct verb
@@ -45,7 +45,7 @@ Documentation has a different job than marketing. Marketing makes a case for C1.
 
 ## File Format
 
-**Always use .mdx format** for C1 documentation files. MDX (Markdown with JSX) is the required format for the docs site. When creating new documentation, save files with the `.mdx` extension.
+**Always use .mdx format** for C1.ai documentation files. MDX (Markdown with JSX) is the required format for the docs site. When creating new documentation, save files with the `.mdx` extension.
 
 ### Content Structure
 
@@ -56,7 +56,7 @@ Documentation has a different job than marketing. Marketing makes a case for C1.
 
 ## File and Folder Structure
 
-C1 docs use Mintlify, where **file path = URL**. Structure decisions are permanent without redirects, so be intentional.
+C1.ai docs use Mintlify, where **file path = URL**. Structure decisions are permanent without redirects, so be intentional.
 
 ### Folder rules
 
@@ -95,7 +95,7 @@ Sidebar grouping in `docs.json` is independent of folder structure. You can visu
    - Are there any hedging verbs, editorializing phrases, or throat-clearing openers?
    - Does any sentence try to serve too many stakeholders at once? Split it or cut it.
    - After each procedure, is there an outcome sentence stating what changed?
-   - Is the company name "C1" throughout?
+   - Is the company name "C1.ai" throughout?
 
 ## Key Style Points
 
@@ -211,14 +211,14 @@ When documenting features that are in early access, add a standardized warning c
 
 **Key points:**
 - Always use `<Warning>` (not `<Info>` or `<Note>`)
-- Always use "the C1 Support team" (not "our Support team" or "your account team")
+- Always use "the C1.ai Support team" (not "our Support team" or "your account team")
 - Don't name the specific feature (use "This feature")
 - Include the explanation of what early access means
 - Use "share feedback" (not "have any feedback")
 
 ## Hosting region references (default instance vs. EU data residency)
 
-C1 runs two hosting options — a **default instance** (`conductor.one`) and an **EU data residency instance** (`c1eu.ai`). A tenant is provisioned in one region, and every tenant-specific URL, hostname, or IP address reflects it. See the "Hosting regions" table in [Create a C1 tenant](/product/how-to/qs-set-up-c1) for the canonical explainer — link there rather than re-explaining the concept on other pages.
+C1.ai runs two hosting options — a **default instance** (`conductor.one`) and an **EU data residency instance** (`c1eu.ai`). A tenant is provisioned in one region, and every tenant-specific URL, hostname, or IP address reflects it. See the "Hosting regions" table in [Create a C1.ai tenant](/product/how-to/qs-set-up-c1) for the canonical explainer — link there rather than re-explaining the concept on other pages.
 
 Anywhere a region-specific value appears, use one of the two treatments below based on how the value is used — not on which section of the docs it's in.
 
@@ -229,9 +229,9 @@ Anywhere a region-specific value appears, use one of the two treatments below ba
 - EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
 ```
 
-Lead into the pair with wording that tells the reader how to choose — "whichever matches your C1 tenant's domain" — rather than assuming they already know which hosting option they're on. This applies even when the value is tenant-specific (contains a placeholder like `<tenantName>` or `YOUR_DOMAIN`): show both domain suffixes, not just `conductor.one`.
+Lead into the pair with wording that tells the reader how to choose — "whichever matches your C1.ai tenant's domain" — rather than assuming they already know which hosting option they're on. This applies even when the value is tenant-specific (contains a placeholder like `<tenantName>` or `YOUR_DOMAIN`): show both domain suffixes, not just `conductor.one`.
 
-Don't use this pattern for a value the reader copies directly from their own C1 account (for example, an MCP server URL shown on an "AI connections" page) — the product already displays the tenant's real, region-correct value, so there's nothing to disambiguate.
+Don't use this pattern for a value the reader copies directly from their own C1.ai account (for example, an MCP server URL shown on an "AI connections" page) — the product already displays the tenant's real, region-correct value, so there's nothing to disambiguate.
 
 **Reference and example-heavy pages** (API docs, CLI docs, service-principal/workload-federation guides) where `conductor.one` appears repeatedly inside code blocks or curl examples — don't rewrite every example. Add one callout near the section the examples belong to instead:
 
@@ -255,15 +255,15 @@ Don't use this pattern for a value the reader copies directly from their own C1 
 
 ## Product name
 
-Always use **C1** to refer to the product and company in prose. Do not use "ConductorOne" in new documentation.
+Always use **C1.ai** to refer to the product and company in prose. Do not use "ConductorOne" in new documentation.
 
 **Marketing website:** The marketing website is **c1.ai** — use this for any links to the public marketing site. Do not use `conductorone.com` for marketing links.
 
-**Exceptions — never change these to C1:**
+**Exceptions — never change these to C1.ai:**
 
 | What | Examples |
 | :--- | :--- |
-| Product and tenant URLs | `conductor.one`, tenant URLs like `example.conductor.one` |
+| Product and tenant URLs | `conductor.one`, tenant URLs like `example.conductor.one`, and `c1eu.ai` (the EU data-residency domain) |
 | File and directory paths generated by tools | `~/.conductorone/config.yaml` |
 | Code identifiers | Environment variables (`CONDUCTORONE_CLIENT_ID`), package names, binary names |
 | GitHub organization in URLs | `github.com/ConductorOne/...` |
@@ -272,14 +272,14 @@ When in doubt: if a user would type it into a terminal or config file, leave it 
 
 ## Common Mistakes to Avoid
 
-- **Hedging verbs**: "helps you to," "can help," "is designed to," "allows you to" — use direct verbs instead ("lets you," "C1 does X")
+- **Hedging verbs**: "helps you to," "can help," "is designed to," "allows you to" — use direct verbs instead ("lets you," "C1.ai does X")
 - **Feature-first openers**: "Campaign templates are a feature that allows..." → lead with what the reader can do instead
 - **Celebrating task completion**: "That's it!", "Done.", "You're all set!" → state the outcome
 - **Multi-clause sentences serving too many stakeholders at once** — split or cut
 - **Editorializing**: "it's important to note," "it's worth mentioning," "please note"
 - **Promotional language**: "powerful," "robust," "seamless," "innovative"
 - **Excessive conjunctions**: "moreover," "furthermore," "additionally"
-- **Using "ConductorOne"** instead of "C1" in prose
+- **Using "ConductorOne"** instead of "C1.ai" in prose
 - **Using "bool"** — use "Boolean"
 - **Title case in headings** — sentence case only
 - **Context-free headings** like "FAQ" or "Related" — always include the subject ("Frequently asked questions about automations")
