@@ -1,6 +1,6 @@
 # Audit Events
 
-All service principal and workload federation activity recorded in C1 system log.
+All service principal and workload federation activity recorded in C1.ai system log.
 
 ## Authentication Events
 
@@ -46,4 +46,4 @@ CRUD operations logged as OCSF API Activity events.
 
 ## Viewing Events
 
-Navigate to system log in C1 admin console.
+Navigate to system log in C1.ai admin console.

@@ -1,6 +1,6 @@
 # HCP Terraform Integration
 
-C1 Terraform provider auto-detects HCP Terraform workload identity tokens.
+C1.ai Terraform provider auto-detects HCP Terraform workload identity tokens.
 
 ## Prerequisites
 

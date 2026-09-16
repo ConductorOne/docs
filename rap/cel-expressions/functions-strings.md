@@ -1,10 +1,10 @@
 # String Functions
 
-Standard CEL string methods plus C1 extensions.
+Standard CEL string methods plus C1.ai extensions.
 
 ## ifEmpty()
 
-Return a default value if string is empty. C1 extension.
+Return a default value if string is empty. C1.ai extension.
 
 ```cel
 string.ifEmpty(default: string) -> string
