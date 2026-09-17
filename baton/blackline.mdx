@@ -1,8 +1,8 @@
 ---
 title: "Set up a Blackline connector"
-description: "C1 provides identity governance for Blackline. Integrate your Blackline instance with C1 for unified visibility and governance over user access."
 og:title: "Set up a Blackline connector"
-og:description: "C1 provides identity governance for Blackline. Integrate your Blackline instance with C1 for unified visibility and governance over user access."
+description: "C1 provides identity governance for Blackline. Integrate your Blackline instance with C1 to run user access reviews (UARs) and automatically create and deprovision Blackline accounts."
+og:description: "C1 provides identity governance for Blackline. Integrate your Blackline instance with C1 to run user access reviews (UARs) and automatically create and deprovision Blackline accounts."
 sidebarTitle: "Blackline"
 ---
 
@@ -14,15 +14,22 @@ We recommend closely monitoring workflows that use this connector and contacting
 
 ## Capabilities
 
+{/* AUTO-GENERATED:START - capabilities */}
+
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Role | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Team | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Account | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Role | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+| Team | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+
+{/* AUTO-GENERATED:END - capabilities */}
 
 **Additional functionality:**
 
-*None.*
+The Blackline connector supports [automatic account provisioning](/product/admin/account-provisioning) for user accounts. Team membership and role assignment remain read-only.
+
+- Create Blackline accounts without a password. The connector requires a username, first name, last name, and email. The username is sent as Blackline's `loginId` string (for example, `sample.user`); it is not the numeric user `id`.
+- Start Blackline's asynchronous account deprovision process. Blackline disables the account and removes its access assignments instead of hard-deleting it. C1 evaluates Blackline's immediate response, but it does not track a failure that happens later while Blackline finishes the process in the background.
 
 ## Gather Blackline configuration information
 
@@ -37,7 +44,7 @@ Here's the information you'll need:
 - Scope
 - Environment Subdomain
 
-User must have an administrator role
+Sync requires a Blackline administrator role. Creating or deprovisioning accounts requires a Blackline **System Administrator** role.
 
 **Environment Subdomain** is the BlackLine region used to build the API host `https://{environment}.api.blackline.com` (for example `us`, `eu`, or `sbeu`). This is the BlackLine **region**, not your company or instance name.
 
@@ -53,6 +60,8 @@ The connector uses the following endpoints:
 
 - User management API
 	- `GET /v1/users`
+	- `POST /v1/users`
+	- `POST /v1/users/{id}/deprovision`
 	- `GET /v1/users/{id}/teams`
 - Team management API
 	- `GET /v1/teams`
@@ -60,7 +69,9 @@ The connector uses the following endpoints:
 - Role Management API
 	- `GET /v1/roles`
 
-<Card title="View the documentation" icon="book" horizontal href="https://developer.blackline.com/get-started" />
+For more information, see Blackline's [create user](https://developer.blackline.com/docs/users/1/routes/v1/users/post) and [deprovision user](https://developer.blackline.com/docs/users/1/routes/v1/users/%7Bid%7D/deprovision/post) API documentation.
+
+<Card title="View the Blackline developer documentation" icon="book" horizontal href="https://developer.blackline.com/apis" />
 
 ## Configure the Blackline connector
 
@@ -85,7 +96,7 @@ The connector uses the following endpoints:
     <Step>
     Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+	If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
     Set the connector's **Name** and, optionally, a **Description**.
@@ -119,13 +130,14 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 ### Resources 
 
-[Contact C1's support team](mailto:support@c1.ai) to download the latest version of the connector.
+- [Download the latest Blackline connector](https://dist.conductorone.com/ConductorOne/baton-blackline)
+- [View the connector source code](https://github.com/conductorone/baton-blackline)
 
 ### Step 1: Set up a new Blackline connector
 
 <Steps>
     <Step>
-    In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+    In C1, navigate to **Apps** > **Connectors** > **Add connector**.
     </Step>
     <Step>
     Search for **Baton** and click **Add**.
@@ -133,7 +145,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
     <Step>
     Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+	If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
     Set the connector's **Name** and, optionally, a **Description**.
@@ -178,6 +190,9 @@ stringData:
   BATON_BLACKLINE_USERNAME: <BlackLine user account>
   BATON_BLACKLINE_PASSWORD: <BlackLine user account API key, retrieved from FCS user details page>
   BATON_BLACKLINE_SCOPE: <API scope name(s) plus instance ID as 'instance_<GUID>', space-separated (e.g. 'bl.users instance_<GUID>'). Provided per-instance by BlackLine support.>
+
+  # Optional: include if you want C1 to create and deprovision accounts using this connector
+  BATON_PROVISIONING: true
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
