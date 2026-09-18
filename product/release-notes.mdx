@@ -8,6 +8,131 @@ sidebarTitle: Release notes
 ---
 {/* Editor Refresh: 2026-08-21 */}
 
+<Update label="September 18, 2026">
+
+## Product digest: September 18, 2026
+
+### Virtual MCP servers
+
+An MCP client shouldn't need a separate connection for every tool source, and a governed one shouldn't get more than it's entitled to just because it can reach a server. Admins can now create a **Virtual MCP server** that curates an approved set of tools and toolsets pulled from multiple Hosted or External MCP sources into a single endpoint.
+
+A user needs both access to the virtual server itself and an existing or requestable entitlement for each underlying tool or toolset it exposes — removed assignments and revoked leaf access are rechecked before a tool actually runs, not just at connection time.
+
+{/* TODO: docs link - no dedicated page found for Virtual MCP servers; check with eng/PM for the right product/admin page or whether one needs to be written */}
+{/* PR #25355 */}
+
+### Shadow apps get a full workflow, not just a finding
+
+Discovering an unmanaged app used to be the end of the story — the finding sat there until the next detection cycle caught up, however you resolved it. Shadow apps now carry through from detection to resolution:
+
+- **Discovered usage resources become findings automatically**, and each finding links straight to the usage-resource identity that surfaced it — no separate hunt through Shadow apps required. {/* PR #25003 */}
+- **Authorize or ignore a shadow app right from the finding details drawer** — no need to leave Findings to act. Admins without remediation permission see guidance to ask one who has it instead of a dead end. {/* PR #25631 */}
+- **The finding resolves immediately**, instead of waiting for the next detection cycle — if the resolve step itself fails after a successful authorize/ignore, a warning explains the finding will still clear automatically on the next run. {/* PR #25728 */}
+- **Shadow app detection now defaults on when the Shadow Apps feature is enabled**, and its settings only appear when the feature is actually on, so there's nothing to configure to start seeing findings. {/* PR #25786, #25509 */}
+- **Row actions and evidence views are cleaned up**: Authorize/Ignore buttons use consistent primary/outlined styling, and the deactivated-owner finding's evidence now renders as a read-only Account/Account status table. {/* PR #25214, #25285 */}
+{/* QUESTION: PR #25190 says "Shadow app findings are no longer available in findings settings or finding workflows" - this reads like it could contradict the rest of this arc (which is about deeper findings integration). Need to check with eng what this actually removed before this section can be confirmed accurate. */}
+{/* TODO: docs link - product/admin/shadow-apps.mdx already exists, confirm it covers this workflow and link to the relevant section */}
+
+### AI & Copilot
+
+- **Ask ConductorOne AI why a task is stuck.** Super Admins can now have the assistant trace a failed, stuck, or waiting task's full history — approval and provisioning state, access-profile origin, app-account access, connector handoff — and get a recommended next step. It only recommends; it doesn't change anything on its own. {/* PR #25528 */}
+- **AI agents can now author their own connectors, end to end.** An in-app authoring agent can read the authoring contract, source the OpenAPI spec, design the access model, write and build connector source, test-sync it, and deploy — running the whole funnel without stopping after the first step. Activation stays a human decision. {/* PR #24771, #24877, #24925 */}
+- **c1aw agents are now reachable through the curated MCP tool catalog**: customer agents connected to a tenant's C1 MCP endpoint can discover c1aw agents and hold a turn-based conversation with one, and System owners, AI governance admins, and support agents can start, list, and message c1aw sessions the same way. {/* PR #24790, #24783 */}
+{/* QUESTION: is this MCP-session-tooling item (24790/24783) something we want to walk through in more depth, or is a two-line summary enough? Flagging since it's fairly technical/API-shaped for a product digest. */}
+- **MCP connections respect toolset grants, not just app membership.** A PER_USER MCP server now only shows up for users who actually have a grant on that server's toolset — being an app member or admin no longer implies you can authenticate to it. {/* PR #24574 */}
+- **A unified home for MCP sources.** Registered MCP integrations are now managed as MCP sources throughout ConductorOne, with a single guided "Add MCP source" flow covering both catalog and external sources — connection, access, tool approval, and authentication setup in one place. {/* PR #25296 */}
+- **Employees can see their own AI budget.** When self-service is enabled, employees can view their current AI spend allowance and recorded calls and manage their own per-app restrictions (including temporary replacements) directly — server-side limits and admin funding caps still apply underneath. {/* PR #25258 */}
+- Enabling C1 Gateway and setting up MCP connections no longer requires accepting AI Access Management terms first. {/* PR #24830 */}
+- C1 AI's responses are now more concise, with brief up-front plans for multi-step tasks and less routine narration while it works. {/* PR #24941 */}
+- AI access requests now come with clearer recipient guidance and actionable errors when the target user or account is missing, cutting down on requests that failed from identity-field confusion. {/* PR #24944 */}
+{/* TODO: could open with a bolded lead bullet similar to Aug 21/Sep 4 style once trim pass decides how much weight this section gets relative to Virtual MCP servers / Shadow apps */}
+
+### Connector management
+
+- **Adding a connector is now a guided flow**: create a new app, add a connector to an existing app, or link an IdP application — instead of one undifferentiated form. {/* PR #25052 */}
+- **A data drop is easier to act on.** When a sync looks like it dropped data unexpectedly, the banner now suggests running a new sync (with a one-click **Sync now** button) since a data drop is often just a temporary API issue upstream. The message is shorter so the next step - confirm the change or try another sync - is easier to spot, and the same wording now shows up in the Slack notification too. {/* PR #25188, #25209 */}
+- **Require a reason for connector configuration changes.** Admins can now require a justification whenever a connector's configuration changes, and that reason is audited alongside a secret-safe configuration history. {/* PR #25438 */}
+
+### Access request and review improvements
+
+- **Locked entitlements now request against the right policy.** Entitlements that are locked but don't have their own request policy previously defaulted to the App Owner policy regardless of what the UI showed; they now correctly use the application's request policy. {/* PR #25095 */}
+- **Access search is more reliable while you're using it**: it keeps keyboard focus as you type, resets correctly when you change the search or target user, and request actions only appear once access status has actually finished loading (with a retry if it can't load). Filtered pages, including app-scoped ones, no longer lose their place when a page comes back empty, and each entitlement now shows its own expiration instead of borrowing one from another grant. {/* PR #24929, #24927 */}
+- **Find your blocked request faster.** The "already has a pending task" banner on the request form now links each listed item straight to its open task. {/* PR #24824 */}
+- **A denial always reads as a denial.** Manually denying an access request could previously still send the requester an email saying it was granted; denial emails now always correctly say denied. {/* PR #24743 */}
+- **Reviewer denial reasons reach your ticketing system automatically.** Access-review revoke tasks now include the reviewer's denial justification in their description, so existing external ticket templates using `.Description` pick it up with no changes. Custom templates can also reference `ReviewTaskNumber`, `ReviewTaskURL`, and `DeniedBy` directly. {/* PR #25108 */}
+- **Campaigns can now scope to pending invitations.** Access-review campaigns can filter on accounts with an outstanding invitation the principal hasn't accepted yet - previously these were silently dropped from any campaign whose scope restricted account status, with no error and no way to include them. {/* PR #25014 */}
+- **Lopsided access-conflict groups are no longer a workaround.** Conflict monitors no longer require both entitlement groups to individually stay at or under 32 members - groups can now be lopsided (say, 90 and 11) as long as the total combination count stays at or under 1024, so a customer with one large group no longer has to split it across multiple monitors. {/* PR #24868 */}
+- **A stuck campaign close no longer stays stuck.** Closing a campaign could hang when a completed review was left in a pending state; campaigns now reconcile that stale state during close, and any genuinely unresolved review returns a clear, recoverable result instead of leaving the campaign unclosable. {/* PR #24845 */}
+- **Add a Resource description column to reviews.** Campaign owners can surface a resource's custom description (falling back to connector-synced metadata) as its own reviewer-visible column; existing campaigns are unaffected until it's turned on. {/* PR #24812 */}
+- **Approval steps requiring the app owner now stay with the app owner.** Fixed a bug where a step requiring review by the app owner could get reassigned to system admins if owner-source grants hadn't been reconciled yet - the wrong people could end up approving sensitive access changes. {/* PR #25626 */}
+{/* QUESTION: flagging this one specifically since it's a permission/approver-correctness bug (see skill's "who can do this" check) rather than a routine fix - want to confirm before publishing that the fix is complete and there's no remaining window where this can happen. */}
+- **Task visibility now matches who can actually see it.** Task lists follow the same view permissions as task details - app, entitlement, or campaign ownership, or having merely participated in the past, no longer makes a task visible in a list on its own. {/* PR #25374 */}
+{/* QUESTION: this PR number (#25374) is also cited by the source digest for the removed spend-remedy-status API endpoint under Breaking changes below - same number, two unrelated changes. Verify the real PR number for one of these against `gh pr view` before publishing. */}
+- Adding a Slack or Teams channel to a campaign now shows the channel name immediately in Settings, no refresh needed. {/* PR #24799 */}
+- When adding scopes to an access profile, requests for already-enrolled users are now only created when "Create requests for currently enrolled users" is checked - matching how entitlements already behave. {/* PR #25665 */}
+- Campaign progress now stays below 100% while any review is open and above 0% once work has started, with progress bars and summary charts rounding consistently between those endpoints. {/* PR #25346 */}
+- Access reviews now reflect approve/deny decisions instantly and stay in sync more efficiently on large campaigns, with fewer redundant background requests - no workflow change for reviewers. {/* PR #21773 */}
+
+### Automation improvements
+
+- **Scope triggers by resource type, not just by app.** Grant Found and Grant Deleted triggers can now be scoped by resource type through the same faceted, per-app picker already used for revoke criteria - with real counts and disambiguation when two apps share a resource-type name. Grant-trigger cards now show an inclusion-criteria summary chip. {/* PR #25146 */}
+- **Revoke criteria get the same faceted picker.** The Resource type filter on a revoke automation's criteria is now a real faceted picker with server-side search, counts, and disambiguated labels. {/* PR #25042 */}
+- Fixed requestable automation approvals that could get stuck before expression-based approvers were evaluated. {/* PR #24990 */}
+- Automation builders can now search available steps and trigger types by name or description instead of scanning a list. {/* PR #25690 */}
+{/* QUESTION: this PR number (#25690) is also cited by the source digest for a bug fix (automations with a deprecated revoke-entitlements step crashing the step editor) - dropped that item under the skip-routine-bug-fixes call, but flagging the reused number here too in case it points at a mislabeled PR. */}
+
+### Role mining
+
+Role-mining filters now hold up better against messy real-world attribute data: high-cardinality custom attributes (like Squad or Tribe, with many distinct values) stay available with paged, searchable value selection instead of disappearing, and an attribute stays visible in the filter catalog even when it currently has no values, has more than 200, or hits a temporary value-preview failure. {/* PR #25500, #25495 */}
+
+### Findings improvements
+
+- **Findings can now be assigned to a specific person, automatically.** Add a Set assignee step to any Findings → Transformation rule, and every finding it matches is assigned to that person as it arrives; a person's own manual assignment always wins over the rule. {/* PR #25487 */}
+- Findings can now also be assigned directly to an identity user (not just handled by role); assignees see their assigned findings and can update state according to their role. {/* PR #23470 */}
+
+### Vaults and secrets
+
+**My resources** brings together everything a user owns or has access to - groups, vaults, provisioned credentials (now called credential stores throughout the admin UI), and shared secrets - in one page, and now also includes Apps and Entitlements tabs. Secrets shared *with* you show up alongside your own. The standalone Groups and Secrets pages redirect here, so existing bookmarks and links still work. {/* PR #24681, #24680, #25117 */}
+
+Separately, headless devices that join a user's vaults with a user-minted enrollment code are now staged and auto-approved, with no manual approval step - vault contents remain metadata-only server-side either way. {/* PR #24971 */}
+
+### Usability improvements
+
+- The Inventory page is now **Identities & NHI**, with dedicated Overview, Human users, Service, Secrets, NHI, and Agents tabs. {/* PR #24792 */}
+{/* QUESTION: is this a rename within the nav overhaul already described in the pinned "Updated navigation" entry at the top of this page, or a separate change worth its own mention? Didn't want to re-explain the whole nav restructure if it's already covered there - confirm the relationship before publishing. */}
+{/* QUESTION: PR #24648 (dedicated overview pages for AI/Governance/Identities/Security/Vaults/Platform, existing Groups/Secrets bookmarks redirect) also appeared in the source material for this window. It reads like it may be the same nav overhaul already published in the pinned "Updated navigation" entry at the top of this page rather than new content for this cycle - left out entirely rather than duplicate it, but flagging in case it's actually a distinct follow-on change that needs its own bullet. */}
+- Groups now show their member count at the top of the group detail page, next to the description and the access profiles that use the group - previously the only way to size a group here was counting rows in the Members table, which didn't work once a group had more than one page of members. {/* PR #25412 */}
+- Rendered C1 emails are now minified, cutting their size by roughly 55% so notifications stay under Gmail's 102 KB clipping limit instead of getting cut off partway through. {/* PR #25247 */}
+- Jump straight to nested pages from command search (Cmd+K) - Shadow MCPs, Virtual MCP servers, password policies, and unmanaged/shadow apps are all now reachable this way, following the same role and feature-flag rules as the sidebar. {/* PR #25695 */}
+- Screen-reader support across every admin list page (Directory, Applications, Task log, and more) is now fully readable: status and action icons announce their label, row selection announces on the row itself, and column-resize handles read out their current width. Nothing changes visually. {/* PR #25646 */}
+- Charts with many legend items (pie/donut and time-series) now show the legend below the chart instead of overlapping it, wrapping into as many rows as needed; clicking a legend item on a pie or donut chart focuses the chart on just that item instead of repainting it, and clicking again restores the full view. {/* PR #24915, #24878 */}
+- Clearer table headers and coordinated pagination styling make lists easier to scan throughout ConductorOne. {/* PR #24870 */}
+- Paginated dropdowns now load more matching options as you scroll instead of jumping back to the top. {/* PR #25457 */}
+- Fixed local policy editing and switching from entitlement details, and policy dropdowns no longer appear above newly opened policy drawers. {/* PR #24823 */}
+- Navigation highlighting now stays consistent with the pages a user can actually access, and Vaults redirects keep the right page context while loading. {/* PR #25132 */}
+
+### API and developer tools
+
+- **Manage AI governance through the API.** Classifiers, tool gates, classifier bindings, classifier templates, and the agent classifier policy can now all be managed through the public REST API. {/* PR #25540 */}
+- **Terraform support for MCP sources.** Terraform users can manage hosted and external MCP sources - source details, authentication configuration, and tool enablement policy - as code. {/* PR #25273 */}
+- AI integrations get clearer, runnable code-mode examples that preserve access-approval outcomes and recommend scoped queries and bounded batches. {/* PR #24974 */}
+- API requests that fail because the platform is briefly over capacity now return HTTP 503 Service Unavailable with a Retry-After header instead of HTTP 500; rate-limit responses (429) are unchanged. {/* PR #25267 */}
+{/* QUESTION: is the 500->503 change significant enough to also flag under Breaking changes, in case an integration specifically branches on 500? Leaning no (it's additive/more-correct, not a removal) but flagging since Session 2 should confirm. */}
+- When governed AI spend is enabled with an approval policy configured, API clients can request allowance changes, check fulfillment status, and retrieve review details permitted by their role. {/* PR #24952 */}
+
+### Breaking changes
+
+- **Breaking change: a revoke criteria scoped only by a legacy resource-type name now fails closed.** Previously it would silently match every app that happened to share that resource-type name; it now fails that step's execution instead. Re-scope any revoke automation still relying on the old name-only matching. {/* PR #25042 */}
+- **Breaking change: PaperSecret's Revoke API is now Delete.** Service SDKs rename Revoke to Delete. The public `DELETE /api/v1/secrets/{vault_id}` endpoint now deletes only the Paper Vault and no longer queues a provider-side credential revoke - use the new `POST /api/v1/app-secrets-admin/revoke` endpoint to queue that. {/* PR #25587 */}
+- **Breaking change: the spend-remedy-status endpoint is gone.** `GET /api/v1/tasks/{task_id}/spend-remedy-status` has been removed; integrations must migrate to the task APIs. JS/TS integrations must also handle spend-control revision values as strings, to preserve precision. API clients that use a closed list of task action types need to handle a new type: `TYPE_SPEND_REMEDY = 7`. {/* PR #25374, #24952 */}
+{/* QUESTION: same PR-number collision flagged above under Access request and review improvements - confirm which PR this breaking change actually shipped in before publishing. */}
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
+
 <Update label="EU instance">
 
 ### EU data residency instance now available
