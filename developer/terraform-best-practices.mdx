@@ -216,10 +216,86 @@ resource "conductorone_app_entitlement" "test_entitlement_update_multistep" {
 
 - **Terraform import is not required.** Reference the entitlement by ID using a data source lookup.
 - **JSON encoding is required** for `multi_step` provisioning and `account_provision` config blocks.
-- **Entitlement owners** are managed with a separate resource, [conductorone_app_entitlement_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_entitlement_owner). Owners are always a list of C1 users — the resource accepts `user_ids` only, and setting the list replaces any existing owners for that entitlement. See the example below.
-- **App-level owners** are managed with [conductorone_app_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_owner), which takes an `app_id` and a `user_ids` list. Setting `user_ids` replaces any existing owners for the app, and changing either field forces the resource to be replaced.
+- **Entitlement and app owners** are managed with separate resources, not fields on `conductorone_app_entitlement`. See [Managing app, entitlement, and connector ownership](#managing-app-entitlement-and-connector-ownership) — use the v2 owner resources there for new configurations.
 
-### Example: manage entitlement owners
+<Tip>
+`duration_grant` and `duration_unset` are mutually exclusive. Set `duration_grant` to a duration string in seconds (for example, `"3600s"` for one hour) to cap how long a grant lasts. Set `duration_unset = {}` for no maximum duration. Never set both.
+</Tip>
+
+---
+
+## Managing app, entitlement, and connector ownership
+
+C1 has two generations of Terraform resources for assigning owners. The **v1** resources (`conductorone_app_owner`, `conductorone_app_entitlement_owner`, `conductorone_app_resource_owner`) each accept a `user_ids` list and only support C1 users as owners. The **v2** resources assign exactly one owner — either a C1 user or another entitlement — per resource instance, and add support for entitlement-type owners that v1 does not have.
+
+<Tip>
+**Use the v2 resources for new configurations.** They support entitlement-type owners, which v1 does not, and are the actively developed API. The v1 resources remain supported for existing configurations — see [Legacy: v1 owner resources](#legacy-v1-owner-resources) below — but shouldn't be your starting point for anything new.
+</Tip>
+
+### v1 vs v2 at a glance
+
+| Resource | Assigns owner(s) to | Owner type | API version |
+|---|---|---|---|
+| `conductorone_app_owner` | An app | List of C1 users (`user_ids`) | v1 |
+| `conductorone_app_entitlement_owner` | An entitlement | List of C1 users (`user_ids`) | v1 |
+| [conductorone_app_resource_owner](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/resources/app_resource_owner) | An app resource | List of C1 users (`user_ids`) | v1 |
+| `conductorone_app_owner_user` | An app | A single C1 user (`user_ref_id`) | v2 |
+| `conductorone_app_owner_entitlement` | An app | A single entitlement | v2 |
+| `conductorone_app_entitlement_owner_user` | An entitlement | A single C1 user (`user_ref_id`) | v2 |
+| `conductorone_app_entitlement_owner_entitlement` | An entitlement | A single entitlement | v2 |
+| `conductorone_connector_owner_user` | A connector | A single C1 user (`user_ref_id`) | v2 |
+| `conductorone_connector_owner_entitlement` | A connector | A single entitlement | v2 |
+
+<Warning>
+`conductorone_app_resource_owner` does not yet have a usable v2 equivalent. Continue using the v1 `conductorone_app_resource_owner` resource for app resource ownership.
+</Warning>
+
+### Example: assign an entitlement owner (user)
+
+Use `conductorone_app_entitlement_owner_user` to assign a single C1 user as the owner of an entitlement.
+
+```hcl
+resource "conductorone_app_entitlement_owner_user" "access_profile_owner" {
+  app_id         = "<APP ID>"         # The app that contains the entitlement being owned
+  entitlement_id = "<ENTITLEMENT ID>" # The entitlement being assigned an owner
+  role_slug      = "primary"          # The owner role slug — see "Keep in mind" below
+  user_ref_id    = "<USER ID>"        # The C1 user who will own this entitlement
+}
+```
+
+### Example: assign an entitlement owner (entitlement)
+
+Use `conductorone_app_entitlement_owner_entitlement` when ownership should be held by another entitlement rather than a specific user — for example, so ownership follows whoever holds a role or group membership.
+
+```hcl
+resource "conductorone_app_entitlement_owner_entitlement" "access_profile_owner" {
+  app_id                     = "<APP ID>"                    # The app that contains the entitlement being owned
+  entitlement_id             = "<ENTITLEMENT ID>"            # The entitlement being assigned an owner
+  role_slug                  = "primary"                     # The owner role slug — see "Keep in mind" below
+  app_entitlement_ref_app_id = "<OWNING ENTITLEMENT APP ID>" # App ID of the entitlement that will act as owner
+  app_entitlement_ref_id     = "<OWNING ENTITLEMENT ID>"     # ID of the entitlement that will act as owner
+}
+```
+
+The two resources differ only in how the owner is identified:
+
+- **`_user`** — the owner is a single C1 user, identified by `user_ref_id`.
+- **`_entitlement`** — the owner is another entitlement, identified by both `app_entitlement_ref_app_id` and `app_entitlement_ref_id`. Both fields are required because an entitlement's ID alone isn't unique across apps.
+
+The app-level (`conductorone_app_owner_user` / `conductorone_app_owner_entitlement`) and connector-level (`conductorone_connector_owner_user` / `conductorone_connector_owner_entitlement`) resources follow the same `app_id`/`role_slug` plus `user_ref_id`-or-`app_entitlement_ref_*` pattern. The connector resources additionally require a `connector_id` identifying the owned connector.
+
+### Keep in mind
+
+- **`role_slug` is required on every v2 owner resource.** Existing configurations set it to `"primary"`. Confirm this is the value your tenant expects — the field itself is defined as a plain required string in the provider schema, with no enforced default or allowed-values list.
+- **v2 owner resources have no in-place update.** Every field, including `role_slug`, forces a destroy-and-recreate if changed. Plan for resource replacement, not in-place updates, when rotating an owner.
+- **v2 owner resources are singular, not lists.** One resource instance represents exactly one owner. To assign multiple owners of the same type, declare multiple resource instances (for example, with `for_each`) rather than a single resource with a list.
+- **Only v2 supports entitlement-type owners.** The v1 resources (`conductorone_app_owner`, `conductorone_app_entitlement_owner`, `conductorone_app_resource_owner`) accept C1 users only.
+
+### Legacy: v1 owner resources
+
+The v1 resources remain supported for existing configurations. Prefer the v2 resources above for anything new — see the recommendation at the top of this section.
+
+### Example: manage entitlement owners (v1)
 
 Use this pattern to set the owners of an entitlement, replacing any owners currently set.
 
@@ -234,7 +310,7 @@ resource "conductorone_app_entitlement_owner" "role_owners" {
 }
 ```
 
-### Example: manage app owners
+### Example: manage app owners (v1)
 
 Use the same pattern with `conductorone_app_owner` to set the owners of an app, replacing any owners currently set.
 
@@ -250,10 +326,6 @@ resource "conductorone_app_owner" "aws_owners" {
 <Note>
 When looking up users, the [conductorone_user](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/data-sources/user) data source returns a single user matching your search criteria, while [conductorone_users](https://registry.terraform.io/providers/ConductorOne/conductorone/latest/docs/data-sources/users) returns a paginated `list` of matching users. Use `conductorone_user` when you need one user's ID (as in the examples above) and `conductorone_users` when you need to iterate over multiple users.
 </Note>
-
-<Tip>
-`duration_grant` and `duration_unset` are mutually exclusive. Set `duration_grant` to a duration string in seconds (for example, `"3600s"` for one hour) to cap how long a grant lasts. Set `duration_unset = {}` for no maximum duration. Never set both.
-</Tip>
 
 ---
 
