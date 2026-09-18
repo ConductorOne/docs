@@ -1,6 +1,6 @@
 # Handling Access-Request Envelopes
 
-ConductorOne (C1) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP servers, enforcing governance on every call. A tool call only executes when the tool is **Enabled** by an admin and the caller holds a **grant** for it. When the caller lacks access, the gateway does not fail opaquely — it returns a structured envelope in place of domain data.
+ConductorOne (C1.ai) is an MCP gateway: one MCP endpoint in front of the organization's approved MCP servers, enforcing governance on every call. A tool call only executes when the tool is **Enabled** by an admin and the caller holds a **grant** for it. When the caller lacks access, the gateway does not fail opaquely — it returns a structured envelope in place of domain data.
 
 This applies to any `tools.<toolName>()` call inside an `execute` program, and to directly named tool calls where code mode is off.
 
@@ -19,7 +19,7 @@ This applies to any `tools.<toolName>()` call inside an `execute` program, and t
 }
 ```
 
-Meaning: the tool is *requestable* by this caller but not yet granted. C1 opened an access request on the caller's behalf. **The upstream API was not called** — no data was read, nothing was written. Approval flows through the tool's normal policy (manager approval, auto-approve, JIT expiry, and so on). Once the grant lands, the same call executes normally.
+Meaning: the tool is *requestable* by this caller but not yet granted. C1.ai opened an access request on the caller's behalf. **The upstream API was not called** — no data was read, nothing was written. Approval flows through the tool's normal policy (manager approval, auto-approve, JIT expiry, and so on). Once the grant lands, the same call executes normally.
 
 **No access path:**
 
@@ -80,7 +80,7 @@ if (blocked) return blocked;
 ## Agent Behavior After `request_created`
 
 1. Stop that line of work. Do not proceed with dependent steps that need the missing data.
-2. Give the user the `task_url` directly, plus which tool it is for. The user (or an approver) acts on it in C1.
+2. Give the user the `task_url` directly, plus which tool it is for. The user (or an approver) acts on it in C1.ai.
 3. Report what remains blocked so the user knows what will resume.
 4. Retry only after the user confirms approval. Retrying before approval returns the same envelope, and may re-surface the same pending task.
 5. If part of the task is independently answerable with tools that did succeed, complete that part and state clearly what is still blocked.
@@ -102,15 +102,15 @@ In both cases, report what happened and stop. Do not retry with the same input, 
 
 ## How a Caller Gets Access
 
-Tool access is granted through C1's normal request-and-approval flow. Approved tools are bundled into **toolsets**, toolsets are bound to **access profiles**, and a user requests the access profile:
+Tool access is granted through C1.ai's normal request-and-approval flow. Approved tools are bundled into **toolsets**, toolsets are bound to **access profiles**, and a user requests the access profile:
 
-1. In C1, go to **Requests**. Access profiles containing toolsets appear in the catalog next to app entitlements, each showing which toolset it grants, which tools are in it, and the approval policy (auto-approve, requires approval, or JIT with an expiry).
+1. In C1.ai, go to **Requests**. Access profiles containing toolsets appear in the catalog next to app entitlements, each showing which toolset it grants, which tools are in it, and the approval policy (auto-approve, requires approval, or JIT with an expiry).
 2. Open the access profile and click **Request access**, adding a justification if required.
-3. Alternatively submit from Slack with `/c1 request` where the C1 Slack integration is installed. The same approval flow runs either way.
+3. Alternatively submit from Slack with `/c1 request` where the C1.ai Slack integration is installed. The same approval flow runs either way.
 4. Track status on **My requests**; notifications arrive by Slack or email depending on tenant configuration.
 
 A `request_created` envelope has already filed this request — the user follows the `task_url` rather than starting a new one.
 
-Once approved, the granted tools become callable from the user's AI client, usually after the connection refreshes. Some upstream services also require the user's own credentials (per-user OAuth); the user authorizes those from their C1 profile under **AI & API > MCP connections**.
+Once approved, the granted tools become callable from the user's AI client, usually after the connection refreshes. Some upstream services also require the user's own credentials (per-user OAuth); the user authorizes those from their C1.ai profile under **AI & API > MCP connections**.
 
 Access can also disappear mid-session: a revoked grant, an expired JIT grant, a flipped kill switch, or a client closed for inactivity all cause subsequent calls to return a denial. In-flight calls finish.

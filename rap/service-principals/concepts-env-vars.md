@@ -1,6 +1,6 @@
 # Environment Variables
 
-All C1 client tools recognize these environment variables.
+All C1.ai client tools recognize these environment variables.
 
 ## Variables
 

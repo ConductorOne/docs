@@ -1,6 +1,6 @@
 # CEL Overview
 
-CEL (Common Expression Language) is Google's expression language for policy evaluation. C1 uses CEL to let you encode access logic that would be impossible with dropdown menus.
+CEL (Common Expression Language) is Google's expression language for policy evaluation. C1.ai uses CEL to let you encode access logic that would be impossible with dropdown menus.
 
 ## Why CEL for Authorization
 
@@ -37,15 +37,15 @@ c1.directory.users.v1.GetManagers(subject)
 size(managers) > 0 ? managers : appOwners
 ```
 
-## What's C1's vs Google's
+## What's C1.ai's vs Google's
 
-| Layer | Google's CEL | C1's Extensions |
+| Layer | Google's CEL | C1.ai's Extensions |
 |-------|--------------|---------------------------|
 | Syntax | All operators, macros (`has()`, `size()`) | Nothing added |
 | Types | Primitives, lists, maps, timestamps | `User`, `Task`, `AppEntitlement` |
 | Functions | String methods, math | `c1.directory.*`, `c1.user.*` |
 
-**Rule of thumb:** If it starts with `c1.`, it's C1's extension.
+**Rule of thumb:** If it starts with `c1.`, it's C1.ai's extension.
 
 ## How Expressions are Evaluated
 

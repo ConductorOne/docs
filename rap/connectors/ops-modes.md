@@ -9,8 +9,8 @@ One-shot vs daemon vs hosted mode.
 | Mode | Trigger | Behavior |
 |------|---------|----------|
 | **One-shot** | No `--client-id` | Run once, produce .c1z file, exit |
-| **Daemon** | `--client-id` provided | Connect to C1, poll for tasks, run continuously |
-| **Hosted** | C1 infrastructure | Managed by C1, no local deployment |
+| **Daemon** | `--client-id` provided | Connect to C1.ai, poll for tasks, run continuously |
+| **Hosted** | C1.ai infrastructure | Managed by C1.ai, no local deployment |
 
 ## One-Shot Mode
 
@@ -34,7 +34,7 @@ Use for:
 
 ## Daemon Mode
 
-Connect to C1 and process tasks continuously:
+Connect to C1.ai and process tasks continuously:
 
 ```bash
 ./baton-myservice \
@@ -44,7 +44,7 @@ Connect to C1 and process tasks continuously:
 ```
 
 The connector:
-1. Authenticates to C1
+1. Authenticates to C1.ai
 2. Polls for sync/provisioning tasks
 3. Executes tasks and reports results
 4. Repeats until stopped
@@ -56,12 +56,12 @@ Use for:
 
 ## Hosted Mode
 
-C1 runs the connector for you:
+C1.ai runs the connector for you:
 - No infrastructure to manage
 - Automatic updates
-- Credentials stored in C1
+- Credentials stored in C1.ai
 
-Check if your connector is available as hosted in the C1 console.
+Check if your connector is available as hosted in the C1.ai console.
 
 ## Provisioning Flag
 

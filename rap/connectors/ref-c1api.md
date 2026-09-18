@@ -1,6 +1,6 @@
 # ref-c1api
 
-How connectors communicate with C1 platform. SDK handles this; understanding helps debugging.
+How connectors communicate with C1.ai platform. SDK handles this; understanding helps debugging.
 
 ---
 
@@ -50,7 +50,7 @@ type SyncTask struct {
 }
 ```
 
-Produces: c1z file uploaded to C1
+Produces: c1z file uploaded to C1.ai
 
 ### GrantTask
 

@@ -1,8 +1,8 @@
 # MCP Gateway Documentation Index
 
-Documentation for interacting with ConductorOne (C1) as an MCP gateway, and for the code-mode interface agents use to call governed tools through it. Request relevant sections based on the user's question.
+Documentation for interacting with ConductorOne (C1.ai) as an MCP gateway, and for the code-mode interface agents use to call governed tools through it. Request relevant sections based on the user's question.
 
-C1 is an MCP gateway: an AI client connects to one C1 MCP endpoint, and C1 sits in front of the organization's approved MCP servers. Agents do not connect to those upstream servers directly. Every call is identity-aware, governed per tool, and audit logged.
+C1.ai is an MCP gateway: an AI client connects to one C1.ai MCP endpoint, and C1.ai sits in front of the organization's approved MCP servers. Agents do not connect to those upstream servers directly. Every call is identity-aware, governed per tool, and audit logged.
 
 ## How to Use
 
@@ -25,7 +25,7 @@ C1 is an MCP gateway: an AI client connects to one C1 MCP endpoint, and C1 sits 
 ## Selection Guidelines
 
 **"What is..."**
-- C1 MCP / the C1 gateway / C1 MCP URL -> `concepts-gateway.md`
+- C1.ai MCP / the C1.ai gateway / C1.ai MCP URL -> `concepts-gateway.md`
 - Code mode -> `concepts-gateway.md`, `use-code-mode.md`
 - `describe` / `execute` -> `use-code-mode.md`
 - `get_execution` -> `use-async-executions.md`
@@ -57,7 +57,7 @@ C1 is an MCP gateway: an AI client connects to one C1 MCP endpoint, and C1 sits 
 
 **Governance questions**
 - Why a call was blocked -> `concepts-gateway.md`, `use-access-requests.md`
-- What C1 logs per call -> `concepts-gateway.md`
+- What C1.ai logs per call -> `concepts-gateway.md`
 - Which client types get code mode -> `concepts-gateway.md`
 
 ---
@@ -76,7 +76,7 @@ Retrieve: `use-access-requests.md`
 User: "execute came back pending with an execution_id"
 Retrieve: `use-async-executions.md`
 
-User: "How does C1 decide whether my agent can call a tool?"
+User: "How does C1.ai decide whether my agent can call a tool?"
 Retrieve: `concepts-gateway.md`
 
 User: "The result came back with the salary field redacted"

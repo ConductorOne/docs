@@ -109,7 +109,7 @@ c1.user.v1.GetAppUsersForUser(subject, "app-id")
 | Scenario | What Happens | How to Handle |
 |----------|--------------|---------------|
 | Profile attribute missing | Empty string or error | Use `has()` check |
-| Attribute mapping not found | Empty value | Check mapping exists in C1 config |
+| Attribute mapping not found | Empty value | Check mapping exists in C1.ai config |
 | `entitlement` not available | Compile error if referenced | Check context provides entitlement |
 | `task` not available | Compile error if referenced | Check context provides task |
 
