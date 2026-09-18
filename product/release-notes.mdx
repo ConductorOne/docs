@@ -12,7 +12,14 @@ sidebarTitle: Release notes
 
 ## Product digest: September 18, 2026
 
-{/* TODO: headline section needed - Virtual MCP servers (PR #25355, FEATURE_FLAG_ID_VIRTUAL_MCP_SERVER) and the whole Shadow apps arc (SHADOW_APP_FINDINGS / SHADOW_MCP_FINDINGS) were cut on 2026-09-18 after checking ductone/c1 pkg/builtin_tenant/features_2026.go: both are DEV_MANUAL/SKU_MANUAL, not GA. Need a replacement lead item once the rest of this draft is confirmed GA. */}
+### Ask ConductorOne AI why a task is stuck
+
+A failed, stuck, or waiting task usually means digging through approval history, provisioning logs, and app-account state by hand to figure out where it actually broke — and whether that's even still true, since the picture can shift between when it stalled and when someone gets around to looking.
+
+Super Admins can now ask ConductorOne AI to diagnose a specific task. The assistant reconstructs the full history — approval and provisioning state, access-profile origin, app-account access, and the connector handoff — and recommends the safest next step. Diagnosis is read-only: it traces and explains, but never changes the task itself.
+
+{/* TODO: docs update - product/admin/ai-assistant.mdx exists and covers general Q&A/reporting/onboarding, but has no section on task diagnosis yet. Add one and link this paragraph to it before publishing. */}
+{/* PR #25528 */}
 
 ### Policy references
 
@@ -32,10 +39,7 @@ Creating a new application or adding a connector now uses a single guided drawer
 
 ### AI & Copilot
 
-- **Ask ConductorOne AI why a task is stuck.** Super Admins can now have the assistant trace a failed, stuck, or waiting task's full history — approval and provisioning state, access-profile origin, app-account access, connector handoff — and get a recommended next step. It only recommends; it doesn't change anything on its own. {/* PR #25528 */}
-{/* QUESTION: couldn't find a dedicated feature flag gating this in pkg/builtin_tenant/features_2026.go - the task_debugging intent is registered unconditionally alongside other GA intents in pkg/claw/skill/intent/skills.go, same pattern connector_authoring uses even though THAT one is flag-gated elsewhere. Static registration alone doesn't prove this is enabled for all tenants - confirm with eng before trusting this is GA (candidate for a new headline if it checks out, since Virtual MCP servers and Shadow apps both got cut). */}
 - **c1aw agents are now reachable through the curated MCP tool catalog**: customer agents connected to a tenant's C1 MCP endpoint can discover c1aw agents and hold a turn-based conversation with one, and System owners, AI governance admins, and support agents can start, list, and message c1aw sessions the same way. {/* PR #24790, #24783 */}
-{/* QUESTION: is this MCP-session-tooling item (24790/24783) something we want to walk through in more depth, or is a two-line summary enough? Flagging since it's fairly technical/API-shaped for a product digest. */}
 - **MCP connections respect toolset grants, not just app membership.** A PER_USER MCP server now only shows up for users who actually have a grant on that server's toolset — being an app member or admin no longer implies you can authenticate to it. {/* PR #24574 */}
 - **A unified home for MCP sources.** Registered MCP integrations are now managed as MCP sources throughout ConductorOne, with a single guided "Add MCP source" flow covering both catalog and external sources — connection, access, tool approval, and authentication setup in one place. {/* PR #25296 */}
 - Enabling C1 Gateway and setting up MCP connections no longer requires accepting AI Access Management terms first. {/* PR #24830 */}
@@ -61,10 +65,8 @@ Creating a new application or adding a connector now uses a single guided drawer
 - **Lopsided access-conflict groups are no longer a workaround.** Conflict monitors no longer require both entitlement groups to individually stay at or under 32 members - groups can now be lopsided (say, 90 and 11) as long as the total combination count stays at or under 1024, so a customer with one large group no longer has to split it across multiple monitors. {/* PR #24868 */}
 - **A stuck campaign close no longer stays stuck.** Closing a campaign could hang when a completed review was left in a pending state; campaigns now reconcile that stale state during close, and any genuinely unresolved review returns a clear, recoverable result instead of leaving the campaign unclosable. {/* PR #24845 */}
 - **Add a Resource description column to reviews.** Campaign owners can surface a resource's custom description (falling back to connector-synced metadata) as its own reviewer-visible column; existing campaigns are unaffected until it's turned on. {/* PR #24812 */}
-- **Approval steps requiring the app owner now stay with the app owner.** Fixed a bug where a step requiring review by the app owner could get reassigned to system admins if owner-source grants hadn't been reconciled yet - the wrong people could end up approving sensitive access changes. {/* PR #25626 */}
-{/* QUESTION: flagging this one specifically since it's a permission/approver-correctness bug (see skill's "who can do this" check) rather than a routine fix - want to confirm before publishing that the fix is complete and there's no remaining window where this can happen. */}
+- **Approval steps requiring the app owner now fall back correctly.** Fixed an approval policy bug where a step requiring review by the app owner could be reassigned to system admins when the app's owner-source grants hadn't yet been reconciled into the ownership store; approval evaluation now resolves owner IDs directly from the configured ownership sources in that case, and records the rescue in the ticket's audit trail. The same fix applies to entitlement-owner and app-resource-owner approval steps. {/* PR #25626 */}
 - **Task visibility now matches who can actually see it.** Task lists follow the same view permissions as task details - app, entitlement, or campaign ownership, or having merely participated in the past, no longer makes a task visible in a list on its own. {/* PR #25374 */}
-{/* QUESTION: this PR number (#25374) is also cited by the source digest for the removed spend-remedy-status API endpoint under Breaking changes below - same number, two unrelated changes. Verify the real PR number for one of these against `gh pr view` before publishing. */}
 - Adding a Slack or Teams channel to a campaign now shows the channel name immediately in Settings, no refresh needed. {/* PR #24799 */}
 {/* REMOVED: entitlement request forms rendering in the Slack request/extend modals (PR #24671, flagged by eng for possible inclusion) - FEATURE_FLAG_ID_SLACK_REQUEST_FORMS is SKU_MANUAL as of 2026-09-18, not GA. The PR itself also notes it hasn't been verified against a live Slack workspace yet. Re-add once it GAs. */}
 {/* TODO: the developer who flagged this told Melinda it would roll out "soon" - re-check FEATURE_FLAG_ID_SLACK_REQUEST_FORMS's live status in ductone/c1 pkg/builtin_tenant/features_2026.go on Monday (2026-09-21) before trusting that verbally; per the skill, a verbal "it's rolling out" is not a substitute for the grep - it's been wrong before. */}
@@ -78,7 +80,6 @@ Creating a new application or adding a connector now uses a single guided drawer
 - **Revoke criteria get the same faceted picker.** The Resource type filter on a revoke automation's criteria is now a real faceted picker with server-side search, counts, and disambiguated labels. {/* PR #25042 */}
 - Fixed requestable automation approvals that could get stuck before expression-based approvers were evaluated. {/* PR #24990 */}
 - Automation builders can now search available steps and trigger types by name or description instead of scanning a list. {/* PR #25690 */}
-{/* QUESTION: this PR number (#25690) is also cited by the source digest for a bug fix (automations with a deprecated revoke-entitlements step crashing the step editor) - dropped that item under the skip-routine-bug-fixes call, but flagging the reused number here too in case it points at a mislabeled PR. */}
 
 ### Role mining
 
@@ -91,15 +92,13 @@ Role-mining filters now hold up better against messy real-world attribute data: 
 
 ### Vaults and secrets
 
-**My resources** brings together everything a user owns or has access to - groups, vaults, provisioned credentials (now called credential stores throughout the admin UI), and shared secrets - in one page, and now also includes Apps and Entitlements tabs. Secrets shared *with* you show up alongside your own. The standalone Groups and Secrets pages redirect here, so existing bookmarks and links still work. {/* PR #24681, #24680, #25117 */}
+**My resources** brings together everything a user owns or has access to - groups, vaults, provisioned credentials (now called credential stores throughout the admin UI), and shared secrets - in one page, and now also includes Apps and Entitlements tabs. Secrets shared *with* you show up alongside your own. The standalone Groups and Secrets pages redirect here, so existing bookmarks and links still work. {/* PR #24681, #24680, #24648, #25117 */}
 
 Separately, headless devices that join a user's vaults with a user-minted enrollment code are now staged and auto-approved, with no manual approval step - vault contents remain metadata-only server-side either way. {/* PR #24971 */}
 
 ### Usability improvements
 
-- The Inventory page is now **Identities & NHI**, with dedicated Overview, Human users, Service, Secrets, NHI, and Agents tabs. {/* PR #24792 */}
-{/* QUESTION: is this a rename within the nav overhaul already described in the pinned "Updated navigation" entry at the top of this page, or a separate change worth its own mention? Didn't want to re-explain the whole nav restructure if it's already covered there - confirm the relationship before publishing. */}
-{/* QUESTION: PR #24648 (dedicated overview pages for AI/Governance/Identities/Security/Vaults/Platform, existing Groups/Secrets bookmarks redirect) also appeared in the source material for this window. It reads like it may be the same nav overhaul already published in the pinned "Updated navigation" entry at the top of this page rather than new content for this cycle - left out entirely rather than duplicate it, but flagging in case it's actually a distinct follow-on change that needs its own bullet. */}
+- **Identities & NHI is now available to every tenant.** The redesigned Inventory page - with dedicated Overview, Human users, Service, Secrets, NHI, and Agents tabs - was previously limited availability; it's now open to everyone. {/* PR #24792 */}
 - Groups now show their member count at the top of the group detail page, next to the description and the access profiles that use the group - previously the only way to size a group here was counting rows in the Members table, which didn't work once a group had more than one page of members. {/* PR #25412 */}
 - Rendered C1 emails are now minified, cutting their size by roughly 55% so notifications stay under Gmail's 102 KB clipping limit instead of getting cut off partway through. {/* PR #25247 */}
 {/* REMOVED: PR #25695 (command search reaches Shadow MCPs, Virtual MCP servers, password policies, unmanaged/shadow apps) - dropped entirely since 2 of its 4 destinations (Shadow MCPs, Virtual MCP servers) are behind non-GA flags and "unmanaged/shadow apps" is ambiguous re: the same gate; "password policies" alone wasn't worth a standalone bullet. Revisit once Virtual MCP servers / Shadow apps GA. */}
@@ -118,7 +117,6 @@ Separately, headless devices that join a user's vaults with a user-minted enroll
 - **Terraform support for MCP sources.** Terraform users can manage hosted and external MCP sources - source details, authentication configuration, and tool enablement policy - as code. {/* PR #25273 */}
 - AI integrations get clearer, runnable code-mode examples that preserve access-approval outcomes and recommend scoped queries and bounded batches. {/* PR #24974 */}
 - API requests that fail because the platform is briefly over capacity now return HTTP 503 Service Unavailable with a Retry-After header instead of HTTP 500; rate-limit responses (429) are unchanged. {/* PR #25267 */}
-{/* QUESTION: is the 500->503 change significant enough to also flag under Breaking changes, in case an integration specifically branches on 500? Leaning no (it's additive/more-correct, not a removal) but flagging since Session 2 should confirm. */}
 - When governed AI spend is enabled with an approval policy configured, API clients can request allowance changes, check fulfillment status, and retrieve review details permitted by their role. {/* PR #24952 */}
 
 ### Breaking changes
@@ -126,7 +124,6 @@ Separately, headless devices that join a user's vaults with a user-minted enroll
 - **Breaking change: a revoke criteria scoped only by a legacy resource-type name now fails closed.** Previously it would silently match every app that happened to share that resource-type name; it now fails that step's execution instead. Re-scope any revoke automation still relying on the old name-only matching. {/* PR #25042 */}
 - **Breaking change: PaperSecret's Revoke API is now Delete.** Service SDKs rename Revoke to Delete. The public `DELETE /api/v1/secrets/{vault_id}` endpoint now deletes only the Paper Vault and no longer queues a provider-side credential revoke - use the new `POST /api/v1/app-secrets-admin/revoke` endpoint to queue that. {/* PR #25587 */}
 - **Breaking change: the spend-remedy-status endpoint is gone.** `GET /api/v1/tasks/{task_id}/spend-remedy-status` has been removed; integrations must migrate to the task APIs. JS/TS integrations must also handle spend-control revision values as strings, to preserve precision. API clients that use a closed list of task action types need to handle a new type: `TYPE_SPEND_REMEDY = 7`. {/* PR #25374, #24952 */}
-{/* QUESTION: same PR-number collision flagged above under Access request and review improvements - confirm which PR this breaking change actually shipped in before publishing. */}
 
 ### Connector updates
 
