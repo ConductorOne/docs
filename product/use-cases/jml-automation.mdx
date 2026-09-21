@@ -1,0 +1,59 @@
+---
+title: "Use case: Joiner, mover, leaver (JML) automation"
+og:title: "Use case: Automate JML workflows with C1 - C1 docs"
+og:description: "See how C1 turns HR events into account and access changes across every connected system — for joiners, movers, and leavers — and where to go for setup details."
+description: "See how C1 turns HR events into account and access changes across every connected system — for joiners, movers, and leavers — and where to go for setup details."
+sidebarTitle: "JML automation"
+---
+{/* Editor Refresh: 2026-09-21 */}
+
+Joiner, mover, leaver (JML) automation turns the three events that change someone's relationship to your company — hired, changed roles, left — into the account and access changes that should follow automatically, without an IT ticket for each one. This page walks through how C1 handles each event and links out to setup details. It's a closer look at the onboarding and offboarding flows introduced in the [identity governance use case](/product/use-cases/identity-governance).
+
+<Note>
+This page assumes you've already [connected your HR system or identity provider as a C1 directory](/product/admin/directory) and [added connectors](/baton/intro) for the systems JML should act on.
+</Note>
+
+## Start with your HR system
+
+Every JML event starts with a change in your directory — your HRIS or identity provider, whichever you've [designated as the source of truth](/product/admin/directory). When that source reflects a hire, a role change, or a termination, C1 picks it up on the next directory sync and makes the change available to trigger automations and access profile enrollment.
+
+[Automation triggers](/product/admin/automations-triggers-reference) give you the building blocks: **User Created** fires when a new person is synced in; **User Updated** fires on any attribute change and lets you compare `oldUser` and `newUser` to detect a specific transition — a department change, an employment status flip from active to terminated, and so on.
+
+## Joiner: provision before day one
+
+When a new hire is created in your directory, C1 can grant their baseline access automatically:
+
+- **Access profiles** handle the broad strokes. [Access profiles](/product/admin/profiles) scoped by department, role, or location are exactly what marketing calls "birthright access" — a curated bundle of apps and entitlements a person gets because of who they are, not because they asked. [Membership automation](/product/admin/dynamic-access-control) enrolls a new hire in the right profiles as soon as they match the profile's condition, with enrollment approval and provisioning able to run on auto-approve for low-risk access.
+- **Custom automations** handle anything more specific — creating a department-specific account, notifying a team, sending a welcome email. See the [employee onboarding example](/product/admin/automation-examples#employee-onboarding), triggered on **User Created**.
+
+<Tip>
+**How early is "before day one"?** C1 acts as soon as the hire appears in your directory — if your HRIS creates a record ahead of the actual start date, C1 provisions against that record immediately; if it only creates the record on day one, provisioning happens then instead. The timing follows your HR system's own record creation, not a separate pre-start trigger in C1.
+</Tip>
+
+## Mover: recalculate access on a role change
+
+When someone's department, title, manager, or location changes, their access should change with it — old-role access removed, new-role baseline granted. Two mechanisms handle this, and you can use either or both:
+
+- **Membership automation reacts on its own.** Because [access profile enrollment](/product/admin/dynamic-access-control) is condition-based, a role change that makes a user stop matching one profile and start matching another triggers unenrollment from the first and enrollment in the second automatically — no separate "mover" logic required, it's the same joiner/leaver mechanism evaluated continuously.
+- **Build it explicitly with an automation** when you need more control than profile enrollment gives you — for example, notifying the new manager or handling entitlements that aren't managed through a profile. See the **Role transfer (department change)** pattern in [automation examples](/product/admin/automation-examples#other-automation-patterns): a **User Updated** trigger on department, comparing `ctx.trigger.oldUser.department != ctx.trigger.newUser.department`, that revokes the old department's entitlements and grants the new baseline.
+
+## Leaver: offboard across every connected system
+
+When employment status changes to terminated or disabled, [membership automation](/product/admin/dynamic-access-control#what-happens-to-access-when-a-user-is-unenrolled) unenrolls the user from their access profiles and, based on how each profile is configured, revokes some, all, or only the "unjustified" entitlements those profiles granted.
+
+For full control over the offboarding sequence — revoking everything except compliance-required access, disabling the user's C1 status, kicking off a review for what's left, notifying security — see the [employee offboarding example](/product/admin/automation-examples#employee-offboarding), triggered on **User Updated** when status transitions from enabled to disabled.
+
+## Build the audit trail
+
+Every automation run, enrollment, and revocation is logged. Task-level history (who was granted or revoked what, when, and by which policy) is visible on each task's audit log, and the underlying events are available as [system logs](/product/admin/system-log) in OCSF format for export to a SIEM. If a JML automation kicks off an access review campaign — like the offboarding example's remaining-access check — that campaign produces its own [attributable, hash-verifiable report](/product/admin/manage-campaigns#generate-a-campaign-report).
+
+## Related resources
+
+<Columns cols={2}>
+<Card title="Connect a directory" iconType="duotone" icon="sitemap" horizontal href="/product/admin/directory" />
+<Card title="Automate JML flows" iconType="duotone" icon="arrows-rotate" horizontal href="/product/admin/dynamic-access-control" />
+<Card title="Automation examples" iconType="duotone" icon="bolt" horizontal href="/product/admin/automation-examples" />
+<Card title="Automation triggers reference" iconType="duotone" icon="list" horizontal href="/product/admin/automations-triggers-reference" />
+<Card title="Identity governance use case" iconType="duotone" icon="layer-group" horizontal href="/product/use-cases/identity-governance" />
+<Card title="UAR automation use case" iconType="duotone" icon="user-check" horizontal href="/product/use-cases/uar-automation" />
+</Columns>
