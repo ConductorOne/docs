@@ -37,24 +37,76 @@ CrowdStrike issues a client ID and client secret to an API client, which C1 exch
 
 <Steps>
 <Step>
-In the Falcon console, go to **Support and resources** > **API clients and keys** and select **Add new API client**.
+In the Falcon console, go to **Support and resources** > **API clients and keys**.
+</Step>
+<Step>
+Select **Add new API client**.
+</Step>
+<Step>
+Give the client a recognizable name such as `C1`, then grant **Read** on the API scopes covering the tools you want. See [Choose API scopes](#choose-api-scopes) for the mapping.
+</Step>
+<Step>
+Select **Create**.
+</Step>
+<Step>
+Copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
+</Step>
+<Step>
+Note your Falcon cloud's API base URL. Each tenant lives on one regional cloud, and both the token request and every API call go to that region's gateway.
 
-{/* REVIEWER NOTE — needs a verified docs link for generating credentials */}
-</Step>
-<Step>
-Give the client a recognizable name such as `C1`, then grant only the **API scopes** you need, such as **Read** access to Detections, Incidents, and Hosts.
-</Step>
-<Step>
-Select **Create**, then copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
-</Step>
-<Step>
-Note your Falcon cloud's API base URL, such as `https://api.crowdstrike.com` or your region-specific endpoint.
-
-{/* REVIEWER NOTE — confirm exact UI labels/path */}
+| Falcon cloud | API base URL |
+|---|---|
+| US-1 | `https://api.crowdstrike.com` |
+| US-2 | `https://api.us-2.crowdstrike.com` |
+| EU-1 | `https://api.eu-1.crowdstrike.com` |
+| US-GOV-1 | `https://api.laggar.gcw.crowdstrike.com` |
+| US-GOV-2 | `https://api.us-gov-2.crowdstrike.mil` |
 </Step>
 </Steps>
 
+You now have a client ID, client secret, and base URL to enter when you register the server in C1.
+
 For a shared production setup, use a dedicated API client so activity is attributable to C1 rather than a person.
+
+## Choose API scopes
+
+Each tool reads a different Falcon API, and each API has its own scope. Grant **Read** on the scopes for the tools you want. A tool whose scope is missing returns CrowdStrike's authorization error rather than an empty result, so an unexpected 403 usually means the scope is absent from the API client.
+
+| Tools | Falcon API scope |
+|---|---|
+| `list_hosts` | Hosts |
+| `list_alerts` | Alerts |
+| `list_incidents` | Incidents |
+| `list_ioc_indicators` | IOC Management |
+| `list_device_control_policies` | Device Control Policies |
+| `list_vulnerabilities`, `list_remediations` | Vulnerabilities |
+| `list_intel_actors` | Actors (Falcon Intelligence) |
+| `list_intel_indicators` | Indicators (Falcon Intelligence) |
+| `list_intel_reports` | Reports (Falcon Intelligence) |
+| `list_zero_trust_assessments` | Zero Trust Assessment |
+| `list_discover_applications` | Assets |
+| `list_ioms`, `list_iom_details` | CSPM Registration |
+
+Falcon Intelligence is three separate scopes, not one — granting **Actors** doesn't enable `list_intel_indicators` or `list_intel_reports`. Grant each scope whose tool you want.
+
+<Note>
+Spotlight, Falcon Intelligence, Zero Trust Assessment, Discover, Device Control, and Cloud Security are separately licensed Falcon products. If a scope you expect isn't in the dialog, your tenant doesn't license that product. An unlicensed module returns 403 the same way a missing scope does, so when a tool 403s and its scope is already granted, check the license before re-editing scopes.
+</Note>
+
+Four tools take action in CrowdStrike and need **Write** as well:
+
+| Tools | Falcon API scope |
+|---|---|
+| `contain_host`, `lift_containment`, `hide_host` | Hosts (Write) |
+| `create_ioc_indicator` | IOC Management (Write) |
+
+Leaving Write off the API client is a deliberate way to keep the connection read-only: those four tools then return CrowdStrike's authorization error, and the rest keep working.
+
+<Note>
+`list_ioms` and `list_iom_details` need the **CSPM Registration** scope. CrowdStrike also offers a **Cloud Security API Detections** scope, which is the easier one to reach for by name — but it authorizes a different misconfiguration family (`/cloud-security-evaluations/`) that C1 doesn't expose, so an API client carrying only that scope returns 403 from both tools. The Alerts scope doesn't cover them either, despite the endpoints sharing a URL prefix with Falcon's detections API. If `list_ioms` returns 403 while your other tools return data, add CSPM Registration to the API client.
+</Note>
+
+Scope changes take effect the next time C1 requests a token, so you don't need to re-register the server or reconnect after editing the API client.
 
 ## How CrowdStrike credentials are shared
 
@@ -96,4 +148,4 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 ## Manage your CrowdStrike credentials
 
 - **Rotate the client secret** by resetting it on the API client in the Falcon console, then update the secret on the server's authentication settings in C1.
-- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike.
+- **Adjust access** by editing the API scopes granted to the API client in CrowdStrike. See [Choose API scopes](#choose-api-scopes).
