@@ -38,7 +38,7 @@ The user's email address is provided automatically by C1 and is used as the SCIM
 
 The connector runs in one of two modes depending on which credentials you provide. **At least one** of a Compliance Access Key or SCIM credentials is required.
 
-- **Compliance API mode (recommended).** When a **Compliance Access Key** is configured, Anthropic's **Compliance API** (`/v1/compliance/*`) is the source of truth — it sees every user and group across all linked organizations under your parent, **both SCIM-synced and console-invited identities**. **SCIM 2.0** credentials (implemented by WorkOS) are optional here and enable provisioning of SCIM-managed users and groups.
+- **Compliance API mode (recommended).** When a **Compliance Access Key** is configured, Anthropic's **Compliance API** (`/v1/compliance/*`) is the source of truth — it sees every user and group across all linked organizations under your parent, **both SCIM-synced and console-invited identities**. **SCIM 2.0** credentials (implemented by WorkOS) are optional here and enable provisioning of SCIM-managed users and groups. A third, optional credential — the **Admin API Key** — enables provisioning of console-created ("direct") group membership; it requires a Compliance Access Key to also be configured, since it has no effect in SCIM-only mode.
 - **SCIM-only mode (fallback).** When no Compliance Access Key is set, the connector syncs users and groups directly from SCIM and provisions natively. Only SCIM-provisioned identities are visible — console-invited users and console-created groups will not appear. Adding a Compliance Access Key later is non-disruptive: SCIM-managed identities keep their SCIM ids, and console-only identities simply become visible for the first time.
 
 <Warning>
@@ -60,7 +60,7 @@ The connector lists and reconciles directory data entirely from the Compliance A
 
 In Compliance mode the connector also streams Anthropic's audit/activity feed (`/v1/compliance/activities`) as C1 **usage events** — each event records a user acting within an organization (for example, viewing a chat or file). These power last-active and dormant-access signals for access reviews, alongside the access state from the directory sync. The feed reads only when a Compliance Access Key is configured (it is absent in SCIM-only mode) and requires the `read:compliance_activities` scope on the key.
 
-### SCIM 2.0 (optional — provisioning only)
+### SCIM 2.0 (optional — provisioning)
 
 When SCIM credentials are configured, the connector can provision **SCIM-managed** resources:
 
@@ -68,18 +68,40 @@ When SCIM credentials are configured, the connector can provision **SCIM-managed
 | :--- | :--- |
 | Provision (create) user | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 | Deprovision (delete) user | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
-| Add user to group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
-| Remove user from group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Add user to a SCIM-managed group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Remove user from a SCIM-managed group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 
-Provisioning resolves the target's SCIM id by email (users) or name (groups) at write time. **Console-native identities have no SCIM record and are read-only** — they sync, but cannot be created, deleted, or have membership changed through this connector. In Compliance mode without SCIM credentials the connector is sync-only.
+Console-created (`direct`) group membership does **not** require SCIM credentials — it is provisioned through the separate Admin API Key, as described below:
+
+| Capability | Supported |
+| :--- | :--- |
+| Add user to a console-created (`direct`) group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Remove user from a console-created (`direct`) group | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+Provisioning resolves the target's SCIM id by email (users) or name (groups) at write time. **User account creation and deletion are SCIM-only** — console-native users have no SCIM record and cannot be created or deleted through this connector.
+
+### Direct (console-created) group membership — Admin API provisioning
+
+Group-membership provisioning routes on the group's `source_type`, which the connector records on every group during sync:
+
+| `source_type` | Grant / revoke path |
+| :--- | :--- |
+| `scim` | SCIM `PATCH /Groups/{id}` |
+| `direct` (console-created) | Admin API `POST` / `DELETE /v1/organizations/rbac_groups/{group_id}/members` |
+
+A group with any other or missing `source_type` is not guessed at — the connector fails the grant or revoke with an explicit error rather than risk writing to a group the identity provider owns.
+
+Direct-group provisioning requires a separate **Admin API Key** (configured as `admin-api-key`), scoped to `read:members` and `write:rbac_groups` — see [Scopes for direct-group provisioning](#scopes-for-direct-group-provisioning) below. **This does not change user account creation or deletion, which remain SCIM-only** — only group *membership* gained an Admin API path; console-native users still cannot be created or deleted through this connector.
+
+In Compliance mode without SCIM credentials and without the Admin API Key configured, the connector is sync-only.
 
 ### SCIM-only mode (fallback)
 
-If you cannot yet obtain a Compliance Access Key (the Compliance API is enabled on request and is in beta), configure **only** the SCIM credentials. The connector then syncs and provisions users and groups entirely through SCIM, keyed by their SCIM ids — the connector's original behavior. Note this mode does **not** see console-invited identities; switch to Compliance mode once a key is available for full coverage.
+If you cannot yet obtain a Compliance Access Key (the Compliance API is enabled on request and is in beta), configure **only** the SCIM credentials. The connector then syncs and provisions users and groups entirely through SCIM, keyed by their SCIM ids — the connector's original behavior. Note this mode does **not** see console-invited identities or console-created groups; switch to Compliance mode once a key is available for full coverage.
 
 ## Gather Claude Enterprise credentials
 
-Provide **at least one** of a Compliance Access Key (recommended) or SCIM credentials. Configuring both enables Compliance-canonical sync *and* provisioning.
+Provide **at least one** of a Compliance Access Key (recommended) or SCIM credentials. Configuring both enables Compliance-canonical sync *and* provisioning of SCIM-managed groups. A third credential — the **Admin API Key** — is optional and only needed if you also want provisioning of console-created ("direct") group membership; it requires a Compliance Access Key to also be configured.
 
 <Warning>
 The **Primary Owner** of the Claude Enterprise organization must perform these tasks. The Compliance API and SCIM are Enterprise-plan features, and the Compliance API is enabled on request.
@@ -93,7 +115,7 @@ The **Primary Owner** of the Claude Enterprise organization must perform these t
   </Step>
 
   <Step>
-    As the Primary Owner, go to **claude.ai > Organization settings > Data and privacy**, find **Compliance access keys**, and create a key with these scopes:
+    As the Primary Owner, go to **claude.ai > Organization settings > Data and privacy**, find **Compliance access keys**, and create a key with at least these scopes:
 
     - `read:compliance_org_data` (required)
     - `read:compliance_user_data` (required)
@@ -110,6 +132,38 @@ The **Primary Owner** of the Claude Enterprise organization must perform these t
     Copy the **Compliance Access Key** (`sk-ant-api01-…`) and store it securely. Provide it as the `compliance-api-key` field during configuration.
   </Step>
 </Steps>
+
+### Admin API Key (optional — direct-group provisioning)
+
+If you also want provisioning of console-created ("direct") group membership, create a second, separate key with its own scopes.
+
+<Steps>
+  <Step>
+    As the Primary Owner, go to **claude.ai > Organization settings > Data and privacy**, find **Compliance access keys**, and create a second key with these scopes:
+
+    - `read:members` (required)
+    - `write:rbac_groups` (required)
+
+    Create this key for **all linked organizations** — read [Scopes for direct-group provisioning](#scopes-for-direct-group-provisioning) below before you do.
+  </Step>
+
+  <Step>
+    Copy the **Admin API Key** (`sk-ant-api01-…`) and store it securely. Provide it as the `admin-api-key` field during configuration.
+  </Step>
+</Steps>
+
+#### Scopes for direct-group provisioning
+
+| Key | Capability | Scopes | Key must cover |
+| :--- | :--- | :--- | :--- |
+| Compliance Access Key | Read-only sync | `read:compliance_org_data` + `read:compliance_user_data` (+ `read:compliance_activities` for the activity feed) | parent **or** single org |
+| Admin API Key | Direct-group provisioning | `read:members` + `write:rbac_groups` | **all linked organizations** |
+
+- The Admin API Key's scopes require a key created for **all linked organizations**, which only the **parent organization's primary owner** can issue — an organization owner is limited to Compliance scopes on their own org.
+- Upgrading a Compliance Access Key from a single-org key to an all-linked-organizations key **widens what syncs**: new organizations, users, groups, and entitlements appear under management.
+- **Scopes are fixed at key creation** — turning on direct-group provisioning later means issuing a new Admin API Key, not editing an existing key.
+- `write:rbac_groups` is **role-conferring**: Anthropic states that group assignment can grant the permissions attached to the group's roles, so the Admin API Key can confer any custom role attached to any direct group, enterprise-wide. Scope it deliberately.
+- Anthropic also documents a single `read:org_audit` scope as covering the Compliance Access Key's read-only set above. This is a **documented alternative that has not been verified**, and it applies only to that read-only scope set — there is no equivalent documented alternative for the Admin API Key's `read:members` + `write:rbac_groups` scopes.
 
 ### SCIM credentials (provisioning, or the SCIM-only fallback)
 
@@ -137,7 +191,8 @@ Configure these if you want provisioning in Compliance mode, or if you have no C
 To complete this task, you'll need:
 
 - The **Connector Administrator** or **Super Administrator** role in C1
-- At least one of the Claude Enterprise **Compliance Access Key** (recommended) or the **SCIM credentials** generated above (both, if you want Compliance-canonical sync plus provisioning)
+- At least one of the **Compliance Access Key** (recommended) or the **SCIM credentials** generated above (both, if you want Compliance-canonical sync plus provisioning of SCIM-managed groups)
+- Optionally, the separate **Admin API Key** generated above, if you also want provisioning of console-created ("direct") group membership
 </Warning>
 
 <Tabs>
@@ -147,7 +202,7 @@ To complete this task, you'll need:
 
   <Steps>
     <Step>
-      In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
     </Step>
 
     <Step>
@@ -155,21 +210,18 @@ To complete this task, you'll need:
     </Step>
 
     <Step>
-      Choose how to set up the new Claude Enterprise connector:
+      Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-      - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-      - Add the connector to a managed app (select from the list of existing managed apps)
-      - Create a new managed app
+      If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
-
     <Step>
-      Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-
-      If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      Set the connector's **Name** and, optionally, a **Description**.
     </Step>
-
     <Step>
-      Click **Next**.
+      Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+    </Step>
+    <Step>
+      Click **Add**. The connector is created and its configuration page opens.
     </Step>
 
     <Step>
@@ -184,7 +236,8 @@ To complete this task, you'll need:
 
       - **SCIM Token** (optional): Optional SCIM bearer token (claude.ai → Settings → Identity and access). Only needed to enable provisioning of SCIM-managed users and groups.
       - **SCIM URL** (optional): Optional WorkOS SCIM endpoint URL (claude.ai > Settings > Identity and access). Only needed for provisioning; required together with scim-token.
-      - **Compliance Access Key** (optional): Anthropic Compliance Access Key (read:compliance_org_data + read:compliance_user_data). Source of truth when set; otherwise the connector syncs SCIM-only.
+      - **Compliance Access Key** (optional, configured as `compliance-api-key`): Anthropic Compliance Access Key (sk-ant-api01-...), created at claude.ai > Organization settings > API. Covers read-only sync (read:compliance_org_data + read:compliance_user_data) — see README Scopes for details. Source of truth for sync when set; otherwise the connector syncs SCIM-only. Direct-group membership provisioning uses the separate Admin API Key below, not this key.
+      - **Admin API Key** (optional, configured as `admin-api-key`): A second Anthropic API key (sk-ant-api01-...), created the same way as the Compliance Access Key above (claude.ai > Organization settings > API) but scoped only to read:members + write:rbac_groups. Used exclusively for direct-group (console-created group) membership provisioning — see README Scopes for details. Optional, but requires compliance-api-key to also be set.
     </Step>
 
 {/* AUTO-GENERATED:END - config-params */}
@@ -218,7 +271,7 @@ To complete this task, you'll need:
 
   <Steps>
     <Step>
-      In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
     </Step>
 
     <Step>
@@ -226,21 +279,18 @@ To complete this task, you'll need:
     </Step>
 
     <Step>
-      Choose how to set up the new Claude Enterprise connector:
+      Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-      - Add the connector to a currently unmanaged app
-      - Add the connector to a managed app
-      - Create a new managed app
+      If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
-
     <Step>
-      Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-
-      If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      Set the connector's **Name** and, optionally, a **Description**.
     </Step>
-
     <Step>
-      Click **Next**.
+      Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+    </Step>
+    <Step>
+      Click **Add**. The connector is created and its configuration page opens.
     </Step>
 
     <Step>
@@ -275,6 +325,10 @@ To complete this task, you'll need:
     # Provide at least one mode. Compliance Access Key (recommended) — when set,
     # it is the source of truth; otherwise the connector runs SCIM-only.
     BATON_COMPLIANCE_API_KEY: <sk-ant-api01-… Compliance Access Key>
+
+    # Optional, separate key — only needed for direct-group (console-created
+    # group) membership provisioning. Not part of the at-least-one-of above.
+    BATON_ADMIN_API_KEY: <sk-ant-api01-… Admin API Key>
 
     # SCIM credentials — provisioning in Compliance mode, or the SCIM-only fallback
     # (required together). At least one of the key above or this pair must be set.

@@ -1,0 +1,174 @@
+---
+title: "Set up a Confluent Cloud connector"
+og:title: "Set up a Confluent Cloud connector"
+description: "C1 provides identity governance and just-in-time provisioning for Confluent Cloud. Integrate your Confluent Cloud organization with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Confluent Cloud. Integrate your Confluent Cloud organization with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Confluent Cloud"
+---
+
+C1 provides identity governance and just-in-time provisioning for Confluent
+Cloud. Integrate your Confluent Cloud organization with C1 to run user access
+reviews (UARs), enable just-in-time access requests, and automatically provision
+and deprovision access.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Service Accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Organizations|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+|Environments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+|Clusters|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+
+The connector reads one Confluent Cloud organization, the organization the API
+key belongs to. It syncs that organization's users, service accounts,
+environments, and Kafka clusters, along with the RBAC role bindings that grant
+those identities access at the organization, environment, and cluster scopes.
+
+The connector grants and revokes RBAC role bindings for a user across those
+scopes. Provisioning principals are users only.
+
+### Limitations
+
+<Note>
+**Individual Kafka topics are not synced.** Per-topic access requires the
+per-cluster Kafka REST API, which this connector does not use. Cluster-wide
+topic roles that apply across all topics in a cluster are still synced.
+Cluster-scoped and all-topics role bindings only apply when the organization
+already has a Kafka cluster.
+</Note>
+
+- **Role bindings apply only at the scope they name.** A binding at the
+  organization or environment scope appears on that resource alone. Confluent
+  also grants cluster access to the OrganizationAdmin and EnvironmentAdmin
+  roles, so review those organization- and environment-scope grants alongside a
+  cluster's own when you assess who can reach a cluster.
+- **Only user and service account principals are synced.** The connector reads
+  role bindings whose principal is a user or a service account. A binding held by
+  any other principal, including an SSO group mapping or an identity pool, does
+  not appear in C1 — so access held through SSO group membership or a workload
+  identity is not visible here.
+- **API keys are not synced.** Confluent API keys, including those owned by
+  service accounts, are outside the connector's resource model.
+- **Confluent Cloud only.** The connector reads the Confluent Cloud
+  control-plane API. Self-managed Confluent Platform uses a different API and is
+  not supported.
+- **API key authentication only.** The connector authenticates with a Cloud API
+  key. OAuth through Confluent STS is not supported.
+- **No last-login data.** Confluent's user API does not expose a last-login
+  timestamp, so C1 cannot report dormant Confluent accounts.
+- **No account creation.** The connector does not create users, service
+  accounts, or organization invitations.
+
+## Prerequisites
+
+You need a Confluent Cloud Cloud API key (an organization-scoped key) whose
+service account holds the **OrganizationAdmin** role. That role grants the full
+read access and role-binding writes the connector needs across the organization.
+
+## Gather Confluent Cloud credentials
+
+<Steps>
+  <Step>
+    Sign in to the Confluent Cloud console as an administrator.
+  </Step>
+
+  <Step>
+    Confirm the account you will use holds the **OrganizationAdmin** role at the
+    organization level.
+  </Step>
+
+  <Step>
+    Open **Settings** > **API keys** and add a new Cloud API key with
+    organization (global) scope.
+  </Step>
+
+  <Step>
+    Copy and save both the **key ID** and the **secret**. The secret is shown
+    only once at creation time.
+  </Step>
+</Steps>
+
+## Configure the Confluent Cloud connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Confluent Cloud** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Confluent Cloud connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the Confluent Cloud credentials:
+
+        - **Confluent Cloud API key ID**: the key ID you created.
+        - **Confluent Cloud API secret**: the secret paired with the key ID.
+        - **Confluent Cloud API base URL** (optional): the control-plane API
+          root, with no trailing slash. Defaults to `https://api.confluent.cloud`;
+          leave it unless a test harness targets another host.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Confluent Cloud connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the Confluent Cloud connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        Create a secret for the Confluent Cloud API secret.
+      </Step>
+
+      <Step>
+        Configure the connector environment variables:
+
+        - **BATON_CONFLUENT_API_KEY**: the API key ID you created.
+        - **BATON_CONFLUENT_API_SECRET**: the secret paired with the key ID.
+        - **BATON_BASE_URL** (optional): the control-plane API root, with no
+          trailing slash. Defaults to `https://api.confluent.cloud`.
+        - **BATON_PROVISIONING**: set to `true` to enable grant and revoke.
+          Without it the connector syncs read-only, provisioning actions are not
+          enabled, and grant and revoke requests will not succeed.
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your Confluent Cloud connector is now pulling access data into C1.
+  </Tab>
+</Tabs>

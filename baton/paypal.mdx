@@ -1,0 +1,161 @@
+---
+title: "Set up a PayPal connector"
+og:title: "Set up a PayPal connector"
+description: "C1 provides identity governance for PayPal. Integrate your PayPal Business account with C1 for unified visibility and governance over users and roles."
+og:description: "C1 provides identity governance for PayPal. Integrate your PayPal Business account with C1 for unified visibility and governance over users and roles."
+sidebarTitle: "PayPal"
+---
+
+C1 provides identity governance for PayPal. Integrate your PayPal Business
+account with C1 for unified visibility and governance over SCIM users and
+role assignments.
+
+## Capabilities
+
+|Resource|Sync|Provision|
+|-|-|-|
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+|Roles|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+
+The connector reads PayPal Business users from the Identity API v2 SCIM
+endpoints and derives roles from entitlement values on each user. You can
+create and delete SCIM users and grant or revoke role assignments.
+
+<Note>
+Creating a user sends the account's login (or, if none is set, its primary
+email) to PayPal as the SCIM `userName`. PayPal's own docs do not publish a
+character-class restriction for this field, so the connector does not
+reject any value client-side — if PayPal's API rejects the value, that
+error is returned as-is.
+</Note>
+
+## Gather PayPal credentials
+
+<Warning>
+You need a PayPal REST app with client credentials for the Business account
+you want to connect. The app must be authorized for PayPal Identity API v2
+SCIM user management. This authorization is **not** a self-service toggle in
+the PayPal Developer Dashboard's app Features — a standard REST app does not
+have it by default. Contact PayPal directly to request access to Identity
+API v2 SCIM for your app before setting up this connector.
+</Warning>
+
+<Steps>
+  <Step>
+    Sign in to the [PayPal Developer Dashboard](https://developer.paypal.com/)
+    and open the REST app for your Business account (or create one).
+  </Step>
+
+  <Step>
+    Copy the app's **Client ID** and **Client Secret**.
+  </Step>
+
+  <Step>
+    Confirm the app can call the SCIM user management endpoints (`GET`,
+    `POST`, `PATCH`, and `DELETE` on `/v2/scim/Users`). If a request returns
+    `403 NOT_AUTHORIZED`, the app has not been granted Identity API v2 SCIM
+    access yet — contact PayPal to request it.
+  </Step>
+
+  <Step>
+    Note whether you are connecting to **production** or **sandbox**.
+  </Step>
+</Steps>
+
+## Configure the PayPal connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **PayPal** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new PayPal connector.
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Enter the PayPal credentials:
+
+        - **Client ID**: The REST app client ID.
+        - **Client Secret**: The REST app client secret.
+        - **Environment**: `production` or `sandbox`.
+        - **Base URL override** (optional): Leave blank unless PayPal provides a non-standard API host. Do not include `/v2/scim`.
+        - **Token URL**: Enter `https://api-m.paypal.com/v1/oauth2/token` for production, or `https://api-m.sandbox.paypal.com/v1/oauth2/token` for sandbox.
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your PayPal connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to run the PayPal connector in your own
+    environment.
+
+    <Steps>
+      <Step>
+        Create secrets for the PayPal client ID and client secret.
+      </Step>
+
+      <Step>
+        Configure the connector environment variables:
+
+        ```bash
+        BATON_PAYPAL_CLIENT_ID=<PayPal REST app client ID>
+        BATON_PAYPAL_CLIENT_SECRET=<PayPal REST app client secret>
+        BATON_ENVIRONMENT=production
+        BATON_TOKEN_URL=https://api-m.paypal.com/v1/oauth2/token
+        ```
+
+        Optional override:
+
+        ```bash
+        BATON_BASE_URL=https://api-m.paypal.com
+        ```
+      </Step>
+
+      <Step>
+        Deploy the connector using your standard self-hosted connector process.
+      </Step>
+    </Steps>
+
+    **Done.** Your PayPal connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+## Connector configuration reference
+
+|Setting|Environment variable|Required|Description|
+|-|-|-|-|
+|Client ID|`BATON_PAYPAL_CLIENT_ID`|Yes|PayPal REST app client ID for OAuth 2.0 client credentials.|
+|Client Secret|`BATON_PAYPAL_CLIENT_SECRET`|Yes|PayPal REST app client secret. Stored as a secret.|
+|Environment|`BATON_ENVIRONMENT`|Yes|`production` or `sandbox`. Selects the default API base URL.|
+|Base URL override|`BATON_BASE_URL`|No|Advanced override for the PayPal REST API base URL. Leave unset to derive from Environment.|
+|Token URL|`BATON_TOKEN_URL`|Yes|The OAuth token URL. Cannot be derived from Environment automatically; enter the URL matching your chosen Environment.|

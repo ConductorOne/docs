@@ -23,12 +23,103 @@ If you're setting up AWS with C1 for the first time, you're in the right place.
 | Identity Center groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Accounts via Permission Sets | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>\* |
 | Secrets - Access keys | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Organization Root / Organizational Unit (Sparse ACLs)\*\* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Permission Set / Permission Set Assignment (Sparse ACLs)\*\* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>\* |
+| IAM managed policies | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Inline policies | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
 The AWS connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning) of IAM accounts.
 
 \*The connector can provision to accounts via permissions sets only if Identity Center is enabled.
 
+\*\*Sparse ACL resources are opt-in — see [Sparse ACLs: Organizations and permission sets as scoped bindings](#sparse-acls-organizations-and-permission-sets-as-scoped-bindings) below.
+
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
+
+[This connector syncs non-human identities](/product/admin/nhi) and displays them on the **Identities overview** dashboard.
+
+## AWS STS web identity action
+
+The connector exposes the global `assume_role_with_web_identity` action for
+approved, short-lived AWS credential vending. C1 supplies a request-scoped OIDC
+token and age encryption recipient. The connector exchanges the token with AWS
+STS, encrypts the returned credential envelope before it crosses the connector
+boundary, and returns ciphertext plus expiration and assumed-role audit
+metadata.
+
+The action accepts:
+
+- `role_arn`: the target customer IAM role;
+- `web_identity_token`: a short-lived C1-issued OIDC token;
+- `age_recipient`: the request-scoped public encryption recipient;
+- `session_name`: the AWS audit/session name;
+- `duration_seconds`: 900 through 43,200, also limited by the IAM role; and
+- `policy_json`: an optional restrictive inline session policy.
+
+Before enabling the action, create an IAM OIDC provider for the C1 issuer and a
+role trust policy allowing `sts:AssumeRoleWithWebIdentity`. Restrict the trust
+policy to the documented C1 issuer, intended audience, and tenant/requestor
+subject profile. Do not use a wildcard issuer, audience, or subject. The role's
+permissions policy defines the maximum AWS access; the optional session policy
+can only narrow it further.
+
+Synced IAM role profiles include `aws_max_session_duration_seconds`, the
+provider-observed `MaxSessionDuration` ceiling returned by IAM. C1 must combine
+that ceiling with its own access policy when choosing `duration_seconds`. AWS
+does not expose an authoritative role property that says whether a future
+session will be issued directly or through role chaining; C1 must derive that
+topology from its configured issuance mode and apply the corresponding AWS
+limit.
+
+## Sparse ACLs: Organizations and permission sets as scoped bindings
+
+When both **Enable support for AWS Organizations** and **Enable support for AWS IAM Identity Center** are turned on, the connector also models Identity Center permission set assignments as **Sparse ACL** bindings, alongside the existing flat per-account entitlement model. This introduces four resource types:
+
+- **Organization Root** and **Organizational Unit** — the AWS Organizations hierarchy (Root → OU → Account), synced as read-only navigation/review context. Neither carries bindings of its own.
+- **Permission Set** — a role catalog entry for each Identity Center permission set.
+- **Permission Set Assignment** — one binding per (permission set, account) pair that's actually assigned, listing the users and groups granted that permission set on that account. Group grants expand to their members.
+
+Instead of one row per (account, permission set, user) combination, reviewers see "Permission Set X on Account Y" as a single item, with the account's place in the AWS Organizations hierarchy shown for context.
+
+These four resource types are **opt-in** on the C1 platform: even with both checkboxes enabled above, you must separately opt in to each resource type before C1 begins syncing it. Until you opt in, the connector keeps syncing the existing flat account/permission-set entitlement model unchanged.
+
+Syncing the Organization Root / Organizational Unit hierarchy also requires the `organizations:ListRoots` and `organizations:ListOrganizationalUnitsForParent` permissions (see the IAM policy in the Identity Center setup tab below). If these permissions are missing, the connector logs a warning and skips the OU hierarchy rather than failing the sync — accounts continue to sync without OU grouping.
+
+## IAM policies as resources
+
+The connector syncs AWS IAM policies as resources in their own right, alongside the identities they're attached to:
+
+- **IAM managed policies** — both customer-managed and AWS-managed policies. AWS-managed policies (`arn:aws:iam::aws:policy/...`) are global objects shared by every account, so they're synced once rather than per account.
+- **Inline policies** — policies embedded directly in an IAM user, role, or group, and the inline policy attached to an Identity Center permission set.
+
+Each policy resource carries its policy document (the JSON that defines which actions the policy allows or denies) as a resource attribute, so reviewers can see what a policy actually grants instead of only its name.
+
+Syncing policy documents requires the policy read permissions listed in the IAM policies below (`iam:GetPolicy`, `iam:GetPolicyVersion`, and the `iam:Get*Policy` / `iam:List*Policies` actions). If these permissions are missing, the connector logs a warning and syncs the policy resources without their document contents rather than failing the sync — so a policy that appears with no document is usually a missing-permission symptom rather than an empty policy.
+
+## IAM user last login and access key activity
+
+For an IAM user, **Last Login** is the most recent of password-based AWS sign-in (`PasswordLastUsed`) and access-key use. Password sign-in includes the AWS Management Console and can also include other AWS websites, such as AWS Marketplace. The two signals stay separate on the profile so reviewers can tell a console sign-in apart from programmatic key activity.
+
+- `password_last_used` — the password-based AWS sign-in timestamp.
+- `access_key_last_used` — the most recent use across all of the user's access keys.
+
+Populating `access_key_last_used` requires `iam:ListAccessKeys` and `iam:GetAccessKeyLastUsed`; it does not require **Sync secrets**.
+
+When AWS returns neither `PasswordLastUsed` nor any access-key last-used date, C1 leaves **Last Login** unset. A missing password date does not mean the user has no console password; use `console_access_enabled` for that distinction.
+
+Per-key detail lives on the access key itself, on the [Inventory page](/product/admin/inventory):
+
+- **Last used**, together with `last_used_service` and `last_used_region` — what the key was calling and from where. For a key with no tracked use, AWS returns a null date and `"N/A"` placeholders; the connector omits those values.
+- **Status** — Active or Inactive. Inactive keys were already synced; they now carry a disabled status so reviewers can tell them apart from active keys. Inactive keys can be reactivated; reviewers decide whether to delete them.
+
+Two optional settings gate parts of this, and both are off by default:
+
+- **Sync secrets** — without it no access keys are synced, so none of the per-key detail above appears.
+- **Sync IAM User Console Access** (`BATON_SYNC_IAM_USER_CONSOLE_ACCESS`) — without it `console_access_enabled`, `password_reset_required`, and `login_profile_created_at` are not populated. It is off by default because it costs one `iam:GetLoginProfile` call per IAM user and requires `iam:GetLoginProfile` on the connector role. This setting detects an IAM console password; it does not detect access through Identity Center or an assumed role.
+
+IAM user **Last Login** itself does not depend on either setting.
+
+Identity Center user Last Login uses a separate CloudTrail event feed. Enable Organizations support, Identity Center support, and **Sync SSO User Last Login** (`BATON_SYNC_SSO_USER_LAST_LOGIN`), and grant `cloudtrail:LookupEvents` to report Identity Center sign-ins. This setting is also off by default and does not affect IAM user Last Login or access key activity.
 
 ## Gather AWS credentials
 
@@ -64,23 +155,24 @@ AWS [requires the use of External IDs](https://docs.aws.amazon.com/IAM/latest/Us
 
 <Steps>
     <Step>
-    In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+    In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
     </Step>
     <Step>
     Search for **AWS v2** and click **Add**.
     </Step>
     <Step>
-    Choose how to set up the new AWS connector:
-	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-	- Add the connector to a managed app (select from the list of existing managed apps)
-	- Create a new managed app
+    Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
+
+       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
-    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-	If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+    Set the connector's **Name** and, optionally, a **Description**.
     </Step>
     <Step>
-    Click **Next**.
+    Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+    </Step>
+    <Step>
+    Click **Add**. The connector is created and its configuration page opens.
     </Step>
     <Step>
     Find the **Settings** area of the page and click **Edit**.
@@ -169,7 +261,8 @@ Next, you will create an inline policy to define the specific data this role can
             "iam:GetGroup",
             "iam:GetRole",
             "iam:ListAccessKeys",
-            "iam:GetAccessKeyLastUsed"
+            "iam:GetAccessKeyLastUsed",
+            "iam:GetLoginProfile"
           ],
           "Resource": "*"
         },
@@ -189,6 +282,25 @@ Next, you will create an inline policy to define the specific data this role can
             "iam:ListAccountAliases"
           ],
           "Resource": "*"
+        },
+        {
+          "Sid": "SyncIAMPolicyDocuments",
+          "Effect": "Allow",
+          "Action": [
+            "iam:ListPolicies",
+            "iam:GetPolicy",
+            "iam:GetPolicyVersion",
+            "iam:ListUserPolicies",
+            "iam:ListRolePolicies",
+            "iam:ListGroupPolicies",
+            "iam:GetUserPolicy",
+            "iam:GetRolePolicy",
+            "iam:GetGroupPolicy",
+            "iam:ListAttachedUserPolicies",
+            "iam:ListAttachedRolePolicies",
+            "iam:ListAttachedGroupPolicies"
+          ],
+          "Resource": "*"
         }
       ]
     }
@@ -204,11 +316,15 @@ Next, you will create an inline policy to define the specific data this role can
     * iam:GetGroup: Required to see which users belong to which groups. ListGroups only provides the group names, while GetGroup identifies the specific members.
     * iam:GetRole: Allows C1 to retrieve detailed information about specific roles, including their trust relationships.
 
-    **Optional: Security & Audit Insights** Include these permissions if you want C1 to sync access key metadata.
+    **Access key activity** These permissions populate `access_key_last_used` on each IAM user. Enable **Sync secrets** to also sync each key as its own secret resource with status and per-key activity.
 
-    * iam:ListAccessKeys and iam:GetAccessKeyLastUsed: These allow C1 to gather data on the status of your IAM access keys, such as when they were last used. This is useful for identifying unused or stale credentials.
+    * iam:ListAccessKeys and iam:GetAccessKeyLastUsed: These allow C1 to gather access key metadata, including when each key was last used. This is useful for identifying unused or stale credentials.
 
        Note that C1 only retrieves metadata for auditing; it does not store or access the secret access keys themselves.
+
+    **Optional: IAM User Console Access** The JSON above includes this permission. It is used only when **Sync IAM User Console Access** (`BATON_SYNC_IAM_USER_CONSOLE_ACCESS`) is enabled. The flag is off by default because it makes one `iam:GetLoginProfile` call per IAM user.
+
+    * iam:GetLoginProfile: Allows C1 to see whether each IAM user has a console login profile, and whether a password reset is required.
 
     **Optional: AWS Organizations Support** Include these permissions if you enable the "Enable support for AWS Organizations" checkbox in the C1 UI.
 
@@ -218,6 +334,15 @@ Next, you will create an inline policy to define the specific data this role can
     **Optional: Descriptive Account Aliases**
 
     * iam:ListAccountAliases: Include this if you prefer to use human-readable account aliases (for example, "Production-Environment") in the C1 UI instead of 12-digit numeric AWS account IDs.
+
+    **Optional: IAM Policies as Resources** Include these permissions if you want C1 to sync IAM managed policies and inline policies as resources, along with their policy documents. See [IAM policies as resources](#iam-policies-as-resources) above.
+
+    * iam:ListPolicies, iam:GetPolicy, and iam:GetPolicyVersion: Allow C1 to discover managed policies and read the JSON document of each policy's default version.
+    * iam:ListUserPolicies, iam:ListRolePolicies, and iam:ListGroupPolicies: Allow C1 to discover the inline policies embedded in each IAM user, role, and group.
+    * iam:GetUserPolicy, iam:GetRolePolicy, and iam:GetGroupPolicy: Allow C1 to read the JSON document of each inline policy.
+    * iam:ListAttachedUserPolicies, iam:ListAttachedRolePolicies, and iam:ListAttachedGroupPolicies: Allow C1 to see which managed policies are attached to which users, roles, and groups.
+
+       If these permissions are omitted, the connector still syncs successfully — policy resources are either skipped or synced without their document contents.
     </Step>
     <Step>
         Click **Review Policy**.
@@ -244,23 +369,24 @@ AWS [requires the use of External IDs](https://docs.aws.amazon.com/IAM/latest/Us
 
 <Steps>
     <Step>
-    In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+    In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
     </Step>
     <Step>
     Search for **AWS v2** and click **Add**.
     </Step>
     <Step>
-    Choose how to set up the new AWS connector:
-	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren’t yet managed with C1)
-	- Add the connector to a managed app (select from the list of existing managed apps)
-	- Create a new managed app
+    Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
+
+       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
-    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-	If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+    Set the connector's **Name** and, optionally, a **Description**.
     </Step>
     <Step>
-    Click **Next**.
+    Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+    </Step>
+    <Step>
+    Click **Add**. The connector is created and its configuration page opens.
     </Step>
     <Step>
     Find the **Settings** area of the page and click **Edit**.
@@ -335,7 +461,9 @@ The permissions policy below is broken into several sections to align with these
 	    {
 	      "Action": [
 	        "iam:GetGroup",
-	        "iam:GetAccessKeyLastUsed",  
+	        "iam:GetAccessKeyLastUsed",
+	        "iam:GetLoginProfile",
+	        "iam:GetRole",
 	        "iam:ListAccountAliases",
 	        "iam:ListGroups",
 	        "iam:ListRoles",
@@ -344,14 +472,20 @@ The permissions policy below is broken into several sections to align with these
 	        "identitystore:ListGroupMemberships",
 	        "identitystore:ListGroups",
 	        "identitystore:ListUsers",
+	        "organizations:DescribeAccount",
+	        "organizations:DescribeOrganization",
 	        "organizations:ListAccounts",
+	        "organizations:ListParents",
 	        "sso:DescribePermissionSet",
 	        "sso:GetInlinePolicyForPermissionSet",
 	        "sso:ListAccountAssignments",
+	        "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
 	        "sso:ListInstances",
 	        "sso:ListManagedPoliciesInPermissionSet",
 	        "sso:ListPermissionSets",
 	        "sso:ListPermissionSetsProvisionedToAccount",
+	        "organizations:ListRoots",
+	        "organizations:ListOrganizationalUnitsForParent",
 	        "iam:GetUser",
 	        "iam:ListAccessKeys",
 	        "iam:ListSigningCertificates",
@@ -365,6 +499,14 @@ The permissions policy below is broken into several sections to align with these
 	      "Effect": "Allow",
 	      "Resource": "*",
 	      "Sid": "ConductorOneReadAccess"
+	    },
+	    {
+	      "Action": [
+	        "cloudtrail:LookupEvents"
+	      ],
+	      "Effect": "Allow",
+	      "Resource": "*",
+	      "Sid": "SSOUserLastLogin"
 	    },
 	    {
 	      "Action": [
@@ -403,7 +545,6 @@ The permissions policy below is broken into several sections to align with these
 	        "iam:DeleteRole",
 	        "iam:DeleteRolePolicy",
 	        "iam:DetachRolePolicy",
-	        "iam:GetRole",
 	        "iam:ListAttachedRolePolicies",
 	        "iam:ListRolePolicies",
 	        "iam:PutRolePolicy",
@@ -417,8 +558,25 @@ The permissions policy below is broken into several sections to align with these
 	      "Effect": "Allow",
 	      "Action": [
 	        "iam:ListRoles",
-	        "iam:ListPolicies",
-	        "iam:ListAccessKeys"
+	        "iam:ListPolicies"
+	      ],
+	      "Resource": "*"
+	    },
+	    {
+	      "Sid": "SyncIAMPolicyDocuments",
+	      "Effect": "Allow",
+	      "Action": [
+	        "iam:GetPolicy",
+	        "iam:GetPolicyVersion",
+	        "iam:ListUserPolicies",
+	        "iam:ListRolePolicies",
+	        "iam:ListGroupPolicies",
+	        "iam:GetUserPolicy",
+	        "iam:GetRolePolicy",
+	        "iam:GetGroupPolicy",
+	        "iam:ListAttachedUserPolicies",
+	        "iam:ListAttachedRolePolicies",
+	        "iam:ListAttachedGroupPolicies"
 	      ],
 	      "Resource": "*"
 	    },
@@ -444,10 +602,16 @@ The permissions policy below is broken into several sections to align with these
 	**Section 1: Read-only access (“C1ReadAccess”)**
 	This group of permissions is the minimum required for C1 to discover and sync your Identity Center users, groups, and permission sets. These are strictly read-only permissions.
 	- `iam:CreateUser`: This permission is required to provision IAM user accounts.
-	- `iam:List..., iam:GetGroup`: These are standard IAM permissions for listing users, groups, and roles. They are necessary to identify resources within your AWS account. iam:GetGroup provides the members of a group.
+	- `iam:List..., iam:GetGroup`: These are standard IAM permissions for listing and retrieving users, groups, and roles. They are necessary to identify resources within your AWS account. `iam:GetGroup` provides the members of a group.
+	- `iam:GetRole`: **Recommended**, used to read a role's trust policy when syncing grants for that role. If omitted, the connector logs a warning and skips trust-policy grants for that role instead of failing.
 	- `identitystore:List...`: These permissions are specific to AWS IAM Identity Center. They allow C1 to list and read information about your users and groups as they are defined within the Identity Center.
-	- `organizations:ListAccounts`: This permission is required to list all the accounts within your AWS Organization, enabling C1 to understand your account structure.
+	- `organizations:ListAccounts`: This permission allows C1 to list all accounts within your AWS Organization.
+	- `organizations:DescribeOrganization`: Not currently used by the connector; included for parity with the rest of this policy and to reserve it in case it's needed in the future.
+	- `organizations:ListParents`: **Recommended**, only needed to re-parent accounts onto their Organizational Unit for the Sparse ACLs by-inheritance hierarchy. If omitted, accounts sync flat without OU grouping instead of failing.
+	- `organizations:DescribeAccount`: **Recommended**, enables proactive validation of account status before creating assignments. If omitted, the connector proceeds anyway and surfaces a less clear error for suspended accounts.
 	- `sso:List..., sso:Describe..., sso:Get...`: These permissions allow C1 to list your permission sets, see how they are assigned to accounts and users, and read the inline and managed IAM policies attached to each permission set.
+	- `cloudtrail:LookupEvents`: **Optional**, only needed when Organizations support, Identity Center support, and **Sync SSO User Last Login** are all enabled. The JSON above includes it so the connector can read Identity Center sign-in events in that configuration.
+	- `organizations:ListRoots, organizations:ListOrganizationalUnitsForParent`: **Optional**, only needed for the Sparse ACLs Organization Root / Organizational Unit hierarchy (see [Sparse ACLs](#sparse-acls-organizations-and-permission-sets-as-scoped-bindings) above). If omitted, the connector logs a warning and skips the OU hierarchy instead of failing.
 	- `iam:GetUser, and various iam:List... permissions`: These permissions are necessary for C1 to first retrieve all associated credentials and metadata for an IAM user before a complete deletion can be performed.
 	**Section 2: Provisioning access (“C1ProvisionAccess”)**
 	This group of permissions is only required if you want to provision (create or delete) user assignments in AWS, including managing IAM users directly. For example, if you plan to use C1 to add a user to a group, assign a permission set to a user, create an IAM user, or fully delete an IAM user, you will need to include these permissions.
@@ -459,14 +623,15 @@ The permissions policy below is broken into several sections to align with these
 	- `iam:TagUser`: This permission is required to add tags to a newly created IAM user.
 	**Section 3: Access to IAM Identity Center-provisioned roles (“AccessToSSOProvisionedRoles”)**
 	This group of permissions allows C1 to inspect and manage the AWS-managed roles created by IAM Identity Center in your accounts. This is crucial for understanding how permission sets are being applied.
-	- `iam:AttachRolePolicy, iam:DeleteRole, iam:GetRole, etc.`: These are permissions to manage IAM roles. The key detail is the Resource constraint: `arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*`. This ensures that C1 can only interact with roles created and managed by the AWS IAM Identity Center service itself, preventing it from modifying other roles in your account.
+	- `iam:AttachRolePolicy, iam:DeleteRole, etc.`: These are permissions to manage IAM roles. The key detail is the Resource constraint: `arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*`. This ensures that C1 can only modify roles created and managed by the AWS IAM Identity Center service itself, preventing it from modifying other roles in your account. Note that read-only access (`iam:GetRole`) is granted separately in Section 1 for all roles.
 	**Section 4: Other permissions**
 	These are supporting permissions that enable specific features or functionality. Some of the permissions listed here can be omitted if your particular use case doesn’t require the data they pull in to C1.
-	- `IAMListPermissions`: This section allows C1 to sync data on access keys. C1 does not store or access the access keys. If you do not want to sync access key data, you can omit this section.
+	- `IAMListPermissions`: This section adds supplementary IAM role and managed-policy listing in the management account. Access key activity is provided by `iam:ListAccessKeys` and `iam:GetAccessKeyLastUsed` in the `ConductorOneReadAccess` statement above.
 	- `sts:AssumeRole`: **This permission is required when AWS Organizations support is enabled and the connector is doing cross-account IAM sync.** That covers two cases: Organizations on with Identity Center off, and Organizations on with Identity Center on plus the "Also sync cross-account IAM" flag turned on. It lets C1 assume the `OrganizationAccountAccessRole` in your child accounts so it can discover and sync resources across your AWS Organization. It can be omitted if AWS Organizations support is disabled, or if Identity Center is on without the cross-account IAM flag.
 	- `iam:GetSAMLProvider`: This is a necessary permission to read the configuration of the SAML provider that AWS IAM Identity Center uses for single sign-on.
 	- The permissions listed in the `"Sid": "IAMListPermissions"` and `"Sid": "AccessToSSOProvisiondRoles"` sections are required only if you want to use C1 to create assignments in the AWS Organization’s management account. In certain cases, you may also need to add `iam:UpdateSAMLProvider` to these sections.
-	- The `iam:GetAccessKeyLastUsed` permission is only needed if you want C1 to sync access key secret data.
+	- `iam:ListAccessKeys` and `iam:GetAccessKeyLastUsed` let C1 report the most recent access key activity on each IAM user. Enable **Sync secrets** to also sync each key as its own secret resource with per-key activity.
+	- `iam:GetLoginProfile` is only needed when **Sync IAM User Console Access** is enabled. It lets C1 report whether an IAM user has a console password.
     </Step>
     <Step>
     Click **Review Policy**.
@@ -514,10 +679,13 @@ The permissions policy below is broken into several sections to align with these
     **Optional.** Click to **Enable support for AWS IAM Identity Center** and select the region for AWS IAM Identity Center from the dropdown.
     </Step>
     <Step>
-    **Optional.** To enable C1 to sync the statuses of Identity Center accounts, click to **Enable usage of the AWS IAM Identity Center SCIM API** and enter the SCIM endpoint and access token in the relevant fields.
+    **Optional.** Enable **Sync secrets** to display them on the [Inventory page](/product/admin/inventory).
     </Step>
     <Step>
-    **Optional.** Enable **Sync secrets** to display them on the [Inventory page](/product/admin/inventory).
+    **Optional.** Enable **Sync IAM User Console Access** to report whether each IAM user has a console password. The connector role must include `iam:GetLoginProfile`.
+    </Step>
+    <Step>
+    **Optional.** If both Organizations support and Identity Center support are enabled, enable **Sync SSO User Last Login** to report Identity Center sign-ins. The connector role must include `cloudtrail:LookupEvents`.
     </Step>
     <Step>
     Click **Save**.
@@ -544,24 +712,24 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
     <Step>
-    In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+    In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
     </Step>
     <Step>
     Search for **Baton** and click **Add**.
     </Step>
     <Step>
-    Choose how to set up the new AWS connector:
+    Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-	- Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-	- Add the connector to a managed app (select from the list of existing managed apps)
-	- Create a new managed app
+       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
-    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-	If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+    Set the connector's **Name** and, optionally, a **Description**.
     </Step>
     <Step>
-    Click **Next**.
+    Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+    </Step>
+    <Step>
+    Click **Add**. The connector is created and its configuration page opens.
     </Step>
     <Step>
     In the **Settings** area of the page, click **Edit**.
@@ -604,16 +772,22 @@ stringData:
   BATON_GLOBAL_AWS_SSO_ENABLED: true
   BATON_GLOBAL_AWS_SSO_REGION: <Region for SSO identities (default is "us-east-1")>
 
+  # Optional: Sync access keys as secret resources on the Inventory page
+  BATON_SYNC_SECRETS: true
+
+  # Optional: Report whether IAM users have a console password
+  # Requires iam:GetLoginProfile
+  BATON_SYNC_IAM_USER_CONSOLE_ACCESS: true
+
+  # Optional: Report Identity Center user Last Login from CloudTrail
+  # Requires Organizations and Identity Center support plus cloudtrail:LookupEvents
+  BATON_SYNC_SSO_USER_LAST_LOGIN: true
+
   # Optional: Choose which AWS user type C1 should create when provisioning accounts.
   # "iam_user" (default) creates IAM users. "sso_user" creates AWS Identity Center
   # (SSO) users via the Identity Store API. Only one path is active at a time per
   # connector instance, so a single instance cannot provision both IAM and SSO users.
   BATON_CREATE_ACCOUNT_RESOURCE_TYPE: sso_user
-
-  # Optional: Include to enable C1 to sync the statuses of Identity Center accounts
-  BATON_SCIM_ENABLED: true
-  BATON_SCIM_ENDPOINT: <SCIM endpoint>
-  BATON_SCIM_TOKEN: <SCIM access token>
 ```
 
 If support for AWS Organizations is enabled, the IAM Role must be created in the management (formerly called master) account of the AWS Organization. If the IAM Role is created on a member account and support for AWS Organizations is enabled, the integration will return a 400 error.
@@ -677,10 +851,7 @@ spec:
 
 <Steps>
     <Step>
-    Log into [C1](https://accounts.conductor.one/accounts).
-    </Step>
-    <Step>
-    Click **Connectors** > **AWS Connector**.
+    In C1, click **Connectors** > **AWS Connector**.
     </Step>
     <Step>
     Copy and save the **External ID** populated in the **External ID** field. We'll use this in Step 2.
@@ -723,6 +894,9 @@ resource "aws_iam_role" "ConductorOneIntegration" {
         {
           "Action" : [
             "iam:GetGroup",
+            "iam:GetAccessKeyLastUsed",
+            "iam:GetLoginProfile",
+            "iam:GetRole",
             "iam:ListAccountAliases",
             "iam:ListGroups",
             "iam:ListRoles",
@@ -731,14 +905,29 @@ resource "aws_iam_role" "ConductorOneIntegration" {
             "identitystore:GetGroupMembershipId",
             "identitystore:ListGroups",
             "identitystore:ListUsers",
+            "organizations:DescribeAccount",
+            "organizations:DescribeOrganization",
             "organizations:ListAccounts",
+            "organizations:ListOrganizationalUnitsForParent",
+            "organizations:ListParents",
+            "organizations:ListRoots",
             "sso:DescribePermissionSet",
             "sso:GetInlinePolicyForPermissionSet",
             "sso:ListAccountAssignments",
+            "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
             "sso:ListInstances",
             "sso:ListManagedPoliciesInPermissionSet",
             "sso:ListPermissionSets",
-            "sso:ListPermissionSetsProvisionedToAccount"
+            "sso:ListPermissionSetsProvisionedToAccount",
+            "iam:GetUser",
+            "iam:ListAccessKeys",
+            "iam:ListSigningCertificates",
+            "iam:ListSSHPublicKeys",
+            "iam:ListServiceSpecificCredentials",
+            "iam:ListMFADevices",
+            "iam:ListUserPolicies",
+            "iam:ListAttachedUserPolicies",
+            "iam:ListGroupsForUser"
           ],
           "Effect" : "Allow",
           "Resource" : "*",
@@ -746,8 +935,17 @@ resource "aws_iam_role" "ConductorOneIntegration" {
         },
         {
           "Action" : [
+            "cloudtrail:LookupEvents"
+          ],
+          "Effect" : "Allow",
+          "Resource" : "*",
+          "Sid" : "SSOUserLastLogin"
+        },
+        {
+          "Action" : [
             "iam:AddUserToGroup",
             "iam:RemoveUserFromGroup",
+            "iam:CreateUser",
             "sso:CreateAccountAssignment",
             "sso:DeleteAccountAssignment",
             "identitystore:CreateGroupMembership",
@@ -755,7 +953,17 @@ resource "aws_iam_role" "ConductorOneIntegration" {
             "identitystore:CreateUser",
             "identitystore:DeleteUser",
             "sso:DescribeAccountAssignmentCreationStatus",
-            "sso:DescribeAccountAssignmentDeletionStatus"
+            "sso:DescribeAccountAssignmentDeletionStatus",
+            "iam:DeleteLoginProfile",
+            "iam:DeleteAccessKey",
+            "iam:DeleteSigningCertificate",
+            "iam:DeleteSSHPublicKey",
+            "iam:DeleteServiceSpecificCredential",
+            "iam:DeactivateMFADevice",
+            "iam:DeleteUserPolicy",
+            "iam:DetachUserPolicy",
+            "iam:DeleteUser",
+            "iam:TagUser"
           ],
           "Effect" : "Allow",
           "Resource" : "*",
@@ -770,7 +978,6 @@ resource "aws_iam_role" "ConductorOneIntegration" {
             "iam:DeleteRole",
             "iam:DeleteRolePolicy",
             "iam:DetachRolePolicy",
-            "iam:GetRole",
             "iam:ListAttachedRolePolicies",
             "iam:ListRolePolicies",
             "iam:PutRolePolicy",
@@ -785,6 +992,27 @@ resource "aws_iam_role" "ConductorOneIntegration" {
           "Action" : [
             "iam:ListRoles",
             "iam:ListPolicies"
+          ],
+          "Resource" : "*"
+        },
+        # Required to sync IAM managed policies and inline policies as resources,
+        # including their policy documents. Omit to sync policy resources without
+        # their document contents.
+        {
+          "Sid" : "SyncIAMPolicyDocuments",
+          "Effect" : "Allow",
+          "Action" : [
+            "iam:GetPolicy",
+            "iam:GetPolicyVersion",
+            "iam:ListUserPolicies",
+            "iam:ListRolePolicies",
+            "iam:ListGroupPolicies",
+            "iam:GetUserPolicy",
+            "iam:GetRolePolicy",
+            "iam:GetGroupPolicy",
+            "iam:ListAttachedUserPolicies",
+            "iam:ListAttachedRolePolicies",
+            "iam:ListAttachedGroupPolicies"
           ],
           "Resource" : "*"
         },
@@ -809,6 +1037,8 @@ resource "aws_iam_role" "ConductorOneIntegration" {
   }
 }
 ```
+
+After applying the Terraform configuration, enable **Sync secrets** and **Sync IAM User Console Access** in the connector settings if you want their optional data. Enable **Sync SSO User Last Login** only when both Organizations support and Identity Center support are enabled.
 </Tab>
 </Tabs>
 

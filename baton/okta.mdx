@@ -10,16 +10,31 @@ sidebarTitle: "Okta"
 **This is an updated and improved version of the Okta connector!** If you're setting up Okta with C1 for the first time, you're in the right place.
 </Tip>
 
+<Note>
+This page covers the Okta **connector**, which syncs and provisions access data for identity governance. It does not control how you sign in to C1. To set up signing in to C1 with your Okta account, see [Authenticate with Okta](/product/how-to/qs-set-up-c1#authenticate-with-okta).
+</Note>
+
 ## Capabilities
 
 | Resource | Sync | Provision | Delete |
 | :--- | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Applications | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Standard and custom admin roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |  |
+| Resource sets | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Resource set bindings | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Secrets - API tokens | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |  |
+| Devices | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |  |
+
+<Note>
+**Devices is opt-in.** This resource type is off by default. Enable it by selecting the **Device** resource type in the connector's sync configuration. Devices are synced read-only; the connector does not manage device-to-user assignments.
+</Note>
+
+<Note>
+**Resource sets and resource set bindings require Sync Custom Roles.** These two resource types model Okta's custom-role machinery: a resource set is the collection of Okta objects a custom role applies to, and a binding pairs a resource set with a custom role. Granting a binding assigns a user or group to that custom role over that resource set. Both are synced and provisioned only when **Sync Custom Roles** is enabled.
+</Note>
 
 <Note>
 The standard roles **Workflows Administrator**, **Access Certifications Administrator**, and **Access Requests Administrator** appear as Custom Roles in C1. Enable **Sync Custom Roles** to see them. The Okta API returns these roles through the same endpoint as custom roles.
@@ -37,24 +52,117 @@ The connector surfaces whatever value Okta returns, so any future group types Ok
 Use this attribute in policies and access profiles to verify that bindings and grants reference the intended kind of group, especially when an Okta-native group and an app push group share the same name.
 </Note>
 
+<Note>
+**Continuous sync via event feed.** In addition to scheduled full syncs, the Okta connector polls Okta's system log for near-real-time changes and applies them between syncs ([continuous sync](/baton/faq#syncing)). This works with either authentication method. Event feed coverage varies by resource type:
+
+| Resource | Events captured |
+| :--- | :--- |
+| Accounts | Lifecycle changes: create, activate, deactivate, suspend, unsuspend, reactivate, profile updates |
+| Groups | Membership changes: group creation, user membership add/remove |
+| Applications | Lifecycle and membership changes: create, update, activate, user membership add/remove |
+| Roles | Membership changes: role grant/revoke via privilege events |
+</Note>
+
+<Note>
+**Skip app groups changes how app access is attributed.** When a group is assigned to an app, C1 records that group as the source of each member's access. Skipping `APP_GROUP` groups means they are never synced, so access conferred by one has no group to point at. Rather than dropping that access, the connector reports it as a direct assignment on the app.
+
+Two things this does *not* do:
+
+- **It does not flatten all group-based access on the app.** An `OKTA_GROUP` assigned to the same app still expands to its members normally, and those grants still name the group as the source.
+- **It applies per app, not per group.** On an app assigned both an `APP_GROUP` and an `OKTA_GROUP`, members of the `OKTA_GROUP` keep their group-sourced access *and* gain an additional direct assignment they would not have otherwise.
+
+On such an app, the direct assignments produced this way are marked immutable, because removing that access means changing group membership rather than the app assignment. Members who came only from a skipped `APP_GROUP` have no source recorded at all.
+</Note>
+
 The Okta connector supports [automatic account provisioning](/product/admin/account-provisioning).
 
-This connector does not support account deprovisioning. You must deprovision accounts directly in Okta.
+The Okta connector supports account deprovisioning through C1 resource deletion. It first deactivates the user to the `DEPROVISIONED` state and then permanently deletes the user. The same operations are available separately through the `deactivate_user` and `delete_user` connector actions. These operations require an API token or OAuth app with `okta.users.manage` scope.
+
+#### Account creation profile fields
+
+When you configure account provisioning for Okta, C1 shows the following optional fields on the account creation form (in addition to first name, last name, email, and login):
+
+| Field | Values | Default | What it does |
+| :--- | :--- | :--- | :--- |
+| **Password Change Required on Login** | `True` / `False` | Off | When creating an account with a random password, requires the user to change that password on first login. |
+| **Create Inactive** | `True` / `False` | Off | Creates the user in Okta as staged (inactive) without activating them. |
+| **Send Activation Email** | `True` / `False` | `True` | When set to `False`, activates the user without sending Okta's activation email. Use this when C1 (or another system) owns user communication. |
+| **Provider Type** | `OKTA` / `FEDERATION` | Okta's default (local) provider | Set to `FEDERATION` to create a federated user with no local Okta password. Common in hub-and-spoke / Org2Org designs where the hub IdP owns credentials. |
+| **Additional Attributes** | Map of Okta profile keys | — | Extra Okta profile attributes (standard or custom schema) to set on the user. |
+
+<Note>
+**Provider Type** `FEDERATION` cannot be combined with a random-password credential option (federated users have no Okta password). **Send Activation Email** `False` cannot be combined with **Password Change Required on Login** `True` when creating with a random password (that combination cannot set Okta's change-password-on-login flag). With a no-password credential option, Password Change Required on Login has no effect and does not conflict. If **Create Inactive** is `True`, the connector leaves the user staged and does not run the activation step — Create Inactive takes precedence over Send Activation Email.
+</Note>
+
+<Note>
+**Okta Staged status (sign-in to Okta, not C1).** In Okta, **Staged** means the account was created but not activated yet, so the user cannot sign in to Okta. That is an Okta lifecycle state — it is not about signing in to ConductorOne. Staged users sync as **disabled** in C1 so sync matches the lifecycle actions: `disable_user` is a no-op on staged accounts, and `enable_user` activates them (`/lifecycle/activate` without sending another activation email). After activation the account becomes **Active** or **Provisioned** (Provisioned only means they have not completed first login yet).
+
+Default **Create Account** does not leave users staged: the connector activates them or sends Okta's activation email. Users stay staged only when **Create Inactive** is `True`, an Okta admin created them without activating, or an incomplete create left them there. The raw Okta status string stays on the resource details, so Staged remains distinguishable from Suspended or Deprovisioned. After you upgrade a connector that previously reported staged users as enabled, the next sync flips those resources to disabled — review any automations that key off user enabled/disabled status.
+</Note>
+
+<Note>
+**Recovering an account left staged by an interrupted create.** With **Send Activation Email** set to `False`, account creation spans several calls, so a failure partway through can leave the Okta user created but not activated.
+
+Retrying the same create does not finish the job. Okta rejects the duplicate login, the connector returns the account it found, and the user stays **Staged** — a staged account left behind this way is indistinguishable from one created deliberately with **Create Inactive**.
+
+Run the `enable_user` action against the account to finish activating it.
+</Note>
+
+<Note>
+**A deprovisioned login cannot be reused by Create Account.** If the login you are creating already belongs to a **Deprovisioned** (deactivated) Okta account, the create fails with an error instead of returning that account. The connector cannot reactivate a deprovisioned user, so returning it would hand back an account that can never be used. Reactivate the user directly in Okta, or delete and recreate the account, to reuse the login.
+</Note>
+
+<Note>
+**Password Change Required on Login**, **Create Inactive**, and **Send Activation Email** are all string fields with a `True` / `False` placeholder (same schema shape). Map them as the strings `"true"` / `"false"` (case-insensitive). The connector also accepts a real boolean at runtime, but provisioning mappings that treat these three fields the same way are the supported pattern. **Additional Attributes** must return a map. Account creation fails with an error when a mapped value has the wrong type, so the account is never created without the values you asked for. Leaving a field unmapped uses its default.
+</Note>
 
 Syncing standard and custom admin roles requires a super admin token. 
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page. 
 
+[This connector syncs non-human identities](/product/admin/nhi) and displays them on the **Identities overview** dashboard.
+
 ### Connector actions
 
-Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. The Okta connector's actions are reached from **two different automation steps**, and which step offers an action is determined by the action itself — you cannot choose:
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) | `deactivate_user`, `delete_user`, `update_profile`, `create`, `modify_group` | Varies by action. The three user actions use a resource selector on the **User** resource type. `modify_group` takes the Okta group ID as a plain text field, and `create` has no target at all. |
+| Account lifecycle action | `enable_user`, `disable_user` | The step's own **Target account** selector — either the account in context or a specific account. |
+
+In the Perform connector action step, actions are listed under their resource type and display name rather than their raw action name: `deactivate_user`, `delete_user`, and `update_profile` appear as **`user - Deactivate User`**, **`user - Delete User`**, and **`user - Update User Profile`**, and `modify_group` as **`group - Modify Group`**. An action with no display name registered falls back to its raw name, so `create` appears as **`group - create`**.
+
+`enable_user`, `disable_user` and `update_user` take `user_id` as a plain string, and `modify_group` takes `group_id` the same way. Pass the raw Okta ID (for example `00u1abc2def3GHI4jk5`), not the C1 resource ID — the connector sends the value to Okta unchanged, and a C1 resource ID returns a not-found error. `deactivate_user`, `delete_user`, and `update_profile` take a resource selector instead, so the Okta ID is resolved for you.
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
-| enable_user | `user_id` (string, required) | Unsuspends a suspended Okta user account |
-| disable_user     | `user_id` (string, required) | Suspends an active Okta user account |
+| enable_user | `user_id` (string, required) | Enables an Okta user account: unsuspends a suspended account, and activates a staged one without sending an activation email. Returns success without calling Okta when the account is already enabled. Does **not** reactivate a deactivated (`DEPROVISIONED`) account — that returns an error. Okta's activate API can do that transition, but this action treats reactivation of a deactivated user as a separate decision from enable. |
+| disable_user | `user_id` (string, required) | Suspends an Okta user account. Returns success without calling Okta when the account is already suspended, deactivated, or still staged. |
+| deactivate_user | `user_id` (Okta user resource, required) | Destructively deprovisions the selected user from assigned applications and leaves the Okta user record in `DEPROVISIONED`. A user already in that state succeeds without another mutation. |
+| delete_user | `user_id` (Okta user resource, required) | Ensures the selected user is deactivated, then permanently deletes the user. A user that is already absent succeeds so workflow retries are safe. |
+| update_profile | `user_id` (resource ID, required), 18 optional profile fields (`login`, `email`, `secondEmail`, `firstName`, `lastName`, `middleName`, `displayName`, `title`, `department`, `division`, `organization`, `employeeNumber`, `costCenter`, `userType`, `primaryPhone`, `mobilePhone`, `countryCode`, `managerId`), `additionalAttributes` (map) | Updates an existing Okta user's profile attributes. At least one profile field must be provided. |
+| update_user | `user_id` (string, required), `user_profile` (JSON object, required) | Updates a user's profile from a JSON object of Okta profile attributes — accepts any attribute, not limited to update_profile's curated list. This is the action C1's automated profile-push pipeline uses. |
 | create | `name` (string, required), `description` (string), `userMembers` (resource ID list) | Creates a new Okta group with optional initial members |
 | modify_group | `group_id` (string, required), `name` (string), `description` (string) | Updates the name and/or description of an existing Okta group. Returns success without calling the Okta API if the supplied values already match the group's current name and description (idempotent). |
+
+<Warning>
+`deactivate_user`, `delete_user`, and C1 account deprovisioning are destructive. Deactivation removes the user's assigned-app provisioning and can destroy downstream data such as email or files. Deletion permanently removes the Okta user and cannot be recovered. Use workflow approval gates where appropriate.
+</Warning>
+
+<Note>
+`disable_user` is not an alias for deactivation: it suspends sign-in while retaining group and application assignments, and `enable_user` can reverse it. Use `deactivate_user` only when the workflow intends Okta deprovisioning, and `delete_user` only when it intends permanent removal.
+</Note>
+
+<Note>
+`deactivate_user` is **not** available from the Account lifecycle action step — that step offers only `enable_user` and `disable_user`. An existing offboarding automation built on Account lifecycle action therefore reaches Okta *suspend*, not deprovision. To deprovision from a workflow, add a **Perform connector action** step and select `user - Deactivate User`.
+</Note>
+
+<Note>
+**`enable_user` does not clear a credential problem.** Okta treats **Recovery**, **Password expired**, and **Locked out** as enabled statuses — the account exists and is not suspended, it just cannot complete a sign-in. `enable_user` reports those accounts as already enabled and makes no call to Okta, so it neither unlocks the account nor resets the password.
+
+Clear these in Okta, or with a password-reset or unlock flow. `enable_user` covers only the two transitions it names: unsuspending a **Suspended** account and activating a **Staged** one.
+</Note>
 
 <Note>
 Group deletion is available via the CLI using the `--delete-resource` flag. To delete a group, run:
@@ -238,9 +346,17 @@ On the app's **General** tab, note the **Client ID**.
 </Step>
 <Step>
 In the **Client Credentials** section, select **Public key / Private key** as the client authentication method.
+
+<Note>
+**Leave the DPoP setting at its default.** The connector supports Demonstrating Proof of Possession (DPoP), so you do not need to change the **Proof of Possession** option — whether **"Require Demonstrating Proof of Possession (DPoP) header in token requests"** is checked (Okta's default for new API Services apps) or unchecked, the connector authenticates successfully. If you disabled DPoP for an existing app on the advice of an earlier version of this page, you can safely re-enable it.
+</Note>
 </Step>
 <Step>
 Click **Add Key**, then either generate a new key pair or paste your own public key. Save the private key securely — you'll need it when configuring the connector.
+
+<Note>
+After clicking **Add Key**, click **Done** in the key dialog **and then click Save** in the outer Client Credentials panel. Okta's UI requires both clicks; missing the outer Save silently discards the key and the connector will fail with `"The client does not have a JWKSet configured, but the client_assertion requires one"`.
+</Note>
 </Step>
 <Step>
 Note the **Key ID** shown for your key.
@@ -251,14 +367,56 @@ Navigate to the **Okta API Scopes** tab and grant the scopes required for your u
    - `okta.users.read` and `okta.groups.read` (required for sync)
    - `okta.roles.read` and `okta.apps.read` (required for sync)
    - `okta.users.manage`, `okta.groups.manage`, `okta.roles.manage`, `okta.apps.manage` (required for provisioning)
-   - `okta.apiTokens.read` (required when **Sync secrets** is enabled)
+   - `okta.logs.read` (required for the event feed)
+   - `okta.apiTokens.read` (required when **Sync secrets** is enabled or the **API Token** resource type is enabled)
+   - `okta.devices.read` (required when the **Device** resource type is enabled)
+
+<Note>
+After clicking **Grant** for each scope, refresh the page and visually verify that all granted scopes appear under "Granted scopes." Okta's API Services app config can silently discard incomplete saves. If scopes are missing, the connector will fail with `"You are not allowed any of the requested scopes"`.
+</Note>
 </Step>
 <Step>
 Navigate to the **Admin Roles** tab and assign an appropriate admin role to the app (e.g., **Super Administrator** or a custom role with the permissions you need).
+
+<Note>
+**This step is required, and skipping it does not always produce an error.** Granting OAuth scopes is not sufficient on its own — the scopes are present in the token, but Okta still evaluates the app's admin role when serving each request.
+
+Without an admin role assignment, and even when all OAuth scopes are granted correctly:
+
+- Most endpoints fail with `"You do not have permission to perform the requested action"` (HTTP 403). Device sync fails this way.
+- **User sync instead returns an empty list with HTTP 200.** The sync completes successfully and reports no error, but the connector finds zero accounts.
+
+If a sync finishes cleanly with no accounts, check the app's **Admin Roles** tab before looking anywhere else.
+</Note>
 </Step>
 </Steps>
 
 You'll need the **Client ID**, **Private Key**, and **Private Key ID** when configuring the connector.
+
+<Note>
+**Private key format.** The **Okta Private Key** field in the C1 connector form holds a single line. Pasting a multi-line PEM into it replaces the line breaks with spaces, and the connector rejects the result with `oktaauth: parse private key: no PEM block found`.
+
+Enter the key on one line, writing each line break as a literal `\n`:
+
+```
+-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\n-----END PRIVATE KEY-----
+```
+
+Convert a PEM file to that form with:
+
+```bash
+awk 'BEGIN{ORS="\\n"} {print}' key.pem | sed 's/\\n$//'
+```
+
+Running the connector self-hosted, pass the key unchanged: `BATON_OKTA_PRIVATE_KEY` and `--okta-private-key` accept the multi-line PEM as it is. The single-line form is a property of the connector form, not of the connector.
+
+Either PEM encoding works, and converting between them is not necessary:
+
+- **PKCS#1** — header line `-----BEGIN RSA PRIVATE KEY-----`
+- **PKCS#8** — header line `-----BEGIN PRIVATE KEY-----` (what OpenSSL 3.0+ produces by default)
+
+The key must be RSA. Okta's DPoP implementation does not accept elliptic-curve keys, and the connector rejects an EC key with `"Okta DPoP requires RSA"`.
+</Note>
 
 ## Configure the Okta connector
 
@@ -275,27 +433,24 @@ To complete this task, you'll need:
 
 <Steps>
 <Step>
-In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
 </Step>
 <Step>
 Search for **Okta v2** and click **Add**.
 </Step>
 <Step>
-Choose how to set up the new Okta connector:
+Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-
-   - Add the connector to a managed app (select from the list of existing managed apps)
-
-   - Create a new managed app
+   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-
-   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+Set the connector's **Name** and, optionally, a **Description**.
 </Step>
 <Step>
-Click **Next**.
+Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+</Step>
+<Step>
+Click **Add**. The connector is created and its configuration page opens.
 </Step>
 <Step>
 Find the **Settings** area of the page and click **Edit**.
@@ -304,13 +459,13 @@ Find the **Settings** area of the page and click **Edit**.
 Select your authentication method: **API Token** or **OAuth 2.0 Private Key**.
 </Step>
 <Step>
-Enter your Okta domain (the URL of your Okta instance is `<YOUR DOMAIN>.okta.com`) into the **Okta domain** field.
+Enter your Okta domain hostname, e.g. `<YOUR DOMAIN>.okta.com`, into the **Okta domain** field. The `https://` prefix is optional.
 </Step>
 <Step>
 Enter your credentials:
 
    - For **API Token**: paste your API token into the **API token** field.
-   - For **OAuth 2.0 Private Key**: enter your **Okta Client ID**, **Okta Private Key ID**, and paste the **Okta Private Key** (PEM-encoded).
+   - For **OAuth 2.0 Private Key**: enter your **Okta Client ID** and **Okta Private Key ID**, then enter your RSA private key into **Okta Private Key** on a single line, with each line break written as `\n`. See **Private key format** above.
 </Step>
 <Step>
 **Optional.** If desired, click the checkbox to **Sync custom roles**.
@@ -320,12 +475,16 @@ Enter your credentials:
 </Step>
 <Step>
 **Optional.** If desired, click the checkbox to **Skip app groups** to exclude Okta push groups (APP\_GROUP type) from sync. This is useful when push groups created by SCIM-integrated apps are not needed for access management workflows.
+
+<Note>
+This setting also changes how app access from those groups is attributed. Access conferred by a skipped group is reported as a direct assignment on the app, since the group is no longer synced to point at. Groups of other types assigned to the same app still expand to their members normally. See **Capabilities** above for the full behavior.
+</Note>
 </Step>
 <Step>
-**Optional.** If desired, click the checkbox to **Sync inactive apps** to include inactive (disabled) Okta applications in sync. By default, only active applications are synced.
+**Optional.** Inactive (disabled) Okta applications are synced by default. Clear the **Sync inactive apps** checkbox to exclude them.
 </Step>
 <Step>
-**Optional.** Enable **Sync secrets** to display them on the [Inventory page](/product/admin/inventory).
+**Optional.** Enable the **API Token** resource type in the connector's sync configuration to display Okta API tokens on the [Inventory page](/product/admin/inventory).
 </Step>
 <Step>
 **Optional.** Enter a list of user email domains that will be included in the connector's sync. If you do not specify any domains here, the connector will sync all available accounts regardless of email domain.
@@ -356,27 +515,24 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
 <Step>
-In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
 </Step>
 <Step>
-Choose how to set up the new Okta connector:
+Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
-
-   - Add the connector to a managed app (select from the list of existing managed apps)
-
-   - Create a new managed app
+   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
-Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
-
-   If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+Set the connector's **Name** and, optionally, a **Description**.
 </Step>
 <Step>
-Click **Next**.
+Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+</Step>
+<Step>
+Click **Add**. The connector is created and its configuration page opens.
 </Step>
 <Step>
 In the **Settings** area of the page, click **Edit**.
@@ -411,13 +567,14 @@ stringData:
   BATON_DOMAIN: <Your Okta domain>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 
   # Optional: exclude Okta push groups (APP_GROUP type) from sync
-  # BATON_SKIP_APP_GROUPS: true
+  # BATON_SKIP_APP_GROUPS: "true"
 
-  # Optional: include inactive (disabled) Okta applications in sync
-  # BATON_SYNC_INACTIVE_APPS: true
+  # Optional: inactive (disabled) Okta applications are synced by default.
+  # Set this to false to exclude them.
+  # BATON_SYNC_INACTIVE_APPS: "false"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -440,7 +597,7 @@ spec:
     metadata:
       labels:
         app: baton-okta
-        baton: true
+        baton: "true"
         baton-app: okta
     spec:
       containers:
@@ -473,7 +630,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 ### What's next?
 
 If Okta is your company's identity provider (meaning that it is used to SSO into other software), the connector sync will automatically create applications in C1 for all of your SCIMed software. Before you move on, review the [Create applications](/product/admin/applications) page for important information about how to set up connectors for the SCIMed apps.
-
-
-
-

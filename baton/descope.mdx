@@ -15,7 +15,7 @@ and revoke role assignments and tenant memberships.
 | Resource | Descope object | Notes |
 |---|---|---|
 | `user` | User | From `/v2/mgmt/user/search`. Stable id is the Descope `userId`. |
-| `tenant` | Tenant | From `/v1/mgmt/tenant/all`. Has a `member` entitlement granted to users. |
+| `tenant` | Tenant | From `/v1/mgmt/tenant/search`. Has a `member` entitlement granted to users. |
 | `role` | Role | From `/v1/mgmt/role/all`. Both project-level and tenant-scoped roles. Has an `assigned` entitlement granted to users. |
 | `permission` | Permission | From `/v1/mgmt/permission/all`. Has a `granted` entitlement showing which roles confer the permission (read-only). |
 
@@ -26,11 +26,26 @@ and revoke role assignments and tenant memberships.
    starts with `P`).
 3. Create a **Management Key** under **Company → Management Keys**, scoped to
    the project you want to connect. Copy it — Descope shows it only once.
-4. In ConductorOne, add the Descope integration and provide:
+4. In ConductorOne, add the **Descope** integration and provide:
    - **Project ID** — the `P…` value above.
    - **Management Key** — the key you just created.
    - **Base URL** — use `https://api.descope.com` unless you are on a
      non-default Descope deployment.
+   - **Tenant IDs** — optional. Leave empty to sync every tenant in the
+     project. When set, only these tenants are synced: their tenant resources,
+     their memberships, the assignments of roles scoped to them, and the
+     tenant-scoped roles themselves. Project-level roles and every user still
+     sync — the role catalogue is read in one project-wide call and the user
+     directory is not filtered.
+     The connector checks on every sync that each ID here is a tenant in the
+     project. A configured ID the search does not return **fails that whole
+     sync** — users, roles and permissions included, not just that tenant —
+     naming the ID, so a tenant that was deleted in Descope stops syncing
+     until its ID is removed from this field. An ID that does
+     not exist, or that carries whitespace from a comma-separated value, would
+     otherwise drop that tenant's resources and membership grants from every
+     sync without an error — the listing simply returns fewer tenants. Find the
+     IDs in the Descope console under **Tenants** (they start with `T`).
 
 The connector authenticates with a bearer token of the form
 `ProjectID:ManagementKey`.
@@ -47,14 +62,56 @@ the project admin role covers all of these.
 - Paginates `/v2/mgmt/user/search` via the request-body `offset`/`limit`
   fields (page size 100), terminating on the response `total`.
 - Lists tenants, roles, and permissions in single unpaginated calls.
-- Resolves role and permission grants from the inline `roleNames`,
-  `userTenants[].roleNames`, and `permissionNames` fields on the synced
-  records (cached once per sync).
+- Lists tenants through `POST /v1/mgmt/tenant/search`. With **Tenant IDs**
+  unset the request carries an empty payload, which Descope documents as
+  returning every tenant. With the field set the request filters by
+  `tenantIds`, so the response — and the memory it occupies — is bounded by
+  the configured tenants instead of by the project's tenant count. Without
+  that bound, a project that auto-provisions a tenant per end-user can return
+  a tenant listing large enough to exhaust the connector's memory.
+- Fails validation when a configured **Tenant IDs** value is not returned by
+  that search. Descope answers an unmatched `tenantIds` filter with a normal
+  empty result, so without the check a wrong ID would just sync less.
+- Scopes tenant-scoped roles, resources and walks together. A role scoped to a
+  tenant that **Tenant IDs** excludes is not emitted as a role resource (so its
+  tenant id does not reach ConductorOne in the role display name or the
+  `tenant_id` profile), and its member walk is skipped. Project-level roles
+  (`tenant_id` empty) are never filtered. The permission → role grants below are
+  derived from the same role catalogue, so they are filtered the same way — a
+  grant never names a role resource that was not emitted.
+- Reads the role catalogue itself in one project-wide call per sync, cached for
+  the session; the scope filter above is applied to what it emits, not to what
+  it fetches.
+- Does **not** filter the user directory: users are project-level in
+  Descope, and a user can belong to a tenant that is not synced without
+  being scoped to one. Every user is emitted, whoever its tenants are.
+- Refuses to grant access outside the sync scope. A project previously
+  synced without **Tenant IDs** still holds ConductorOne entitlements for
+  every tenant, so a grant request can name an excluded tenant; the
+  connector fails that grant with an actionable error instead of writing it.
+  Revokes are not guarded, so legacy out-of-scope grants can be cleared.
+- Resolves tenant and role grants with a server-side filtered
+  `/v2/mgmt/user/search` per resource — `tenantIds` for tenant membership,
+  `tenantRoleNames` for tenant-scoped roles, and `roleNames` for project-level
+  roles — so no full user directory is cached in the session store.
+- Reports tenant membership as direct membership only, via
+  `includeSubTenants: false`. A user's `userTenants[]` lists only the tenants
+  they belong to directly, so members of a child tenant are not reported
+  against its parent.
+- Re-checks project-level role holders against the user's project `roleNames`.
+  The `roleNames` filter matches a role name at any scope, so a user holding
+  the role only inside a tenant would otherwise be reported as holding the
+  project-level role of the same name.
+- Resolves permission grants from the inline `permissionNames` on the role
+  list (cached once per sync; the role list is small and bounded).
 - Treats HTTP 429 and 5xx as transient and retries with exponential back-off.
 - Caps concurrency at `maxParallelFetches: 6`.
 
 ## Provisioning
 
+- Every grant and revoke first resolves the principal's login via
+  `GET /v1/mgmt/user?userId=…`, because the mutation endpoints below take a
+  `loginId` while user resources are keyed on the stable `userId`.
 - **Role assignment** (`role` → `assigned`): grants and revokes project-level
   and tenant-scoped roles via `/v1/mgmt/user/update/role/add` and
   `/remove` (tenant-scoped roles include the `tenantId`).

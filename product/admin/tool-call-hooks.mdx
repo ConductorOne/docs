@@ -5,7 +5,7 @@ og:title: Tool call hooks - C1 docs
 og:description: Intercept MCP tool calls with built-in patterns or custom functions to redact, modify, or block calls at runtime.
 ---
 
-{/* Editor Refresh: 2026-05-08 */}
+{/* Editor Refresh: 2026-09-02 */}
 
 <Note>
 **Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
@@ -15,12 +15,13 @@ Tool call hooks are interception points that run on every governed MCP tool call
 
 ## How hooks work
 
-Each hook fires on one of two events:
+Each hook fires on one of three events:
 
 | Event | When it runs | What it can do |
 | :--- | :--- | :--- |
 | **Pre-tool use** | Before C1 forwards the call to the MCP server | Inspect or rewrite the input, or deny the call |
 | **Post-tool use** | After the MCP server returns | Inspect or rewrite the output, or deny the response from reaching the client |
+| **Pre-output** | Before a chunk of the assistant's generated response leaves the process (Slack or web chat). No tool call is involved. | Inspect or rewrite the outgoing response chunk, or withhold it |
 
 Hooks run in **priority order** (lower priority numbers run first). Each hook is independently enabled or disabled and can be scoped to specific tools with a [CEL](/product/admin/expressions) filter expression. Multiple hooks can stack on the same call — input or output modifications from earlier hooks are passed to later ones, and any hook can short-circuit the chain by denying.
 
@@ -30,9 +31,11 @@ Every hook execution is recorded in the [audit log](/product/admin/audit-ai-tool
 
 ## Configure a hook
 
+Create hooks from the **Hooks** section under **AI > Classifiers**.
+
 <Steps>
 <Step>
-Go to **AI > C1 Gateway > Settings** and find the **Hooks** section.
+Go to **AI > Classifiers**, open the **General** tab, and find the **Hooks** section.
 </Step>
 <Step>
 Click **New hook**.
@@ -44,10 +47,11 @@ Fill out the form:
 | :--- | :--- |
 | **Name** | Required. 1–100 characters. |
 | **Description** | Optional. Up to 2048 characters. |
-| **Hook type** | **Built-in pattern** for one of the patterns below, or **Custom function** to invoke a [function](/product/admin/functions). |
-| **Event** | **Pre-tool use** or **Post-tool use**. Some built-in patterns only support one event. |
-| **Filter** | Optional CEL expression. Available variable: `ctx.tool_name`. Empty matches all tools. Example: `ctx.tool_name.startsWith("github_")`. |
+| **Hook type** | **Built-in pattern** for one of the patterns below, **Custom function** to invoke a [function](/product/admin/functions), or **Patch tool input** to merge fields onto the input with no function call — see [Patch tool input hooks](#patch-tool-input-hooks). |
+| **Event** | **Pre-tool use**, **Post-tool use**, or **Pre-output** — which ones are offered, and whether you can pick among them, depends on the hook type. See [Event and pattern must be compatible](#event-and-pattern-must-be-compatible). |
+| **Filter** | Optional CEL expression. Empty matches all calls for the event. Available variables depend on the event — see [Filter variables by event](#filter-variables-by-event). |
 | **Priority** | 0–1000. Lower runs first. |
+| **Managed by classifiers** | Off by default. See [Managed by classifiers](#managed-by-classifiers) below. |
 | **Enabled** | Toggle on to activate the hook immediately on save. |
 </Step>
 <Step>
@@ -58,17 +62,109 @@ Click **Save**.
 </Step>
 </Steps>
 
+### Filter variables by event
+
+A filter expression only sees the variables available for its event. Referencing one that isn't set for that event makes the expression fail to evaluate, which **denies the call** — see the fail-closed note above.
+
+**Pre-tool use, Post-tool use**
+
+| Variable | Notes |
+| :--- | :--- |
+| `ctx.tool_name` | For example, `ctx.tool_name.startsWith("github_")`. |
+| `ctx.tool_input` | The tool's input. Currently only a bounded type string is exposed, for `find_api_objects` and `count_api_objects`. |
+| `ctx.surface` | The originating chat channel: `"slack"`, `"web"`, or `"teams"`. Unset — not empty — when the call didn't come from a chat channel. |
+| `ctx.channel_id` | The originating chat channel ID. Only set for Slack and Teams; unset otherwise. |
+| `ctx.workspace_id` | The originating Slack or Teams workspace ID. Unset when the call didn't come from a chat channel. |
+| `ctx.user_roles` | The acting user's role names, for example `["system:user"]`. Roles are additive — an elevated user also holds `system:user` — so check `size() == 1` for exclusivity, not membership alone. |
+
+**Pre-output**
+
+| Variable | Notes |
+| :--- | :--- |
+| `ctx.untrusted_class` | One of the strings `"LOW"`, `"MEDIUM"`, `"HIGH"`. |
+| `ctx.surface` | The output channel: `"slack"` or `"web"`. |
+| `ctx.user_roles` | Same as above. |
+
+`ctx.tool_name` is **unset** on Pre-output — no tool call is involved.
+
+<Warning>
+`ctx.untrusted_class` (a hook filter, comparing **strings**) and `ctx.untrusted_content` (a [classifier rule](/product/admin/agent-classifiers-reference#cel-variables) variable, comparing **ordered levels**) carry the same underlying risk score under two different names and two different types. In a pre-output hook filter write `ctx.untrusted_class == "HIGH"`; in a classifier rule write `ctx.untrusted_content == HIGH`. Using the rule form in a hook filter fails to evaluate, and the call is denied.
+</Warning>
+
+### Event and pattern must be compatible
+
+What events you can pick between depends on the hook type:
+
+| Hook type | Event selection |
+| :--- | :--- |
+| **Custom function** | Choose freely between **Pre-tool use** and **Post-tool use**. Pre-output is never offered — see the note below. |
+| **Built-in pattern** | Fixed by the pattern you pick. Most patterns lock to a single event, greyed out once selected — the **Event** column in [Built-in patterns](#built-in-patterns) is the authoritative list. **Link filter** is the one pattern that offers a real choice, between **Post-tool use** and **Pre-output**. |
+| **Patch tool input** | Locked to **Pre-tool use**. |
+
+C1 rejects a mismatch between the selected event and pattern when you save the hook.
+
+<Note>
+**Custom function hooks cannot use the Pre-output event.** Saving one is rejected. Pre-output is reachable only through a built-in pattern: **Block output** (locked to it) or **Link filter** (selectable).
+</Note>
+
+## Managed by classifiers
+
+Each hook has a **Managed by classifiers** toggle:
+
+- **Off (default)** — the hook always evaluates on every matching call.
+- **On** — the hook only evaluates when a [classifier](/product/admin/agent-classifiers) rule explicitly selects it.
+
+See [Agent classifiers](/product/admin/agent-classifiers) for how classifier rules select hooks.
+
 ## Built-in patterns
 
-C1 ships five pre-built hook patterns. Each one is a self-contained handler with its own configuration; no function code is required.
+Each built-in pattern is a self-contained handler with its own configuration; no function code is required.
 
 | Pattern | Event | What it does |
 | :--- | :--- | :--- |
-| **PII field redaction** | Post | Replaces values in JSON output fields whose names match a configurable list (defaults: `ssn`, `social_security_number`, `date_of_birth`, `salary`, `bank_account`) with a placeholder string. |
-| **Credit card blocking** | Post | Scans tool output for Luhn-valid credit card numbers and denies the response if any are found. |
-| **Query scope limit** | Pre | Caps numeric input fields (defaults: `limit`, `page_size`, `count`, `max_results`) at a configured maximum to prevent oversized queries. |
-| **Write authorization** | Pre | Denies tool calls whose classification is in a blocked list, optionally only outside a configured business-hours window (timezone, start/end times, days of the week). |
-| **Sensitive file guard** | Pre | Denies tool calls that reference sensitive file paths or directories (defaults: `.env`, `*.pem`, `*.key`, `id_rsa`, `.ssh/`, `.aws/`, and similar). |
+| **PII field redaction** | Post | Replaces values in output fields whose names match a configurable list with a placeholder string |
+| **Credit card blocking** | Post | Denies the response if output contains a Luhn-valid credit card number |
+| **Query scope limit** | Pre | Caps numeric input fields at a maximum, to prevent oversized queries |
+| **Write authorization** | Pre | Denies calls whose classification is in a blocked list, optionally only outside business hours |
+| **Sensitive file guard** | Pre | Denies calls that reference sensitive file paths or directories |
+| **Tool output size guard** | Post | Denies output exceeding a byte cap |
+| **Link filter** | Post, Pre-output | Redacts or annotates URLs and markdown images whose host is not allowlisted, mitigating markdown-image exfiltration |
+| **Block output** | Pre-output | Withholds the in-flight response chunk |
+| **Block tool output** | Post | Denies the tool call result after the tool runs, without indicating whether the underlying action succeeded or failed |
+| **Pre-tool block** | Pre | Denies the tool call before it runs |
+| **Secrets masking**\* | Post | Redacts secret-shaped values from output — AWS keys, bearer tokens, JWTs, private keys, Slack/GitHub tokens |
+| **Encoded content guard**\* | Pre | Denies input containing long base64 blobs, long hex runs, or invisible unicode used to smuggle instructions |
+| **Prompt injection scan**\* | Post | Scores output for prompt injection using the AI-governance judge and acts at or above a threshold |
+
+<Note>
+\* **Secrets masking**, **Encoded content guard**, and **Prompt injection scan** are defined in the API but aren't currently offered in the admin UI's pattern picker when creating a hook — the other ten are.
+</Note>
+
+### Pattern configuration and defaults
+
+<Warning>
+Where a pattern takes a list, a value you configure **replaces** the default list — it does not extend it. If you add one field name to **PII field redaction**, the built-in field names stop applying unless you re-include them.
+</Warning>
+
+| Pattern | Configuration | Defaults |
+| :--- | :--- | :--- |
+| **PII field redaction** | Fields to redact; replacement text | `ssn`, `social_security_number`, `date_of_birth`, `dob`, `salary`, `bank_account`, `routing_number`; replacement `***REDACTED***` |
+| **Credit card blocking** | None | — |
+| **Query scope limit** | Fields to cap; maximum value | `limit`, `page_size`, `count`, `max_results`; maximum `100` |
+| **Write authorization** | Blocked classifications (at least one); optional business-hours window with timezone, start/end times, and days | Read is not offered as a blockable classification |
+| **Sensitive file guard** | Two separate lists: blocked file patterns, and blocked directories | Patterns `.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `id_rsa`, `*.pfx`; directories `.ssh`, `.aws`, `.config` |
+| **Tool output size guard** | Maximum output size in bytes | `131072` (128 KB) |
+| **Link filter** | Allowed hosts; action (Redact or Annotate); whether to also act on images | Action defaults to Redact |
+| **Block output** | Message; output surfaces | Surfaces default to **none** — see the warning below |
+| **Block tool output** | Message shown when the call is denied | Falls back to a generic message when empty |
+| **Pre-tool block** | Message shown when the call is denied | Falls back to a generic message when empty |
+| **Secrets masking**\* | None | — |
+| **Encoded content guard**\* | None | — |
+| **Prompt injection scan**\* | Risk threshold at which to act | — |
+
+<Warning>
+**A Block output hook with no surfaces selected never fires.** An empty surface list means *no* surface, not all of them — deliberately, so that forgetting to choose can't silently apply the hook everywhere. The failure mode is a hook that looks configured and enabled but withholds nothing. Select **Slack**, **Web**, or both.
+</Warning>
 
 ## Custom function hooks
 
@@ -87,11 +183,21 @@ The function receives:
   "context": {
     "tool_source": "connector",
     "classification": "WRITE"
+  },
+  "caller": {
+    "id": "<principal id>",
+    "token_id": "...",
+    "mcp_client_id": "...",
+    "mcp_client_type": "..."
   }
 }
 ```
 
-`tool_source` is either `builtin` or `connector`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`).
+`tool_source` is `builtin`, `connector`, or `claw`. `classification` is the tool's configured action class (`READ`, `WRITE`, `DESTRUCTIVE`, `SENSITIVE`, or `DANGEROUS`). `caller` identifies who made the call; `token_id`, `mcp_client_id`, and `mcp_client_type` are omitted when empty.
+
+<Warning>
+`caller` is for logging and call-shape decisions only — it is **never an authorization input**, because the grant decision is made before the hook runs. Identity-based scope belongs in [access profiles](/product/admin/tools-and-toolsets), not hooks.
+</Warning>
 
 ### Post-tool-use payload
 
@@ -103,7 +209,8 @@ The function receives the same fields plus the call result:
   "input": { /* original input */ },
   "output": { /* whatever the tool returned */ },
   "error": "",
-  "context": { /* same as pre */ }
+  "context": { /* same as pre */ },
+  "caller": { /* same as pre */ }
 }
 ```
 
@@ -126,3 +233,19 @@ In both events the function returns an object with any subset of these fields:
 
 If the function throws, exceeds the 60-second timeout, or returns invalid JSON, the call is denied and the failure is recorded as `ERROR` or `TIMEOUT` in the audit log.
 
+## Patch tool input hooks
+
+A patch hook merges fields onto a tool's input before it runs, with no function call — use it for a small, static or CEL-computed change that doesn't need custom logic. It's always on the **Pre-tool use** event.
+
+Like any hook, its **Filter (CEL expression)** field decides *whether* it fires on a given call — empty matches every Pre-tool-use call. Below that, a separate **Patch source** decides *what* gets merged in when it does fire:
+
+The merge follows [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON merge-patch semantics: a key in the patch overwrites or adds that key on the input, a `null` value removes it, and a nested object replaces the existing one rather than merging into it.
+
+Choose a **Patch source**:
+
+- **CEL expression** — must evaluate to a map of the fields to merge. Available variables: `ctx`, `input`, and `caller`.
+- **Static fields** — a fixed JSON object, entered directly, merged the same way.
+
+<Note>
+A patch hook only rewrites the input — it can't deny a call or inspect the output. To deny or inspect, use a built-in pattern or a custom function instead.
+</Note>
