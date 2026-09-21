@@ -24,15 +24,15 @@ From there, two mechanisms do the work:
 - **Access profiles.** An [access profile](/product/admin/profiles) is a curated bundle of apps and entitlements scoped to a group — for example, "Everyone" or "Engineering." C1's own term for what's commonly known as birthright access: access a user gets automatically because of who they are, not because they asked for it.
 - **Membership automation (JML).** [Automate onboarding & offboarding access changes](/product/admin/dynamic-access-control) enrolls and unenrolls users in access profiles automatically based on conditions you define — matching a department, a title, an entitlement they hold. Enrollment can be configured to auto-approve for low-risk access, so a new hire's baseline access is provisioned same-day with no manual review.
 
-For onboarding logic that goes beyond profile enrollment — granting specific entitlements, creating department-specific accounts, or notifying a team in Slack — build a custom flow with [automations](/product/admin/automations). See the [employee onboarding example](/product/admin/automation-examples#employee-onboarding) for a worked walkthrough triggered on a directory sync event, and the [JML automation use case](/product/use-cases/jml-automation) for the full joiner/mover/leaver picture, including role changes.
+For onboarding logic that goes beyond profile enrollment — granting specific entitlements, creating department-specific accounts, or notifying a team in Slack — build a custom flow with [automations](/product/admin/automations). When a step needs logic the built-in steps don't cover — calling an external system, implementing an org-specific rule — write it as a [Function](/product/admin/functions): a serverless TypeScript step with a typed SDK for querying C1 data and an npm package allowlist for external calls. See the [employee onboarding example](/product/admin/automation-examples#employee-onboarding) for a worked walkthrough triggered on a directory sync event, and the [JML automation use case](/product/use-cases/jml-automation) for the full joiner/mover/leaver picture, including role changes.
 
 ## Ongoing: self-service access
 
 Baseline access covers what everyone needs. For everything else, people request it.
 
-[Access requests](/product/admin/access-requests) let users ask for apps, roles, or entitlements — permanently or [just-in-time](/product/how-to/qs-aws-jit-identity-center) for a limited window — and C1 applies your approval policy before anything is provisioned: auto-approve for low-risk access, route to a manager or resource owner for anything sensitive. [Get started with self-service access requests](/product/how-to/qs-self-service-requests) walks through setting this up end to end.
+[Access requests](/product/admin/access-requests) let users ask for apps, roles, or entitlements — permanently or [just-in-time](/product/how-to/qs-aws-jit-identity-center) for a limited window — and C1 applies your approval policy before anything is provisioned: auto-approve for low-risk access, route to a manager or resource owner for anything sensitive. [Get started with self-service access requests](/product/how-to/qs-self-service-requests) walks through setting this up end to end. The same request-and-approve model isn't limited to access grants — the [Actions catalog](/product/how-to/request-actions) extends it to on-demand operational actions, like provisioning a device.
 
-The same request-and-approve model extends to AI tools. If [AI access management](/product/admin/aiam-overview) is enabled for your tenant, approved MCP tools are bundled into toolsets and bound to access profiles, so a user requests AI tool access the same way they'd request an app — see [Get started with AI tools](/product/how-to/ai-tools).
+The same request-and-approve model also extends to AI tools. If [AI access management (AIAM)](/product/admin/aiam-overview) is enabled for your tenant, every call an AI client makes to a connected MCP server is routed through an identity-aware proxy: it authenticates the caller, checks the call against the user's granted access profile and any configured policy, forwards it to the downstream server, and logs the operation with full identity context. Approved tools are bundled into toolsets and bound to access profiles, so a user requests AI tool access the same way they'd request an app — see [Get started with AI tools](/product/how-to/ai-tools).
 
 ## Provisioning: policy-based, to any connected system
 
@@ -55,12 +55,13 @@ For a recurring compliance check that doesn't need a full campaign — for examp
 
 The same membership automation that handles onboarding handles departures. When a user no longer matches an access profile's membership condition — their status changes, they leave a department — C1 creates a revocation task automatically. You control what happens to their access: leave it as-is, revoke everything the profile granted, or revoke only what isn't justified by another profile they still belong to. See [Automate onboarding & offboarding access changes](/product/admin/dynamic-access-control#what-happens-to-access-when-a-user-is-unenrolled), the [employee offboarding example](/product/admin/automation-examples#employee-offboarding), and the [JML automation use case](/product/use-cases/jml-automation) for the full lifecycle.
 
-## Beyond human identities
+## AI agents and non-human identities
 
-C1 also governs access for AI agents, and gives you visibility into non-human identities (NHIs) like service accounts and app registrations — but these aren't yet governed through the same unified workflow as human identity access, so it's worth knowing what's available today versus what's still expanding:
+AI agents are governed by the same mechanism as everything else on this page — access profiles, policy, approval, and audit — applied to the AI tool layer through [AI access management (AIAM)](/product/admin/aiam-overview). It has its own setup path; start with [Enable AI access management](/product/admin/enable-ai-access-management). For MCP servers that support the standard, C1 can skip the proxy entirely and issue the agent a scoped, C1-signed token instead — see [Enterprise-managed authorization](/product/admin/enterprise-managed-authorization/overview).
 
-- **AI agents and tools** are governed through [AI access management (AIAM)](/product/admin/aiam-overview), a control plane for AI clients calling MCP servers. It uses the same access-profile and approval-policy mechanism as human access requests, but lives in its own part of the product with its own setup path — start with [Enable AI access management](/product/admin/enable-ai-access-management).
-- **Non-human identities** — app registrations, assumable roles, and managed identities discovered across your connected apps — are surfaced on the [NHI dashboard](/product/admin/nhi) for visibility, ownership tracking, and findings. This capability is under active development: today it covers discovery and classification, not the request/approve/revoke workflow that governs human access. Check the [release notes](/product/release-notes) for what's shipped since this page was written.
+That's a different integration from [C1 MCP](/product/admin/c1-mcp), which is read-only in the other direction: it lets your own AI assistants (Claude Desktop, Cursor, Codex) query C1's identity data directly, for ops and investigation rather than governing what an agent can reach.
+
+Non-human identities — app registrations, assumable roles, and managed identities discovered across your connected apps — are a newer, still-expanding part of this picture. The [NHI dashboard](/product/admin/nhi) covers discovery, ownership tracking, and findings today; it doesn't yet have the request/approve/revoke workflow that governs human and AI-agent access. Check the [release notes](/product/release-notes) for what's shipped since this page was written.
 
 ## Related resources
 
@@ -71,4 +72,7 @@ C1 also governs access for AI agents, and gives you visibility into non-human id
 <Card title="Access conflicts (SoD)" iconType="duotone" icon="shield-check" horizontal href="/product/admin/access-conflicts" />
 <Card title="AI access management" iconType="duotone" icon="robot" horizontal href="/product/admin/aiam-overview" />
 <Card title="Connectors library" iconType="duotone" icon="arrow-right" horizontal href="/baton/intro" />
+<Card title="Extend with Functions" iconType="duotone" icon="code" horizontal href="/product/admin/functions" />
+<Card title="C1 MCP" iconType="duotone" icon="plug" horizontal href="/product/admin/c1-mcp" />
+<Card title="Service principals" iconType="duotone" icon="microchip" horizontal href="/product/admin/service-principals/overview" />
 </Columns>
