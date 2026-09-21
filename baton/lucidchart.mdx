@@ -6,21 +6,62 @@ og:description: "C1 provides identity governance and just-in-time provisioning f
 sidebarTitle: "Lucidchart"
 ---
 
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
 ## Capabilities
+
+The Lucidchart connector syncs the following resources:
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Folders | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Documents | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | 
+| Documents | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
-The Lucidchart connector supports [automatic account provisioning](/product/admin/account-provisioning). 
+{/* AUTO-GENERATED:END - capabilities */}
 
-*Account provisioning is only available on Lucidchart accounts with Enterprise licenses.
+**Additional functionality:**
+The Lucidchart connector supports [automatic account provisioning](/product/admin/account-provisioning). Account provisioning includes Create* and Delete†.
+
+**Notes:**
+- \*Account provisioning is only available on Lucidchart accounts with Enterprise licenses. When creating an account with no roles specified, Lucid assigns its server-side default role.
+- †Delete and the account actions require a Lucid Enterprise SCIM bearer token (`lucid-scim-token`). Without it, sync and account creation still work, but these capabilities are unavailable. See [Create a SCIM token](#create-a-scim-token) for how to generate one.
 
 When a new account is created by C1, the account's password will be sent to a [vault](/product/admin/vaults). 
 
-This connector does not support account deprovisioning. You must deprovision accounts directly in Lucidchart.
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step. Each one needs the `lucid-scim-token` described above (see [Create a SCIM token](#create-a-scim-token)):
+
+| Action name | Additional fields | Description |
+| :--- | :--- | :--- |
+| `enable_user` | `user_id` (string, required) | Reactivates an account (SCIM `active=true`). |
+| `disable_user` | `user_id` (string, required) | Deactivates an account (SCIM `active=false`). Soft and reversible. |
+| `update_user` | `user_id` (string, required), `user_profile` (string, required) | Updates an account's `firstName`, `lastName`, `email`, `username` or `roles`. `user_profile` is a JSON object of the attributes to change. |
+
+`update_user` accepts roles either as SCIM names (`AccountAdmin`, `BillingAdmin`, `Developer`, `DocumentAdmin`, `EnterpriseShieldAdmin`, `TemplateAdmin`) or as the kebab-case names account creation takes (`team-admin`, `billing-admin`, `developer`, `document-admin`, `enterprise-shield-admin`, `template-admin`), which are translated for you. The remaining creation-time roles — `account-owner`, `group-admin`, `organizational-group-admin` and `team-manager` — have no SCIM equivalent and cannot be changed after the account exists.
+
+### The two SCIM integrations
+
+Lucid runs two separate SCIM integrations, and both are served from the **same** base URL, `https://users.lucid.app/scim/v2`. Nothing in the URL tells them apart — the bearer token alone decides which integration a call reaches, so each needs its own token.
+
+| Setting | Integration | Covers |
+| :--- | :--- | :--- |
+| `lucid-scim-token` | SCIM for admin management | Organizational groups. Required for Delete and for the account actions. |
+| `lucid-content-access-scim-token` | SCIM for content access | Teams. **Optional.** When set, Delete also deprovisions the user from this integration. |
+
+`lucid-content-access-scim-token` extends Delete; it does not replace `lucid-scim-token`. With it configured, a Delete removes the user from admin management first and from content access second. If the first succeeds and the second fails, the connector reports a partial-deprovisioning error rather than a success — the user is gone from admin management but may still hold team content access, and that shouldn't look like a completed offboarding.
+
+### FedRAMP and GovSuite tenants
+
+The `scim-base-url` setting defaults to `https://users.lucid.app/scim/v2`, which is correct for all commercial Lucid accounts. Leave it empty unless you're on FedRAMP/GovSuite.
+
+Lucid publishes no fixed FedRAMP SCIM hostname. Unlike the REST API, which simply swaps `api.lucid.co` for `api.lucidgov.app`, the SCIM base URL for a GovSuite account is **generated per account in your own GovSuite admin panel**. Copy it from there and paste it into `scim-base-url`. It applies to both SCIM tokens, since both integrations share the one base URL.
+
+Both SCIM bearer tokens are sent to whatever host `scim-base-url` names, so the connector rejects a value that isn't an absolute `https://` URL — cleartext would put the tokens on the wire in the clear. The hostname itself is not restricted, because a GovSuite hostname is account-specific and Lucid publishes no list to check it against.
+
+A rejected value disables the SCIM surface — actions, deprovisioning and delete — and logs the problem at debug level. Syncing is unaffected, since it runs against the REST API under `base-url` and never reads this setting. If SCIM operations fail with an error naming `scim-base-url`, correct the value rather than the tokens.
 
 ## Gather Lucidchart credentials 
 
@@ -70,10 +111,7 @@ Give the new app a name, then click **Create**.
 Select the new app's **OAuth 2.0** tab.
 </Step>
 <Step>
-Enter whichever redirect URI matches your C1 tenant's domain in the **Redirect URI** field:
-
-- Default instance: `https://accounts.conductor.one/oauth/callback`
-- EU data residency instance: `https://accounts.c1eu.ai/oauth/callback`
+Enter `https://accounts.conductor.one/oauth/callback` in the **Redirect URI** field.
 </Step>
 <Step>
 Click **Create OAuth 2.0 client**.
@@ -82,6 +120,30 @@ Click **Create OAuth 2.0 client**.
 Carefully copy and save the OAuth client ID and client secret.
 </Step>
 </Steps> 
+
+### Create a SCIM token
+
+This token is optional. Sync, folder and document provisioning, and account creation all work without it. You only need it if you want C1 to delete accounts or to run the `enable_user`, `disable_user` and `update_user` actions, which go through Lucid's SCIM surface.
+
+<Warning>
+SCIM is only available on Lucidchart accounts with Enterprise licenses, and Lucid support must enable it for your account before the page below appears. This task is performed by an account administrator in the Lucid **admin panel** — not in the developer portal.
+</Warning>
+
+<Steps>
+<Step>
+In the Lucid admin panel, navigate to **Admin** > **App Integration** > **SCIM**.
+
+   Don't see the **SCIM** page? Contact Lucid support to have SCIM enabled for your account.
+</Step>
+<Step>
+Generate a SCIM bearer token.
+
+   The same page lists the SCIM base URL (`https://users.lucid.app/scim/v2`), which the connector uses by default.
+</Step>
+<Step>
+Carefully copy and save the SCIM token.
+</Step>
+</Steps>
 
 ### Self-hosted only: Create an OAuth refresh token
 
@@ -95,13 +157,17 @@ Follow the [Lucidchart OAuth2 access token documentation](https://developer.luci
 If you want to use the Lucidchart connector to provision accounts, give the token the `account.user` scope.
 
    Account provisioning is only available on Lucidchart accounts with Enterprise licenses.
+
+   If you also want C1 to transfer a deleted user's documents to another user before removing the account, add the `account.user.transfercontent` scope. Without it, Delete calls to `POST /v1/transferUserContent` will return 403.
+
+   Note: if the user's REST record can't be read at deletion time (a 403 or an undocumented 404), C1 probes SCIM to confirm they're actually gone before deleting, refusing with `FailedPrecondition` if SCIM says the user is still present — grant `account.user:readonly` so the email can be read. A SCIM 409 (account owner or default document owner) also surfaces as `FailedPrecondition`.
 </Step>
 <Step>
 Carefully copy and save the **refresh token** included in the token response.
 </Step>
 </Steps>  
 
-**Done.** Next, move on to the connector configuration instructions. 
+**That's it!** Next, move on to the connector configuration instructions. 
 
 ## Configure the Lucidchart connector
 
@@ -123,12 +189,12 @@ In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
 <Step>
 Search for **Lucidchart** and click **Add**.
 
-   **Don't see the Lucidchart connector?** Reach out to [support@c1.ai](mailto:support@c1.ai) to add Lucidchart to your **Connectors** page.
+   **Don't see the Lucidchart connector?** Reach out to [support@conductorone.com](mailto:support@conductorone.com) to add Lucidchart to your **Connectors** page.
 </Step>
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
@@ -147,6 +213,17 @@ Paste the API key in the **Lucidchart API key** field.
 </Step>
 <Step>
 Paste the client ID and client secret into the relevant fields.
+</Step>
+<Step>
+**Optional.** Paste the SCIM token in the **Lucidchart SCIM Token** field. Leave it empty if you skipped [Create a SCIM token](#create-a-scim-token); account delete and the three account actions are then unavailable.
+
+   If you also use Lucid's second SCIM integration, **SCIM for content access** (which syncs to teams), paste its token into the **Lucidchart content access SCIM token** field. When it's set, deleting a user also removes them from that integration.
+</Step>
+<Step>
+**FedRAMP/GovSuite only.** Enter your account-specific SCIM base URL in the **Lucidchart SCIM base URL** field. Leave it empty on commercial accounts — it defaults to `https://users.lucid.app/scim/v2`.
+</Step>
+<Step>
+**Optional.** To have C1 transfer a deleted user's documents to another user instead of removing them along with the account, enter that user's email address in the **Content Transfer User Email** field.
 </Step>
 <Step>
 **Optional.** By default, the connector syncs Lucidchart documents and folders that are shortcuts. If you prefer not to sync shortcuts (because they don't grant effective permissions or might return 403/404 errors from the API), click to enable **Exclude shortcuts**.
@@ -168,7 +245,7 @@ The connector's label changes to **Syncing**, followed by **Connected**. You can
 </Step>
 </Steps>
 
-**Done.** Your Lucidchart connector is now pulling access data into C1.
+**That's it!** Your Lucidchart connector is now pulling access data into C1.
 </Tab>
 
 <Tab title="Self-hosted">
@@ -184,7 +261,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
 <Step>
-In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -192,7 +269,7 @@ Search for **Baton** and click **Add**.
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
@@ -236,6 +313,22 @@ stringData:
   BATON_LUCID_CLIENT_ID: <Lucidchart OAuth2 client ID>
   BATON_LUCID_CLIENT_SECRET: <Lucidchart OAuth2 client secret>
   BATON_LUCID_REFRESH_TOKEN: <Lucidchart OAuth2 refresh token>
+
+  # Optional (Enterprise only): required for Delete and the account actions
+  BATON_LUCID_SCIM_TOKEN: <Lucidchart SCIM token — "SCIM for admin management">
+
+  # Optional: Lucid's second SCIM integration, "SCIM for content access" (teams).
+  # When set, Delete also deprovisions the user from that integration.
+  BATON_LUCID_CONTENT_ACCESS_SCIM_TOKEN: <Lucidchart content access SCIM token>
+
+  # Optional: FedRAMP/GovSuite only. Defaults to https://users.lucid.app/scim/v2.
+  # Lucid generates this per account in your GovSuite admin panel; there is no
+  # published FedRAMP SCIM hostname. Applies to both SCIM tokens.
+  BATON_SCIM_BASE_URL: <account-specific SCIM base URL>
+
+  # Optional: email address of the user who receives a deleted user's documents,
+  # so the content is retained rather than removed with the account
+  BATON_LUCID_CONTENT_TRANSFER_USER_EMAIL: <email address>
 
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
@@ -290,9 +383,6 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 </Step>
 </Steps>
 
-**Done.** Your Lucidchart connector is now pulling access data into C1.
+**That's it!** Your Lucidchart connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
-
