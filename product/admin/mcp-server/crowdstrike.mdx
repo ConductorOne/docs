@@ -38,8 +38,6 @@ CrowdStrike issues a client ID and client secret to an API client, which C1 exch
 <Steps>
 <Step>
 In the Falcon console, go to **Support and resources** > **API clients and keys**.
-
-{/* REVIEWER NOTE — needs a verified docs link for generating credentials */}
 </Step>
 <Step>
 Select **Add new API client**.
@@ -54,9 +52,15 @@ Select **Create**.
 Copy the **Client ID** and **Client Secret**. CrowdStrike shows the secret only once.
 </Step>
 <Step>
-Note your Falcon cloud's API base URL, such as `https://api.crowdstrike.com` or your region-specific endpoint.
+Note your Falcon cloud's API base URL. Each tenant lives on one regional cloud, and both the token request and every API call go to that region's gateway.
 
-{/* REVIEWER NOTE — confirm exact UI labels/path */}
+| Falcon cloud | API base URL |
+|---|---|
+| US-1 | `https://api.crowdstrike.com` |
+| US-2 | `https://api.us-2.crowdstrike.com` |
+| EU-1 | `https://api.eu-1.crowdstrike.com` |
+| US-GOV-1 | `https://api.laggar.gcw.crowdstrike.com` |
+| US-GOV-2 | `https://api.us-gov-2.crowdstrike.mil` |
 </Step>
 </Steps>
 
@@ -73,27 +77,33 @@ Each tool reads a different Falcon API, and each API has its own scope. Grant **
 | `list_hosts` | Hosts |
 | `list_alerts` | Alerts |
 | `list_incidents` | Incidents |
-| `list_ioc_indicators` | IOC Manager |
-| `list_device_control_policies` | Device control policies |
-| `list_vulnerabilities`, `list_remediations` | Vulnerabilities (Falcon Spotlight) |
-| `list_intel_actors`, `list_intel_indicators`, `list_intel_reports` | Falcon Intelligence |
+| `list_ioc_indicators` | IOC Management |
+| `list_device_control_policies` | Device Control Policies |
+| `list_vulnerabilities`, `list_remediations` | Vulnerabilities |
+| `list_intel_actors` | Actors (Falcon Intelligence) |
+| `list_intel_indicators` | Indicators (Falcon Intelligence) |
+| `list_intel_reports` | Reports (Falcon Intelligence) |
 | `list_zero_trust_assessments` | Zero Trust Assessment |
-| `list_discover_applications` | Falcon Discover |
-| `list_ioms`, `list_iom_details` | CSPM registration |
+| `list_discover_applications` | Assets |
+| `list_ioms`, `list_iom_details` | CSPM Registration |
 
-{/* REVIEWER NOTE — the tool names are exact, taken from the server's own tool list. The right-hand column needs a check against the Falcon console's own scope labels, which I could not verify without a tenant. */}
+Falcon Intelligence is three separate scopes, not one — granting **Actors** doesn't enable `list_intel_indicators` or `list_intel_reports`. Grant each scope whose tool you want.
+
+<Note>
+Spotlight, Falcon Intelligence, Zero Trust Assessment, Discover, Device Control, and Cloud Security are separately licensed Falcon products. If a scope you expect isn't in the dialog, your tenant doesn't license that product. An unlicensed module returns 403 the same way a missing scope does, so when a tool 403s and its scope is already granted, check the license before re-editing scopes.
+</Note>
 
 Four tools take action in CrowdStrike and need **Write** as well:
 
 | Tools | Falcon API scope |
 |---|---|
 | `contain_host`, `lift_containment`, `hide_host` | Hosts (Write) |
-| `create_ioc_indicator` | IOC Manager (Write) |
+| `create_ioc_indicator` | IOC Management (Write) |
 
 Leaving Write off the API client is a deliberate way to keep the connection read-only: those four tools then return CrowdStrike's authorization error, and the rest keep working.
 
 <Note>
-`list_ioms` and `list_iom_details` need the **CSPM registration** scope. CrowdStrike also offers a Cloud Security scope, and it is easy to reach for by name — but it covers a different set of endpoints (cloud groups and cloud risks) that C1 does not expose, so it will not make these two tools work. If `list_ioms` returns 403 while your other tools return data, add CSPM registration to the API client.
+`list_ioms` and `list_iom_details` need the **CSPM Registration** scope. CrowdStrike also offers a **Cloud Security API Detections** scope, which is the easier one to reach for by name — but it authorizes a different misconfiguration family (`/cloud-security-evaluations/`) that C1 doesn't expose, so an API client carrying only that scope returns 403 from both tools. The Alerts scope doesn't cover them either, despite the endpoints sharing a URL prefix with Falcon's detections API. If `list_ioms` returns 403 while your other tools return data, add CSPM Registration to the API client.
 </Note>
 
 Scope changes take effect the next time C1 requests a token, so you don't need to re-register the server or reconnect after editing the API client.
