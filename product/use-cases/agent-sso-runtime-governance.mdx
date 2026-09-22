@@ -1,0 +1,51 @@
+---
+title: "Use case: Agent SSO and runtime governance"
+og:title: "Use case: Govern AI agents at runtime with C1 - C1 docs"
+og:description: "See how C1 replaces standing agent credentials with short-lived scoped tokens, authorizes and inspects every tool call, and gives security teams visibility into what each agent can reach — and where to go for setup details."
+description: "See how C1 replaces standing agent credentials with short-lived scoped tokens, authorizes and inspects every tool call, and gives security teams visibility into what each agent can reach — and where to go for setup details."
+sidebarTitle: "Agent SSO & runtime governance"
+---
+{/* Editor Refresh: 2026-09-22 */}
+
+An AI agent holding a static API key is a standing credential with no named owner and no clean way to turn it off — the same problem shared service-account logins have always been, just faster-moving. This page covers how C1 governs an agent at runtime instead: no long-lived secret to leak, every call checked as it happens, and a record of what each agent actually did. It's a closer look at the AI-agent side of the [identity governance use case](/product/use-cases/identity-governance).
+
+<Note>
+This page assumes [AI access management](/product/admin/enable-ai-access-management) is enabled for your tenant.
+</Note>
+
+## Replace standing credentials with Agent SSO
+
+For MCP servers that support it, [enterprise-managed authorization (EMA)](/product/admin/enterprise-managed-authorization/overview) exchanges a signed-in user's identity for a short-lived, scoped token addressed to that one server — built on the open [Cross-App Access (XAA)](/product/glossary#cross-app-access-xaa) standard, using an [ID-JAG](/product/glossary#id-jag) token. It's single sign-on for agents: the same identity governance already applied to people, applied to whatever's acting on their behalf. Tokens expire in minutes, carry only the granted scopes, and the agent's access is requested, approved, reviewed, and revoked through the same workflow as any other C1 access — revoke the grant and the next token request is denied. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable) to set it up.
+
+## Authorize every tool call
+
+Not every MCP server supports the XAA standard yet. For those, the [AI access management (AIAM) gateway](/product/admin/aiam-overview) is the other path: the agent routes its calls through C1, which evaluates the caller's identity, delegated scope, the requested tool and target, and policy on every single call before forwarding it. [Enterprise-managed authorization and the AIAM gateway](/product/admin/enterprise-managed-authorization/overview#the-two-paths-c1-governs) are governed under one set of entitlements, one policy engine, and one audit trail — many tenants run both, choosing per server based on what it supports.
+
+## Enforce runtime guardrails
+
+[Tool call hooks](/product/admin/tool-call-hooks) intercept a governed call before it reaches the target, after it returns, or before a response chunk leaves the process — and can inspect, rewrite, or deny outright. Built-in patterns cover a lot of ground: PII field redaction, credit-card blocking, a link filter that mitigates markdown-image exfiltration, a sensitive-file guard, and write-authorization rules that can block a classification of call outside business hours. Three more — secrets masking, an encoded-content guard for smuggled instructions, and a prompt-injection scan scored by C1's AI-governance judge — exist in the API today; they're not yet in the admin UI's pattern picker. Hooks are fail-closed: if one errors or times out, the call is denied, not allowed through.
+
+## See what each agent can reach
+
+Every registered [AI client](/product/admin/ai-clients) — Claude Desktop, Cursor, a custom agent, whatever connects — shows up with its type, owner, state, last-used timestamp, and the toolsets currently accessible to it through the owning user's access profiles. A suspected-compromised client can be killed immediately from its detail panel, revoking all its tokens on the spot. For a broader view across all your access data, not just AI clients, [access explorer queries](/product/admin/query#access-explorer-queries) cover orphaned accounts, standing high-risk privileges, and inactive accounts — the same visibility security teams use for human access, applied here to agents too.
+
+## Route risky actions for response
+
+A hook can allow a call, hold it, or block it outright — that's the first line. For anything that needs a person or a downstream system to act, [findings](/product/admin/findings) can route to a webhook, a [Function](/product/admin/functions), or an automation via [routing rules](/product/admin/findings#routing-rules), so a detection doesn't just sit in a queue. Every call — allowed, mutated, or denied — is written to the [audit log](/product/admin/audit-ai-tool-usage) with full identity context, and conversations can be reviewed end to end, including the policy steps evaluated along the way.
+
+<Note>
+Findings is an early-access capability — check current coverage before relying on it for a specific finding type.
+</Note>
+
+## Related resources
+
+<Columns cols={2}>
+<Card title="Enterprise-managed authorization" iconType="duotone" icon="key" horizontal href="/product/admin/enterprise-managed-authorization/overview" />
+<Card title="AI access management" iconType="duotone" icon="robot" horizontal href="/product/admin/aiam-overview" />
+<Card title="Tool call hooks" iconType="duotone" icon="shield-check" horizontal href="/product/admin/tool-call-hooks" />
+<Card title="Manage AI clients" iconType="duotone" icon="desktop" horizontal href="/product/admin/ai-clients" />
+<Card title="Audit AI tool usage" iconType="duotone" icon="list-check" horizontal href="/product/admin/audit-ai-tool-usage" />
+<Card title="Findings" iconType="duotone" icon="magnifying-glass" horizontal href="/product/admin/findings" />
+<Card title="Identity governance use case" iconType="duotone" icon="layer-group" horizontal href="/product/use-cases/identity-governance" />
+<Card title="Self-service use case" iconType="duotone" icon="grid-2" horizontal href="/product/use-cases/self-service-app-directory" />
+</Columns>
