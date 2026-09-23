@@ -1,0 +1,288 @@
+---
+title: "Set up an Oracle FCCS connector"
+og:title: "Set up an Oracle FCCS connector"
+description: "C1 provides identity governance and just-in-time provisioning for Oracle FCCS. Integrate your Oracle FCCS instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Oracle FCCS. Integrate your Oracle FCCS instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Oracle FCCS"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Oracle FCCS connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Apps | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+Oracle FCCS is an Oracle Enterprise Performance Management (EPM) Cloud application. This connector talks to the Oracle EPM REST API (`/interop/rest/security/`) and complements the Oracle IDCS connector, which manages the user lifecycle. Predefined Oracle Cloud roles (Power User, Service Administrator, User, Viewer) are excluded by default because they are managed via IDCS.
+
+The connector also emits login activity from Oracle's 120-day User Login Report as a usage event feed, allowing C1 to derive account last-login timestamps independently of full resource syncs.
+
+## Provisioning notes and limitations
+
+- **Role assignments are provisioned for users only.** C1 can grant and revoke roles for user accounts. Roles held by a group are synced so they appear in access reviews, but the connector does not provision them — manage those assignments in Oracle. Oracle does expose an endpoint for assigning roles to groups, but it replaces a group's entire role set in one call rather than adding or removing a single role, which makes it unsafe to drive from an access request without first confirming the behavior against a live tenant.
+- **Predefined roles cannot be provisioned.** Power User, Service Administrator, User, and Viewer are managed through Oracle IDCS. This applies even when **Sync Predefined Roles** is enabled, which only makes them visible in C1.
+- **Nested group membership is read-only.** A group nested inside another is synced so it appears in access reviews, and C1 expands it so the parent's access reaches the nested group's members. The nesting itself is not provisioned — manage it in Oracle.
+- **A role inherited through an IDCS group is attributed to the user.** When someone holds a role only by belonging to an IDCS group, that group is not synced, so C1 has no group membership to expand and no group to attribute the role to. The grant appears against the user instead, without naming the group it came from, and offers no revoke — the role follows the group membership, which is managed in Oracle IDCS. Roles inherited through an EPM group are unaffected: those are attributed to the group.
+
+## Gather Oracle FCCS credentials
+
+<Warning>
+The service account used for the JWT subject must have the **Service Administrator** role in Oracle FCCS.
+</Warning>
+
+This connector authenticates using an **OAuth JWT user assertion** against Oracle Identity Cloud Service (IDCS) / OCI IAM Identity Domains. An **OCI Gen 2** environment is required.
+
+<Steps>
+  <Step>
+    Create an OAuth confidential application in Oracle IDCS (or your OCI IAM Identity Domain) and enable the **JWT Assertion** grant type. Note the **client ID** and **client secret**.
+  </Step>
+
+  <Step>
+    Generate an RSA key pair (2048-bit or higher). Upload the public key certificate to IDCS under **Security > Trusted Partner Certificates** and note the certificate alias — this is your **JWT key ID** (`kid`).
+  </Step>
+
+  <Step>
+    Identify the **IDCS domain URL** for your identity domain (for example, `https://idcs-abc123.identity.oraclecloud.com`, or the regional `https://idcs-abc123.idcs.identity.us-phoenix-1.oci.oraclecloud.com` for an OCI IAM identity domain) and the **base URL** of your FCCS instance (for example, `https://example.epm.us2.oraclecloud.com`). Both are host-only — do not include a path.
+  </Step>
+
+  <Step>
+    Choose a service user with the **Service Administrator** role to use as the JWT subject.
+  </Step>
+</Steps>
+
+## Configure the Oracle FCCS connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Oracle FCCS** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Oracle FCCS connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Base URL** (`BATON_ORACLE_FCCS_BASE_URL`): Base URL of your Oracle FCCS instance (e.g. `https://example.epm.us2.oraclecloud.com`).
+        - **Oracle Client ID** (`BATON_ORACLE_FCCS_CLIENT_ID`): OAuth client ID from Oracle IDCS.
+        - **Oracle Client Secret** (`BATON_ORACLE_FCCS_CLIENT_SECRET`): OAuth client secret from Oracle IDCS.
+        - **IDCS Domain URL** (`BATON_ORACLE_FCCS_IDCS_DOMAIN_URL`): The Oracle IDCS identity domain URL, without a path (e.g. `https://idcs-abc123.identity.oraclecloud.com`).
+        - **JWT Private Key** (`BATON_ORACLE_FCCS_JWT_PRIVATE_KEY`): RSA private key (PEM) used to sign JWT assertions. Upload the `.pem` file; on the CLI pass a path to it instead.
+        - **JWT Subject** (`BATON_ORACLE_FCCS_JWT_SUBJECT`): Username to impersonate in the JWT assertion (must have the Service Administrator role).
+        - **JWT Key ID** (`BATON_ORACLE_FCCS_JWT_KEY_ID`): Certificate alias (`kid`) matching the certificate uploaded to IDCS.
+        - **Scope** (`BATON_ORACLE_FCCS_SCOPE`): EPM service scope for the token request. Use `urn:opc:serviceInstanceID=<SERVICE_INSTANCE_ID>urn:opc:resource:consumer::all`.
+        - **JWT Issuer** (`BATON_ORACLE_FCCS_JWT_ISSUER`): *(optional)* JWT issuer claim. Defaults to the Oracle client ID.
+        - **JWT Audience** (`BATON_ORACLE_FCCS_JWT_AUDIENCE`): *(optional)* JWT audience claim. Defaults to `https://identity.oraclecloud.com/`, which is IDCS itself rather than the FCCS host.
+        - **Sync Predefined Roles** (`BATON_ORACLE_FCCS_SYNC_PREDEFINED_ROLES`): *(optional)* Include predefined IDCS-managed roles in the sync. Defaults to `false`.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Oracle FCCS connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Oracle FCCS](https://github.com/conductorone/baton-oracle-fccs) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Oracle FCCS connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Oracle FCCS connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Oracle FCCS connector deployment:
+
+    #### Secrets configuration
+
+    <Note>
+    `BATON_ORACLE_FCCS_JWT_PRIVATE_KEY` is read as a **file path**, not as the key
+    contents. The signing key therefore goes in a second Secret that the
+    Deployment mounts as a volume, with the environment variable pointing at the
+    mount path. Setting the variable to the PEM text instead makes the container
+    fail at startup with "cannot access file".
+    </Note>
+
+    ```yaml expandable
+    # baton-oracle-fccs-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-oracle-fccs-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Oracle FCCS credentials
+      BATON_ORACLE_FCCS_BASE_URL: <https://example.epm.us2.oraclecloud.com>
+      BATON_ORACLE_FCCS_CLIENT_ID: <Oracle IDCS OAuth client ID>
+      BATON_ORACLE_FCCS_CLIENT_SECRET: <Oracle IDCS OAuth client secret>
+      BATON_ORACLE_FCCS_IDCS_DOMAIN_URL: <https://idcs-abc123.identity.oraclecloud.com>
+      BATON_ORACLE_FCCS_JWT_SUBJECT: <service account username>
+      BATON_ORACLE_FCCS_JWT_KEY_ID: <certificate alias / kid>
+      BATON_ORACLE_FCCS_SCOPE: urn:opc:serviceInstanceID=<service instance ID>urn:opc:resource:consumer::all
+    ---
+    # The signing key lives in its own Secret because the Deployment mounts it as
+    # a file rather than injecting it as an environment variable.
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-oracle-fccs-jwt-key
+    type: Opaque
+    stringData:
+      private-key.pem: |
+        -----BEGIN RSA PRIVATE KEY-----
+        <contents of your RSA private key>
+        -----END RSA PRIVATE KEY-----
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-oracle-fccs.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-oracle-fccs
+      labels:
+        app: baton-oracle-fccs
+    spec:
+      selector:
+        matchLabels:
+          app: baton-oracle-fccs
+      template:
+        metadata:
+          labels:
+            app: baton-oracle-fccs
+            baton: "true"
+            baton-app: oracle-fccs
+        spec:
+          containers:
+          - name: baton-oracle-fccs
+            image: public.ecr.aws/conductorone/baton-oracle-fccs:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-oracle-fccs
+            # Points at the mounted file below, not at the key contents.
+            - name: BATON_ORACLE_FCCS_JWT_PRIVATE_KEY
+              value: /etc/baton-oracle-fccs/private-key.pem
+            envFrom:
+            - secretRef:
+                name: baton-oracle-fccs-secrets
+            volumeMounts:
+            - name: jwt-private-key
+              mountPath: /etc/baton-oracle-fccs
+              readOnly: true
+          volumes:
+          - name: jwt-private-key
+            secret:
+              secretName: baton-oracle-fccs-jwt-key
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Oracle FCCS connector to. Oracle FCCS data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Oracle FCCS connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-oracle-fccs).
+</Tip>
