@@ -9,7 +9,7 @@ The [Endpoints reference](/api-reference) documents every C1 API endpoint indivi
 For single-endpoint tasks (creating an object, fetching a record by ID, and so on), go directly to the [Endpoints reference](/api-reference) — most single calls are self-explanatory there.
 
 <Warning>
-A few steps below are marked **Needs verification**. These are our best reconstruction of the correct call sequence from the API reference, but haven't been confirmed against a live tenant. Confirm these with an engineer before publishing.
+One step below is marked **Needs verification**. It's our best reconstruction of the correct call sequence from the API reference, but hasn't been confirmed against a live tenant. Confirm it with an engineer before publishing.
 </Warning>
 
 ## Add an entitlement to an access profile
@@ -54,24 +54,24 @@ curl -X GET "https://${TENANT}/api/v1/catalogs/${CATALOG_ID}/requestable_entitle
 ```
 </Step>
 <Step title="Search grant tasks for those entitlements">
+`taskTypes` takes an array of `TaskType` objects, not plain strings — grant tasks are selected with `{ "grant": {} }`.
+
 ```bash curl
 curl -X POST "https://${TENANT}/api/v1/search/tasks" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "appEntitlementIds": ["${ENTITLEMENT_ID}"],
-    "taskTypes": ["TASK_TYPE_GRANT"],
+    "taskTypes": [{ "grant": {} }],
     "pageSize": 10
   }'
 ```
 
-Compare `taskStates: OPEN` (still provisioning) against `taskStates: CLOSED` (done) counts to get an "x of y" figure. Request a small `pageSize` (10 or fewer) — each task record is large.
+Compare `taskStates: ["TASK_STATE_OPEN"]` (still provisioning) against `taskStates: ["TASK_STATE_CLOSED"]` (done) counts to get an "x of y" figure. Request a small `pageSize` (10 or fewer) — each task record is large.
+
+A closed task isn't necessarily a successfully provisioned one — it can also be denied, errored, cancelled, or timed out. To count only successful grants, add `"grantOutcomes": ["GRANT_OUTCOME_GRANTED"]` to the request alongside `taskStates: ["TASK_STATE_CLOSED"]`.
 </Step>
 </Steps>
-
-<Warning>
-**Needs verification:** confirm the exact `taskTypes` value that represents an access-profile-driven grant, and whether a `CLOSED` task always means successful provisioning (versus closed-but-denied/failed).
-</Warning>
 
 ## Set an entitlement's risk level
 
@@ -89,25 +89,33 @@ curl -X POST "https://${TENANT}/api/v1/attributes/risk_levels" \
 The response includes the new value's `id` — save it for the next step.
 </Step>
 <Step title="Apply the risk level to the entitlement">
-<Warning>
-**Needs verification:** we could not confirm the endpoint/body that attaches an attribute value to a specific entitlement from the reference alone. Confirm with an engineer whether this is a field on the entitlement update call or a separate binding endpoint.
-</Warning>
+Risk level is a field on the entitlement itself (`riskLevelValueId`), so it's set through the same entitlement update call used for any other entitlement field. Scope the update to just that field with `updateMask`.
+
+```bash curl
+curl -X POST "https://${TENANT}/api/v1/apps/${APP_ID}/entitlements/${ENTITLEMENT_ID}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entitlement": { "riskLevelValueId": "${RISK_LEVEL_ID}" },
+    "updateMask": "riskLevelValueId"
+  }'
+```
 </Step>
 </Steps>
 
 ## Extend or remove a grant's expiration date
 
-You need the specific grant (the binding between a user and an entitlement) before you can change its expiration — you can't do it by user or entitlement ID alone.
+You need the app user's ID (the account binding a person to this app) before you can change their grant's expiration — you can't do it by email or entitlement ID alone.
 
 <Steps>
-<Step title="Find the grant">
-Search grants for the entititlement to find the specific user's binding.
+<Step title="Find the app user's ID">
+Search app users scoped to the app, matching on the user's email. `query` is a fuzzy match against display name and description, so confirm the returned user's `displayName` is the one you expect before using its `id`.
 
 ```bash curl
-curl -X POST "https://${TENANT}/api/v1/apps/${APP_ID}/entitlements/${ENTITLEMENT_ID}/search-grants" \
+curl -X POST "https://${TENANT}/api/v1/search/app_users" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{ "query": "${USER_EMAIL}" }'
+  -d '{ "appId": "${APP_ID}", "query": "${USER_EMAIL}" }'
 ```
 </Step>
 <Step title="Update or remove the expiration">
@@ -145,13 +153,9 @@ curl -X GET "https://${TENANT}/api/v1/automation_executions/${EXECUTION_ID}" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
-Check the `state` field on the returned execution object.
+Check the `state` field on the returned execution object. `DONE` is the successful terminal state; `ERROR` and `TERMINATE` are failed terminal states. `PENDING`, `CREATING`, `GET_STEP`, `PROCESS_STEP`, and `COMPLETE_STEP` mean it's still running. `WAITING` and `PAUSED_BY_CIRCUIT_BREAKER` mean it's stalled and needs attention — poll or use `resolve_paused`/`clear` on the automation to unblock it.
 </Step>
 </Steps>
-
-<Warning>
-**Needs verification:** confirm the full set of `state` values an execution can return and which ones represent success versus failure.
-</Warning>
 
 ## Add a service principal as an app owner
 
