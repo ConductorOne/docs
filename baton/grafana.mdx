@@ -93,10 +93,57 @@ To create a service account token:
 
 1. In your Grafana Cloud instance, go to **Administration** → **Users and access** → **Service accounts**.
 2. Click **Add service account**, give it a name, and assign it the **Admin** role.
-3. Open the new service account and click **Add service account token**.
-4. Copy and save the generated token — it will not be shown again.
+3. Make sure the service account's **basic role** is set to at least **Viewer** — not **No basic role**. See the callout below; this must be done in the Grafana UI.
+4. Open the new service account and click **Add service account token**.
+5. Copy and save the generated token — it will not be shown again.
 
-Use an **Admin** service-account role (or equivalent permissions covering `teams:read`, `teams.roles:read`, and `serviceaccounts:read`; Role sync additionally needs `roles:read`). Team sync reads each team's RBAC roles, so `teams.roles:read` is required even with Role sync turned off. A narrower token that previously synced only users/orgs may fail List after this upgrade.
+<Warning>
+**A basic role is required, and no RBAC action substitutes for it**
+
+The connector calls `GET /api/org` both for the initial credential validation and, in Cloud mode, on every sync as the Organization resource-sync source — so this is not a one-time check, it's needed for every sync. That endpoint is gated by a Grafana **basic role**, not by an RBAC action: a service account set to **No basic role** returns `403` there even when every RBAC action below is granted, and assigning `orgs:read` does not satisfy it. Setting the basic role to **Viewer** does.
+
+Set this in the Grafana UI (**Administration** → **Users and access** → **Service accounts** → your service account → **Basic role**). It cannot currently be set through the API — `PATCH /api/serviceaccounts/{id}` with `{"role":"Viewer"}` returns `HTTP 500` on Grafana Cloud.
+</Warning>
+
+Use an **Admin** service-account role, or a credential with equivalent permissions. The connector requires six RBAC actions:
+
+| Permission | Endpoint | Needed for |
+| :--- | :--- | :--- |
+| `org.users:read` | `GET /api/org/users` | Account sync (Cloud mode reads organization users) |
+| `teams:read` | `GET /api/teams/search` | Team sync |
+| `teams.permissions:read` | `GET /api/teams/{id}/members` | Team membership grants |
+| `teams.roles:read` | `GET /api/access-control/teams/{id}/roles` | The RBAC roles each team holds — Role sync only |
+| `serviceaccounts:read` | `GET /api/serviceaccounts/search` | Service account sync |
+| `roles:read` | `GET /api/access-control/roles` | Role sync only |
+
+These six actions cover **sync only**. When provisioning is enabled (`BATON_PROVISIONING`), granting and revoking access calls separate write endpoints that need additional RBAC actions. The actions you need depend on which provisioning capability is enabled — **account provisioning** (creating brand-new users) and **entitlement provisioning** (granting/revoking org roles and team membership) call different endpoints and do not require the same permissions.
+
+**Account provisioning** (`CreateAccount`, `Delete`):
+
+| Permission | Needed for |
+| :--- | :--- |
+| `org.users:add` | Inviting a brand-new user into the org (`CreateAccount`, invite-based in Cloud mode, via `POST /api/org/invites`) |
+| `org.users:remove` | Removing a user from the org (`Delete`, via `DELETE /api/org/users/{id}`) — this permission is shared with entitlement provisioning's Revoke below |
+
+**Entitlement provisioning** (Grant/Revoke on the Organizations and Teams resource types):
+
+| Permission | Needed for |
+| :--- | :--- |
+| `org.users:write` | Updating an existing member's org role (Grant, via `PATCH /api/org/users/{id}`) |
+| `org.users:remove` | Removing a user from the org (Revoke, via `DELETE /api/org/users/{id}`) — shared with account provisioning's `Delete` above |
+| `teams.permissions:write` | Adding or removing a team member (Grant/Revoke, via `POST`/`DELETE /api/teams/{id}/members[/{userId}]`) |
+
+`org.users:add` is reached only by `CreateAccount`'s invite path. A customer who enables entitlement provisioning without account provisioning does not need it: in Cloud mode, Grant only ever updates the role of a user who is already an org member (via `PATCH /api/org/users/{id}`), or fails outright if the user isn't already a member — it never calls the invite endpoint.
+
+`org.users:remove`, by contrast, is needed independently by **both** capabilities: account provisioning's `Delete` and entitlement provisioning's Revoke both call the same `DELETE /api/org/users/{id}` endpoint. A customer who enables only one of the two capabilities still needs this permission for that capability alone.
+
+Team sync always reads team membership, so `teams.permissions:read` is required unconditionally. `teams.roles:read` is only needed when Role sync is enabled — the connector only fetches each team's RBAC roles in that case — same as `roles:read`. A narrower token that previously synced only users/orgs may still fail List after this upgrade, since `teams:read` and `teams.permissions:read` are newly required for team sync regardless of Role sync.
+
+<Note>
+**With Role sync enabled, `roles:read` and `teams.roles:read` come as a package**
+
+No built-in Grafana role grants one of these actions without the other: `fixed:roles:reader` and `fixed:roles:writer` each grant both together, and the basic roles that grant `roles:read` (`basic:admin` and `basic:grafana_admin`) also grant `teams.roles:read`. `basic:viewer` and `basic:editor` grant neither. This is expected — when Role sync is disabled, the connector needs neither action, so there is nothing to isolate; when Role sync is enabled, plan on granting both together (or use a **custom role** if you need to diverge from Grafana's built-in roles for some other reason).
+</Note>
 
 You will need:
 
@@ -113,7 +160,43 @@ You will need:
 * The username and password for a Grafana account with **admin-level permissions**
 * Your Grafana instance URL
 
-On Grafana Enterprise that account also needs `teams.roles:read`, which team sync reads for every team, plus `roles:read` when Role sync is enabled. On OSS, leave Role sync disabled — the access-control API is not present, and the connector skips that step instead of failing.
+On Grafana Enterprise that account also needs `teams:read` (`GET /api/teams/search`) and `teams.permissions:read` (team membership, from `GET /api/teams/{id}/members`) unconditionally, plus `roles:read` and `teams.roles:read` together when Role sync is enabled — the connector only fetches each team's RBAC roles in that case. Self-hosted reads users from the global users endpoint rather than `GET /api/org/users`, so `org.users:read` — required in Cloud mode for user sync — does not apply to self-hosted user sync here (it still applies to organization-membership grants below). See the permission table in the **Grafana Cloud** tab above for the full endpoint-by-endpoint mapping, and note that no built-in Grafana role grants `roles:read` without also granting `teams.roles:read` (or vice versa) — that's expected when Role sync is enabled; a custom role is only needed if you must diverge from that pairing. On OSS, leave Role sync disabled — the access-control API is not present, and the connector skips that step instead of failing.
+
+Service account sync is unconditional on both Cloud and self-hosted, so `serviceaccounts:read` (`GET /api/serviceaccounts/search`) is also required here, same as in the Cloud tab.
+
+Beyond team, role, and service-account permissions, self-hosted org and user sync call instance-admin-scoped endpoints:
+
+| Endpoint | Needed for |
+| :--- | :--- |
+| `GET /api/orgs` | Self-hosted organization sync (lists every org on the instance) |
+| `GET /api/orgs/{id}/users` | Organization membership grants |
+| `GET /api/users` | Global user sync (self-hosted reads all users from this endpoint, not `GET /api/org/users`) |
+
+These three endpoints are part of Grafana's legacy admin API and are gated by the account's **Grafana Admin** (server admin) flag on **OSS**, where RBAC is not available. On **Grafana Enterprise**, RBAC exposes granular actions that can gate these same endpoints instead of relying on the server-admin flag: `orgs:read` for `GET /api/orgs`, `users:read` (scope `global.users:*`) for `GET /api/users`, and `org.users:read` for `GET /api/orgs/{id}/users`.
+
+When provisioning is enabled (`BATON_PROVISIONING`), self-hosted also calls write endpoints. Like the read endpoints above, these are part of Grafana's legacy admin API and are gated by the account's **Grafana Admin** (server admin) flag.
+
+**Account provisioning** (`CreateAccount`, `Delete`):
+
+| Endpoint | Needed for |
+| :--- | :--- |
+| `POST /api/admin/users` | Creating a new user (`CreateAccount`) |
+| `DELETE /api/admin/users/{id}` | Deleting a user (`Delete`) |
+
+`CreateAccount`'s already-exists handling looks up the existing account by scanning the first page of the global users list (`GET /api/users`, already required for user sync above), not by ID — so no additional permission beyond user sync is needed for that path.
+
+**Entitlement provisioning** (Grant/Revoke on organization and team membership):
+
+| Endpoint | Needed for |
+| :--- | :--- |
+| `GET /api/users/{id}` | Looking up a user's details when granting org membership (Grant) |
+| `GET /api/users/{id}/orgs` | Checking a user's existing org memberships before Grant/Revoke |
+| `POST /api/orgs/{id}/users` | Adding a user to an organization with a role (Grant) |
+| `DELETE /api/orgs/{id}/users/{userId}` | Removing a user from an organization — needed for both Grant (when changing an existing member's role, which removes then re-adds them) and Revoke |
+| `POST /api/teams/{id}/members` | Adding a user to a team (Grant) |
+| `DELETE /api/teams/{id}/members/{userId}` | Removing a user from a team (Revoke) |
+
+On Grafana Enterprise, team membership Grant/Revoke is additionally gated by `teams.permissions:write` — the same RBAC action documented for Cloud's team provisioning above. On OSS, these two endpoints are instead gated by the account's **org Admin** role — a lower, per-organization privilege than the instance-wide **Grafana Admin** server-admin flag that gates the rest of this table.
 
 **Done.** Next, move on to the connector configuration instructions.
 </Tab>
@@ -190,7 +273,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
 <Step>
-In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
