@@ -12,17 +12,30 @@ sidebarTitle: "Datadog"
 
 ## Capabilities
 
-| Resource | Sync | Provision |
-| :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Teams | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Schedules | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | |
-| Secrets - API keys | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| Resource | Sync | Provision | Issue | Revoke |
+| :--- | :--- | :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | | |
+| Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | | |
+| Teams | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | | |
+| Schedules | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | | | |
+| Secrets - Organization API keys | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>‡ | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>‡ |
+| Secrets - Service account application keys | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>*† |
 
-[This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page.
+[This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page. Organization API keys and service account application keys are synced, issued, and shown as distinct secret kinds: they are two different kinds of API key, not two spellings of one, and a request names which kind it wants. Service account application keys are the default kind.
 
-*Schedules are not synced by default, but you can opt into syncing them when configuring the connector.
+An application key can be issued and revoked through C1 when **Sync secrets** and **Sync service account application keys** are both enabled, provided the selected Datadog user is a service account. Datadog does not support an expiration date when creating an application key.
+
+<Warning>
+Credential issuance targets a Datadog service account only. C1 re-checks at issuance time that the selected user is still a service account, and refuses to issue against a human user. The issued application key is owned by, and scoped to, that service account.
+
+Revoking a service account application key needs the owning service account as well as the key. C1 does not supply it today, so the connector reads it from the key's own owner record instead. A revoke is refused only when that lookup cannot name an owner either.
+</Warning>
+
+‡Organization API key issuance and revocation both require **Allow organization API key deletion**, which is off by default and is separate from **Sync secrets**. An organization API key belongs to the whole organization rather than to the person it was issued to, and it cannot be scoped, so C1 will not mint one it has no permission to revoke. With the setting off, organization API keys still sync; they simply cannot be issued or deleted.
+
+*Schedules and service account application keys are not enabled by default. Enable **Sync schedules** for schedules; enable **Sync secrets** *and* **Sync service account application keys** for application keys — **Sync secrets** alone syncs organization API keys only.
+
+†Revoking a service account application key needs the owning service account as well as the key, because Datadog has no delete-by-key-id-alone form for these keys. When the request omits it, the connector looks the owner up from the key and proceeds; a key whose owner cannot be identified is refused rather than guessed at — see the note above.
 
 ### Connector actions
 
@@ -41,7 +54,7 @@ Configuring the connector requires you to pass in credentials generated in Datad
 <Warning>
 A user with the **Connector Administrator** or **Super Administrator** role in C1 and the **Datadog Admin** or **Datadog standard** role in Datadog must perform this task.
 
-If your user has a custom Datadog role, make sure it includes the **User App Keys** and **API Keys Read** permissions, plus **User Access Invite** and **User Access Manage** to create, update, enable, and disable users from C1.
+If your user has a custom Datadog role, make sure it includes **User App Keys**, **User Access Invite**, and **User Access Manage** to create, update, enable, and disable users from C1. If you enable **Sync secrets**, add **API Keys Read** to sync organization API keys. Add **Service Account Write**, which governs syncing, issuing, and revoking service account application keys, only if you also enable **Sync service account application keys**; add **Org App Keys Read** alongside it, which the revoke path uses to find the service account that owns a key when the request does not name it. Add **API Keys Write** and **API Keys Delete** only if you also enable **Allow organization API key deletion**; without that setting the connector never creates or deletes an organization API key, so those two permissions are not needed. **Service Account Write** is required, not optional, once that setting is on: a role that lacks it fails the sync rather than syncing an application-key inventory that is silently missing keys. That is why the setting is off by default — an existing install keeps syncing until the operator grants the permission.
 </Warning>
 
 ### Locate your Datadog site
@@ -114,7 +127,7 @@ To complete this task, you'll need:
   <Step>
   Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-     If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+  If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
   </Step>
   <Step>
   Set the connector's **Name** and, optionally, a **Description**.
@@ -139,6 +152,11 @@ To complete this task, you'll need:
   </Step>
   <Step>
   **Optional.** Enable **Sync secrets** to display them on the [Inventory page](/product/admin/inventory).
+  </Step>
+  <Step>
+  **Optional.** Enable **Sync service account application keys** to sync, issue, and revoke them. It requires the **Service Account Write** permission, and a role without it fails the whole sync, so it is off by default and **Sync secrets** alone does not turn it on.
+
+  **Optional.** Enable **Allow organization API key deletion** to let C1 issue and revoke Datadog organization API keys. Leave it off unless you want C1 to be able to delete organization-wide keys; enabling **Sync secrets** alone does not grant this.
   </Step>
   <Step>
   **Optional.** Enable **Sync schedules**.
@@ -170,7 +188,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
   <Step>
-  In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+  In C1, navigate to **Apps** > **Connectors** > **Add connector**.
   </Step>
   <Step>
   Search for **Baton** and click **Add**.
@@ -178,7 +196,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
   <Step>
   Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-     If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+  If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
   </Step>
   <Step>
   Set the connector's **Name** and, optionally, a **Description**.
@@ -228,8 +246,18 @@ stringData:
   # Optional: include if you want to sync schedule data from Datadog
   BATON_SYNC_SCHEDULES: true
 
-  # Optional: include if you want to sync secrets (API keys) from Datadog
+  # Optional: include if you want to sync secrets (API keys) from Datadog.
+  # On its own this syncs organization API keys only.
   BATON_SYNC_SECRETS: true
+
+  # Optional: include alongside BATON_SYNC_SECRETS to sync, issue and revoke
+  # service account application keys. Needs service_account_write, without
+  # which sync fails, plus org_app_keys_read for revoke owner lookup.
+  BATON_SYNC_SERVICE_ACCOUNT_APPLICATION_KEYS: true
+
+  # Optional: include ONLY if you want C1 to issue and delete organization-wide
+  # Datadog API keys. Syncing secrets does not grant this on its own.
+  BATON_ALLOW_ORG_API_KEY_DELETION: true
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
