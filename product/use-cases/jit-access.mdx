@@ -1,0 +1,51 @@
+---
+title: "Use case: Just-in-time (JIT) access"
+og:title: "Use case: Replace standing access with JIT access in C1 - C1 docs"
+og:description: "See how C1 provisions access for a set duration instead of indefinitely, for both routine requests and emergencies, and removes it automatically when it's no longer needed — and where to go for setup details."
+description: "See how C1 provisions access for a set duration instead of indefinitely, for both routine requests and emergencies, and removes it automatically when it's no longer needed — and where to go for setup details."
+sidebarTitle: "JIT access"
+---
+{/* Editor Refresh: 2026-09-22 */}
+
+Standing access — a grant with no end date — is risk that just accumulates: nobody notices it, nobody revokes it, and it's still there long after the reason for it is gone — exactly the kind of stale entitlement an attacker or an auditor finds first. Just-in-time (JIT) access is the alternative: request it, get it for exactly as long as the work needs, and have it removed automatically. This page pulls together the JIT mechanics already used throughout the [self-service](/product/use-cases/self-service-app-directory) and [identity governance](/product/use-cases/identity-governance) use cases into one place, plus the emergency-access path those don't cover.
+
+<Note>
+This page assumes you've already [added and configured connectors](/baton/intro) for the systems you want to grant time-bound access to.
+</Note>
+
+## Request access where work happens
+
+JIT requests go through the same channels as any other [access request](/product/how-to/create-requests): the web app, the [C1 app for Slack or Microsoft Teams](/product/how-to/create-requests#request-using-the-c1-app-for-slack), or the command line via [Cone](/product/cli/install) (for people) or [c1i](/product/cli/c1i-agent-skills) (for agents and coding assistants). A requester picks the resource and, where a duration option is offered, how long they need it.
+
+## Apply policy before approval
+
+Every request runs through an approval [policy](/product/admin/policies) that can route on identity, role, resource, and duration before granting anything — auto-approve for routine, low-risk, short-duration requests, or route to a reviewer for anything longer or more sensitive. For a genuine incident, [emergency access](/product/admin/emergency) is a distinct, expedited path: admins enable specific entitlements for it and assign a separate emergency access policy, so a break-glass request doesn't wait behind the standard review queue.
+
+## Set the scope and expiration
+
+Time limits are set on the entitlement or access profile itself via [Max request duration](/product/admin/access-requests) — once it's on, a grant made against it can't outlive that window, and C1 sends the requester reminders as it approaches expiry (at 30, 14, 3, and 1 days out, and 1 hour, depending on the grant's length) so they can request an extension if the work is still ongoing. This same mechanism covers routine time-bound access, cloud infrastructure access — see [Get started with AWS JIT access](/product/how-to/qs-aws-jit-identity-center) and [Get started with GCP JIT access](/product/how-to/qs-gcp-jit) — and on-call rotations, where access can be tied to who's currently on call; see [Get started with on-call access control](/product/how-to/qs-on-call-access-control).
+
+## Remove access automatically
+
+What "automatic" means depends on why the access is ending:
+
+- **The clock runs out.** This is fully automatic once Max request duration is set — no automation to build, C1 revokes the grant when the window closes.
+- **It stops being used.** This isn't automatic by default — build it with the [Unused Access trigger](/product/admin/automations-triggers-reference#unused-access), which fires when an account hasn't been used for a duration you set. See the [unused access cleanup example](/product/admin/automation-examples#unused-access-cleanup): warn the user, wait, then revoke if it's still unused.
+- **The justification no longer applies.** If the access came from [membership automation](/product/admin/dynamic-access-control), a role or department change that makes someone stop matching a profile's condition triggers unenrollment and, depending on how the profile is configured, revocation — covered in depth in the [JML automation use case](/product/use-cases/jml-automation).
+
+## Audit evidence
+
+Every request, approval, grant, and revocation is recorded on its task's audit log, and the underlying events are available as [system logs](/product/admin/system-log) in OCSF format for export to a SIEM. If JIT access is scoped by an access review campaign instead of an individual request, the campaign's own [report](/product/admin/manage-campaigns#generate-a-campaign-report) covers who had what, for how long, and who approved it.
+
+## Related resources
+
+<Columns cols={2}>
+<Card title="Access requests" iconType="duotone" icon="key" horizontal href="/product/admin/access-requests" />
+<Card title="Enable emergency access" iconType="duotone" icon="triangle-exclamation" horizontal href="/product/admin/emergency" />
+<Card title="Get started with AWS JIT access" iconType="duotone" icon="aws" horizontal href="/product/how-to/qs-aws-jit-identity-center" />
+<Card title="Get started with GCP JIT access" iconType="duotone" icon="cloud" horizontal href="/product/how-to/qs-gcp-jit" />
+<Card title="Get started with on-call access control" iconType="duotone" icon="phone-volume" horizontal href="/product/how-to/qs-on-call-access-control" />
+<Card title="Automation examples" iconType="duotone" icon="bolt" horizontal href="/product/admin/automation-examples" />
+<Card title="Self-service use case" iconType="duotone" icon="grid-2" horizontal href="/product/use-cases/self-service-app-directory" />
+<Card title="JML automation use case" iconType="duotone" icon="arrows-rotate" horizontal href="/product/use-cases/jml-automation" />
+</Columns>

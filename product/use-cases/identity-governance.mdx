@@ -1,0 +1,91 @@
+---
+title: "Use case: AI-native identity governance"
+og:title: "Use case: AI-native identity governance with C1 - C1 docs"
+og:description: "See how C1's identity governance capabilities fit together to automate lifecycle, access, and compliance for every identity — and where to go for setup details."
+description: "See how C1's identity governance capabilities fit together to automate lifecycle, access, and compliance for every identity — and where to go for setup details."
+sidebarTitle: "AI-native identity governance"
+---
+{/* Editor Refresh: 2026-09-21 */}
+
+An account that outlives its owner's employment, an entitlement nobody remembers granting, a new hire blocked for a week waiting on IT — this is where breaches start and audits fail. Identity governance covers what happens to a person's access from the day they join your organization to the day they leave — plus everything in between: the apps they request, the access they're automatically granted, and the reviews that confirm they should still have it. This page walks through that lifecycle end to end and links out to the C1 docs that cover each step in depth.
+
+<Note>
+This page assumes you've already [added and configured connectors](/baton/intro) for the systems you want to govern. If you're setting up C1 for the first time, start with [Get started with C1](/product/how-to/qs-set-up-c1).
+</Note>
+
+## Day one: automated onboarding
+
+When a new person joins your organization, C1 can turn that HR event into account creation and baseline access — without anyone filing a ticket.
+
+It starts with your [directory](/product/admin/directory): C1 syncs identity data from your HRIS or identity provider, so a new user record in C1 reflects a real event upstream (a new hire, a status change, a department move).
+
+From there, two mechanisms do the work:
+
+- **Access profiles.** An [access profile](/product/admin/profiles) is a curated bundle of apps and entitlements scoped to a group — for example, "Everyone" or "Engineering." C1's own term for what's commonly known as birthright access: access a user gets automatically because of who they are, not because they asked for it.
+- **Membership automation (JML).** [Automate onboarding & offboarding access changes](/product/admin/dynamic-access-control) enrolls and unenrolls users in access profiles automatically based on conditions you define — matching a department, a title, an entitlement they hold. Enrollment can be configured to auto-approve for low-risk access, so a new hire's baseline access is provisioned same-day with no manual review.
+
+For onboarding logic that goes beyond profile enrollment — granting specific entitlements, creating department-specific accounts, or notifying a team in Slack — build a custom flow with [automations](/product/admin/automations). When a step needs logic the built-in steps don't cover — calling an external system, implementing an org-specific rule — write it as a [Function](/product/admin/functions): a serverless TypeScript step with a typed SDK for querying C1 data and an npm package allowlist for external calls. See the [employee onboarding example](/product/admin/automation-examples#employee-onboarding) for a worked walkthrough triggered on a directory sync event, and the [JML automation use case](/product/use-cases/jml-automation) for the full joiner/mover/leaver picture, including role changes.
+
+## Ongoing: self-service access
+
+Baseline access covers what everyone needs. For everything else, people request it.
+
+[Access requests](/product/admin/access-requests) let users ask for apps, roles, or entitlements — permanently or [just-in-time](/product/use-cases/jit-access) for a limited window — and C1 applies your approval policy before anything is provisioned: auto-approve for low-risk access, route to a manager or resource owner for anything sensitive. [Get started with self-service access requests](/product/how-to/qs-self-service-requests) walks through setting this up end to end. The same request-and-approve model isn't limited to access grants — the [Actions catalog](/product/how-to/request-actions) extends it to on-demand operational actions, like provisioning a device.
+
+The same request-and-approve model also extends to AI tools. If [AI access management (AIAM)](/product/admin/aiam-overview) is enabled for your tenant, every call an AI client makes to a connected MCP server is routed through an identity-aware proxy: it authenticates the caller, checks the call against the user's granted access profile and any configured policy, forwards it to the downstream server, and logs the operation with full identity context. Approved tools are bundled into toolsets and bound to access profiles, so a user requests AI tool access the same way they'd request an app — see [Get started with AI tools](/product/how-to/ai-tools) and the [self-service use case](/product/use-cases/self-service-app-directory) for the full catalog and request-channel picture.
+
+## Provisioning: policy-based, to any connected system
+
+However access is granted — birthright enrollment, a self-service request, or an automation — C1 handles fulfillment the same way. [Provisioning](/product/admin/provisioning) covers the methods C1 supports for pushing the resulting account and entitlement changes out to the target system, from direct API provisioning to ticket-based workflows for systems that aren't directly connected.
+
+## Bringing a new app under governance
+
+Governing an app requires connecting it first. [Add and manage applications](/product/admin/applications) covers connecting cloud, on-prem, and custom applications — C1 has a library of [pre-built connectors](/baton/intro), and for private systems that can't be reached directly, [C1 Bridge](/baton/bridge-client) connects C1 to systems behind your firewall. Apps discovered through an identity provider but not yet actively managed show up as unmanaged, so you can see your full software footprint before deciding what to bring under governance next.
+
+## Compliance: access reviews and separation of duties
+
+Two mechanisms keep access accountable after it's granted (see the [UAR automation use case](/product/use-cases/uar-automation) for a closer look at running reviews):
+
+- **Access review campaigns.** Run one-time or scheduled [access review campaigns](/product/admin/campaigns) to have managers or resource owners certify or revoke access on a regular cadence. [Get started running access reviews](/product/how-to/qs-user-access-reviews) covers planning, running, and reporting on a campaign.
+- **Separation of duties (SoD).** [Access conflict monitors](/product/admin/access-conflicts) automatically detect when a user holds two entitlements that shouldn't be combined — the access equivalent of catching a policy violation before an auditor does. Conflict monitors support standards like SOX, FDA 21 CFR Part 11, and ISO 27001, and you can [scope a review campaign to only the users with an active conflict](/product/admin/access-conflicts#review-access-conflicts-in-a-campaign) instead of reviewing everyone.
+
+For a recurring compliance check that doesn't need a full campaign — for example, alerting on a specific risky combination weekly — see the [scheduled compliance check example](/product/admin/automation-examples#scheduled-compliance-check).
+
+## Leaver: automated offboarding
+
+The same membership automation that handles onboarding handles departures. When a user no longer matches an access profile's membership condition — their status changes, they leave a department — C1 creates a revocation task automatically. You control what happens to their access: leave it as-is, revoke everything the profile granted, or revoke only what isn't justified by another profile they still belong to. See [Automate onboarding & offboarding access changes](/product/admin/dynamic-access-control#what-happens-to-access-when-a-user-is-unenrolled), the [employee offboarding example](/product/admin/automation-examples#employee-offboarding), and the [JML automation use case](/product/use-cases/jml-automation) for the full lifecycle.
+
+## AI agents and non-human identities
+
+AI agents are governed by the same mechanism as everything else on this page — access profiles, policy, approval, and audit — applied to the AI tool layer through [AI access management (AIAM)](/product/admin/aiam-overview). It has its own setup path; start with [Enable AI access management](/product/admin/enable-ai-access-management). For MCP servers that support the standard, C1 can skip the proxy entirely and issue the agent a scoped, C1-signed token instead — see [Enterprise-managed authorization](/product/admin/enterprise-managed-authorization/overview). The [Agent SSO and runtime governance use case](/product/use-cases/agent-sso-runtime-governance) covers both paths, plus runtime guardrails and per-agent visibility, in depth.
+
+That's a different integration from [C1 MCP](/product/admin/c1-mcp), which is read-only in the other direction: it lets your own AI assistants (Claude Desktop, Cursor, Codex) query C1's identity data directly, for ops and investigation rather than governing what an agent can reach.
+
+Non-human identities — app registrations, assumable roles, and managed identities discovered across your connected apps — are a newer, still-expanding part of this picture. The [NHI dashboard](/product/admin/nhi) covers discovery, ownership tracking, and findings today; it doesn't yet have the request/approve/revoke workflow that governs human and AI-agent access. Check the [release notes](/product/release-notes) for what's shipped since this page was written.
+
+## Explore other use cases
+
+This page is the anchor for the pieces below — each has its own closer look:
+
+<Columns cols={2}>
+<Card title="UAR automation use case" iconType="duotone" icon="user-check" horizontal href="/product/use-cases/uar-automation" />
+<Card title="JML automation use case" iconType="duotone" icon="arrows-rotate" horizontal href="/product/use-cases/jml-automation" />
+<Card title="Self-service use case" iconType="duotone" icon="grid-2" horizontal href="/product/use-cases/self-service-app-directory" />
+<Card title="Agent SSO & runtime governance use case" iconType="duotone" icon="lock" horizontal href="/product/use-cases/agent-sso-runtime-governance" />
+<Card title="Secrets management use case" iconType="duotone" icon="vault" horizontal href="/product/use-cases/secrets-management" />
+<Card title="JIT access use case" iconType="duotone" icon="clock" horizontal href="/product/use-cases/jit-access" />
+</Columns>
+
+## Related resources
+
+<Columns cols={2}>
+<Card title="Access profiles" iconType="duotone" icon="layer-group" horizontal href="/product/admin/profiles" />
+<Card title="Automate JML flows" iconType="duotone" icon="arrows-rotate" horizontal href="/product/admin/dynamic-access-control" />
+<Card title="Access review campaigns" iconType="duotone" icon="user-check" horizontal href="/product/admin/campaigns" />
+<Card title="Access conflicts (SoD)" iconType="duotone" icon="shield-check" horizontal href="/product/admin/access-conflicts" />
+<Card title="AI access management" iconType="duotone" icon="robot" horizontal href="/product/admin/aiam-overview" />
+<Card title="Connectors library" iconType="duotone" icon="arrow-right" horizontal href="/baton/intro" />
+<Card title="Extend with Functions" iconType="duotone" icon="code" horizontal href="/product/admin/functions" />
+<Card title="C1 MCP" iconType="duotone" icon="plug" horizontal href="/product/admin/c1-mcp" />
+<Card title="Service principals" iconType="duotone" icon="microchip" horizontal href="/product/admin/service-principals/overview" />
+</Columns>
