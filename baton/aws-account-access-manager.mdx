@@ -1,0 +1,254 @@
+---
+title: "Set up a Aws Account Access Manager connector"
+og:title: "Set up a Aws Account Access Manager connector"
+description: "C1 provides identity governance and just-in-time provisioning for Aws Account Access Manager. Integrate your Aws Account Access Manager instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Aws Account Access Manager. Integrate your Aws Account Access Manager instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Aws Account Access Manager"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Aws Account Access Manager connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Applications | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+<Note>
+This connector emits Role grants whose principal is an AWS Identity Center user or group, but it has no Identity Center sync of its own — so those grants carry an `ExternalResourceMatchID` annotation and the platform correlates them against whatever *other* connector (for example, an AWS Identity Center connector) already syncs that same identity. Once correlation runs, every grant principal is that connector's own user or group resource.
+
+The two placeholder resource types this uses are declared internally only to supply the principal resource-type IDs, and have no syncer, so they are not capabilities and do not appear above.
+
+**An Identity Center connector is a prerequisite, not an optimisation.** This connector declares that it requires an external connector, so a sync with none configured fails outright rather than completing with unresolved principals. If a sync errors saying an external connector is required, pair this connector with one that syncs the same IAM Identity Center instance.
+</Note>
+
+
+<Note>
+**Stale access can linger in AWS after you remove something.** Account Access Manager does not clean
+entitlements up on its own, so an assignment survives the deletion of the IAM role it points at, and the
+removal of the user or group from IAM Identity Center. Those rows keep appearing in synced grants until
+someone revokes them. Renaming an AWS account is not reflected either -- the account name captured when
+the assignment was created is the one you will see.
+</Note>
+
+## Gather Aws Account Access Manager credentials
+
+<Warning>
+To configure the Aws Account Access Manager connector, you need IAM administrator permissions in the AWS account or organization where Account Access Manager is enabled.
+</Warning>
+
+<Steps>
+  <Step>
+      In IAM, create (or identify) how C1 will authenticate. Which options are available depends on where the connector runs:
+
+      - **C1-hosted with the ConductorOne binding role configured** (recommended): create an IAM role for C1 to assume, and put a trust policy on it naming ConductorOne's published binding role ARN with the external ID C1 shows you. You hand over no long-lived keys, and you revoke access by editing that one policy.
+      - **C1-hosted without the binding role**: a long-lived access key/secret pair is the only option. A role ARN cannot be used here — the connector's hosted identity has no permission to assume roles, so it fails with `AccessDenied`.
+      - **Self-hosted** (you run the connector yourself): a long-lived access key/secret pair, the ambient AWS credential chain (instance or IRSA role), or either of those plus a role ARN to assume.
+  </Step>
+
+  <Step>
+    Attach a policy granting `account-access:ListApplications`, `account-access:GetApplication`, `account-access:ListEntitlements`, `account-access:CreateEntitlement`, and `account-access:DeleteEntitlement`, plus `organizations:ListAccounts`. The last one is what lets the connector find the accounts to look for role assignments in; without it no roles are discovered. `organizations:ListAccounts` is not only an IAM question: AWS answers it from the organization's management account or a delegated administrator, and refuses it from an ordinary member account whatever the policy grants. So the connector has to run from one of those two.
+  </Step>
+
+  <Step>
+    For every IAM role you intend to grant access to through Account Access Manager, add a trust policy statement allowing the `account-access.amazonaws.com` service principal to `sts:AssumeRole` and `sts:SetContext`, with a `Condition` block matching `aws:SourceAccount` and `aws:SourceArn` for your application — without it, granting access to that role fails with a validation error.
+  </Step>
+
+  <Step>
+    Look up the AWS Identity Store ID (Identity Center console → **Settings**, format `d-xxxxxxxxxx`) backing this Application's Identity Center instance, and copy the access key/secret (or role ARN) and Identity Store ID for the configuration step below.
+  </Step>
+
+  <Step>
+    Make sure a connector that syncs the **same** IAM Identity Center instance is already set up in C1 — an AWS connector with Identity Center enabled, for example. This connector emits every role grant against an Identity Center user or group and syncs none of those identities itself, so without that pair there is nothing to correlate the grants to and the sync fails.
+  </Step>
+</Steps>
+
+## Configure the Aws Account Access Manager connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Aws Account Access Manager** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Aws Account Access Manager connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **AWS Region**: the primary region of your IAM Identity Center instance. Account access manager must be enabled in that same region.
+        - **Identity Store ID** (required): the AWS Identity Store ID (e.g. `d-xxxxxxxxxx`) backing this Application's Identity Center instance, so grants can be correlated to a real synced user/group from another connector (e.g. an AWS Identity Center connector). Without a correct value here, grants can never resolve to a real person.
+        - **Application ARN** (optional): scope sync to a single Application. Leave blank to sync every Application visible to the credentials below.
+        - **AWS Access Key ID** / **AWS Secret Access Key** / **AWS Session Token** (optional): static credentials. Leave blank to use the ambient AWS credential chain.
+        - **AWS Role ARN** / **AWS Role External ID** (optional): assume this role (via STS `AssumeRole`) on top of the credential source above.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Aws Account Access Manager connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Aws Account Access Manager](https://github.com/conductorone/baton-aws-account-access-manager) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    ### Step 1: Set up a new Aws Account Access Manager connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Aws Account Access Manager connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Aws Account Access Manager connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-aws-account-access-manager-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-aws-account-access-manager-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Aws Account Access Manager credentials
+      # Add connector-specific credentials here
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-aws-account-access-manager.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-aws-account-access-manager
+      labels:
+        app: baton-aws-account-access-manager
+    spec:
+      selector:
+        matchLabels:
+          app: baton-aws-account-access-manager
+      template:
+        metadata:
+          labels:
+            app: baton-aws-account-access-manager
+            baton: "true"
+            baton-app: aws-account-access-manager
+        spec:
+          containers:
+          - name: baton-aws-account-access-manager
+            image: public.ecr.aws/conductorone/baton-aws-account-access-manager:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-aws-account-access-manager
+            envFrom:
+            - secretRef:
+                name: baton-aws-account-access-manager-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Aws Account Access Manager connector to. Aws Account Access Manager data should be found on the **Entitlements** and **Resources** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Aws Account Access Manager connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-aws-account-access-manager).
+</Tip>
