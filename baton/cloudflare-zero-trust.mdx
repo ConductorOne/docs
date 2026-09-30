@@ -14,6 +14,124 @@ sidebarTitle: "Cloudflare Zero Trust"
 | Access groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
+## Access group rules
+
+Cloudflare Access groups grant membership using three rule lists with
+different logic:
+
+- **Include** — OR. A user matches the group if at least one rule matches.
+- **Require** — AND. A user must also match every rule in this list.
+- **Exclude** — NOT. A user must not match any rule in this list.
+
+Each list can contain several rule types (email, email domain, everyone,
+country, IP range, IdP group claim, a nested Access group, etc.). This
+connector can evaluate some of them and not others, and rules it cannot
+evaluate are **skipped** rather than treated as non-matching:
+
+| Rule type | Evaluated? | Effect on reported membership |
+| :--- | :--- | :--- |
+| `email`, `email_domain`, `everyone` | Yes | Fully enforced in all three lists. |
+| `group` (nested Access group) | In `Include` only | Reported as an expandable grant — see below. |
+| `ip`, `ip_list`, `geo`, `certificate`, `device_posture`, `auth_method`, `login_method`, `auth_context`, `external_evaluation` | No | None, by design. |
+| `email_list`, IdP group claims (`okta`, `gsuite`, `saml`, ...), service tokens | No | May over- or under-report — see below. |
+
+### Why skipped rules do not narrow membership
+
+Each list combines its rules with a boolean operator, and a skipped rule is
+treated as that operator's neutral element so it cannot change the list's
+answer: satisfied under `Require`'s AND, non-matching under `Include`'s OR
+and `Exclude`'s NOT.
+
+This matters most for `Require`. If a skipped rule were treated as "does not
+match", a single one would make the whole AND fail and the group would report
+**no members at all**. A group with `Include: email` and `Require: geo US`
+really does grant access to that user, and C1 reports it.
+
+<Warning>
+**A group whose `Include` list contains nothing this connector can evaluate
+reports no members at all.** `Include` is an OR, and its neutral element is
+"no match", so a list made up entirely of skipped rules — an IdP-group claim
+on its own, for example, which is a common Access setup — produces an empty
+result.
+
+That direction under-reports rather than over-reports, and an empty group in
+an access review reads as "nobody has access" rather than "this could not be
+determined". The connector cannot tell the difference, and inventing members
+would be worse, so it logs every group in this state at sync time and lists
+the group's rules on its resource profile. Check those groups in Cloudflare
+directly.
+</Warning>
+
+Contextual rules — country, IP range, mTLS certificate, device posture,
+authentication method — are never evaluated, and this is deliberate rather
+than a gap. They constrain *the request*: where it comes from and how it
+authenticated. They do not change *who* the policy grants access to, and
+Cloudflare evaluates them per request, so no connector can resolve them at
+sync time. C1 models who a policy grants access to, not the conditions under
+which that access applies.
+
+<Warning>
+**Rules that name identities this connector cannot read may cause C1 to
+over-report membership.** Nested Access groups referenced from
+`Require`/`Exclude`, email lists, IdP group claims (`okta`, `gsuite`,
+`saml`) and service tokens all name real identities, but in a directory
+this connector does not sync.
+
+Because they are skipped, a user who does not satisfy a `Require` rule — or
+who should be removed by an `Exclude` rule — may still be reported as a
+member of the group. In `Include` the effect runs the other way: a member
+admitted only by such a rule is not reported at all. Every group carrying such a rule is logged at sync
+time, and its rules are listed on the group's profile in C1 under
+`include_rules` / `require_rules` / `exclude_rules`, so you can see exactly
+which conditions were not applied.
+
+For those groups, confirm membership in Cloudflare before relying on C1 for
+an access review.
+</Warning>
+
+A nested Access group referenced in **Include** is represented as an
+expandable grant on the referenced group's own membership — so nested
+group membership (including further nesting) is reflected in C1 without
+this connector re-evaluating every member on every sync.
+
+<Warning>
+**Nested Include membership is not reported when the same group also has
+`Require` or `Exclude` rules that this connector can evaluate.** An
+expandable grant is a union: it pulls in everyone who holds the nested
+group's membership, and the outer group's `Require`/`Exclude` rules cannot
+be applied to the members it pulls in. A member excluded by the outer group
+would otherwise still be reported as a member of it.
+
+Rather than over-report access, the connector omits the nested membership
+for those groups and reports only the members matched directly by the outer
+group's own `email`, `email_domain` and `everyone` rules. Rules that are
+skipped anyway — and a `Require` list consisting only of `everyone` — are
+not treated as restrictions, since they filter nothing. Affected groups are
+logged at sync time.
+</Warning>
+
+### Granting and revoking group membership
+
+C1 adds a member to an Access group by appending an `email` rule to the
+group's `Include` list, and removes one by deleting that rule. Everything
+else about the group — its name and its `Require` and `Exclude` rules — is
+written back unchanged.
+
+Because membership is expressed as rules rather than as a member list, some
+requests cannot be carried out, and the connector refuses them rather than
+reporting a change it did not make:
+
+| Request | Result |
+| :--- | :--- |
+| Grant to someone a `Require` or `Exclude` rule keeps out | **Refused.** The rule would be written but would grant nothing, and C1 would never hold the grant, so the rule would stay in your policy unnoticed. |
+| Grant to someone already admitted by a broad rule (`everyone`, `email_domain`) | **No change.** They already have access, and adding a rule naming them would only leave a redundant one behind. |
+| Revoke from someone whose access comes from a broad rule | **Refused.** That rule governs other members too, so it cannot be edited on one person's behalf. Change it in Cloudflare instead. |
+| Revoke the last `email` rule in a group's `Include` list | **Refused.** Cloudflare rejects a group with an empty `Include` list. Delete or edit the group in Cloudflare instead. |
+| Revoke from someone who is not a member | **No change.** |
+
+Membership that comes from a nested Access group cannot be revoked here
+either: the member belongs to the referenced group, not to this one.
+
 ## Gather Cloudflare Zero Trust credentials
 
 Configuring the connector requires you to pass in credentials generated in Cloudflare Zero Trust. Gather these credentials before you move on.
@@ -68,11 +186,13 @@ A user with **Super Administrator** access in Cloudflare Zero Trust must perform
          - Account -> Access: Organizations, Identity Providers, and Groups -> Edit
          - Account -> Access: Apps and Policies -> Read
          - Account -> Access: Audit Logs -> Read
+         - Account -> Memberships -> Edit
 
        Otherwise, set:
 
          - Account -> Account Settings -> Read
          - Account -> Access: Organizations, Identity Providers, and Groups -> Read
+         - Account -> Memberships -> Read
          - Account -> Access: Apps and Policies -> Read
          - Account -> Access: Audit Logs -> Read
 
