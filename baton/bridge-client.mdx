@@ -255,6 +255,14 @@ For each scalar above, a sibling `C1_BRIDGE_SECRET_<FIELD>` env var accepts a `"
 
 `ca_pem` has no scalar form (`C1_BRIDGE_CA_PEM` doesn't exist) — multi-line PEM data doesn't round-trip cleanly through shell envs, so it lives in YAML or comes from a secret backend.
 
+### macOS certificate trust
+
+On macOS, the bridge uses the macOS certificate trust store by default. If `SSL_CERT_FILE` or `SSL_CERT_DIR` is set, it uses the specified CA bundle or directory instead for connections that rely on system roots, including authentication, gateway, and Vault secret backend connections.
+
+The bridge's `ca_path` and `ca_pem` add certificates to these roots rather than replacing them, so `SSL_CERT_FILE` and `SSL_CERT_DIR` still affect authentication and gateway connections. For the Vault connection, `VAULT_CACERT`, `VAULT_CACERT_BYTES`, or `VAULT_CAPATH` take precedence over system roots.
+
+To use the macOS trust store, unset both variables. If other tools require them, set `GODEBUG=x509sslcertoverrideplatform=0` when running the bridge to use macOS certificate verification while leaving those variables set.
+
 ### Single-service env mode
 
 For deployments that don't want to ship a YAML config at all, a single service mapping can be defined entirely in the environment. When both `C1_BRIDGE_SERVICE_LISTEN_PORT` and `C1_BRIDGE_SERVICE_BACKEND` are set, a single port is constructed from the `C1_BRIDGE_SERVICE_*` vars and **replaces** any `ports:` block loaded from YAML.
