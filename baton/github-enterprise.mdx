@@ -25,12 +25,15 @@ If you access GitHub at `github.com`, go to the [GitHub](/baton/github) integrat
 | Licenses | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Secrets - API keys | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | GitHub App | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| GitHub Activity\*\*\* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
-The GitHub Enterprise connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). New accounts will send an invitation to the account owner; if an invitation is pending, the account status will be shown as **Unspecified**. 
+The GitHub Enterprise connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). New accounts will send an invitation to the account owner; if an invitation is pending, the account status will be shown as **Pending**. 
 
 \* Due to limitations on the GitHub API, syncing multiple orgs requires a personal access token (PAT). A separate connector and GitHub app is required when using the GitHub App integration.
 
 \*\* Organization roles are also referred to as "enterprise licenses" in GitHub's documentation.
+
+\*\*\* Only synced when **Sync user last activity** is enabled. See [Sync member last activity](#sync-member-last-activity) below.
 
 [This connector can sync secrets](/product/admin/inventory) and display them on the **Inventory** page. 
 
@@ -243,6 +246,8 @@ If you're using a personal access token to set up the connector:
    1. **Optional.** If you do not want to include archived repos in syncs, click to enable **Omit archived repositories**.
 
    1. **Optional.** For large organizations, click to enable **Optimize sync for large organizations**. This reduces API calls by using grant expansion for team-based repo access and skipping per-team detail fetches.
+
+   1. **Optional.** If you want to see when members were last active, click to enable **Sync user last activity**. See [Sync member last activity](#sync-member-last-activity) for requirements and limitations.
 </Step>
 <Step>
 If you're using a GitHub app to set up the connector:
@@ -262,6 +267,8 @@ If you're using a GitHub app to set up the connector:
    1. **Optional.** If you do not want to include archived repos in syncs, click to enable **Omit archived repositories**.
 
    1. **Optional.** For large organizations, click to enable **Optimize sync for large organizations**. This reduces API calls by using grant expansion for team-based repo access and skipping per-team detail fetches.
+
+   1. **Optional.** If you want to see when members were last active, click to enable **Sync user last activity**. See [Sync member last activity](#sync-member-last-activity) for requirements and limitations.
 </Step>
 <Step>
 Click **Save**.
@@ -320,6 +327,7 @@ baton-github-enterprise
 | `BATON_DIRECT_COLLABORATORS_ONLY` | Set to `true` to optimize sync for large organizations by reducing API calls (uses grant expansion for team-based repo access and skips per-team detail fetches). |
 | `BATON_PROVISIONING` | Set to `true` to enable provisioning and deprovisioning. |
 | `BATON_SYNC_SECRETS` | Set to `true` to sync secrets (API keys). |
+| `BATON_SYNC_LAST_ACTIVITY` | Set to `true` to see when members were last active. See [Sync member last activity](#sync-member-last-activity) for requirements and limitations. |
 </Step>
 <Step>
 The connector connects to your C1 tenant and begins syncing. Verify it appears as **Connected** in **Apps** > **Connectors**.
@@ -356,6 +364,7 @@ baton-github-enterprise \
 | `--enterprises` | Comma-separated list of enterprises to sync enterprise roles for. |
 | `--omit-archived-repositories` | Exclude archived repositories from syncs. |
 | `--direct-collaborators-only` | Optimize sync for large organizations by reducing API calls (uses grant expansion for team-based repo access and skips per-team detail fetches). |
+| `--sync-last-activity` | See when members were last active. See [Sync member last activity](#sync-member-last-activity) for requirements and limitations. |
 | `--provisioning` | Enable provisioning and deprovisioning. |
 </Step>
 <Step>
@@ -381,6 +390,30 @@ When deploying on Kubernetes with a minimal base image (for example, Debian slim
 </Tip>
 </Tab>
 </Tabs>
+
+## Sync member last activity
+
+You can enable **Sync user last activity** to have C1 show, for each member, the most recent recorded action across all synced organizations (for example, changing an organization or repository setting, creating or deleting a repository, or adding someone to a team). This appears on the member's profile in C1 alongside their other access details.
+
+**Requirements:**
+
+- **Personal access token:** the token must have the **read:audit_log** scope, and permission to view each organization's audit log (typically an organization owner).
+- **GitHub App:** the app must have the **Organization permissions > Administration: Read-only access** permission. If you followed the GitHub App setup instructions above, this is already granted (it's also required for SAML/SSO detection), so no extra permission needs to be added.
+
+<Warning>
+**Enabling the config option alone is not enough.** After you enable **Sync user last activity** (or set `--sync-last-activity` / `BATON_SYNC_LAST_ACTIVITY=true`) and save the connector, go to the connector's **Capabilities & configuration** page in C1 and confirm the **GitHub Activity** resource type is enabled for sync — it will show up in the resource list as available, but disabled, until you manually enable it.
+
+</Warning>
+
+**What "last activity" means:** This is not necessarily a login timestamp. GitHub's audit log only records actions members take, not every time someone signs in or browses the product. Because of this, C1 shows the most recent recorded action for a member, whatever that action was, as a best-effort signal of when they were last active. A member who only reads or browses without taking any recorded action won't show a last-activity date, even if they use GitHub regularly.
+
+**What is not counted:** The organization audit log records administrative events, not content activity. Writing an issue or pull request comment and reviewing code are not recorded there, so neither produces a last-activity date. An organization whose members write and review code but administer nothing may therefore show no last-activity dates at all.
+
+To keep this fast on large organizations, raw Git operations (pushes, fetches, and clones done via `git` rather than the website or API) are not counted toward last activity — only web and API actions are. Combined with the point above, this means a member whose work is limited to writing and reviewing code won't show a last-activity date, even though they're actively using GitHub.
+
+If a member has never taken a recorded action, or if the connector can't reach an organization's audit log for any reason (for example, a missing scope or a plan without audit log access), C1 simply won't show a last-activity date for that member — this does not affect the rest of the sync.
+
+Activity is delivered as an ongoing background feed rather than as part of each full sync, so it may take a little time after enabling this option before last-activity dates first appear, and dates update continuously afterward rather than only at sync time.
 
 ## Troubleshooting
 
