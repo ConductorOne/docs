@@ -1,0 +1,39 @@
+---
+title: "Scenario: Review AWS access by account"
+og:title: "Scenario: Review AWS access by account (Prod vs. Test) - C1 docs"
+og:description: "Scope an AWS access review to a single account instead of your whole AWS Organization at once, so Prod and Test can be reviewed on their own terms."
+description: "Scope an AWS access review to a single account instead of your whole AWS Organization at once, so Prod and Test can be reviewed on their own terms."
+sidebarTitle: "Review AWS access by account"
+---
+{/* Editor Refresh: 2026-09-29 */}
+
+By default, an AWS access review can span your whole AWS Organization at once — every account, one undifferentiated pool of access. That's a problem when your accounts don't carry the same risk: a role in Test doesn't deserve the same reviewer, cadence, or scrutiny as the same role in Prod. Here's how to scope a campaign to a single AWS account instead — for the fuller picture of how C1 runs access reviews generally, see the [UAR automation use case](/product/use-cases/uar-automation).
+
+<Note>
+**Before you start:** this solution only works once C1 can see your AWS accounts as separate, reviewable units — which isn't how the AWS connector behaves by default. The first section below turns that on; skip it if your tenant already has it enabled.
+</Note>
+
+## Enable account-level visibility on the AWS connector
+
+Per-account review only works if C1 can see your AWS Organization as a hierarchy in the first place. On the AWS connector, enable both **Enable support for AWS Organizations** and **Enable support for AWS IAM Identity Center**, then opt in to the Cloud Infrastructure Access resource types — Organization Root, Organizational Unit, and Permission Set Assignment are each opt-in individually, even with both checkboxes on. See [Cloud infrastructure access: Organizations and permission sets as scoped bindings](/baton/aws#cloud-infrastructure-access-organizations-and-permission-sets-as-scoped-bindings) for the full setup.
+
+Once this is on, your AWS Organization syncs as a real hierarchy — Root → Organizational Unit → Account — and each account's permission-set grants show up as their own reviewable item ("Permission Set X on Account Y"), instead of one flat list spanning every account.
+
+## Scope the campaign to one account
+
+With that in place, use the **By inheritance** scope type — the same scope type the [UAR automation use case](/product/use-cases/uar-automation) already covers for cloud infrastructure — and choose a **scope and role pair**: select your Prod account (or an OU, to cover a whole group of accounts at once) and a role, like Admin. C1 resolves everyone who holds that role there, direct or inherited, into the review. See [Scope an access review campaign by inheritance](/product/admin/campaign-scope-by-inheritance) for the full setup steps.
+
+Save it as a **campaign template** if Prod and Test should run on different schedules — a tighter cadence for Prod, a lighter one for Test — since each is now its own campaign instead of one review spanning both.
+
+## Scoping by account vs. the "Accounts" filter
+
+The **Accounts** filter available on other campaign scope types (limiting by account criteria) is a different thing entirely — it filters by identity type, domain, and status (a service account vs. a human account, enabled vs. disabled), not by which AWS account something lives in. It won't get you Prod-vs-Test separation; the **By inheritance** scope type with a scope-and-role pair is what does.
+
+## Related resources
+
+<Columns cols={2}>
+<Card title="UAR automation use case" iconType="duotone" icon="user-check" horizontal href="/product/use-cases/uar-automation" />
+<Card title="Scope an access review campaign by inheritance" iconType="duotone" icon="sitemap" horizontal href="/product/admin/campaign-scope-by-inheritance" />
+<Card title="Cloud infrastructure access overview" iconType="duotone" icon="cloud" horizontal href="/product/admin/cloud-infrastructure-access" />
+<Card title="Set up an AWS connector" iconType="duotone" icon="aws" horizontal href="/baton/aws" />
+</Columns>
