@@ -12,9 +12,19 @@ sidebarTitle: "LDAP"
 | :--- | :--- | :--- |
 | Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Roles (`organizationalRole` in LDAP) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
-| Groups (`groupOfUniqueNames` in LDAP) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Groups (`groupOfNames`, `groupOfUniqueNames`, `posixGroup`, `groupOfURLs`, `group` in LDAP) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 The LDAP connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). 
+
+### Group membership provisioning
+
+A group's membership lives in `member` (a DN), `uniqueMember` (a DN) or `memberUid` (a login name), and which one it is cannot be derived from the entry's object classes: `posixGroup` is STRUCTURAL under RFC 2307 and AUXILIARY under rfc2307bis, and a client such as SSSD chooses the attribute it reads through its own `ldap_schema` setting. The connector therefore learns it per entry instead of assuming it:
+
+- **Grant** writes the attribute the group entry already uses, or, when the entry holds no membership yet, the one its object classes suggest (`groupOfUniqueNames` alone: `uniqueMember`; `posixGroup` with no DN group class: `memberUid`; otherwise `member`). If the server rejects an attribute as not permitted by the entry, the next candidate is tried. A group whose membership has diverged across attributes is written to each of them. `memberUid` is written as the principal's `uid` or `cn`, whichever form the group's own values already use.
+- Every write is confirmed by re-reading the entry on the connection that accepted it, and asking the same question sync asks -- is this principal a member? A write the server accepted but that cannot be confirmed is a retryable failure, and is never followed by a write to a second attribute.
+- **Revoke** removes the membership from wherever it actually is, deleting the exact stored values from every attribute that holds the principal in one request. A revoke never acts on a guess or on a configured pin.
+- A revoke acts on the group's own attributes and on nothing else, so a membership held only through a nested group is not revoked here: it answers `GrantAlreadyRevoked`, changes nothing in the directory, and reappears on the next sync — revoke it at the source group instead. The one membership the connector *does* report and cannot remove with a write to the group is the user's primary group, minted from the user entry's own `gidNumber`; that one is reported as an error naming it, whether or not this call also removed a direct membership. Otherwise the result is a plain success (a direct membership was removed) or `GrantAlreadyRevoked` (there was none).
+- Set `--group-member-attribute` to `member`, `uniqueMember` or `memberUid` (default `auto`) to pin the attribute a **grant** writes, for directories the connector cannot learn from -- notably one with schema checking disabled, so that no attribute is ever rejected. The pin governs grants only; revokes still act on where the membership actually is. See the connector README for the full behavior and its limits.
 
 ### POSIX account provisioning
 
@@ -36,6 +46,14 @@ To use this feature, configure the following account provisioning mappings:
     Automatic UID number calculation assigns `uidNumber` only. You must provide `gidNumber` manually in the **Additional Attributes** mapping. If you set **Calculate the next valid UID Number** to `true`, any `uidNumber` value provided in **Additional Attributes** is ignored.
 </Note>
 
+<Note>
+    A mapping that resolves to an empty value is **omitted** from the LDAP add. A zero-length value is not portable across attribute types — a directory rejects the whole add with result 21 (`Invalid Attribute Syntax`) on most of them — so an optional field the account leaves unset cannot break account creation, and it is not stored as an empty value either. A list keeps its non-empty entries and is omitted only when none remain. Values such as `false` and `0` are real values and are still sent.
+
+    `objectClass` is the exception: a mapping that resolves to no object class at all is rejected before the add, because an account cannot be created without one.
+
+    This is the opposite of `update_profile`, where an empty `custom_attributes` value **clears** the attribute. See the `update_profile` rules under Connector actions.
+</Note>
+
 ### Connector actions
 
 Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
@@ -45,9 +63,37 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | Action name | Additional fields | Description |
 | ----------- | ----------------- | ----------- |
 | `create_ou` | `name` (string, required), `parent_dn` (string), `description` (string) | Create an LDAP organizational unit (`organizationalUnit`) under a parent container. `parent_dn` defaults to the configured base DN; a parent outside the base DN is rejected. Idempotent — creating an OU that already exists succeeds. |
+| `enable_user` | `user_id` (account resource ID, required) | Mark a user account as enabled by writing the attributes configured in `enable-user-attributes`. Registered only when that configuration is set. |
+| `disable_user` | `user_id` (account resource ID, required) | Mark a user account as disabled by writing the attributes configured in `disable-user-attributes`. Registered only when that configuration is set. |
 
 <Note>
   To use `create_ou`, the connector's bind account must have permission to add child entries under the target parent DN (by default, the configured base DN). For OpenLDAP and similar servers, this is write/add access on the parent container; for Active Directory, delegate the **Create Organizational Unit objects** right on the parent OU.
+</Note>
+
+#### User enable/disable attributes
+
+Some directories do not use the standard `userAccountControl` (Active Directory) or `nsAccountLock` (FreeIPA) flags to mark an account's lifecycle state, but their own attribute — IDMWorks, for example, uses `revoke`, where `Y` means disabled and `N` means enabled. `enable-user-attributes` and `disable-user-attributes` map LDAP attribute names to the values that mean *enabled* and *disabled*:
+
+```yaml
+disable-user-attributes:
+  revoke: "Y"
+enable-user-attributes:
+  revoke: "N"
+```
+
+Both maps are unset by default. When configured:
+
+- **Sync** reports an account as disabled when any configured attribute holds its disabled value, as enabled when any holds its enabled value, and otherwise falls back to `userAccountControl` then `nsAccountLock`. Values are compared case-insensitively and whitespace-trimmed; any value of a multi-valued attribute counts.
+- **`disable_user` writes exactly the attributes named in `disable-user-attributes`**, and **`enable_user` writes exactly those in `enable-user-attributes`**. Neither action touches an attribute named only in the other direction.
+- Because of that isolation, a configuration that sets both maps must name the **same** attributes in each — otherwise `enable_user` would leave an attribute at its disabled value while the synced status kept reporting the account as disabled. Asymmetric key sets are rejected at startup. To clear an attribute when enabling, give it an explicit empty value (`enable-user-attributes: {"revoke": ""}`), which keeps the attribute name present.
+- The same attribute cannot be given the same value in both directions; attribute names must not be empty; `objectClass` and password attributes cannot be used as the marker; and the **disable** side cannot use an empty value. Each is rejected at startup. An absent attribute reads as enabled, so "disable by clearing the marker" would clear it, report success, and leave sync reporting the account enabled — an empty value stays legal only on the **enable** side, where it means clear-on-enable.
+- Each action returns `success`, `status` (`"enabled"` / `"disabled"`), `applied` (the number of attributes changed; `0` means the account was already in the requested state), and `updated_user` (encoded from the entry the write was verified against; absent only if encoding it failed, since a failed re-read fails the action). The connector re-reads the entry and verifies the configured attributes now hold their configured values — or are absent, for a configured clear — before reporting success. An attribute it cannot write (the entry's RDN attribute, for example) fails the action rather than being reported as skipped, on the first call and on every retry alike.
+- Unlike `update_profile`, these actions are **global**, not resource-scoped. `user_id` still takes the C1 account identifier rather than the LDAP DN, for the same reason.
+- **Quote the values.** The configuration loader stringifies map values before the connector sees them, so an unquoted `TRUE`/`FALSE` arrives as the string `"true"` and is written that way; LDAP's Boolean syntax (RFC 4517) requires uppercase, so the modify is rejected instead of setting the attribute. The connector cannot tell a quoted `"true"` from an unquoted one by then, so this is not caught at startup. `Y` and `N` are not YAML booleans and are safe unquoted.
+- **As an environment variable the value must be JSON**: `BATON_DISABLE_USER_ATTRIBUTES='{"revoke":"Y"}'` works, `BATON_DISABLE_USER_ATTRIBUTES='revoke=Y'` is rejected at startup rather than silently configuring nothing. A nested YAML map and repeated `--disable-user-attributes key=value` flags both work as written.
+
+<Note>
+  With a "clear on enable" definition (`revoke: "Y"` / `revoke: ""`) the enabled state is reached by *fall-through* rather than by matching a positive value: no configured attribute matches its disabled value, so the built-in rules apply and an unspecified status defaults to enabled. "Enabled" therefore means "the disabled marker is absent".
 </Note>
 
 **Resource-scoped actions (user):**
@@ -123,7 +169,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
 <Step>
-In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -131,7 +177,7 @@ Search for **Baton** and click **Add**.
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
