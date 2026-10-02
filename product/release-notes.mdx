@@ -6,7 +6,103 @@ description: Here are the latest new features, enhancements, and resolved issues
 rss: true
 sidebarTitle: Release notes
 ---
-{/* Editor Refresh: 2026-08-21 */}
+{/* Editor Refresh: 2026-10-02 */}
+
+<Update label="October 2, 2026">
+
+## Product digest: October 2, 2026
+
+### Shadow app findings
+
+Shadow app findings are now available to every tenant, surfacing unsanctioned apps your connectors wouldn't otherwise catch. You can turn detection off per tenant under Findings settings. Application Administrators can also view and search every Shadow App finding across the whole tenant, not just the ones tied to apps they personally own.
+
+{/* PR #25921, #26177 */}
+{/* TODO: docs update - no existing Shadow apps doc page found; confirm with eng/docs whether one should exist and link it here */}
+
+### Access request and review improvements
+
+- **Campaigns now open and close at the time and timezone you actually configured.** Scheduled campaigns used to be created by a daily sweep that always fired at 8am Pacific and auto-closed at 5am Pacific, no matter where the admin who set them up was working from. Campaign templates now carry their own timezone, start time, and end time, delivered by a Temporal schedule instead of the fixed daily sweep. {/* PR #26027, #26361, #26660, #26685 */}
+  {/* NOTE: feature flag CAMPAIGN_SCHEDULE_TEMPORAL reads SKU_MANUAL as of 2026-10-02 (checked against pkg/builtin_tenant/features_2026.go at origin/main commit 983e424399, 2026-10-02T21:19:29Z) - the normal house rule is to cut a SKU_MANUAL item rather than publish it. Added anyway per Mindy's explicit instruction after the developer confirmed a broad rollout. Flagging here so a later read of this file doesn't mistake the flag status for an oversight. */}
+
+- **Reviewers past step one get an email that actually makes sense.** Reviewers on step 2 or later of a campaign used to get the same kickoff email as everyone else, with no indication a prior step had already run. They now get their own subject and body explaining what happened — and no email at all if they have no open tasks. {/* PR #24456 */}
+
+- **Access Request Administrators can now see the access profiles they own from My resources**, using the same columns and links as the full Governance table. {/* PR #26089 */}
+
+- **Access Request Administrators can now actually save access profile JML settings.** Saving approval policy, entitlement provisioning, or maximum membership duration — or managing membership automation — used to fail outright with "PermissionDenied" for this role. {/* PR #26606 */}
+
+### Automation improvements
+
+- **Policies can now route around an out-of-office manager.** New `GetDelegates` and `HasDelegate` CEL functions let an approval step send a request to a user's delegate, or fall back to the skip-level manager when no delegate is set. {/* PR #26289 */}
+  {/* TODO: docs link - link to policy/CEL function reference once confirmed */}
+
+- **Automation execution steps now show what they actually did.** The executions step list and details drawer used to show only a raw step ID; they now show the action's name (e.g. *Post to #it-onboarding-requests with the new hire details*) above the ID, which still appears in monospace underneath for anyone who needs it. Long names and IDs truncate with a hover tooltip instead of overflowing the card. {/* PR #26175 */}
+
+### AI and MCP improvements
+
+- **Account-provisioning fields explain themselves.** Each field in the provisioning mapping now shows its connector-defined description (and display name, when different from the field key) right under the row. In automation "Create account" steps, a validation error now shows its real message on its own line instead of just turning the description red. {/* PR #26179 */}
+
+- **AI-assisted entitlement search respects the same visibility rules as regular search.** Previously it could surface entitlements a user wasn't otherwise allowed to discover. {/* PR #25947 */}
+
+- **MCP source setup is consolidated.** MCP guidance now lives in one place on the MCP sources page, with clearer Tools and Toolsets actions and a streamlined configuration drawer. {/* PR #25860 */}
+
+- **App owners can now configure up to three approved inference models on one Edge**, using a shared credential, each reachable through the same hosted endpoint. {/* PR #26268 */}
+
+- **Inference routes are more reliable.** Edge inference now automatically picks up the active Vault secret version after a credential rotation, without a manual route update (a brief gap is still possible until the next refresh). Separately, saving or clearing an inference route no longer fails outright due to a request-shape bug. {/* PR #26235 */}
+
+- **See which AI provider is actually serving your requests.** LLM usage can now be grouped by provider, showing attempt counts and reported tokens per service; retried requests still count once in request totals. {/* PR #26339 */}
+
+- **Conversation titles and summaries now honor your configured Micro AI model**, falling back to a default when none is set. {/* PR #26576, #26546 */}
+  {/* QUESTION: the two source PRs name specific underlying models (one two-PR change moved the compiled default from one vendor model to another). Should the digest name the actual model, or is that an internal implementation detail we shouldn't expose? Need a call before publishing - drafted vague on purpose pending that answer. */}
+
+- **Agents can now page through virtual filesystem listings instead of getting one unbounded dump**, with directory-prefix matching that no longer confuses a prefix like `/reports` with a folder like `/reports-old`. {/* PR #26633 */}
+
+### App and connector management improvements
+
+- **Connector names in the app view link straight to their config page** for anyone who can configure that connector — matching the permission already used by the row's Configure menu. Everyone else still sees a plain, non-clickable name. {/* PR #26612 */}
+
+- **Custom-authored connectors can now receive compatible runtime patch updates without a rebuild or another content approval.** A failed update leaves the current connector running. {/* PR #26603 */}
+
+- **Promoting an unmanaged app now supports entitlement-only owners.** If you provide entitlement owners without user owners, the new application gets only those entitlement owners, instead of always inheriting user owners from its parent too. {/* PR #26003 */}
+
+### Usability improvements
+
+- **The Users page shows everyone by default** — directory, local, and system users — instead of opening with an Origin filter already narrowing the list. {/* PR #26263 */}
+
+- **My resources shows only what you actually own.** It previously included apps where you only had administrative visibility or an account, and entitlements you only held through a group grant. Personal vaults are now correctly labeled **Owner** instead of **Member**. {/* PR #25836 */}
+
+- **The sidebar user menu has an explicit Profile item** that opens your profile settings; the name/email header above it is informational and no longer acts as a link. {/* PR #26038 */}
+
+- **Pages no longer hide content that overflows sideways.** In a narrow window or at 200% text zoom, things like wide toolbars or table columns that used to vanish off the right edge are now reachable by scrolling — including by keyboard, since the main content area can now take keyboard focus. {/* PR #26613 */}
+
+- **Findings get a real text search.** A search box on the Findings page filter row matches any substring in the Target or App columns, persists in the URL so a filtered view is shareable, and bulk "select all matching" actions respect it. {/* PR #26443 */}
+
+### API and developer tools
+
+- **User attribute mappings are now in the public API** — read, create, update, delete, and list, with matching Terraform generation metadata. {/* PR #25328 */}
+
+- **Access profile scope-role bindings are now in the public API** via `GET /api/v1/catalogs/{catalog_id}/scope_role_bindings`. {/* PR #26725 */}
+
+### Breaking changes
+
+- **Breaking change: the Copilot service desk feature is retired.** Tenants that had automatic Jira service-desk-to-access-request processing enabled lose that flow; in-flight items finish as no-ops. The Settings → Service desk tab, its nav item, and the `/admin/settings/service-desk-integration` route are removed. Jira installs created before retirement still appear in the support dashboard, but new webhook events no longer trigger ticket processing. {/* PR #25218 */}
+
+- **Breaking change: the Grants and Standing Privileges CSV exports' `AccountUserName` column now reports the account's username, not its display name** — matching the accounts export so the two can be joined on that column. A new `AccountDisplayName` column, inserted before it, preserves the old display-name value for anyone who still wants it. Consumers reading these exports by column position (not header name) will see a one-column shift. {/* PR #26535 */}
+  {/* TODO: docs update - the exports/CSV reference page should get a note about the new column and the position shift, not just this digest bullet */}
+
+### c1i v0.8.0
+
+This release rounds out c1i's API coverage with several new command groups: `mcp classifiers` for MCP gateway AI governance (renamed from the earlier guardrails concept), `access-reviews` for managing campaigns and reports, `findings` for public security findings and their governance rules, `role-mining` from analysis through to access-profile creation, `entitlements proxy-bindings`, and `service-principals` (alias `sp`) for managing tenant-owned non-human identities end to end. `access-profiles` also gains full request-catalog lifecycle management — updating or soft-deleting a profile, and managing its requestable and visibility entitlements and bundle automation.
+
+Repeated one-shot commands also generate far less OAuth noise: c1i now caches its access token (in the OS keyring when available, with a hardened file fallback) and reuses it until it's close to expiring, dropping 12 sequential commands from 12 authentication events to 1. Opt out with `C1I_NO_TOKEN_CACHE=1`.
+
+See the [v0.8.0](https://github.com/ConductorOne/c1i/releases/tag/v0.8.0) release notes for the full changelog, and [Install c1i](/product/cli/c1i) for setup instructions. See the [c1i command reference](/product/cli/c1i-commands) for the new command groups.
+{/* TODO: confirm /product/cli/c1i-commands already documents the new command groups (mcp classifiers, access-reviews, findings, role-mining, entitlements proxy-bindings, service-principals) before publishing - add/update that reference page if not */}
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
 
 <Update label="September 18, 2026">
 
