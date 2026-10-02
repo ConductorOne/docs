@@ -79,8 +79,9 @@ role permissions.
   `${personio-base-url}/v2/auth/token`. The token request uses
   `grant_type=client_credentials`, `client_id`, and `client_secret`, then sends
   the returned access token as a bearer token.
-- Each person is enriched with the active employment when present, otherwise
-  the newest employment by start date.
+- Each person is enriched with one employment: an active, onboarding, or
+  on-leave one in preference to any other, and the most recent by start date
+  among those.
 - If employment enrichment fails for one person, the person is still emitted
   with person-level fields.
 - The following employment fields sync as a human-readable display name
@@ -97,6 +98,26 @@ role permissions.
   If a lookup fails or the credential lacks access to that object type, the
   `*_name` field (and `org_units`) is simply omitted for that person for
   that sync.
+- A user syncs as enabled when Personio reports the person as `ACTIVE`. If the
+  credential doesn't expose the person-level status, the employment
+  sub-status is used instead, and active, onboarding, or on-leave counts as
+  enabled.
+- The granular Personio employment sub-status also syncs, as the
+  `c1_personio_raw_employment_status` profile attribute and as the user's
+  status details. The value is `ACTIVE`, `INACTIVE`, `ONBOARDING`, `LEAVE`,
+  or `UNSPECIFIED`, and is omitted when no employment resolves for that
+  person. Use it to drive automations that key on a change the
+  enabled/disabled flag doesn't show — a new starter moving from
+  `ONBOARDING` to `ACTIVE` is enabled the whole time.
+
+  The two can disagree: someone who still holds an older active employment
+  alongside a newer inactive one syncs as disabled while reporting `ACTIVE`.
+
+  **`ONBOARDING` does not identify a new joiner on its own.** An existing
+  employee with a future-dated internal transfer reports the same value, and
+  no other synced field reliably separates the two. Pair the sub-status with
+  a signal from outside Personio, such as whether the identity already
+  exists in your IdP.
 - `sub_company` is not synced. Personio's own API marks this field deprecated
   in favor of legal entity; use `legal_entity_name` instead.
 - Standard PII fields such as address, phone, national identifiers, date of
@@ -121,7 +142,7 @@ role permissions.
       <Step>
         Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-           If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+        If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
       </Step>
 
       <Step>
