@@ -21,6 +21,7 @@ Each recipe includes the problem, solution code, and rationale.
 | **GitHub** | Node ID or numeric ID | Integer as string | `12345678` |
 | **Salesforce** | Salesforce ID | 18-char ID | `00e3h000000bRQAAA2` |
 | **Google Workspace** | Google Group ID | Variable | `00gjdgxs3x1h123` |
+| **Databricks** | Connector resource ID (varies by resource type) | See [Databricks resource IDs](#databricks-resource-ids) | `account/8c6f99ec-78ce-4654-8f92-e716b3dd67a7/group/79416186968854` |
 
 **Why this matters:** C1 uses these IDs to correlate resources across syncs. Using the wrong ID causes duplicate objects or failed correlations.
 
@@ -28,6 +29,23 @@ Each recipe includes the problem, solution code, and rationale.
 - Azure AD has two IDs: Object ID (use this) and Application ID (client ID for OAuth)
 - AWS uses full ARNs, not account IDs alone
 - GitHub has numeric IDs and GraphQL node IDs; either works but be consistent
+- Databricks does not use the native ID for every resource type. Groups, workspaces, and workspace roles use a connector-built value, so check the table below before setting `match_baton_id`
+
+### Databricks resource IDs
+
+baton-databricks (v0.1.16 and later) sets `RawId` to the connector's resource ID. For groups, that is a compound path, not the Databricks group ID. A bare group ID in `match_baton_id` does not merge: after sync, the connector's group appears as a second resource next to the pre-created one.
+
+| Resource type | `match_baton_id` value | Example |
+|---------------|------------------------|---------|
+| Group (account) | `account/<account-id>/group/<group-id>` | `account/8c6f99ec-78ce-4654-8f92-e716b3dd67a7/group/79416186968854` |
+| Group (workspace) | `workspace/<deployment-name>/group/<group-id>` | `workspace/dbc-dd4d071e-0b85/group/79416186968854` |
+| Workspace | Deployment name, not the numeric workspace ID | `dbc-dd4d071e-0b85` |
+| Workspace role | `<deployment-name>:<role>` | `dbc-dd4d071e-0b85:databricks-sql-access` |
+| Account role | Role name | `account_admin` |
+| User | Databricks user ID | `74984374645487` |
+| Service principal | Databricks service principal ID | `71985169525637` |
+
+Entitlements match on the parent resource's `match_baton_id` plus the slug (for example, `member` on a group).
 
 ## Setting RawId annotation
 
