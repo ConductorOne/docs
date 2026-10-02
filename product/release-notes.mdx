@@ -6,7 +6,141 @@ description: Here are the latest new features, enhancements, and resolved issues
 rss: true
 sidebarTitle: Release notes
 ---
-{/* Editor Refresh: 2026-08-21 */}
+{/* Editor Refresh: 2026-10-02 */}
+
+<Update label="October 2, 2026">
+
+## Product digest: October 2, 2026
+
+### Shadow app detection is on by default
+
+Finding unsanctioned apps used to depend on a tenant remembering to flip on Shadow app detection — and even with it on, an Application Administrator only saw a shadow-app finding if they happened to own the app or connector it came from, leaving real blind spots for the people whose job is finding this stuff.
+
+Shadow app findings are now detected for every Platform tenant automatically, no flag required (you can still turn detection off per tenant under Findings settings). Application Administrators can now view and search every Shadow App finding across the whole tenant, not just the ones tied to apps they personally own.
+
+{/* PR #25921, #26177 */}
+{/* TODO: verify "Application Administrator" is the exact role gated here (view/search only, no edit per PR text) against the actual permission check before publishing */}
+{/* TODO: docs update - no existing Shadow apps doc page found in a quick search; confirm with eng/docs whether one should exist and link it here */}
+
+### Access request and review improvements
+
+- **Large access review campaigns no longer silently drop entitlements.** Campaign preparation now reliably walks every entitlement in a large resource-type scope instead of occasionally skipping some during pagination. {/* PR #26250 */}
+
+- **Reviewers past step one get an email that actually makes sense.** Reviewers on step 2 or later of a campaign used to get the same kickoff email as everyone else, with no indication a prior step had already run. They now get their own subject and body explaining what happened — and no email at all if they have no open tasks. {/* PR #24456 */}
+
+- **Access Request Administrators can now see the access profiles they own from My resources**, using the same columns and links as the full Governance table. {/* PR #26089 */}
+  {/* TODO: verify "Access Request Administrator" is the precise role this is scoped to */}
+
+- **Access Request Administrators can now actually save access profile JML settings.** Saving approval policy, entitlement provisioning, or maximum membership duration — or managing membership automation — used to fail outright with "PermissionDenied" for this role. {/* PR #26606 */}
+  {/* TODO: verify "Access Request Administrator" is the precise role this is scoped to */}
+
+- **Your Slack access-request duration pick now sticks.** Previously, the first duration you chose for an entitlement with no maximum duration got silently cleared, and you had to pick it again before submitting. {/* PR #26301 */}
+
+- **Closed a loophole in "Entitlements only" access profiles.** A non-admin could still join a profile restricted to entitlement-only requests by requesting its enrollment entitlement directly through the API or MCP. That path now fails with `PermissionDenied`, matching what the request UI already enforced. Super admins can still enroll users directly. {/* PR #26359 */}
+
+- **Sparse ACL is now available to every tenant on the Platform SKU**, with no more tenant-by-tenant flag activation required. {/* PR #26106 */}
+  {/* QUESTION: was Sparse ACL ever announced to customers as a flagged/beta feature in an earlier digest? If not, this GA note may need more context than one line. */}
+
+### Automation improvements
+
+- **A webhook provisioner no longer keeps firing after its task is done.** A task using a webhook provisioner could keep calling the webhook endpoint and logging "attempted provisioning" audit entries after it had already been granted and closed. It now stops on its own, and shows as **Canceled** with a reason in **Settings → Webhooks → History**. Also fixed: a webhook that answered with a failing status but a well-formed body was never counted against its 50-attempt retry budget, so it retried every few seconds until it expired instead of backing off. {/* PR #26025 */}
+
+- **Unused-access automation counts are accurate again.** Candidate counts could previously include disabled accounts or double-count an account when its targeted entitlements overlapped. {/* PR #26182 */}
+
+- **Conflict monitors that negate a group no longer throw false warnings** on grant tasks. {/* PR #26100 */}
+
+- **Policies can now route around an out-of-office manager.** New `GetDelegates` and `HasDelegate` CEL functions let an approval step send a request to a user's delegate, or fall back to the skip-level manager when no delegate is set. {/* PR #26289 */}
+  {/* TODO: docs link - link to policy/CEL function reference once confirmed */}
+
+- **Automation execution steps now show what they actually did.** The executions step list and details drawer used to show only a raw step ID; they now show the action's name (e.g. *Post to #it-onboarding-requests with the new hire details*) above the ID, which still appears in monospace underneath for anyone who needs it. Long names and IDs truncate with a hover tooltip instead of overflowing the card. {/* PR #26175 */}
+
+### AI and MCP improvements
+
+- **Account-provisioning fields explain themselves.** Each field in the provisioning mapping now shows its connector-defined description (and display name, when different from the field key) right under the row. In automation "Create account" steps, a validation error now shows its real message on its own line instead of just turning the description red. {/* PR #26179 */}
+
+- **Long pasted text no longer breaks out of chat bubbles.** Unbroken text like a pasted JSON payload now wraps and stays fully visible in the admin conversation drawer, the full-page conversation view, the C1AI dock, onboarding, and the Mapping-assistant panel — instead of getting clipped at the edge. {/* PR #26180 */}
+
+- **AI-assisted entitlement search respects the same visibility rules as regular search.** Previously it could surface entitlements a user wasn't otherwise allowed to discover. {/* PR #25947 */}
+
+- **MCP source setup is consolidated.** MCP guidance now lives in one place on the MCP sources page, with clearer Tools and Toolsets actions and a streamlined configuration drawer. {/* PR #25860 */}
+
+- **App owners can now configure up to three approved inference models on one Edge**, using a shared credential, each reachable through the same hosted endpoint. {/* PR #26268 */}
+
+- **Inference routes are more reliable.** Edge inference now automatically picks up the active Vault secret version after a credential rotation, without a manual route update (a brief gap is still possible until the next refresh). Separately, saving or clearing an inference route no longer fails outright due to a request-shape bug. {/* PR #26235 */}
+
+- **See which AI provider is actually serving your requests.** LLM usage can now be grouped by provider, showing attempt counts and reported tokens per service; retried requests still count once in request totals. {/* PR #26339 */}
+
+- **Conversation titles and summaries now honor your configured Micro AI model**, falling back to a default when none is set. {/* PR #26576, #26546 */}
+  {/* QUESTION: the two source PRs name specific underlying models (one two-PR change moved the compiled default from one vendor model to another). Should the digest name the actual model, or is that an internal implementation detail we shouldn't expose? Need a call before publishing - drafted vague on purpose pending that answer. */}
+
+- **Agents can now page through virtual filesystem listings instead of getting one unbounded dump**, with directory-prefix matching that no longer confuses a prefix like `/reports` with a folder like `/reports-old`. {/* PR #26633 */}
+  {/* QUESTION: is this customer-visible (exposed via MCP to customer-built agents) or purely an internal Claw-agent implementation detail? If the latter, cut this bullet. */}
+
+### App and connector management improvements
+
+- **Connector names in the app view link straight to their config page** for anyone who can configure that connector — matching the permission already used by the row's Configure menu. Everyone else still sees a plain, non-clickable name. {/* PR #26612 */}
+
+- **App display names you set at creation now survive sync**, in both directions: a name you typed is preserved, and a name left at the connector's default gets replaced by the connector-reported name on first sync instead of staying generic. {/* PR #26193, #26401 */}
+
+- **Custom-authored connectors can now receive compatible runtime patch updates without a rebuild or another content approval.** A failed update leaves the current connector running. {/* PR #26603 */}
+
+- **Linked-entitlement lookup failures no longer break the whole page** — they're now contained to the Linked entitlements card. {/* PR #25937 */}
+
+- **Promoting an unmanaged app now supports entitlement-only owners.** If you provide entitlement owners without user owners, the new application gets only those entitlement owners, instead of always inheriting user owners from its parent too. {/* PR #26003 */}
+
+### Usability improvements
+
+- **The Users page shows everyone by default** — directory, local, and system users — instead of opening with an Origin filter already narrowing the list. {/* PR #26263 */}
+
+- **"Total users" now reflects the latest count**, not an average of historical snapshots. {/* PR #26262 */}
+
+- **My resources shows only what you actually own.** It previously included apps where you only had administrative visibility or an account, and entitlements you only held through a group grant. Personal vaults are now correctly labeled **Owner** instead of **Member**. {/* PR #25836 */}
+
+- **The sidebar user menu has an explicit Profile item** that opens your profile settings; the name/email header above it is informational and no longer acts as a link. {/* PR #26038 */}
+
+- **Breadcrumb search dropdowns (switching apps or Claw agents) reset properly.** Clearing the search box now restores the full list instead of leaving it filtered by your last search. {/* PR #26735 */}
+
+- **Pages no longer hide content that overflows sideways.** In a narrow window or at 200% text zoom, things like wide toolbars or table columns that used to vanish off the right edge are now reachable by scrolling — including by keyboard, since the main content area can now take keyboard focus. {/* PR #26613 */}
+
+- **Findings get a real text search.** A search box on the Findings page filter row matches any substring in the Target or App columns, persists in the URL so a filtered view is shareable, and bulk "select all matching" actions respect it. {/* PR #26443 */}
+
+- **Role mining dropped its redundant History browser** (opening a saved analysis by link still works), and leaving role mining no longer leaves a stale `analysis_id` stuck in the URL of the next page you open. {/* PR #25944 */}
+
+- **Role mining's custom filters now hold up at scale**, retaining and accurately counting high-cardinality values across large holder sets. {/* PR #25501 */}
+
+- **The "unsaved changes" warning no longer fires** when you open and close Configure linked entitlements without actually changing anything. {/* PR #25951 */}
+
+### API and developer tools
+
+- **User attribute mappings are now in the public API** — read, create, update, delete, and list, with matching Terraform generation metadata. {/* PR #25328 */}
+
+- **Access profile scope-role bindings are now in the public API** via `GET /api/v1/catalogs/{catalog_id}/scope_role_bindings`. {/* PR #26725 */}
+
+### Bug fixes
+
+- **A shared-email first sign-in now links to the right person.** When several C1 users share one email address, first sign-in now matches on the identity provider's username instead of always landing on the oldest user with that email. {/* PR #26550 */}
+
+- **Browser-based agent workflows no longer fail on an empty text segment** sent to the inference bridge; a truly empty request now gets a clear error instead of a confusing provider validation failure. {/* PR #25787 */}
+
+- **Fixed DocuSign V2 connector syncs failing for customers with CLM (Contract Lifecycle Management) resource types enabled.** Affected customers need to re-authorize the DocuSign connector to pick up the new permissions. {/* PR #25909 */}
+  {/* QUESTION: this is a single-connector fix (not a connector-type behavior change) - does it belong here, or should it instead go in the baton connector digest? It wasn't in the Sept 25 or Oct 2 connector digest entries already published. Flagging rather than guessing. */}
+
+- **Vault sharing to multiple active devices now works per-device**, so a converged device can read access while an offline sibling device remains pending — instead of one device's setup blocking another's. {/* PR #25213 */}
+
+- **Secret Access now audits failed and denied attempts, not just successes**, naming who tried, what, when, and why it was rejected — never the secret value itself. {/* PR #25592 */}
+
+### Breaking changes
+
+- **Breaking change: the Copilot service desk feature is retired.** Tenants that had automatic Jira service-desk-to-access-request processing enabled lose that flow; in-flight items finish as no-ops. The Settings → Service desk tab, its nav item, and the `/admin/settings/service-desk-integration` route are removed. Jira installs created before retirement still appear in the support dashboard, but new webhook events no longer trigger ticket processing. {/* PR #25218 */}
+
+- **Breaking change: the Grants and Standing Privileges CSV exports' `AccountUserName` column now reports the account's username, not its display name** — matching the accounts export so the two can be joined on that column. A new `AccountDisplayName` column, inserted before it, preserves the old display-name value for anyone who still wants it. Consumers reading these exports by column position (not header name) will see a one-column shift. {/* PR #26535 */}
+  {/* TODO: docs update - the exports/CSV reference page should get a note about the new column and the position shift, not just this digest bullet */}
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
 
 <Update label="September 18, 2026">
 
