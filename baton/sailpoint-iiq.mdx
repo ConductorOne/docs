@@ -1,0 +1,182 @@
+---
+title: "Set up a SailPoint IdentityIQ connector"
+og:title: "Set up a SailPoint IdentityIQ connector"
+description: "C1 provides identity governance and just-in-time provisioning for SailPoint IdentityIQ. Integrate your IIQ instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically enable or disable accounts."
+og:description: "C1 provides identity governance and just-in-time provisioning for SailPoint IdentityIQ. Integrate your IIQ instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically enable or disable accounts."
+sidebarTitle: "SailPoint IdentityIQ"
+---
+
+## Capabilities
+
+The SailPoint IdentityIQ connector syncs accounts and entitlements from a configured application managed by IIQ. It does not sync IIQ-native objects (IIQ users, IIQ roles) — those are internal to SailPoint and out of scope.
+
+| Resource | Sync | Actions |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | Enable / Disable |
+| Entitlements | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | Grant / Revoke |
+
+**Notes:**
+- **Accounts** are application-specific accounts scoped to the configured application name. Each account is enriched with identity data (email, department, manager) fetched from `GET /Users/{id}`. Account status reflects the `active` and `locked` fields from the SCIM API.
+- **Entitlements** are application entitlements (LDAP groups, permissions, etc.) filtered by application name. Grants are discovered via the entitlement assignments on each identity.
+
+## Prerequisites
+
+Before configuring the connector:
+
+1. SailPoint IdentityIQ with SCIM v2 API enabled.
+2. The C1 integration rule library and workflows loaded into IIQ (required for grant/revoke provisioning — see [SailPoint IIQ Setup](#sailpoint-iiq-setup)).
+3. An OAuth2 service account **or** HTTP Basic Auth credentials with SCIM API access.
+
+## Gather SailPoint IIQ credentials
+
+<Warning>
+To configure the SailPoint IdentityIQ connector, you need IIQ System Administrator access to import the service account and workflows. OAuth2 credential generation also requires System Administrator access.
+</Warning>
+
+<Steps>
+  <Step>
+    **Import the service account and workflows** into SailPoint IIQ.
+
+    In the IIQ console or via **Gear → Import from File**, import the following files from the [`sailpoint/`](https://github.com/conductorone/baton-sailpoint-iiq/tree/main/sailpoint) directory:
+
+    | File | Purpose |
+    |------|---------|
+    | `C1IntegrationRuleLibrary.xml` | Shared rule library used by grant/revoke workflows |
+    | `C1IntegrationGrantEntitlement.xml` | Workflow triggered when C1 grants an entitlement |
+    | `C1IntegrationRevokeEntitlement.xml` | Workflow triggered when C1 revokes an entitlement |
+    | `C1IntegrationSvcAccount.xml` | Dedicated service account with the required SCIM and workflow permissions |
+  </Step>
+
+  <Step>
+    **Choose an authentication method** and gather the credentials.
+
+    <Tabs>
+      <Tab title="HTTP Basic Auth (default)">
+        IIQ SCIM v8.3 declares HTTP Basic Auth as the standard authentication method. Use the username and password of the service account created in step 1 (or any IIQ account with SCIM API access).
+
+        Copy the **username** and **password**.
+      </Tab>
+      <Tab title="OAuth2 client credentials">
+        OAuth2 is an optional IIQ feature that must be explicitly enabled. If your IIQ instance supports it, follow the official SailPoint guide: [OAuth 2.0 client credentials for SailPoint IIQ](https://community.sailpoint.com/t5/IdentityIQ-Wiki/OAuth-2-0-client-credentials-as-a-token-based-protocol-for-API/ta-p/77630).
+
+        Copy the resulting **Client ID**, **Client Secret**, and **Token URL**.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step>
+    **Find your application name.**
+
+    In the IIQ UI, navigate to **Applications** and note the display name of the application whose accounts and entitlements you want to sync (e.g. `LDAP`, `Active Directory`). The value is case-sensitive and must match exactly.
+  </Step>
+</Steps>
+
+## Configure the connector in C1
+
+<Warning>
+SailPoint IdentityIQ is an on-premises product. The connector must be able to reach your IIQ instance over the network. If your IIQ instance is not publicly accessible, use the **self-hosted** option and run the connector on a machine inside your network.
+</Warning>
+
+<Tabs>
+  <Tab title="Self-hosted">
+    <Steps>
+      <Step>
+        In the C1 Admin UI, navigate to **Connectors** and click **Add connector**.
+      </Step>
+      <Step>
+        Search for **SailPoint IdentityIQ** and select it. When prompted for hosting, choose **Self-hosted**.
+      </Step>
+      <Step>
+        Copy the **connector token** displayed — you will need it to register the running connector with C1.
+      </Step>
+      <Step>
+        On a host with network access to your IIQ instance, run the connector using Docker or the binary:
+
+        <Tabs>
+          <Tab title="Docker">
+            ```bash
+            docker run --rm \
+              -e BATON_SAILPOINT_BASE_URL="http://your-iiq-host:8080/identityiq/scim/v2" \
+              -e BATON_SAILPOINT_APPLICATION_NAME="Your Application Name" \
+              -e BATON_SAILPOINT_USERNAME="c1-service-account" \
+              -e BATON_SAILPOINT_PASSWORD="your-password" \
+              -e BATON_C1_TOKEN="<connector-token-from-step-3>" \
+              public.ecr.aws/conductorone/baton-sailpoint-iiq:latest
+            ```
+          </Tab>
+          <Tab title="Binary">
+            Download the latest release binary from the [releases page](https://github.com/conductorone/baton-sailpoint-iiq/releases), then run:
+
+            ```bash
+            baton-sailpoint-iiq \
+              --sailpoint-base-url "http://your-iiq-host:8080/identityiq/scim/v2" \
+              --sailpoint-application-name "Your Application Name" \
+              --sailpoint-username "c1-service-account" \
+              --sailpoint-password "your-password" \
+              --c1-token "<connector-token-from-step-3>"
+            ```
+          </Tab>
+        </Tabs>
+
+        Replace `--sailpoint-username` / `--sailpoint-password` with `--sailpoint-token-url`, `--sailpoint-client-id`, and `--sailpoint-client-secret` if using OAuth2.
+      </Step>
+      <Step>
+        Return to the C1 UI. Once the connector registers and completes its first sync, the status changes to **Connected**.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Cloud-hosted">
+    <Steps>
+      <Step>
+        In the C1 Admin UI, navigate to **Connectors** and click **Add connector**.
+      </Step>
+      <Step>
+        Search for **SailPoint IdentityIQ** and select it. When prompted for hosting, choose **Cloud-hosted**.
+      </Step>
+      <Step>
+        Fill in the configuration fields using the credentials gathered above.
+
+        | Field | Description |
+        |-------|-------------|
+        | SailPoint Base URL | SCIM v2 base URL (e.g. `https://your-iiq-host/identityiq/scim/v2`) |
+        | SailPoint Application Name | Application display name — must match exactly as it appears in IIQ |
+        | SailPoint Username | HTTP Basic Auth username |
+        | SailPoint Password | HTTP Basic Auth password |
+        | SailPoint Token URL | OAuth2 only — token endpoint URL |
+        | SailPoint Client ID | OAuth2 only — client ID |
+        | SailPoint Client Secret | OAuth2 only — client secret |
+      </Step>
+      <Step>
+        Click **Save**. C1 runs an initial sync and the status changes to **Connected** when complete.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## SailPoint IIQ Setup
+
+The following steps must be completed in SailPoint IIQ before running the connector. XML files are in the [`sailpoint/`](https://github.com/conductorone/baton-sailpoint-iiq/tree/main/sailpoint) directory.
+
+### 1. Load the Rule Library and Workflows
+
+Load the four XML files listed in step 1 above via **Gear → Import from File** or the IIQ console.
+
+### 2. Create a Service Account
+
+Load `C1IntegrationSvcAccount.xml` to create a dedicated service account.
+
+> You may change the account name and password, but **the capabilities must remain unchanged** — the account requires SCIM API access and permission to launch workflows.
+
+### 3. Configure Authentication
+
+**HTTP Basic Auth (default):** Use the username and password of the service account created above (or any IIQ account with SCIM API access). Set `BATON_SAILPOINT_USERNAME` and `BATON_SAILPOINT_PASSWORD`.
+
+**OAuth2 (optional):** If your IIQ instance has OAuth2 enabled, follow the [official SailPoint guide](https://community.sailpoint.com/t5/IdentityIQ-Wiki/OAuth-2-0-client-credentials-as-a-token-based-protocol-for-API/ta-p/77630) to generate a Client ID and Secret for the service account. Set `BATON_SAILPOINT_TOKEN_URL`, `BATON_SAILPOINT_CLIENT_ID`, and `BATON_SAILPOINT_CLIENT_SECRET`.
+
+## What gets synced
+
+| Resource | Source endpoint | Notes |
+|----------|-----------------|-------|
+| Accounts | `GET /Accounts?filter=application.displayName eq "..."` | Filtered by configured application name |
+| Identity enrichment | `GET /Users/{id}?attributes=...entitlements` | Fetched once per account; provides email, department, manager, and entitlement assignments |
+| Entitlements | `GET /Entitlements?filter=application.displayName eq "..."` | Filtered by configured application name |
