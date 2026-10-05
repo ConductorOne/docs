@@ -4,7 +4,7 @@ og:title: CEL expressions reference - C1 docs
 og:description: Complete reference for CEL expression objects, functions, and usage contexts in C1.
 description: Complete reference for CEL expression objects, functions, and usage contexts in C1.
 ---
-{/* Editor Refresh: 2026-02-13 */}
+{/* Editor Refresh: 2026-10-05 */}
 
 ## Type definitions
 
@@ -269,6 +269,8 @@ These library functions let you interact with the C1 system to look up whether a
 | `c1.directory.groups.v1.FindByName` | group name | group | Policies, Groups, Automations, Account provisioning |
 | `c1.directory.apps.v1.GetEntitlementMembers` | app ID, entitlement ID | list of users | Policies, Groups, Automations, Account provisioning |
 | `c1.directory.apps.v1.GetEntitlementOwners` | app ID + entitlement ID, or entitlement | list of users | Policies |
+| `c1.directory.users.v1.GetDelegates` | user | list of users | Policy steps, Policy conditions |
+| `c1.directory.users.v1.HasDelegate` | user | Boolean | Policy steps, Policy conditions |
 
 **What can go wrong:**
 - `FindByEmail` fails if email doesn't exist in directory - verify emails before deploying
@@ -278,6 +280,8 @@ These library functions let you interact with the C1 system to look up whether a
 - `DirectReports` returns empty list `[]` if user has no reports
 - `GetEntitlementMembers` returns empty list `[]` if entitlement has no members
 - `GetEntitlementOwners` returns empty list `[]` if the entitlement has no owners — add a fallback to prevent silently skipping the approval step
+- `GetDelegates` returns at most one user — only the user's first active delegation, even though it's typed as a list — and returns empty list `[]` if the user has no active delegate right now
+- `HasDelegate` returns `false` under the same conditions `GetDelegates` returns an empty list; use it to guard a fallback instead of relying on `GetDelegates` alone, the same way `GetManagers` needs one
 
 <Warning>
 **Critical:** When `GetManagers` returns an empty list in a policy approver expression, the approval step is silently skipped rather than failing. Always add a fallback approver:
@@ -292,6 +296,16 @@ size(c1.directory.users.v1.GetManagers(subject)) > 0
   : appOwners
 ```
 </Warning>
+
+<Tip>
+Use `HasDelegate` to route an approval to an out-of-office manager's delegate when one is set, falling back to the skip-level manager otherwise:
+
+```go
+c1.directory.users.v1.HasDelegate(manager)
+  ? c1.directory.users.v1.GetDelegates(manager)
+  : c1.directory.users.v1.GetManagers(manager)
+```
+</Tip>
 
 <Tip>
 Go to an application or entitlement's details page to look up its ID, or use [Cone](/product/cli/install/).
