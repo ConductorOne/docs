@@ -35,7 +35,7 @@ FRONTEND_EXTENSIONS = {".tsx", ".ts", ".jsx", ".js", ".json"}
 SKIP_EXACT = {
     "done", "done.", "note", "tip", "warning", "important", "required",
     "optional", "new", "or", "and", "all", "yes", "no", "on", "off",
-    "access",
+    "access", "activation required",
 }
 
 # If the cleaned string starts with any of these, it's a sentence/instruction.
@@ -50,6 +50,11 @@ SKIP_ENDSWITH = (":", "?")
 
 # If found in more than this many files, it's too generic to report confidently.
 COMMON_THRESHOLD = 15
+
+# Docs write full nav paths as a single bold span (e.g. "**AI > MCPs**"), but
+# frontend source never contains that literal breadcrumb string — each segment
+# is a separate label. Split on these separators and check segments individually.
+BREADCRUMB_SEP = re.compile(r"\s*(?:>|→)\s*")
 
 # Directories inside FRONTEND_DIR to skip (build output, node_modules, etc.)
 SKIP_DIRS = {"node_modules", ".cache", "dist", "build", "__mocks__"}
@@ -150,6 +155,37 @@ def search_files(term: str, file_paths: list) -> Tuple[str, int, Optional[str]]:
     return "found", count, str(rel)
 
 
+def is_breadcrumb(label: str) -> bool:
+    return bool(BREADCRUMB_SEP.search(label))
+
+
+def check_breadcrumb(label: str, file_paths: list) -> Tuple[str, int, Optional[str]]:
+    """
+    Check a "Section > Subsection" style nav path by verifying each segment
+    independently, since the frontend never contains the joined string.
+    Returns the same shape as search_files; `detail` holds the first found
+    segment's path on success, or the missing segment(s) on failure.
+    """
+    segments = [s.strip() for s in BREADCRUMB_SEP.split(label) if s.strip()]
+    missing = []
+    best_count = 0
+    best_detail = None
+    for seg in segments:
+        status, count, detail = search_files(seg, file_paths)
+        if status == "not_found":
+            missing.append(seg)
+        elif status == "found" and count > best_count:
+            best_count = count
+            best_detail = detail
+        elif status == "common" and best_detail is None:
+            best_count = count
+            best_detail = f"(too generic to pin down — {seg!r} appears in >{COMMON_THRESHOLD} files)"
+
+    if missing:
+        return "not_found", 0, ", ".join(missing)
+    return "found", best_count, best_detail
+
+
 def check_file(doc_path: Path, file_paths: list) -> dict:
     """Check one doc file. Returns result counts."""
     text = doc_path.read_text(encoding="utf-8")
@@ -167,9 +203,12 @@ def check_file(doc_path: Path, file_paths: list) -> dict:
     results = {"not_found": [], "found": [], "common": []}
 
     for label in candidates:
-        status, count, detail = search_files(label, file_paths)
+        if is_breadcrumb(label):
+            status, count, detail = check_breadcrumb(label, file_paths)
+        else:
+            status, count, detail = search_files(label, file_paths)
         if status == "not_found":
-            results["not_found"].append(label)
+            results["not_found"].append((label, detail))
         elif status == "found":
             results["found"].append((label, count, detail))
         else:
@@ -186,8 +225,11 @@ def check_file(doc_path: Path, file_paths: list) -> dict:
 
     if results["not_found"]:
         print(f"\n  NOT FOUND — may be renamed or removed ({len(results['not_found'])}):")
-        for label in results["not_found"]:
-            print(f"    ✗  {label!r}")
+        for label, missing in results["not_found"]:
+            if missing:
+                print(f"    ✗  {label!r}  (segment not found: {missing!r})")
+            else:
+                print(f"    ✗  {label!r}")
 
     if results["found"]:
         print(f"\n  Found in frontend ({len(results['found'])}):")
