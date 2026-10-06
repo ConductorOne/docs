@@ -35,7 +35,7 @@ FRONTEND_EXTENSIONS = {".tsx", ".ts", ".jsx", ".js", ".json"}
 SKIP_EXACT = {
     "done", "done.", "note", "tip", "warning", "important", "required",
     "optional", "new", "or", "and", "all", "yes", "no", "on", "off",
-    "access",
+    "access", "activation required",
 }
 
 # If the cleaned string starts with any of these, it's a sentence/instruction.
