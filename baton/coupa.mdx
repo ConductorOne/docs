@@ -42,17 +42,48 @@ C1 can create Coupa user accounts. When you configure account provisioning for t
 | Invoicing user | Assign an Invoicing license when the account is created. |
 | Sourcing user | Assign a Sourcing license when the account is created. |
 | Account security type | Numeric Coupa account security type. |
-| Authentication method | `coupa_credentials`, `ldap`, or `saml`; values are case-sensitive. |
+| Authentication method | `coupa_credentials`, `ldap`, or `saml`; values are case-sensitive. Only the methods enabled on your Coupa instance are accepted. |
 | Default locale | Default locale, such as `en` or `en-GB`. |
 | Default account type | Name of the user's default Coupa account type. |
 | Default currency | ISO currency code, such as `USD`. |
-| Custom fields | Map of instance-specific Coupa user field names to values. |
+| Custom fields | Map of your Coupa instance's custom user field names to values, for example `{"cost-center": "CC-100"}`. |
 
 Every field is optional to C1. Map **First name** and **Last name** regardless — Coupa has no other source for a new user's name.
 
 Accounts are created active. The connector does not set a password.
 
 Custom fields are sent in Coupa's `custom-fields` namespace. License assignments can also be managed after account creation through C1 License Management.
+
+The connector trims surrounding whitespace from **Email**, **Login**, **SSO identifier**, **Employee number**, **Manager login**, **Authentication method**, **Default locale**, **Default account type**, and **Default currency**. A value that is only whitespace counts as unmapped. **First name** and **Last name** are sent as-is.
+
+**Purchasing user**, **Invoicing user**, and **Sourcing user** must be mapped to boolean values, and **Account security type** to a number. A value of any other type, such as the text `"false"`, is ignored and not sent to Coupa. Custom field values are sent with the type they are mapped with.
+
+<Note>
+The extended attributes are set only when the account is created. The connector does not update SSO identifier, employee number, manager, security and authentication settings, locale, default account type, default currency, or custom fields on existing Coupa users. It also does not sync these attributes back into C1: synced Coupa accounts carry only login, email, name, and status.
+</Note>
+
+#### Mapping examples
+
+Mappings in C1 are expressions. Wrap text constants in quotes; booleans and numbers take no quotes. The C1 user has no separate first and last name, so derive them from the display name.
+
+| Field | Example mapping |
+|-------|-----------------|
+| First name | `subject.display_name.split(" ")[0]` |
+| Last name | `subject.display_name.substring(subject.display_name.indexOf(" ") + 1)` |
+| Email | `subject.email` |
+| Login | `subject.username` |
+| Employee number | A value unique per user, such as `subject.id`. Coupa requires employee numbers to be unique, so a constant fails from the second account on. |
+| Manager login | `"jane.manager"` |
+| Purchasing user | `true` |
+| Default currency | `"USD"` |
+| Custom fields | `{"cost-center": "CC-100", "remote": true, "desk-number": 42}` |
+
+#### How Coupa applies some values
+
+- **License flags.** If an account would be created with no license at all — for example, with **Purchasing user**, **Invoicing user**, and **Sourcing user** all mapped to `false` — Coupa assigns the Purchasing license anyway. To create a user without Purchasing, map at least one other license flag to `true`.
+- **Custom field names.** Coupa accepts either the hyphenated or the underscore form of a custom field name (for example `cost-center` or `cost_center`) and reports it in the hyphenated form. A name that doesn't match an existing custom user field is ignored without an error, so check the spelling against an existing user's `custom-fields` in the Coupa Users API.
+- **Integer custom fields** are returned by Coupa as decimal strings, for example `"42.0"`.
+- **Rejected values.** If Coupa rejects a value — an authentication method your instance doesn't enable, or an account type, currency, or manager that doesn't exist — the account isn't created and the connector returns Coupa's error message, for example `Authentication Method must be one of Coupa Credentials`.
 
 ### Connector actions
 
