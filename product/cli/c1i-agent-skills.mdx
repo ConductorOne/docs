@@ -6,37 +6,41 @@ description: Set up c1i as a skill for Claude Code, Cursor, and other AI coding 
 sidebarTitle: "Use c1i with AI agents"
 ---
 
-{/* Editor Refresh: 2026-05-07 */}
+{/* Editor Refresh: 2026-10-06 */}
 
-c1i is designed from the ground up for AI agents. The `c1i docs skill` command exports a self-contained skill file that teaches your AI coding agent how to use every c1i command, discover API endpoints, and manage C1 resources — without needing external documentation.
+Give your AI coding agent what it needs to run c1i safely against your C1 tenant. The `c1i docs agents` command exports a self-contained skill file that teaches the agent c1i's conventions, and the agent discovers individual commands and flags from c1i's built-in help.
 
 ## What is a skill file?
 
-A **skill file** is a structured markdown document that gives an AI coding agent the context it needs to use a tool effectively. The skill file produced by `c1i docs skill` covers:
+A skill file is a structured Markdown document that gives an AI coding agent the context it needs to use a tool effectively. The skill file produced by `c1i docs agents` covers:
 
-- All c1i commands, flags, and output formats
-- API discovery workflows (how to find and understand endpoints)
-- Common API endpoints and pagination patterns
-- Authentication setup
+- Choosing the right tenant and authenticating, including limiting the credential to specific roles
+- Output formats, field selection, and exit codes
+- Choosing between a first-class command and a raw API call
+- Finding API endpoints, documentation pages, and the built-in runbooks (`c1i docs guide`)
+- Pagination, dry runs, and behavior that commonly surprises agents
+- Upgrading c1i
+
+The skill file doesn't list every command and flag. The agent reads those from `c1i --help` and `c1i <command> --help`, which always match the installed version.
 
 When you add this skill file to your agent's context, the agent can manage users, apps, entitlements, tasks, and access requests in C1 through natural-language instructions.
 
 ## Generate the skill file
 
-Run `c1i docs skill` to output the skill file to your terminal:
+Run `c1i docs agents` to output the skill file to your terminal:
 
 ```shell
-c1i docs skill
+c1i docs agents
 ```
 
 To write it directly to a file:
 
 ```shell
-c1i docs skill -o SKILL.md
+c1i docs agents -o SKILL.md
 ```
 
 <Tip>
-The `docs skill` command works without authentication, so you can generate the skill file before logging in.
+The `docs agents` command works without authentication, so you can generate the skill file before logging in. `c1i docs skill` is an alias that prints the same file.
 </Tip>
 
 ## Set up c1i with Claude Code
@@ -55,7 +59,7 @@ mkdir -p .claude/skills/c1i
 Generate the skill file into that directory:
 
 ```shell
-c1i docs skill -o .claude/skills/c1i/SKILL.md
+c1i docs agents -o .claude/skills/c1i/SKILL.md
 ```
 </Step>
 <Step>
@@ -78,7 +82,7 @@ Start using c1i through Claude Code. You can now give Claude natural-language in
 </Steps>
 
 <Note>
-Make sure c1i is installed and authenticated (`c1i auth login`) before asking Claude Code to run c1i commands. For non-interactive setups (CI, containers, headless servers), set `C1I_URL`, `C1I_CLIENT_ID`, and `C1I_CLIENT_SECRET` as environment variables instead of running `auth login` — c1i picks them up automatically. See [Credential storage](/product/cli/c1i#credential-storage) for the full precedence order.
+Make sure c1i is installed and authenticated (`c1i auth login`) before asking Claude Code to run c1i commands. To give the agent less than your full access, log in with `--scoped-role` or `--choose-roles`; see [Limit the credential to specific roles](/product/cli/c1i#limit-the-credential-to-specific-roles). For non-interactive setups (CI, containers, headless servers), set `C1I_URL`, `C1I_CLIENT_ID`, and `C1I_CLIENT_SECRET` as environment variables instead of running `auth login` — c1i picks them up automatically. See [Credential storage](/product/cli/c1i#credential-storage) for the full precedence order.
 </Note>
 
 ## Set up c1i with Cursor
@@ -99,7 +103,7 @@ mkdir -p .cursor/rules
 Generate the skill file as a Cursor rule:
 
 ```shell
-c1i docs skill -o .cursor/rules/c1i.md
+c1i docs agents -o .cursor/rules/c1i.md
 ```
 </Step>
 <Step>
@@ -118,13 +122,15 @@ Open Cursor and go to **Settings** > **Rules** > **User Rules**.
 Generate the skill file:
 
 ```shell
-c1i docs skill
+c1i docs agents
 ```
 </Step>
 <Step>
 Copy the output and paste it into the user rules text area.
 </Step>
 </Steps>
+
+Cursor now applies the c1i skill in every project you open.
 </Tab>
 </Tabs>
 
@@ -132,14 +138,14 @@ Copy the output and paste it into the user rules text area.
 
 ## Set up c1i with other agents
 
-The skill file is plain markdown with YAML frontmatter, so it works with any AI coding agent that accepts context files. The general pattern:
+The skill file is plain Markdown with YAML frontmatter, so it works with any AI coding agent that accepts context files. The general pattern:
 
 <Steps>
 <Step>
 Generate the skill file:
 
 ```shell
-c1i docs skill -o c1i-skill.md
+c1i docs agents -o c1i-skill.md
 ```
 </Step>
 <Step>
@@ -147,11 +153,11 @@ Add the file wherever your agent reads context. Common locations:
 
 | Agent | Where to put the skill file |
 | :--- | :--- |
-| **Claude Code** | `.claude/skills/c1i/SKILL.md` |
-| **Cursor** | `.cursor/rules/c1i.md` |
-| **Windsurf** | `.windsurfrules` (append the content) |
-| **GitHub Copilot** | `.github/copilot-instructions.md` (append the content) |
-| **Cline** | `.clinerules` (append the content) |
+| Claude Code | `.claude/skills/c1i/SKILL.md` |
+| Cursor | `.cursor/rules/c1i.md` |
+| Windsurf | `.windsurfrules` (append the content) |
+| GitHub Copilot | `.github/copilot-instructions.md` (append the content) |
+| Cline | `.clinerules` (append the content) |
 </Step>
 <Step>
 Authenticate c1i if you haven't already:
@@ -162,7 +168,9 @@ c1i auth login --url your-tenant.conductor.one
 </Step>
 </Steps>
 
-## Example workflows
+Your agent now reads the c1i skill from its context and can run c1i commands against your tenant.
+
+## Example c1i agent workflows
 
 Once your agent has the c1i skill, you can use natural language to accomplish common tasks.
 
@@ -174,7 +182,7 @@ Ask your agent to verify which user it's acting as before making changes:
 "Who am I authenticated as in C1, and how many roles do I have?"
 ```
 
-The agent runs `c1i auth whoami` and reports the user ID, display name, email, and counts of roles, permissions, and feature flags.
+The agent runs `c1i auth whoami` and reports the user ID, display name, email, counts of roles, permissions, and feature flags, and the tenant URL it's targeting.
 
 ### Explore the API
 
@@ -220,17 +228,17 @@ The agent runs `c1i accounts list --app-id=<id> --unmapped-only` to surface acco
 
 ## Keep the skill file up to date
 
-The skill file is versioned — it includes the c1i version in its frontmatter. When you update c1i, regenerate the skill file to pick up any new commands or changes:
+The skill file includes the c1i version in its frontmatter. When you update c1i, regenerate the skill file to pick up new commands and changes:
 
 ```shell
-# Update c1i
-brew upgrade conductorone/baton/c1i
+# Update c1i (Homebrew installs: brew upgrade conductorone/baton/c1i)
+c1i upgrade
 
 # Regenerate the skill file
-c1i docs skill -o .claude/skills/c1i/SKILL.md
+c1i docs agents -o .claude/skills/c1i/SKILL.md
 ```
 
 ## Pages related to c1i agent setup
 
-- [Install c1i](/product/cli/c1i) — installation, authentication, and configuration
+- [Install c1i](/product/cli/c1i) — installation, upgrades, authentication, and configuration
 - [c1i command reference](/product/cli/c1i-commands) — complete list of commands, subcommands, and flags

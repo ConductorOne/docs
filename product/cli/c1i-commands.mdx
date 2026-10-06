@@ -9,134 +9,93 @@ sidebarTitle: "c1i commands"
 {/* Editor Refresh: 2026-10-05 */}
 
 <Tip>
-**Key commands:**
-
-Run `c1i help` in your terminal to show all available commands.
-
-Run `c1i <command> --help` or `c1i <command> -h` for help with a specific command.
+Run `c1i help` to list all commands, and `c1i <command> --help` (or `-h`) for help with a specific command.
 </Tip>
 
-## Overview
+## Overview of c1i commands
 
-c1i interacts with the C1 API to manage users, apps, accounts, entitlements, tasks, and access requests.
+Use this reference to find the command, flags, and output format for any c1i task, from managing identities, apps, and access to policies, automations, and MCP servers.
 
-**Usage:**
+List and search commands output NDJSON, one JSON object per line. Most other commands output formatted JSON, but some mutation commands, such as `requests create grant`, `apps set-owners`, `apps delete`, and `tasks approve`, print a one-line confirmation instead. See [Output conventions](/product/cli/c1i#output-conventions) for `auth`, `docs`, and `api` output.
 
-```bash
-c1i [command]
-```
-
-| Command | Subcommands | Description |
-| :--- | :--- | :--- |
-| `docs` | `search` `page` `endpoints` `endpoint` `openapi` `skill` | Explore API documentation (no auth required). |
-| `auth` | `login` `logout` `status` `whoami` `token` | Manage authentication. |
-| `users` | `list` | Search and list C1 users. |
-| `apps` | `list` `create` `delete` `set-owners` | Manage applications. |
-| `accounts` | `list` `set-owner` | Manage application accounts. |
-| `entitlements` | `list` `proxy-bindings ...` | Search and list application entitlements, and manage entitlement-to-entitlement proxy bindings. |
-| `tasks` | `list` `approve` `deny` `comment` | Manage access request tasks. |
-| `requests` | `create grant` `create revoke` | Create access requests. |
-| `connectors` | `list` | List connectors. |
-| `policies` | `list` `search` `get` `create` `update` `delete` `validate-cel` | Manage policies (approval, provisioning, and certification workflows). |
-| `access-profiles` | `list` `get` `create` `update` `delete` `requestable-entitlements ...` `visibility-entitlements ...` `bundle-automation ...` | Manage access profiles (request catalogs): which entitlements are requestable, and by whom. |
-| `access-reviews` | `list` `get` `create` `update` `reports ...` | Manage access-review campaigns and their generated reports. |
-| `findings` | `search` `get` `create` `state` `assignee` `create-task` `bulk-state` `bulk-create-tasks` `routing-rules ...` `transformation-rules ...` `settings ...` `audits ...` `shadow-mcp-occurrences ...` | Manage security findings, the rules that route and transform them, and the tasks that remediate them. |
-| `role-mining` | `trigger` `suggestions ...` `config ...` `runs ...` `custom-analysis ...` `access-profiles ...` | Manage role mining analyses, suggestions, and the access profiles generated from them. |
-| `service-principals` (alias `sp`) | `list` `get` `create` `update` `delete` `credentials ...` `bindings ...` | Manage service principals (non-human identities), their client credentials, and their subject bindings. |
-| `mcp` | `gateway list-tools` `gateway call` `classifiers ...` | Call the C1 MCP gateway directly (list and invoke tools end to end), and manage MCP gateway AI-governance classifiers. |
-| `api` | | Make raw C1 API requests. |
-| `version` | | Print the c1i version. |
-| `completion` | `bash` `fish` `powershell` `zsh` | Generate a shell completion script. |
+| Command | Description |
+| :--- | :--- |
+| [`docs`](#docs) | Explore API documentation and agent guidance (no auth required). |
+| [`auth`](#auth) | Manage authentication. |
+| [`roles`](#roles) | List and inspect IAM roles (find role IDs for `auth login --scoped-role`). |
+| [`users`](#users) | Search, list, and get C1 users. |
+| [`apps`](#apps) | Manage applications and their owners. |
+| [`accounts`](#accounts) | Manage application accounts. |
+| [`entitlements`](#entitlements) | Search, get, and create application entitlements, and manage entitlement-to-entitlement proxy bindings. |
+| [`grants`](#grants) | Query access grants: who has access to what. |
+| [`tasks`](#tasks) | Manage access request tasks. |
+| [`requests`](#requests) | Create, list, and inspect access requests. |
+| [`connectors`](#connectors) | List connectors. |
+| [`policies`](#policies) | Manage policies (approval, provisioning, and certification workflows). |
+| [`access-profiles`](#access-profiles) | Manage access profiles (request catalogs): which entitlements are requestable, and by whom. |
+| [`access-reviews`](#access-reviews) | Manage access-review campaigns and their generated reports. |
+| [`findings`](#findings) | Manage security findings, the rules that route and transform them, and the tasks that remediate them. |
+| [`role-mining`](#role-mining) | Manage role mining analyses, suggestions, and the access profiles generated from them. |
+| [`automations`](#automations) | List automations, inspect one, and query its execution history. |
+| [`functions`](#functions) | Inspect C1 functions: metadata, commit history, callers, and source. |
+| [`export`](#export) | Export bulk data, such as system log (audit) events. |
+| [`upgrade`](#upgrade) (alias `update`) | Check for and install a newer c1i release. |
+| [`service-principals`](#service-principals) (aliases `service-principal`, `sp`) | Manage service principals (non-human identities), their client credentials, and their subject bindings. |
+| [`mcp gateway`](#mcp-gateway) | Call the C1 MCP gateway directly: list and invoke tools end to end. |
+| [`mcp servers`](#mcp-servers) | Register, configure, and inspect MCP servers. |
+| [`mcp tools`](#mcp-tools) | Manage the MCP tools discovered from a server. |
+| [`mcp toolsets`](#mcp-toolsets) | Manage MCP toolsets: requestable bundles of MCP tools. |
+| [`mcp bindings`](#mcp-bindings) | Manage which tools belong to which toolset. |
+| [`mcp classifiers`](#mcp-classifiers) | Manage MCP gateway AI-governance classifiers. |
+| [`api`](#api) | Make raw C1 API requests. |
+| [`version`](#version) | Print the c1i version. |
+| [`completion`](#completion) | Generate a shell completion script for bash, fish, PowerShell, or zsh. |
 
 ## Global flags
 
+Every command accepts these flags.
+
 | Flag | Description |
 | :--- | :--- |
-| `--url string` | C1 tenant URL. |
+| `--url string` | C1 tenant URL; https required. Precedence: `--url`, `C1I_URL`, then `~/.c1i.yaml`. |
+| `--fields string` | Comma-separated JSON fields to keep in read output (dot-paths). Prefer it over `jq` for simple projection. |
+| `--max-retries int` | Retries for transient API failures (429/5xx); 0 disables (default 4). |
+| `--error-format string` | Error output format: `text` or `json` (default `text`). |
+| `--dry-run` | Preview C1 REST mutations (method, path, body) without sending them. `mcp gateway call` and `auth login` reject it (exit 2). |
+| `--debug` | Trace HTTP requests (method, URL, status, timing) to stderr. |
 | `-h`, `--help` | Help for any command. |
+
+Each global flag also reads a `C1I_*` environment variable: `C1I_URL`, `C1I_FIELDS`, `C1I_MAX_RETRIES`, `C1I_ERROR_FORMAT`, `C1I_DRY_RUN`, and `C1I_DEBUG`.
 
 ## Docs
 
-Explore C1 API documentation and schemas. These commands do **not** require authentication.
+Explore C1 API documentation and schemas. These commands don't require authentication.
 
-**Usage:**
-
-```bash
-c1i docs [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `search` | Search C1 documentation by keyword. |
-| `page` | Fetch a full documentation page. |
-| `endpoints` | List all API endpoints. |
-| `endpoint` | Show the full request/response schema for an endpoint. |
-| `openapi` | Dump the raw OpenAPI spec (YAML). |
-| `skill` | Export documentation for AI agents (SKILL.md format). |
+| `c1i docs search <query>` | Search C1 documentation by keyword. |
+| `c1i docs page <path>` | Fetch a full documentation page by path. |
+| `c1i docs endpoints [--filter <pattern>]` | List all available API endpoints, optionally only those matching a pattern. |
+| `c1i docs endpoint <path>` | Show the full request and response schema for a specific API endpoint. |
+| `c1i docs openapi` | Dump the raw OpenAPI spec in YAML format. |
+| [`c1i docs guide`](#docs-guide) | Print an embedded, task-oriented runbook for a common workflow. |
+| [`c1i docs agents`](#docs-agents) (alias `skill`) | Print agent-facing conventions: output contracts, exit codes, and pagination. |
 
-### `search`
+### `docs guide`
 
-Search C1 documentation by keyword.
-
-**Usage:**
-
-```bash
-c1i docs search <query>
-```
-
-### `page`
-
-Fetch a full documentation page by path.
+Print an embedded, task-oriented runbook: a numbered sequence of c1i commands for a common end-to-end workflow. Run it with no argument to list the available guide names and their purposes. Guides are static content in the c1i binary, so unlike `docs search` and `docs page` they make no network call.
 
 **Usage:**
 
 ```bash
-c1i docs page <path>
+c1i docs guide [name]
 ```
 
-### `endpoints`
+### `docs agents`
 
-List all available API endpoints. Optionally filter by a pattern.
+Print a short, agent-facing document covering the conventions that `--help` text can't: getting the tenant right, output contracts, exit codes, pagination, and when to prefer a first-class command over `c1i api`. It doesn't list every command or flag; run `c1i --help`, `c1i <group> --help`, or `c1i <group> <command> --help` for those.
 
-**Usage:**
-
-```bash
-c1i docs endpoints [--filter <pattern>]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--filter string` | Filter endpoints by pattern. |
-
-### `endpoint`
-
-Show the full request and response schema for a specific API endpoint.
-
-**Usage:**
-
-```bash
-c1i docs endpoint <path>
-```
-
-### `openapi`
-
-Dump the raw OpenAPI spec in YAML format.
-
-**Usage:**
-
-```bash
-c1i docs openapi
-```
-
-### `skill`
-
-Export a self-contained skill file that teaches AI coding agents how to use c1i. The output covers all commands, output formats, API discovery workflows, and common endpoints.
-
-**Usage:**
-
-```bash
-c1i docs skill
-```
+The output opens with a YAML front-matter block (name, description, version, and required binaries) that some agent harnesses parse automatically, followed by plain Markdown. `skill` remains an alias for backward compatibility, so `c1i docs skill` still works.
 
 | Flag | Description |
 | :--- | :--- |
@@ -145,14 +104,11 @@ c1i docs skill
 **Examples:**
 
 ```bash
-# Print the skill file to stdout
-c1i docs skill
-
 # Write directly to a file for Claude Code
-c1i docs skill -o .claude/skills/c1i/SKILL.md
+c1i docs agents -o .claude/skills/c1i/SKILL.md
 
 # Write as a Cursor project rule
-c1i docs skill -o .cursor/rules/c1i.md
+c1i docs agents -o .cursor/rules/c1i.md
 ```
 
 For step-by-step setup instructions for Claude Code, Cursor, and other agents, see [Use c1i with AI agents](/product/cli/c1i-agent-skills).
@@ -161,99 +117,54 @@ For step-by-step setup instructions for Claude Code, Cursor, and other agents, s
 
 ## Auth
 
-Manage authentication credentials.
+Log in, check which identity and credential c1i is using, and mint access tokens.
 
-**Usage:**
+c1i reads credentials from `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, then the OS keyring, then a `0600` file, and caches each access token it mints until it's close to expiry; see [Credential storage](/product/cli/c1i#credential-storage). `auth token` and `mcp gateway` always mint a fresh token. A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once.
 
-```bash
-c1i auth [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `login` | Authenticate via browser or API credentials. |
-| `logout` | Remove stored credentials for the current URL. |
-| `status` | Check if valid credentials are stored and report the storage backend. |
-| `whoami` | Show the authenticated principal's identity, roles, permissions, and feature flags. |
-| `token` | Print a short-lived OAuth2 bearer token for driving raw API calls yourself. |
+| [`c1i auth login`](#auth-login) | Authenticate via browser or API credentials. |
+| `c1i auth logout` | Remove stored c1i credentials for the current URL from both the OS keyring and the file fallback. Environment variables (`C1I_CLIENT_ID`, `C1I_CLIENT_SECRET`) are not affected. |
+| `c1i auth status` | Check whether valid C1 credentials are stored and working. Reports which source (environment, keyring, or file) served the active credentials. |
+| [`c1i auth whoami`](#auth-whoami) | Show the authenticated principal's identity, roles, permissions, and feature flags. |
+| [`c1i auth token`](#auth-token) | Print a short-lived OAuth2 bearer token for driving raw API calls yourself. |
 
-### `login`
+### `auth login`
 
-Authenticate to C1. Opens a browser for OAuth device flow authorization, or accepts credentials directly.
-
-**Usage:**
-
-```bash
-c1i auth login [flags]
-```
+Opens a browser for OAuth device flow authorization, or accepts credentials directly.
 
 | Flag | Description |
 | :--- | :--- |
-| `--url string` | C1 tenant URL. |
-| `--client-id string` | Client ID (for non-interactive auth). |
-| `--client-secret string` | Client secret (for non-interactive auth). |
+| `--client-id string` | C1 API client ID (skips browser login). |
+| `--client-secret string` | C1 API client secret (skips browser login). |
+| `--choose-roles` | Choose the browser-login credential's roles from a menu after approval (needs a terminal). `--choose-roles=false` skips the role question. |
+| `--scoped-role stringArray` | Restrict the browser-login credential to a role, by name (such as `basic-user`) or ID (repeatable). |
 
-**Examples:**
+A browser login creates a credential with all of your roles; see [Limit the credential to specific roles](/product/cli/c1i#limit-the-credential-to-specific-roles). `--scoped-role` takes a role name or a role ID from [`c1i roles list`](#roles). A name that matches no role you can scope to exits with code 2 before c1i creates your credential. An unknown role ID exits with code 4. `--choose-roles` and `--scoped-role` can't be combined, and neither works with `--client-id` and `--client-secret`. `auth login` rejects `--dry-run` (exit 2), because it can't preview creating a credential.
 
-```bash
-# Browser-based login
-c1i auth login --url example.conductor.one
+### `auth whoami`
 
-# Credential-based login
-c1i auth login --client-id <id> --client-secret <secret>
-```
-
-For non-interactive scripts and CI environments, you can skip stored credentials entirely by setting `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (alongside `C1I_URL`) as environment variables. Both must be set; partial values are ignored. See [Credential storage](#credential-storage) for the full precedence order.
-
-### `logout`
-
-Remove stored c1i credentials for the current URL from both the OS keyring and the file fallback. Environment variables (`C1I_CLIENT_ID`, `C1I_CLIENT_SECRET`) are not affected.
-
-**Usage:**
-
-```bash
-c1i auth logout
-```
-
-### `status`
-
-Check whether valid C1 credentials are stored and working. Reports which source (environment, keyring, or file) served the active credentials.
-
-**Usage:**
-
-```bash
-c1i auth status
-```
-
-### `whoami`
-
-Show the authenticated principal — user ID, display name, email, and counts of roles, permissions, and tenant feature flags. Useful for agents and scripts that need to confirm identity before making other API calls.
-
-**Usage:**
-
-```bash
-c1i auth whoami [flags]
-```
+Show the authenticated principal: principal ID, user ID (a service principal might carry only the principal ID), counts of roles, permissions, and tenant feature flags, and display name and email when the user lookup succeeds.
 
 | Flag | Description |
 | :--- | :--- |
-| `-v`, `--verbose` | Include the full `roles`, `permissions`, and `features` arrays. |
+| `-v`, `--verbose` | Include full roles, permissions, and features arrays. |
 
-By default, `whoami` returns a compact summary. Use `--verbose` when you need the full role and permission lists.
+By default, `whoami` returns a compact summary. `--verbose` replaces that summary with the raw introspect payload, which includes the full role, permission, and feature lists but not the summary's counts, `displayName`, or `email`.
 
-### `token`
-
-Mint and print a short-lived OAuth2 bearer token from your stored credentials, for driving raw API calls yourself (for example, with `curl`). A new token is minted on each invocation — it is not written to disk.
-
-**Usage:**
+Both modes add two keys that c1i resolves itself: `tenant`, the base URL this invocation targets, and `tenantSource`, where it came from (`flag`, `env`, or `config`). They appear only after your credentials are proven against that tenant, so check them before a write:
 
 ```bash
-c1i auth token [flags]
+c1i auth whoami --fields tenant
 ```
+
+### `auth token`
+
+c1i mints a new token from your stored credentials on each invocation and doesn't write it to disk.
 
 | Flag | Description |
 | :--- | :--- |
-| `--json` | Also print the token type and absolute expiry (RFC3339), instead of just the access token. |
+| `--json` | Print a JSON object with `access_token`, `token_type`, and `expires_at` (RFC3339) instead of just the access token. |
 
 By default only the access token is printed (newline-terminated), so it composes directly into another command:
 
@@ -264,75 +175,50 @@ curl -H "Authorization: Bearer $(c1i auth token)" \
 
 The token is audience-scoped to the C1 API host.
 
-## Credential storage
+## Roles
 
-c1i reads credentials from the first source that has them, in this order:
+List and inspect IAM roles, including the role IDs that `c1i auth login --scoped-role` accepts.
 
-1. **Environment variables** — `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (combined with `C1I_URL`). Both must be set. Used for non-interactive scripts, CI, and containers. Never written to disk.
-2. **OS keyring** — Keychain (macOS), Credential Manager (Windows), or Secret Service (Linux). Default when available.
-3. **File fallback** — a `0600` JSON file under your config directory:
-   - Linux: `~/.config/c1i/credentials/`
-   - macOS: `~/Library/Application Support/c1i/credentials/`
-   - Windows: `%AppData%\c1i\credentials\`
-
-The file fallback is used automatically when no OS keyring is available — typical on headless Linux servers, Docker or LXC containers, CI runners, and WSL without a desktop environment. `c1i auth login` writes to the keyring when it can and to the file otherwise; `c1i auth status` reports the active source.
-
-### Access-token caching
-
-c1i caches the short-lived OAuth access token it mints from your stored credentials — not the credentials themselves — in the same keyring-then-file location, and reuses it across invocations until it's close to expiry. Without this, a burst of one-shot commands (common in scripts and agent workflows) would mint, and log, a fresh `client_credentials` grant on every single invocation.
-
-A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint a fresh token on every invocation.
+| Command | Description |
+| :--- | :--- |
+| `c1i roles list` | List IAM roles. [Paginates](#pagination-and-limits). |
+| `c1i roles get <role-id>` | Get a single IAM role, including its permissions. |
 
 ## Users
 
 Manage C1 users.
 
-### `list`
+| Command | Description |
+| :--- | :--- |
+| [`c1i users list`](#users-list) | Search and list C1 users. |
+| `c1i users get <user-id>` | Get a single user by ID. |
 
-Search and list C1 users. Outputs NDJSON.
+### `users list`
 
-**Usage:**
-
-```bash
-c1i users list [flags]
-```
+[Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
 | `--query string` | Search query. |
 | `--email string` | Filter by email address. |
 | `--status string` | Filter by status: `enabled`, `disabled`, or `deleted`. |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
-
-**Example:**
-
-```bash
-c1i users list --email user@example.com
-```
 
 ## Apps
 
-Manage applications.
+Create, inspect, and delete applications, and manage their owners.
 
-### `list`
-
-List applications. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i apps list [flags]
-```
-
-| Flag | Description |
+| Command | Description |
 | :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
+| `c1i apps list` | List applications. [Paginates](#pagination-and-limits). |
+| `c1i apps get <app-id>` | Get a single app by ID. |
+| [`c1i apps create`](#apps-create) | Create a new app. |
+| `c1i apps delete <app-id>` | Soft-delete an app by ID. The app is marked deleted and drops out of normal listings, but the record is retained for audit. |
+| [`c1i apps owners`](#apps-owners) | List an app's owners. |
+| [`c1i apps add-owner`](#apps-add-owner) | Add one owner to an app. |
+| [`c1i apps remove-owner`](#apps-remove-owner) | Remove one owner from an app. |
+| [`c1i apps set-owners`](#apps-set-owners) | Set the owners of an app, replacing the full owner list. |
 
-### `create`
+### `apps create`
 
 Create a new app — a plain, unmanaged container you can register MCP servers under. Only `--display-name` is required; app owners are managed separately via `set-owners`, not at create time.
 
@@ -347,7 +233,7 @@ c1i apps create --display-name <name> [flags]
 | `--display-name string` | Display name for the new app. (Required.) |
 | `--description string` | Description for the new app. |
 
-The created app is returned as pretty JSON under an `app` key.
+The created app is returned as formatted JSON under an `app` key.
 
 **Example:**
 
@@ -355,19 +241,51 @@ The created app is returned as pretty JSON under an `app` key.
 APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
 ```
 
-### `delete`
+### `apps owners`
 
-Soft-delete an app by ID. The app is marked deleted and drops out of normal listings, but the record is retained for audit.
+[Paginates](#pagination-and-limits).
 
 **Usage:**
 
 ```bash
-c1i apps delete <app-id>
+c1i apps owners <app-id> [flags]
 ```
 
-### `set-owners`
+Use this to verify an owner change. Owner provisioning is asynchronous, so a change can take roughly 45 to 150 seconds to appear. Most apps already have at least one owner, because `apps create` assigns its caller as an owner. A well-formed app ID that doesn't exist returns zero rows and exits `0`, not `4`.
 
-Set the complete list of owners for an app, replacing any existing owners.
+### `apps add-owner`
+
+Add one user as an app owner without changing the rest of the owner list. Unlike `set-owners`, it can't drop an owner that someone else added in the meantime.
+
+**Usage:**
+
+```bash
+c1i apps add-owner <user-id> --app-id <app-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID to add the owner to. (Required.) |
+
+Owner changes are provisioned asynchronously; verify with `c1i apps owners <app-id>`.
+
+### `apps remove-owner`
+
+Remove one user as an app owner without changing the rest of the owner list. The creator that `apps create` assigned can remain an owner, so check `c1i apps owners <app-id>` first if that matters.
+
+**Usage:**
+
+```bash
+c1i apps remove-owner <user-id> --app-id <app-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID to remove the owner from. (Required.) |
+
+Owner changes are provisioned asynchronously; verify with `c1i apps owners <app-id>`.
+
+### `apps set-owners`
 
 **Usage:**
 
@@ -377,11 +295,11 @@ c1i apps set-owners <app-id> --user-id <user-id> [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--user-id strings` | C1 user ID to set as owner (repeatable; replaces the full owner list). (Required.) |
+| `--user-id stringArray` | C1 user ID to set as owner (repeatable; replaces the full owner list). (Required.) |
 | `--wait` | Block and poll until every requested owner appears, or `--wait-timeout` elapses. |
-| `--wait-timeout duration` | Max time to wait with `--wait` (default `4m`). |
+| `--wait-timeout duration` | Max time to wait with `--wait` (default `4m0s`). |
 
-Owner changes are provisioned asynchronously — this command returns as soon as the request is accepted, but the new owners can take up to a few minutes to actually appear. Pass `--wait` to block until they do.
+Owner changes are provisioned asynchronously, so the command returns once the request is accepted and new owners can take a few minutes to appear. Pass `--wait` to block until they do.
 
 **Example:**
 
@@ -391,11 +309,11 @@ c1i apps set-owners app_abc123 --user-id user_1 --user-id user_2 --wait
 
 ## Accounts
 
-Manage application accounts (app users).
+Manage application accounts (app users). Both commands require `--app-id`, the application ID.
 
-### `list`
+### `accounts list`
 
-Search and list accounts for an application. Outputs NDJSON.
+Search and list accounts for an application. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -405,66 +323,105 @@ c1i accounts list --app-id <app-id> [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--app-id string` | Application ID. (Required.) |
 | `--status string` | Filter by status. |
 | `--type string` | Filter by type: `user`, `service_account`, or `system_account`. |
-| `--unmapped-only` | Only show unmapped accounts. |
+| `--unmapped-only` | Only show accounts with no linked identity user. |
 | `--query string` | Search query. |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
-### `set-owner`
+### `accounts set-owner`
 
 Set the owner of an application account.
 
 **Usage:**
 
 ```bash
-c1i accounts set-owner --app-id <app-id> --app-user-id <app-user-id> --user-id <user-id>
+c1i accounts set-owner <app-user-id> --app-id <app-id> --user-id <user-id>
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--app-id string` | Application ID. (Required.) |
-| `--app-user-id string` | App user ID. (Required.) |
 | `--user-id string` | C1 user ID to set as owner. (Required.) |
 
 ## Entitlements
 
-Manage application entitlements.
+Find, inspect, and create app entitlements, and link entitlements to each other with proxy bindings.
 
-### `list`
+| Command | Description |
+| :--- | :--- |
+| [`c1i entitlements list`](#entitlements-list) | Search and list application entitlements. |
+| [`c1i entitlements get`](#entitlements-get) | Get a single app entitlement by ID. |
+| [`c1i entitlements create`](#entitlements-create) | Create an app entitlement, with its resource type and resource. |
+| [`c1i entitlements proxy-bindings`](#entitlements-proxy-bindings) | Manage entitlement proxy bindings. |
 
-Search and list application entitlements. Outputs NDJSON.
+An entitlement ID is only unique within an app, so always key on the app ID and the entitlement ID together. Some built-in entitlements, such as the base `Access` entitlement, use the same ID in every app that has one.
 
-**Usage:**
+### `entitlements list`
 
-```bash
-c1i entitlements list [flags]
-```
+[Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Filter by application ID. |
 | `--query string` | Search query. |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
-A proxy binding is a visibility and tracking link from a source entitlement to a destination entitlement — it does not grant access or configure delegated provisioning. The public REST API has no list endpoint for proxy bindings; the C1 Console discovers them through an internal search service that isn't part of the public API.
+### `entitlements get`
 
 **Usage:**
 
 ```bash
-c1i entitlements proxy-bindings [command]
+c1i entitlements get <entitlement-id> --app-id <app-id>
 ```
 
-| Subcommand | Description |
+| Flag | Description |
 | :--- | :--- |
-| `get` | Get an entitlement proxy binding. |
-| `create` | Create an entitlement proxy binding. |
-| `delete` | Delete an entitlement proxy binding. |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+
+### `entitlements create`
+
+Create an app entitlement, plus the app resource type and resource it points at, as up to three requests in order. Pass `--resource-type-id` to reuse an existing resource type, and `--resource-id` to reuse an existing resource. Outputs formatted JSON under `appEntitlementView`.
+
+**Usage:**
+
+```bash
+c1i entitlements create --app-id <app-id> --display-name <name> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID to create the entitlement on. (Required.) |
+| `--display-name string` | Display name for the new entitlement; also names the resource type and resource that c1i creates. (Required.) |
+| `--description string` | Description for the new entitlement. |
+| `--alias string` | Alias for the new entitlement; exact-match queryable. |
+| `--slug string` | Slug for the new entitlement, such as `member`. |
+| `--duration-grant string` | Maximum grant duration as a protobuf duration in seconds, such as `3600s`; omit for standing access. `1h` is refused. |
+| `--owner-id stringArray` | C1 user ID to own the new entitlement (repeatable). |
+| `--resource-type string` | Kind of resource type to create: `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`, `CUSTOM`, `VAULT`, or `PROFILE_TYPE` (default `CUSTOM`). |
+| `--resource-type-display-name string` | Display name for the resource type this command creates (default: `--display-name`). |
+| `--resource-type-id string` | Existing app resource type to reuse instead of creating one. |
+| `--resource-display-name string` | Display name for the resource this command creates (default: `--display-name`). |
+| `--resource-id string` | Existing app resource to reuse instead of creating one; requires `--resource-type-id`. |
+
+Passing `--resource-type` or `--resource-type-display-name` together with `--resource-type-id` is a usage error (exit 2), as is `--resource-id` without `--resource-type-id`. Only the `CUSTOM` resource type can repeat on one app, so reuse an existing type with `--resource-type-id` for any other kind.
+
+There is no rollback. If a later request fails, the objects that earlier ones created still exist; the error names them and the flags that reuse them. `--dry-run` previews every request in the sequence. Owner provisioning is asynchronous.
+
+**Example:**
+
+```bash
+c1i entitlements create --app-id "$APP_ID" \
+  --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
+  --slug member --alias payroll_admin
+```
+
+### `entitlements proxy-bindings`
+
+A proxy binding is a visibility and tracking link from a source entitlement to a destination entitlement — it does not grant access or configure delegated provisioning. The public REST API has no list endpoint for proxy bindings; the C1 Console discovers them through an internal search service that isn't part of the public API.
+
+| Command | Description |
+| :--- | :--- |
+| `c1i entitlements proxy-bindings get` | Get an entitlement proxy binding. |
+| `c1i entitlements proxy-bindings create` | Create an entitlement proxy binding. |
+| `c1i entitlements proxy-bindings delete` | Delete an entitlement proxy binding. |
 
 Each subcommand takes the same four flags to identify the binding:
 
@@ -475,135 +432,255 @@ Each subcommand takes the same four flags to identify the binding:
 | `--destination-app-id string` | Application ID of the destination entitlement. (Required.) |
 | `--destination-entitlement-id string` | Destination entitlement ID. (Required.) |
 
-### `proxy-bindings get`
-
-Get an entitlement proxy binding.
-
 **Usage:**
 
 ```bash
-c1i entitlements proxy-bindings get --source-app-id <app-id> --source-entitlement-id <entitlement-id> --destination-app-id <app-id> --destination-entitlement-id <entitlement-id>
+c1i entitlements proxy-bindings get --source-app-id <app-id> \
+  --source-entitlement-id <entitlement-id> --destination-app-id <app-id> \
+  --destination-entitlement-id <entitlement-id>
+c1i entitlements proxy-bindings create --source-app-id <app-id> \
+  --source-entitlement-id <entitlement-id> --destination-app-id <app-id> \
+  --destination-entitlement-id <entitlement-id>
+c1i entitlements proxy-bindings delete --source-app-id <app-id> \
+  --source-entitlement-id <entitlement-id> --destination-app-id <app-id> \
+  --destination-entitlement-id <entitlement-id>
 ```
 
-### `proxy-bindings create`
+## Grants
 
-Create an entitlement proxy binding.
+Query access grants: the bindings between accounts or users and entitlements. Answers "who has access to what".
 
-**Usage:**
+### `grants list`
+
+Search and list grants. At least one filter is required. [Paginates](#pagination-and-limits).
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Filter to grants in this application. |
+| `--entitlement-id string` | Filter to grants of this entitlement (requires `--app-id`). |
+| `--user-id string` | Filter to grants held by this C1 identity user. |
+| `--app-user-id string` | Filter to grants held by this app account (app user). |
+| `--wait` | Block and poll every page until the same grants come back `--wait-stable` times in a row, or `--wait-timeout` elapses. |
+| `--wait-stable int` | Consecutive identical reads that `--wait` requires before printing (minimum 2; default 3). |
+| `--wait-min int` | Minimum matching grants that `--wait` requires before it can settle (0 = an empty result can settle). |
+| `--wait-timeout duration` | Maximum time to wait with `--wait` (default `4m0s`). |
+
+Grant provisioning is asynchronous, so a read taken right after a grant or revoke can catch the set mid-change. With `--wait`, c1i re-reads every page of the match every 5 seconds, regardless of `--limit`, and prints the settled set; progress goes to stderr, so stdout stays pure NDJSON. An empty result is stable: if you are waiting for a grant you just made, pass `--wait-min 1` so the wait holds out for it instead of settling on zero rows.
+
+**Example:**
 
 ```bash
-c1i entitlements proxy-bindings create --source-app-id <app-id> --source-entitlement-id <entitlement-id> --destination-app-id <app-id> --destination-entitlement-id <entitlement-id>
-```
-
-### `proxy-bindings delete`
-
-Delete an entitlement proxy binding.
-
-**Usage:**
-
-```bash
-c1i entitlements proxy-bindings delete --source-app-id <app-id> --source-entitlement-id <entitlement-id> --destination-app-id <app-id> --destination-entitlement-id <entitlement-id>
+# Who holds an entitlement?
+c1i grants list --app-id <app-id> --entitlement-id <entitlement-id>
 ```
 
 ## Tasks
 
-Manage access request tasks.
+List access request tasks and act on them: approve, deny, comment, reassign, or move them through their policy.
 
-**Usage:**
-
-```bash
-c1i tasks [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `list` | Search and list tasks. |
-| `approve` | Approve a task. |
-| `deny` | Deny a task. |
-| `comment` | Add a comment to a task. |
+| [`c1i tasks list`](#tasks-list) | Search and list tasks. |
+| [`c1i tasks approve`](#tasks-approve) | Approve a task. |
+| [`c1i tasks deny`](#tasks-deny) | Deny a task. |
+| [`c1i tasks comment`](#tasks-comment) | Add a comment to a task. |
+| [`c1i tasks close`](#tasks-close) | Close a task without approving or denying it. |
+| [`c1i tasks process`](#tasks-process) | Process a task now rather than waiting for the next cycle. |
+| [`c1i tasks reassign`](#tasks-reassign) | Reassign a task's approval step to one or more other users. |
+| [`c1i tasks reset`](#tasks-reset) | Hard-reset a task to the start of its policy. |
+| [`c1i tasks restart`](#tasks-restart) | Restart a task's approval step, sending it back for a fresh decision. |
+| [`c1i tasks skip-step`](#tasks-skip-step) | Skip a task's current approval step, advancing the policy without a decision. |
+| [`c1i tasks update-grant-duration`](#tasks-update-grant-duration) | Change the grant duration a task will provision. |
 
-### `list`
+### `tasks list`
 
-Search and list access request tasks. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i tasks list [flags]
-```
+[Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
 | `--state string` | Filter by state: `open` or `closed`. |
 | `--query string` | Search query. |
 | `--assigned-to-me` | Only show tasks assigned to the current user. |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
-### `approve`
-
-Approve an access request task.
+### `tasks approve`
 
 **Usage:**
 
 ```bash
-c1i tasks approve --task-id <task-id> [flags]
+c1i tasks approve <task-id> [flags]
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--task-id string` | Task ID. (Required.) |
 | `--comment string` | Comment to include with the approval. |
+| `--policy-step-id string` | Policy step to approve (defaults to the task's current step). |
 
-### `deny`
+If you omit `--policy-step-id`, c1i fetches and uses the task's currently executing step. If it can't determine the step, the command errors and asks you to pass `--policy-step-id`.
 
-Deny an access request task.
+### `tasks deny`
 
 **Usage:**
 
 ```bash
-c1i tasks deny --task-id <task-id> [flags]
+c1i tasks deny <task-id> [flags]
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--task-id string` | Task ID. (Required.) |
 | `--comment string` | Comment to include with the denial. |
+| `--policy-step-id string` | Policy step to deny (defaults to the task's current step). |
 
-### `comment`
+Unlike `approve`, `deny` doesn't require a step: if c1i can't determine the current step, it sends the denial without one.
 
-Add a comment to a task.
+### `tasks comment`
 
 **Usage:**
 
 ```bash
-c1i tasks comment --task-id <task-id> --comment <comment>
+c1i tasks comment <task-id> --comment <comment>
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--task-id string` | Task ID. (Required.) |
 | `--comment string` | Comment text. (Required.) |
+
+### `tasks close`
+
+Closing cancels the task and records no approval decision; use `approve` or `deny` to record an outcome.
+
+**Usage:**
+
+```bash
+c1i tasks close <task-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--comment string` | Comment to include with the close. |
+
+### `tasks process`
+
+Use it on a task that looks stuck; it asks C1 to re-run policy evaluation without changing the task's approval state.
+
+**Usage:**
+
+```bash
+c1i tasks process <task-id>
+```
+
+Processing is asynchronous. Re-read the task with `c1i requests get <task-id>` to see the result.
+
+### `tasks reassign`
+
+`--to-user-id` sets the step's approvers to the users you name.
+
+**Usage:**
+
+```bash
+c1i tasks reassign <task-id> --to-user-id <user-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--to-user-id stringArray` | User ID to reassign the step to (repeatable). (Required.) |
+| `--comment string` | Comment to include with the reassignment. |
+| `--policy-step-id string` | Policy step to reassign (defaults to the task's current step). |
+
+### `tasks reset`
+
+Unlike `restart`, which re-runs the current step, `reset` discards the task's approval progress and starts the policy over. It takes no policy step.
+
+**Usage:**
+
+```bash
+c1i tasks reset <task-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--comment string` | Comment to include with the reset. |
+
+### `tasks restart`
+
+On an open task, this rotates the current policy step and records the restart in the task's policy history. It doesn't reopen a closed task. Whether `restart` is available depends on the task; the server otherwise refuses with `action not permitted`.
+
+**Usage:**
+
+```bash
+c1i tasks restart <task-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--comment string` | Comment to include with the restart. |
+| `--policy-step-id string` | Policy step to restart (defaults to the task's current step). |
+
+`restart`, `reset`, and `skip-step` each rotate the current policy step, so a `--policy-step-id` captured before one of them goes stale and the server answers `this action is no longer available`. Omit the flag to act on whatever step is current.
+
+### `tasks skip-step`
+
+**Usage:**
+
+```bash
+c1i tasks skip-step <task-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--comment string` | Comment to include with the skip. |
+| `--policy-step-id string` | Policy step to skip (defaults to the task's current step). |
+
+### `tasks update-grant-duration`
+
+The task must still be at an approval step; once it reaches provisioning, the server refuses with `cannot update grant duration for a ticket in a provision step`.
+
+**Usage:**
+
+```bash
+c1i tasks update-grant-duration <task-id> --duration <duration>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--duration string` | Grant duration as a protobuf duration in seconds, such as `3600s`; `1h` is refused. (Required.) |
+
+The new value lands on the task as `grantDuration`; read it back with `c1i requests get <task-id>`.
+
+<Note>
+The action subcommands (`close`, `process`, `reassign`, `reset`, `restart`, `skip-step`, and `update-grant-duration`) confirm only the task ID, and the step for those that act on one. They never report a task state, because the action endpoints echo the task's state from before the action.
+</Note>
 
 ## Requests
 
-Create access requests.
+File grant and revoke requests, and track their status.
+
+| Command | Description |
+| :--- | :--- |
+| [`c1i requests list`](#requests-list) | List access requests and their status. |
+| `c1i requests get <request-id>` | Get a single access request by ID. Access requests are backed by tasks, so the ID is the task ID that `c1i requests create` returns or `c1i requests list` shows. Outputs the full task view, including its current policy step and outcome, as formatted JSON. |
+| [`c1i requests create grant`](#requests-create-grant) | Create a grant access request. |
+| [`c1i requests create revoke`](#requests-create-revoke) | Create a revoke access request. |
+
+### `requests list`
+
+List access requests: the grant and revoke tasks a requester files. By default it shows requests you opened or are the subject of, which complements `c1i tasks list` (the approver's view). [Paginates](#pagination-and-limits).
+
+| Flag | Description |
+| :--- | :--- |
+| `--all` | List every access request in the tenant, not just yours. |
+| `--user-id string` | Scope to requests opened by or about this user (default: you). |
+| `--app-id string` | Filter to requests targeting this application. |
+| `--entitlement-id string` | Filter to requests for this entitlement. |
+| `--type string` | Filter by request type: `grant` or `revoke` (default: both). |
+| `--state string` | Filter by state: `open` or `closed`. |
+
+### `requests create grant`
 
 **Usage:**
 
 ```bash
-c1i requests create [command]
-```
-
-### `create grant`
-
-Create a grant access request.
-
-**Usage:**
-
-```bash
-c1i requests create grant --app-id <app-id> --entitlement-id <entitlement-id> [flags]
+c1i requests create grant --app-id <app-id> --entitlement-id <entitlement-id> \
+  [flags]
 ```
 
 | Flag | Description |
@@ -611,18 +688,17 @@ c1i requests create grant --app-id <app-id> --entitlement-id <entitlement-id> [f
 | `--app-id string` | Application ID. (Required.) |
 | `--entitlement-id string` | Entitlement ID. (Required.) |
 | `--user-id string` | User ID (defaults to current user). |
-| `--duration string` | Requested access duration. |
+| `--duration string` | Requested access duration as a protobuf duration in seconds, such as `86400s`. C1 refuses `24h` or `7d` with "invalid google.protobuf.Duration value". |
 | `--description string` | Justification for the request. |
 | `--emergency` | Request emergency access. |
 
-### `create revoke`
-
-Create a revoke access request.
+### `requests create revoke`
 
 **Usage:**
 
 ```bash
-c1i requests create revoke --app-id <app-id> --entitlement-id <entitlement-id> [flags]
+c1i requests create revoke --app-id <app-id> --entitlement-id <entitlement-id> \
+  [flags]
 ```
 
 | Flag | Description |
@@ -636,9 +712,9 @@ c1i requests create revoke --app-id <app-id> --entitlement-id <entitlement-id> [
 
 Manage connectors.
 
-### `list`
+### `connectors list`
 
-List connectors for an application. Outputs NDJSON.
+List connectors for an application. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -649,78 +725,48 @@ c1i connectors list --app-id <app-id> [flags]
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID. (Required.) |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
 
 ## Policies
 
 Manage policies — the objects that describe how C1 processes a task (an access request, a certification, a provisioning action): who approves it, what happens on escalation or timeout, and how the underlying resource gets provisioned.
 
-**Usage:**
-
-```bash
-c1i policies [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `list` | List all policies. |
-| `search` | Search policies by display name, description, type, or deletion state. |
-| `get` | Get a single policy by ID. |
-| `create` | Create a new policy. |
-| `update` | Update a policy. |
-| `delete` | Soft-delete a policy. |
-| `validate-cel` | Check a CEL condition for compile errors. |
+| [`c1i policies list`](#policies-list) | List all policies. |
+| [`c1i policies search`](#policies-search) | Search policies by display name, description, type, or deletion state. |
+| [`c1i policies get`](#policies-get) | Get a single policy by ID. |
+| [`c1i policies create`](#policies-create) | Create a new policy. |
+| [`c1i policies update`](#policies-update) | Update a policy. |
+| [`c1i policies delete`](#policies-delete) | Soft-delete a policy by ID. |
+| [`c1i policies validate-cel`](#policies-validate-cel) | Check a CEL condition for compile errors. |
 
 <Warning>
-Creating or updating a policy with an empty (or missing) steps list succeeds with **no validation error**, and silently produces a deny-everything policy. The `create` and `update` commands refuse to send a request with empty or missing steps unless you pass `--allow-deny-all` to confirm that's what you want.
+Creating or updating a policy with an empty (or missing) steps list succeeds with no validation error, and silently produces a deny-everything policy. The `create` and `update` commands refuse to send a request with empty or missing steps unless you pass `--allow-deny-all` to confirm that's what you want.
 </Warning>
 
-A policy's shape is deeply nested: `policySteps` holds an ordered list of steps, each one of several types (approval, accept, reject, wait, form), and an approval step's approver is itself one of several kinds (users, manager, group, app owners, self, entitlement owners, expression, webhook, resource owners, agent). Modeling all of that as flags would be unusable, so `create` and `update` take the nested pieces from a JSON file (or `-` for stdin), while flat top-level fields (display name, description, policy type) stay as flags.
+A policy's shape is deeply nested: `policySteps` holds an ordered list of steps, each one of seven types (approval, provision, accept, reject, wait, form, action), and an approval step's approver is itself one of several kinds (users, manager, group, app owners, self, entitlement owners, expression, webhook, resource owners, agent). You can read back all seven types, but `create` and `update` refuse two of them client-side with exit code 2, before sending a request: `a "provision" step is never allowed in a policy body — it's read-only and server-computed` and `an "action" step is not supported by create/update yet`. Modeling the nested structure as flags would be unusable, so `create` and `update` take the nested pieces from a JSON file (or `-` for stdin), while flat top-level fields (display name, description, policy type) stay as flags.
 
-### `list`
+### `policies list`
 
-List every policy in the tenant, auto-paginating through the full result. Outputs NDJSON.
+[Paginates](#pagination-and-limits).
 
 Unlike most list commands, this takes no query filter at all — only pagination. Use `search` for filtering.
 
-**Usage:**
+Rows carry `step_kinds` (the kind of each step in the policy's baseline sequence) and `baseline_policy_id`, which together identify a tenant's auto-approval policy without matching on its display name. Search rows carry the same keys.
 
-```bash
-c1i policies list [flags]
-```
+### `policies search`
 
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `search`
-
-Search policies by a fuzzy query (display name + description), an exact display-name match, one or more policy types, or include soft-deleted policies. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i policies search [flags]
-```
+[Paginates](#pagination-and-limits); `--page-size` defaults to 25.
 
 | Flag | Description |
 | :--- | :--- |
 | `--query string` | Fuzzy search on display name and description. |
 | `--display-name string` | Exact-ish (case-insensitive) display name match. |
-| `--policy-type strings` | Filter by policy type: `grant`, `revoke`, `certify` (repeatable). |
+| `--policy-type stringArray` | Filter by policy type, such as `grant`, `revoke`, or `certify` (repeatable). |
 | `--include-deleted` | Include soft-deleted policies. This is the only listing command that can find one. |
-| `--exclude-policy-id strings` | Policy ID to exclude from results (repeatable). |
-| `--page-size int` | Number of results per page (5–100). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
+| `--exclude-policy-id stringArray` | Policy ID to exclude from results (repeatable). |
 
-### `get`
-
-Get a single policy by ID.
+### `policies get`
 
 **Usage:**
 
@@ -730,9 +776,7 @@ c1i policies get <policy-id>
 
 Unlike `list` and the default `search`, `get` returns a soft-deleted policy too (with `deletedAt` populated) rather than filtering it out.
 
-### `create`
-
-Create a new policy.
+### `policies create`
 
 **Usage:**
 
@@ -742,19 +786,15 @@ c1i policies create --display-name <name> --policy-type <type> [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--display-name string` | Display name for the new policy. |
+| `--display-name string` | Display name for the new policy. (Required.) |
 | `--description string` | Description for the new policy. |
-| `--policy-type string` | Policy type: `grant`, `revoke`, `certify`. |
+| `--policy-type string` | Policy type: `grant`, `revoke`, or `certify`. (Required.) |
 | `--steps-file string` | JSON array: the baseline `policySteps.steps` content (file, or `-` for stdin). |
 | `--rules-file string` | JSON array of routing rules: `[{"condition":"<CEL>","stepKey":"<key>"}]` (file, or `-` for stdin). |
 | `--body-file string` | Full request body, verbatim (file, or `-` for stdin); mutually exclusive with the flags above. |
 | `--allow-deny-all` | Allow creating a policy with no steps (or an explicit deny-all). |
 
-The created policy is returned as pretty JSON.
-
-### `update`
-
-Update a policy.
+### `policies update`
 
 **Usage:**
 
@@ -775,9 +815,9 @@ c1i policies update <policy-id> [flags]
 
 Only the fields you pass are changed — this is a partial update, not a full replacement (unless you use `--body-file`).
 
-### `delete`
+### `policies delete`
 
-Soft-delete a policy by ID. The row is retained with `deletedAt` set — this is not a hard delete, and the policy still returns from `get` afterward.
+The row is retained with `deletedAt` set — this is not a hard delete, and the policy still returns from `get` afterward.
 
 **Usage:**
 
@@ -787,9 +827,9 @@ c1i policies delete <policy-id>
 
 A policy referenced by another policy (as a rule's outcome, or as another policy's baseline) can't be deleted while that reference exists — the command reports the referencing policy instead.
 
-### `validate-cel`
+### `policies validate-cel`
 
-Check a CEL expression for compile errors, without creating or updating anything. Useful for testing a rule's `condition` before using it in `create` or `update`.
+It creates and updates nothing, so you can test a rule's `condition` before using it in `create` or `update`.
 
 **Usage:**
 
@@ -809,41 +849,33 @@ Exits `0` for a valid condition, `2` for an invalid one — so `c1i policies val
 This validates the CEL environment rules run in (`subject`, `account`, `entitlement`, `task`) — not the same environment an approval step's `expression` approver runs in. An expression that's valid in one may not compile in the other.
 </Note>
 
-<Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
-
 ## Access profiles
 
 Manage access profiles — the objects that control which entitlements are requestable, and by whom. Admins create them to grant birthright access or to make access requestable by a chosen audience.
 
 The API calls this object a request catalog and routes it under `/api/v1/catalogs`, so its JSON keys and the IDs you pass here say "catalog" — the two names refer to the same object. Not to be confused with an app catalog, the per-user list of what one user can request, derived from the access profiles they belong to.
 
-**Usage:**
-
-```bash
-c1i access-profiles [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `list` | List access profiles. |
-| `get` | Get a single access profile by ID. |
-| `create` | Create an access profile. |
-| `update` | Update an access profile. |
-| `delete` | Soft-delete an access profile. |
-| `requestable-entitlements list` | List entitlements users can request from an access profile. |
-| `requestable-entitlements list-ids` | List requestable entitlement references for an access profile. |
-| `requestable-entitlements add` | Add requestable entitlements to an access profile. |
-| `requestable-entitlements remove` | Remove requestable entitlements from an access profile. |
-| `requestable-entitlements set` | Replace the full requestable-entitlement set. |
-| `visibility-entitlements list` | List entitlements required to see an access profile. |
-| `visibility-entitlements add` | Add visibility entitlements to an access profile. |
-| `visibility-entitlements remove` | Remove visibility entitlements from an access profile. |
-| `bundle-automation get` | Get an access profile's bundle automation. |
-| `bundle-automation create` | Create an access profile's bundle automation. |
-| `bundle-automation set` | Replace an access profile's bundle automation. |
-| `bundle-automation delete` | Delete an access profile's bundle automation. |
-| `bundle-automation resume` | Resume a paused bundle automation. |
-| `bundle-automation run` | Run an access profile's bundle automation. |
+| [`c1i access-profiles list`](#access-profiles-list) | List access profiles. |
+| [`c1i access-profiles get`](#access-profiles-get) | Get a single access profile by ID. |
+| [`c1i access-profiles create`](#access-profiles-create) | Create an access profile. |
+| [`c1i access-profiles update`](#access-profiles-update) | Update an access profile. |
+| [`c1i access-profiles delete`](#access-profiles-delete) | Soft-delete an access profile by ID. |
+| `c1i access-profiles requestable-entitlements list <access-profile-id>` | List entitlements users can request from an access profile. [Paginates](#pagination-and-limits). |
+| `c1i access-profiles requestable-entitlements list-ids <access-profile-id>` | List requestable entitlement references (app ID + entitlement ID pairs) for an access profile. |
+| [`c1i access-profiles requestable-entitlements add`](#access-profiles-requestable-entitlements-add) | Add requestable entitlements to an access profile. |
+| [`c1i access-profiles requestable-entitlements remove`](#access-profiles-requestable-entitlements-remove) | Remove requestable entitlements from an access profile. |
+| [`c1i access-profiles requestable-entitlements set`](#access-profiles-requestable-entitlements-set) | Replace the full requestable-entitlement set in an access profile. |
+| `c1i access-profiles visibility-entitlements list <access-profile-id>` | List entitlements required to see an access profile. [Paginates](#pagination-and-limits). |
+| [`c1i access-profiles visibility-entitlements add`](#access-profiles-visibility-entitlements-add) | Add visibility entitlements to an access profile. |
+| [`c1i access-profiles visibility-entitlements remove`](#access-profiles-visibility-entitlements-remove) | Remove visibility entitlements from an access profile. |
+| `c1i access-profiles bundle-automation get <access-profile-id>` | Get an access profile's bundle automation. |
+| [`c1i access-profiles bundle-automation create`](#access-profiles-bundle-automation-create) | Create an access profile's bundle automation. |
+| [`c1i access-profiles bundle-automation set`](#access-profiles-bundle-automation-set) | Replace an access profile's bundle automation. |
+| `c1i access-profiles bundle-automation delete <access-profile-id>` | Delete an access profile's bundle automation. |
+| `c1i access-profiles bundle-automation resume <access-profile-id>` | Resume a paused access profile bundle automation. |
+| [`c1i access-profiles bundle-automation run`](#access-profiles-bundle-automation-run) | Run an access profile's bundle automation. |
 
 <Note>
 A profile's visibility bindings can only be added once it's published: adding a visibility entitlement to an unpublished profile, or to one that's `--visible-to-everyone`, is refused with a 400 (`catalog must be published to add an access entitlement` / `catalog is visible to everyone, cannot add access entitlements`). Publish first if you plan to restrict visibility by entitlement.
@@ -851,27 +883,13 @@ A profile's visibility bindings can only be added once it's published: adding a 
 
 `requestable-entitlements add`/`remove` and `visibility-entitlements add`/`remove` take a shared `--app-id` plus one or more repeatable `--entitlement-id` flags, since an entitlement reference pairs an entitlement ID with the application that owns it. `requestable-entitlements set` instead takes a `--refs-file` JSON array of `{"appId":"...","id":"..."}` objects (file, or `-` for stdin), since it replaces the entire set rather than adding to it.
 
-### `list`
+### `access-profiles list`
 
-List access profiles. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i access-profiles list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
+[Paginates](#pagination-and-limits).
 
 Rows don't carry a member count — the list endpoint reports it as `0` for every profile and takes no parameter that would populate it. Use `get` for a real count.
 
-### `get`
-
-Get a single access profile by ID.
+### `access-profiles get`
 
 **Usage:**
 
@@ -881,9 +899,7 @@ c1i access-profiles get <access-profile-id>
 
 Unwraps the API's `requestCatalogView.requestCatalog` envelope, so the profile's own keys (`id`, `displayName`, `published`, …) sit at the top level beside the view's own siblings (`memberCount`, `accessEntitlementsPath`, `createdByUserPath`). A `get` also returns the profile's `accessEntitlements` (its visibility bindings), which `list` rows leave out.
 
-### `create`
-
-Create an access profile.
+### `access-profiles create`
 
 **Usage:**
 
@@ -910,9 +926,7 @@ Only `--display-name` is required; every other field is omitted from the request
 CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -r .requestCatalogView.requestCatalog.id)
 ```
 
-### `update`
-
-Update writable access-profile fields.
+### `access-profiles update`
 
 **Usage:**
 
@@ -933,9 +947,7 @@ c1i access-profiles update <access-profile-id> [flags]
 
 This is a partial update: only the fields you pass are changed, and the update mask is derived automatically from which flags you supplied — there's no separate `--update-mask` flag here. An explicit `--description ""` is itself a change (it clears the description); an omitted flag is left alone.
 
-### `delete`
-
-Soft-delete an access profile by ID.
+### `access-profiles delete`
 
 **Usage:**
 
@@ -945,71 +957,42 @@ c1i access-profiles delete <access-profile-id>
 
 The profile is retained for audit: it drops out of `list`, but `get` still returns it with `deletedAt` populated.
 
-### `requestable-entitlements list`
-
-List entitlements users can request from an access profile. Outputs NDJSON.
+### `access-profiles requestable-entitlements add`
 
 **Usage:**
 
 ```bash
-c1i access-profiles requestable-entitlements list <access-profile-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `requestable-entitlements list-ids`
-
-List requestable entitlement references (app ID + entitlement ID pairs) for an access profile.
-
-**Usage:**
-
-```bash
-c1i access-profiles requestable-entitlements list-ids <access-profile-id>
-```
-
-### `requestable-entitlements add`
-
-Add requestable entitlements to an access profile.
-
-**Usage:**
-
-```bash
-c1i access-profiles requestable-entitlements add <access-profile-id> --app-id <app-id> --entitlement-id <entitlement-id> [flags]
+c1i access-profiles requestable-entitlements add <access-profile-id> \
+  --app-id <app-id> --entitlement-id <entitlement-id> [flags]
 ```
 
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID that owns the entitlements. (Required.) |
-| `--entitlement-id strings` | Entitlement ID to add (repeatable; at least one required). |
+| `--entitlement-id stringArray` | Entitlement ID to add (repeatable; at least one required). |
 | `--create-requests` | Also create requests for users already in the access profile for these entitlements. |
 
-### `requestable-entitlements remove`
-
-Remove requestable entitlements from an access profile.
+### `access-profiles requestable-entitlements remove`
 
 **Usage:**
 
 ```bash
-c1i access-profiles requestable-entitlements remove <access-profile-id> --app-id <app-id> --entitlement-id <entitlement-id>
+c1i access-profiles requestable-entitlements remove <access-profile-id> \
+  --app-id <app-id> --entitlement-id <entitlement-id>
 ```
 
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID that owns the entitlements. (Required.) |
-| `--entitlement-id strings` | Entitlement ID to remove (repeatable; at least one required). |
+| `--entitlement-id stringArray` | Entitlement ID to remove (repeatable; at least one required). |
 
-### `requestable-entitlements set`
-
-Replace the full requestable-entitlement set in an access profile.
+### `access-profiles requestable-entitlements set`
 
 **Usage:**
 
 ```bash
-c1i access-profiles requestable-entitlements set <access-profile-id> --refs-file <file>
+c1i access-profiles requestable-entitlements set <access-profile-id> \
+  --refs-file <file>
 ```
 
 | Flag | Description |
@@ -1018,70 +1001,41 @@ c1i access-profiles requestable-entitlements set <access-profile-id> --refs-file
 
 Every existing requestable entitlement not in the array is removed; pass `[]` to clear the entire set.
 
-### `visibility-entitlements list`
-
-List entitlements required to see an access profile. Outputs NDJSON.
+### `access-profiles visibility-entitlements add`
 
 **Usage:**
 
 ```bash
-c1i access-profiles visibility-entitlements list <access-profile-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `visibility-entitlements add`
-
-Add visibility entitlements to an access profile.
-
-**Usage:**
-
-```bash
-c1i access-profiles visibility-entitlements add <access-profile-id> --app-id <app-id> --entitlement-id <entitlement-id>
+c1i access-profiles visibility-entitlements add <access-profile-id> \
+  --app-id <app-id> --entitlement-id <entitlement-id>
 ```
 
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID that owns the entitlements. (Required.) |
-| `--entitlement-id strings` | Entitlement ID to add (repeatable; at least one required). |
+| `--entitlement-id stringArray` | Entitlement ID to add (repeatable; at least one required). |
 
-### `visibility-entitlements remove`
-
-Remove visibility entitlements from an access profile.
+### `access-profiles visibility-entitlements remove`
 
 **Usage:**
 
 ```bash
-c1i access-profiles visibility-entitlements remove <access-profile-id> --app-id <app-id> --entitlement-id <entitlement-id>
+c1i access-profiles visibility-entitlements remove <access-profile-id> \
+  --app-id <app-id> --entitlement-id <entitlement-id>
 ```
 
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID that owns the entitlements. (Required.) |
-| `--entitlement-id strings` | Entitlement ID to remove (repeatable; at least one required). |
+| `--entitlement-id stringArray` | Entitlement ID to remove (repeatable; at least one required). |
 
-### `bundle-automation get`
-
-Get an access profile's bundle automation.
+### `access-profiles bundle-automation create`
 
 **Usage:**
 
 ```bash
-c1i access-profiles bundle-automation get <access-profile-id>
-```
-
-### `bundle-automation create`
-
-Create an access profile's bundle automation.
-
-**Usage:**
-
-```bash
-c1i access-profiles bundle-automation create <access-profile-id> --body-file <file>
+c1i access-profiles bundle-automation create <access-profile-id> \
+  --body-file <file>
 ```
 
 | Flag | Description |
@@ -1090,9 +1044,7 @@ c1i access-profiles bundle-automation create <access-profile-id> --body-file <fi
 
 The supported fields are `createTasks`, `disableCircuitBreaker`, and `enabled` (all booleans), and `entitlements` (an object with `entitlementRefs`, an array of `{"appId":"...","id":"..."}` objects).
 
-### `bundle-automation set`
-
-Replace an access profile's bundle automation.
+### `access-profiles bundle-automation set`
 
 **Usage:**
 
@@ -1106,29 +1058,7 @@ c1i access-profiles bundle-automation set <access-profile-id> --body-file <file>
 
 Takes the same fields as `bundle-automation create`.
 
-### `bundle-automation delete`
-
-Delete an access profile's bundle automation.
-
-**Usage:**
-
-```bash
-c1i access-profiles bundle-automation delete <access-profile-id>
-```
-
-### `bundle-automation resume`
-
-Resume a paused access profile bundle automation.
-
-**Usage:**
-
-```bash
-c1i access-profiles bundle-automation resume <access-profile-id>
-```
-
-### `bundle-automation run`
-
-Run an access profile's bundle automation.
+### `access-profiles bundle-automation run`
 
 **Usage:**
 
@@ -1146,50 +1076,16 @@ Manage access-review campaigns — the governance campaigns the API calls access
 
 `create` takes the complete request body as JSON, since campaign scope is a large nested oneof shape; `update` takes a partial access-review object plus an explicit `--update-mask`.
 
-**Usage:**
-
-```bash
-c1i access-reviews [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `list` | List access-review campaigns. |
-| `get` | Get an access-review campaign. |
-| `create` | Create an access-review campaign from JSON. |
-| `update` | Update an access-review campaign from JSON. |
-| `reports list` | List an access-review campaign's generated reports. |
-| `reports generate` | Request generation of an access-review report. |
+| `c1i access-reviews list` | List access-review campaigns. [Paginates](#pagination-and-limits). |
+| `c1i access-reviews get <campaign-id>` | Get an access-review campaign by ID. |
+| [`c1i access-reviews create`](#access-reviews-create) | Create an access-review campaign from a complete JSON request object. |
+| [`c1i access-reviews update`](#access-reviews-update) | Update an access-review campaign from a partial JSON object. |
+| `c1i access-reviews reports list <campaign-id>` | List an access-review campaign's generated reports. [Paginates](#pagination-and-limits). |
+| [`c1i access-reviews reports generate`](#access-reviews-reports-generate) | Request asynchronous generation of an access-review report. |
 
-### `list`
-
-List access-review campaigns. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i access-reviews list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `get`
-
-Get an access-review campaign by ID.
-
-**Usage:**
-
-```bash
-c1i access-reviews get <campaign-id>
-```
-
-### `create`
-
-Create an access-review campaign from a complete JSON request object.
+### `access-reviews create`
 
 **Usage:**
 
@@ -1203,14 +1099,13 @@ c1i access-reviews create --body-file <file>
 
 The request must contain at least one owner ID in `ownerIds`.
 
-### `update`
-
-Update an access-review campaign from a partial JSON object.
+### `access-reviews update`
 
 **Usage:**
 
 ```bash
-c1i access-reviews update <campaign-id> --body-file <file> --update-mask <fields>
+c1i access-reviews update <campaign-id> --body-file <file> \
+  --update-mask <fields>
 ```
 
 | Flag | Description |
@@ -1220,25 +1115,7 @@ c1i access-reviews update <campaign-id> --body-file <file> --update-mask <fields
 
 The command inserts the campaign ID into the body and wraps the request; both flags are required.
 
-### `reports list`
-
-List an access-review campaign's generated reports. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i access-reviews reports list <campaign-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `reports generate`
-
-Request asynchronous generation of an access-review report.
+### `access-reviews reports generate`
 
 **Usage:**
 
@@ -1257,706 +1134,222 @@ The response confirms that generation was requested, not that the report is read
 
 Manage security findings and the public API surfaces that govern them: routing rules, transformation rules, detector settings, and the audit/occurrence search surfaces behind them.
 
-`create`, `state`, `assignee`, the bulk commands, routing/transformation-rule management, and `settings update` all take JSON files so oneof actions and nested rule documents reach the API unchanged. Pass `--body-file -` to read JSON from standard input. Search commands auto-paginate and emit NDJSON; `get` and the mutation commands print one JSON object.
+`create`, `state`, `assignee`, the bulk commands, routing/transformation-rule management, and `settings update` all take JSON files so oneof actions and nested rule documents reach the API unchanged. Pass `--body-file -` to read JSON from standard input.
 
-**Usage:**
-
-```bash
-c1i findings [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `search` | Search findings from a JSON query. |
-| `get` | Get a finding. |
-| `create` | Create a custom finding from JSON. |
-| `state` | Change a finding's state from JSON. |
-| `assignee` | Assign or clear a finding's assignee from JSON. |
-| `create-task` | Create a remediation task for a finding. |
-| `bulk-state` | Run an asynchronous bulk state operation from JSON. |
-| `bulk-create-tasks` | Create remediation tasks in bulk from JSON. |
-| `routing-rules list` | List finding routing rules. |
-| `routing-rules get` | Get a finding routing rule. |
-| `routing-rules create` | Create a finding routing rule from JSON. |
-| `routing-rules update` | Update a finding routing rule from JSON. |
-| `routing-rules delete` | Delete a finding routing rule. |
-| `transformation-rules list` | List finding transformation rules. |
-| `transformation-rules get` | Get a finding transformation rule. |
-| `transformation-rules create` | Create a finding transformation rule from JSON. |
-| `transformation-rules update` | Update a finding transformation rule from JSON. |
-| `transformation-rules delete` | Delete a finding transformation rule. |
-| `settings show` | Show finding detector settings. |
-| `settings update` | Atomically update finding detector settings from JSON. |
-| `audits search` | Search finding audit events from JSON. |
-| `shadow-mcp-occurrences search` | Search occurrences behind shadow MCP findings from JSON. |
+| [`c1i findings search`](#findings-search) | Search findings with an optional JSON query object. |
+| `c1i findings get <finding-id>` | Get a finding by ID. |
+| `c1i findings create --body-file <file>` | Create a custom finding from a JSON finding object. |
+| `c1i findings state <finding-id> --body-file <file>` | Change a finding's state from a JSON state-change object. |
+| `c1i findings assignee <finding-id> --body-file <file>` | Assign or clear a finding's assignee from a JSON assignee object. |
+| `c1i findings create-task <finding-id> [--policy-id <policy-id>]` | Create a remediation task for a finding, optionally with a specific remediation policy. |
+| `c1i findings bulk-state --body-file <file>` | Run an asynchronous bulk state-change operation from a JSON object. |
+| `c1i findings bulk-create-tasks --body-file <file>` | Create remediation tasks in bulk from a JSON object. |
+| `c1i findings routing-rules list [--limit <n>]` | List finding routing rules. Returns a single, fixed-size page; there's no `--page-size` or `--page-token`. |
+| `c1i findings routing-rules get <rule-id>` | Get a finding routing rule by ID. |
+| `c1i findings routing-rules create --body-file <file>` | Create a finding routing rule from a JSON object. |
+| `c1i findings routing-rules update <rule-id> --body-file <file>` | Update a finding routing rule from a JSON object. |
+| `c1i findings routing-rules delete <rule-id>` | Delete a finding routing rule. |
+| `c1i findings transformation-rules list [--limit <n>]` | List finding transformation rules. Returns a single, fixed-size page; there's no `--page-size` or `--page-token`. |
+| `c1i findings transformation-rules get <rule-id>` | Get a finding transformation rule by ID. |
+| `c1i findings transformation-rules create --body-file <file>` | Create a finding transformation rule from a JSON object. |
+| `c1i findings transformation-rules update <rule-id> --body-file <file>` | Update a finding transformation rule from a JSON object. |
+| `c1i findings transformation-rules delete <rule-id>` | Delete a finding transformation rule. |
+| `c1i findings settings show` | Show finding detector settings. |
+| `c1i findings settings update --body-file <file>` | Atomically update finding detector settings from a JSON object. |
+| `c1i findings audits search [--body-file <file>]` | Search finding audit events from an optional JSON object; without `--body-file`, it searches all accessible audit events. [Paginates](#pagination-and-limits). |
+| `c1i findings shadow-mcp-occurrences search --body-file <file>` | Search occurrences behind shadow MCP findings from a JSON object. [Paginates](#pagination-and-limits). |
 
-### `search`
+### `findings search`
 
-Search findings with an optional JSON query object. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i findings search [flags]
-```
+[Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
 | `--body-file string` | Search-request JSON object (file, or `-` for stdin): may contain `query`, `severities`, `states`, `findingTypes`, `appIds`, target IDs, `sourceKinds`, `refs`, `assigneeIdentityUserIds`, and the other public search filters. |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
 
 A missing `--body-file` searches all accessible findings.
-
-### `get`
-
-Get a finding by ID.
-
-**Usage:**
-
-```bash
-c1i findings get <finding-id>
-```
-
-### `create`
-
-Create a custom finding from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings create --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Finding JSON object (file, or `-` for stdin). (Required.) |
-
-### `state`
-
-Change a finding's state from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings state <finding-id> --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | State-change JSON object (file, or `-` for stdin). (Required.) |
-
-### `assignee`
-
-Assign or clear a finding's assignee from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings assignee <finding-id> --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Assignee JSON object (file, or `-` for stdin). (Required.) |
-
-### `create-task`
-
-Create a remediation task for a finding.
-
-**Usage:**
-
-```bash
-c1i findings create-task <finding-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--policy-id string` | Remediation policy ID to use (optional). |
-
-### `bulk-state`
-
-Run an asynchronous bulk state-change operation from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings bulk-state --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Bulk state-change JSON object (file, or `-` for stdin). (Required.) |
-
-### `bulk-create-tasks`
-
-Create remediation tasks in bulk from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings bulk-create-tasks --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Bulk task-creation JSON object (file, or `-` for stdin). (Required.) |
-
-### `routing-rules list`
-
-List finding routing rules. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i findings routing-rules list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-This returns a single, fixed-size page — there's no `--page-size`/`--page-token` on this command.
-
-### `routing-rules get`
-
-Get a finding routing rule by ID.
-
-**Usage:**
-
-```bash
-c1i findings routing-rules get <rule-id>
-```
-
-### `routing-rules create`
-
-Create a finding routing rule from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings routing-rules create --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Routing-rule JSON object (file, or `-` for stdin). (Required.) |
-
-### `routing-rules update`
-
-Update a finding routing rule from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings routing-rules update <rule-id> --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Routing-rule JSON object (file, or `-` for stdin). (Required.) |
-
-### `routing-rules delete`
-
-Delete a finding routing rule.
-
-**Usage:**
-
-```bash
-c1i findings routing-rules delete <rule-id>
-```
-
-### `transformation-rules list`
-
-List finding transformation rules. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i findings transformation-rules list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-This returns a single, fixed-size page, the same as `routing-rules list`.
-
-### `transformation-rules get`
-
-Get a finding transformation rule by ID.
-
-**Usage:**
-
-```bash
-c1i findings transformation-rules get <rule-id>
-```
-
-### `transformation-rules create`
-
-Create a finding transformation rule from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings transformation-rules create --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Transformation-rule JSON object (file, or `-` for stdin). (Required.) |
-
-### `transformation-rules update`
-
-Update a finding transformation rule from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings transformation-rules update <rule-id> --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Transformation-rule JSON object (file, or `-` for stdin). (Required.) |
-
-### `transformation-rules delete`
-
-Delete a finding transformation rule.
-
-**Usage:**
-
-```bash
-c1i findings transformation-rules delete <rule-id>
-```
-
-### `settings show`
-
-Show finding detector settings.
-
-**Usage:**
-
-```bash
-c1i findings settings show
-```
-
-### `settings update`
-
-Atomically update finding detector settings from a JSON object.
-
-**Usage:**
-
-```bash
-c1i findings settings update --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Detector-settings JSON object (file, or `-` for stdin). (Required.) |
-
-### `audits search`
-
-Search finding audit events from an optional JSON object. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i findings audits search [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Search-request JSON object (file, or `-` for stdin). |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-A missing `--body-file` searches all accessible audit events.
-
-### `shadow-mcp-occurrences search`
-
-Search occurrences behind shadow MCP findings from a JSON object. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i findings shadow-mcp-occurrences search --body-file <file> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Search-request JSON object (file, or `-` for stdin). (Required.) |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
 
 ## Role mining
 
 Manage role mining: analyses that cluster users into cohorts sharing similar entitlements, the suggestions those analyses produce, and the access profiles you can generate from a cohort.
 
-Mutations and searches take JSON request objects through `--body-file` so profile filters, entitlement selections, and full configuration documents reach the API unchanged. Searches that support pagination emit NDJSON; the fixed `list` commands (`suggestions list`, `runs list`, `custom-analysis list`) return a single, fixed-size page capped only by `--limit`.
+Mutations and searches take JSON request objects through `--body-file` so profile filters, entitlement selections, and full configuration documents reach the API unchanged; pass `--body-file -` to read JSON from standard input. The fixed `list` commands (`suggestions list`, `runs list`, `custom-analysis list`) return a single, fixed-size page capped only by `--limit`.
 
-**Usage:**
-
-```bash
-c1i role-mining [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `trigger` | Queue an organization-wide role mining analysis. |
-| `suggestions list` | List role mining suggestions. |
-| `suggestions search` | Search role mining suggestions from JSON. |
-| `suggestions get` | Get a role mining suggestion. |
-| `suggestions state` | Update a suggestion's state from JSON. |
-| `suggestions users` | Search the users in a suggestion's cohort from JSON. |
-| `config show` | Show role mining configuration. |
-| `config update` | Replace role mining configuration from JSON. |
-| `runs list` | List role mining analysis runs. |
-| `runs latest` | Get the latest role mining analysis run. |
-| `custom-analysis list` | List personal role mining custom analyses. |
-| `custom-analysis latest` | Get the latest personal custom analysis. |
-| `custom-analysis get` | Get a custom analysis result. |
-| `custom-analysis trigger` | Queue a personal custom analysis from JSON. |
-| `custom-analysis evaluate` | Evaluate an entitlement selection against an analysis from JSON. |
-| `access-profiles create` | Create an access profile from a role mining cohort. |
+| `c1i role-mining trigger` | Queue an organization-wide role mining analysis. |
+| `c1i role-mining suggestions list [--limit <n>]` | List role mining suggestions. Returns a single, fixed-size page; use `suggestions search` for a paginated, filtered view. |
+| `c1i role-mining suggestions search --body-file <file>` | Search role mining suggestions from a JSON object. [Paginates](#pagination-and-limits). |
+| `c1i role-mining suggestions get <suggestion-id>` | Get a role mining suggestion by ID. |
+| `c1i role-mining suggestions state <suggestion-id> --body-file <file>` | Update a suggestion's state from a JSON object. |
+| `c1i role-mining suggestions users <suggestion-id> --body-file <file>` | Search the users in a suggestion's cohort from a JSON object. [Paginates](#pagination-and-limits). |
+| `c1i role-mining config show` | Show role mining configuration. |
+| `c1i role-mining config update --body-file <file>` | Replace role mining configuration from a full JSON configuration object. |
+| `c1i role-mining runs list [--limit <n>]` | List role mining analysis runs. Returns a single, fixed-size page. |
+| `c1i role-mining runs latest` | Get the latest role mining analysis run. |
+| `c1i role-mining custom-analysis list [--limit <n>]` | List personal role mining custom analyses. Returns a single, fixed-size page. |
+| `c1i role-mining custom-analysis latest` | Get the latest personal custom analysis. |
+| `c1i role-mining custom-analysis get <analysis-id>` | Get a custom analysis result by ID. |
+| `c1i role-mining custom-analysis trigger --body-file <file>` | Queue a personal custom analysis from a JSON object. |
+| `c1i role-mining custom-analysis evaluate <analysis-id> --body-file <file>` | Evaluate an entitlement selection against an analysis from a JSON object. |
+| `c1i role-mining access-profiles create --body-file <file>` | Create an access profile from a role mining cohort's JSON object. |
 
-### `trigger`
+## Automations
 
-Queue an organization-wide role mining analysis.
+List C1 automations, inspect one, and query the run history of their executions. `executions list` is the usual starting point for "did this automation run?" and "why did it fail?".
 
-**Usage:**
+| Command | Description |
+| :--- | :--- |
+| [`c1i automations list`](#automations-list) | List automations. |
+| `c1i automations get <automation-id>` | Get a single automation. |
+| [`c1i automations executions list`](#automations-executions-list) | Stream automation execution history. |
+
+### `automations list`
+
+[Paginates](#pagination-and-limits).
+
+| Flag | Description |
+| :--- | :--- |
+| `--enabled-only` | Only emit automations that are currently enabled. |
+| `--calls-function string` | Only emit automations that invoke the given function ID, in any step. |
+
+### `automations executions list`
+
+[Paginates](#pagination-and-limits).
+
+| Flag | Description |
+| :--- | :--- |
+| `--state string` | Filter by execution state: `done`, `error`, `pending`, `creating`, `waiting`, or `terminate` (or the full `AUTOMATION_EXECUTION_STATE_*` enum value). |
+| `--template-id string` | Filter by automation template (the parent automation's ID). |
+
+c1i applies `--state` and `--template-id` client-side after fetching each page, because the executions endpoint doesn't support server-side filtering. A narrow filter still scans every page the server returns, so combine it with `--limit` to bound the work.
+
+**Example:**
 
 ```bash
-c1i role-mining trigger
+c1i automations executions list --state error --limit 20
 ```
 
-### `suggestions list`
+## Functions
 
-List role mining suggestions. Outputs NDJSON.
+Inspect C1 functions: the serverless TypeScript modules that run in C1's sandbox and are invoked as automation steps, from the UI, or through the API.
+
+| Command | Description |
+| :--- | :--- |
+| [`c1i functions list`](#functions-list) | List C1 functions. |
+| `c1i functions get <function-id>` | Get a single function's metadata. |
+| `c1i functions commits <function-id>` | List a function's commit history. [Paginates](#pagination-and-limits). |
+| `c1i functions usage <function-id>` | Scan the tenant's automations and emit one NDJSON row per automation step that calls the function. Use it to check whether a function is still used before deleting a draft, or to find an example automation that exercises a published function. Row fields are `automation_id`, `automation_name`, `step_name`, `enabled`, `last_executed_at`, and `args`. [Paginates](#pagination-and-limits). |
+| [`c1i functions source`](#functions-source) | Fetch a function's source files. |
+
+### `functions list`
+
+[Paginates](#pagination-and-limits).
+
+| Flag | Description |
+| :--- | :--- |
+| `--published-only` | Only include functions with a published commit (excludes drafts). |
+| `--draft-only` | Only include functions that are drafts or have never been published. |
+
+### `functions source`
+
+Fetch the TypeScript source for a function. Without `--commit`, c1i resolves the function's published commit, falling back to its head (latest draft) if nothing is published. The API returns source files base64-encoded; c1i decodes them and prints each file as text, separated by a delimiter line.
 
 **Usage:**
 
 ```bash
-c1i role-mining suggestions list [flags]
+c1i functions source <function-id> [flags]
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
+| `--commit string` | Specific commit ID to fetch (default: the function's published commit, falling back to head). |
+| `--out-dir string` | Write files to this directory instead of stdout, one file per source file. |
 
-This returns a single, fixed-size page — there's no `--page-size`/`--page-token` on this command. Use `search` for a paginated, filtered view.
+With `--out-dir`, c1i writes files with mode `0600` and creates the directory (or tightens it, never widens it) to at most `0700`, because fetched source can inline credentials.
 
-### `suggestions search`
+## Export
 
-Search role mining suggestions from a JSON object. Outputs NDJSON.
+Export bulk data from C1.
 
-**Usage:**
+### `export events`
 
-```bash
-c1i role-mining suggestions search --body-file <file> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Search-request JSON object (file, or `-` for stdin). (Required.) |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `suggestions get`
-
-Get a role mining suggestion by ID.
-
-**Usage:**
-
-```bash
-c1i role-mining suggestions get <suggestion-id>
-```
-
-### `suggestions state`
-
-Update a suggestion's state from a JSON object.
-
-**Usage:**
-
-```bash
-c1i role-mining suggestions state <suggestion-id> --body-file <file>
-```
+Export C1 system log events, in OCSF format, as an NDJSON stream with one event per line. Redirect the output to a file to archive events or ship them to an external system. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
-| `--body-file string` | State-change JSON object (file, or `-` for stdin). (Required.) |
+| `--since string` | Only events at or after this RFC3339 time. |
+| `--until string` | Only events before this RFC3339 time. |
+| `--since-event-uid string` | Resume after this event UID (incremental sync). |
+| `--sort string` | Chronological order: `asc` (oldest first) or `desc` (default `asc`). |
 
-### `suggestions users`
-
-Search the users in a suggestion's cohort from a JSON object. Outputs NDJSON.
-
-**Usage:**
+**Examples:**
 
 ```bash
-c1i role-mining suggestions users <suggestion-id> --body-file <file> [flags]
+# Everything, oldest first, to a file
+c1i export events > audit.ndjson
+
+# A specific time window
+c1i export events --since 2026-07-01T00:00:00Z --until 2026-07-08T00:00:00Z
+
+# Incremental sync: resume after the last event you already stored
+c1i export events --since-event-uid <last-event-uid>
 ```
+
+## Upgrade
+
+Check for and install a newer c1i release. The command is aliased as `update`.
+
+c1i follows a release channel from the C1 distribution center (`dist.conductorone.com`); see [Upgrade c1i](/product/cli/c1i#upgrade-c1i). Before it replaces a standalone binary, it verifies the release manifest's Sigstore signature (signed by the release workflow run for that c1i tag) and the download's SHA-256 from that manifest. For a Homebrew, `go install`, or container install, `upgrade` prints that method's upgrade command and exits 0 without replacing anything.
 
 | Flag | Description |
 | :--- | :--- |
-| `--body-file string` | Search-request JSON object (file, or `-` for stdin). (Required.) |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
+| `--channel string` | Release channel: `stable`, `latest`, or `preview` (default `stable`). |
+| `--check` | Print a JSON report of whether a newer release is available; change nothing. |
+| `-y`, `--yes` | Skip the confirmation prompt. Required when stdin is not a terminal. |
 
-### `config show`
+`--check` prints one JSON object with these keys:
 
-Show role mining configuration.
-
-**Usage:**
-
-```bash
-c1i role-mining config show
-```
-
-### `config update`
-
-Replace role mining configuration from a JSON object.
-
-**Usage:**
-
-```bash
-c1i role-mining config update --body-file <file>
-```
-
-| Flag | Description |
+| Key | Description |
 | :--- | :--- |
-| `--body-file string` | Full configuration JSON object (file, or `-` for stdin). (Required.) |
+| `current` | The version you run. |
+| `latest` | The newest version on the channel. |
+| `channel` | The release channel checked. |
+| `update_available` | `true` when a newer release exists. |
+| `install_method` | How c1i was installed: `standalone`, `homebrew`, `go-install`, `container`, `system`, or `windows`. |
+| `upgrade_command` | The command that upgrades this install. Present only for a Homebrew, `go install`, or container install. |
 
-### `runs list`
+Windows and system installs print a hint but no `upgrade_command`.
 
-List role mining analysis runs. Outputs NDJSON.
+With the global `--dry-run` flag, `upgrade` fetches and verifies the release (index, manifest, signature, and TUF root) and checks that the install directory is writable. It then prints what it would download and replace. It takes no lock, doesn't prompt, and installs nothing.
 
-**Usage:**
-
-```bash
-c1i role-mining runs list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-This returns a single, fixed-size page, the same as `suggestions list`.
-
-### `runs latest`
-
-Get the latest role mining analysis run.
-
-**Usage:**
-
-```bash
-c1i role-mining runs latest
-```
-
-### `custom-analysis list`
-
-List personal role mining custom analyses. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i role-mining custom-analysis list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `custom-analysis latest`
-
-Get the latest personal custom analysis.
-
-**Usage:**
-
-```bash
-c1i role-mining custom-analysis latest
-```
-
-### `custom-analysis get`
-
-Get a custom analysis result by ID.
-
-**Usage:**
-
-```bash
-c1i role-mining custom-analysis get <analysis-id>
-```
-
-### `custom-analysis trigger`
-
-Queue a personal custom analysis from a JSON object.
-
-**Usage:**
-
-```bash
-c1i role-mining custom-analysis trigger --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Analysis-request JSON object (file, or `-` for stdin). (Required.) |
-
-### `custom-analysis evaluate`
-
-Evaluate an entitlement selection against an analysis from a JSON object.
-
-**Usage:**
-
-```bash
-c1i role-mining custom-analysis evaluate <analysis-id> --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Entitlement-selection JSON object (file, or `-` for stdin). (Required.) |
-
-### `access-profiles create`
-
-Create an access profile from a role mining cohort's JSON object.
-
-**Usage:**
-
-```bash
-c1i role-mining access-profiles create --body-file <file>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--body-file string` | Access-profile creation JSON object (file, or `-` for stdin). (Required.) |
+`upgrade` treats the distribution center as a system beyond C1. A distribution center `404`, `429`, or `5xx` exits `4`, `5`, or `6`, and a same-path redirect loop exits `6`. Any other `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature, or checksum failure exits `8`.
 
 ## Service principals
 
-Manage service principals — tenant-owned non-human identities — aliased as `sp`.
+Manage service principals — tenant-owned non-human identities. The group is aliased as `service-principal` and `sp`, and its `credentials` subgroup as `credential` and `creds`.
 
 A service principal is an identity; a client credential on it is what a caller authenticates with (a client ID and secret). A binding lets another subject — a function, SSO application, AuthZEN server, or edge — act as the principal. This surface is not in the public OpenAPI spec, so these are the first-class commands for reaching it; the bindings surface is a draft API and may change.
 
-**Usage:**
-
-```bash
-c1i service-principals [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `list` | List service principals. |
-| `get` | Get a single service principal by ID. |
-| `create` | Create a service principal. |
-| `update` | Update a service principal's display name. |
-| `delete` | Delete a service principal and all its credentials. |
-| `credentials list` | List a service principal's client credentials. |
-| `credentials get` | Get a single client credential. |
-| `credentials create` | Create a client credential (the secret is shown once). |
-| `credentials update` | Update a client credential's display name. |
-| `credentials revoke` | Revoke (delete) a client credential. |
-| `bindings add` | Bind a subject to a service principal. |
-| `bindings list` | List the service principals a subject is bound to. |
-| `bindings delete` | Remove a subject's binding to a service principal. |
+| `c1i service-principals list` | List service principals. [Paginates](#pagination-and-limits). |
+| `c1i service-principals get <sp-id>` | Get a single service principal by ID. |
+| `c1i service-principals create --display-name <name>` | Create a service principal. |
+| `c1i service-principals update <sp-id> --display-name <name>` | Update a service principal's display name. |
+| `c1i service-principals delete <sp-id>` | Delete a service principal and all its credentials. Prints a one-line confirmation, not JSON. |
+| `c1i service-principals credentials list <sp-id>` | List a service principal's client credentials. The secret itself is never part of a row — it's returned only once, at creation. [Paginates](#pagination-and-limits). |
+| `c1i service-principals credentials get <credential-id> --service-principal-id <sp-id>` | Get a single client credential. |
+| [`c1i service-principals credentials create`](#service-principals-credentials-create) | Create a client credential (the secret is shown once). |
+| `c1i service-principals credentials update <credential-id> --service-principal-id <sp-id> --display-name <name>` | Update a client credential's display name. |
+| `c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>` | Revoke (delete) a client credential. Prints a one-line confirmation, not JSON. |
+| [`c1i service-principals bindings add`](#service-principals-bindings-add) | Bind a subject to a service principal. |
+| `c1i service-principals bindings list [subject flags]` | List the service principals a subject is bound to. Takes the same subject flags as `bindings add`. [Paginates](#pagination-and-limits). |
+| `c1i service-principals bindings delete --service-principal-id <sp-id> [subject flags]` | Remove a subject's binding to a service principal. Takes the same flags as `bindings add`. Idempotent; prints a one-line confirmation, not JSON. |
 
-### `list`
-
-List service principals. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i service-principals list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
-
-### `get`
-
-Get a single service principal by ID.
-
-**Usage:**
-
-```bash
-c1i service-principals get <sp-id>
-```
-
-### `create`
-
-Create a service principal.
-
-**Usage:**
-
-```bash
-c1i service-principals create --display-name <name>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--display-name string` | Display name for the new service principal. (Required.) |
-
-### `update`
-
-Update a service principal's display name.
-
-**Usage:**
-
-```bash
-c1i service-principals update <sp-id> --display-name <name>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--display-name string` | New display name. |
-
-### `delete`
-
-Delete a service principal and all its credentials. Prints a one-line confirmation, not JSON.
-
-**Usage:**
-
-```bash
-c1i service-principals delete <sp-id>
-```
-
-### `credentials list`
-
-List a service principal's client credentials. Outputs NDJSON. The secret itself is never part of a row — it's returned only once, at creation.
-
-**Usage:**
-
-```bash
-c1i service-principals credentials list <sp-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached. |
-
-### `credentials get`
-
-Get a single client credential.
-
-**Usage:**
-
-```bash
-c1i service-principals credentials get <credential-id> --service-principal-id <sp-id>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--service-principal-id string` | Owning service principal ID. (Required.) |
-
-### `credentials create`
-
-Create a client credential. The secret is shown once, at creation.
+### `service-principals credentials create`
 
 **Usage:**
 
@@ -1967,54 +1360,20 @@ c1i service-principals credentials create <sp-id> --display-name <name> [flags]
 | Flag | Description |
 | :--- | :--- |
 | `--display-name string` | Display name for the new credential. (Required.) |
-| `--scoped-role strings` | Restrict the credential to a role ID (repeatable). |
-| `--allow-cidr strings` | Restrict the credential to a source CIDR (repeatable). |
-| `--expires duration` | Time until the credential expires, as a Go duration (for example `720h`); the server accepts the range `(0s, 4320h]` (up to 180 days). |
+| `--scoped-role stringArray` | Restrict the credential to a role ID from [`c1i roles list`](#roles) (repeatable). |
+| `--allow-cidr stringArray` | Restrict the credential to a source CIDR (repeatable). |
+| `--expires string` | Time until the credential expires, as a Go duration (for example `720h`); the server accepts the range `(0s, 4320h]` (up to 180 days). |
 | `--require-dpop` | Require DPoP proof-of-possession for token exchange. |
 
-**Example:**
+### `service-principals bindings add`
 
-```bash
-c1i service-principals credentials create sp_abc123 --display-name ci --expires 720h
-```
-
-### `credentials update`
-
-Update a client credential's display name.
+Idempotent; prints a one-line confirmation, not JSON.
 
 **Usage:**
 
 ```bash
-c1i service-principals credentials update <credential-id> --service-principal-id <sp-id> --display-name <name>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--service-principal-id string` | Owning service principal ID. (Required.) |
-| `--display-name string` | New display name. |
-
-### `credentials revoke`
-
-Revoke (delete) a client credential. Prints a one-line confirmation, not JSON.
-
-**Usage:**
-
-```bash
-c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--service-principal-id string` | Owning service principal ID. (Required.) |
-
-### `bindings add`
-
-Bind a subject to a service principal. Idempotent; prints a one-line confirmation, not JSON.
-
-**Usage:**
-
-```bash
-c1i service-principals bindings add --service-principal-id <sp-id> [subject flags]
+c1i service-principals bindings add --service-principal-id <sp-id> \
+  [subject flags]
 ```
 
 | Flag | Description |
@@ -2030,70 +1389,27 @@ c1i service-principals bindings add --service-principal-id <sp-id> [subject flag
 
 Exactly one subject must be given, and an app-scoped subject (`--sso-application-id`, `--authzen-server-id`, `--edge-id`) requires its paired `--*-app-id` flag.
 
-### `bindings list`
-
-List the service principals a subject is bound to. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i service-principals bindings list [subject flags] [flags]
-```
-
-Takes the same subject flags as `bindings add`, plus the standard `--page-size`/`--page-token`/`--limit` pagination flags.
-
-### `bindings delete`
-
-Remove a subject's binding to a service principal. Idempotent; prints a one-line confirmation, not JSON.
-
-**Usage:**
-
-```bash
-c1i service-principals bindings delete --service-principal-id <sp-id> [subject flags]
-```
-
-Takes the same flags as `bindings add`.
+<Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
 
 ## MCP gateway
 
 Call the C1 MCP gateway directly over its MCP transport — the same handshake an MCP host performs — to verify what a registered server actually exposes. This closes the configure-then-verify loop: register a server, approve its tools, then list or call them here.
 
-<Note>
-This covers only the `gateway` subcommand. `c1i mcp` also has `servers`, `tools`, `toolsets`, and `bindings` subcommands for managing the MCP surface itself; those aren't covered on this page yet.
-</Note>
-
-**Usage:**
-
-```bash
-c1i mcp gateway [command]
-```
-
-| Subcommand | Description |
-| :--- | :--- |
-| `list-tools` | List the tools the gateway exposes to you. |
-| `call` | Invoke a tool and print its result. |
-
 | Flag | Description |
 | :--- | :--- |
 | `--gateway-url string` | MCP gateway endpoint (default: derived from `--url` by inserting `-mcp` into the host — `https://acme.conductor.one` becomes `https://acme-mcp.conductor.one/v1`). |
 
-Authentication uses your stored c1i credentials — the standard API token is accepted by the gateway, so no extra setup is needed.
+The gateway accepts your stored c1i credentials, so no extra setup is needed.
 
-### `list-tools`
+### `mcp gateway list-tools`
 
 Run the MCP handshake against the gateway and list the tools it exposes to you. Outputs NDJSON: one row per tool (name, description).
-
-**Usage:**
-
-```bash
-c1i mcp gateway list-tools [flags]
-```
 
 | Flag | Description |
 | :--- | :--- |
 | `--full` | Include each tool's input JSON schema in the row. |
 
-### `call`
+### `mcp gateway call`
 
 Invoke a tool exposed by the gateway and print its raw MCP result.
 
@@ -2109,11 +1425,449 @@ c1i mcp gateway call <tool-name> [flags]
 
 Find tool names and their input schemas with `c1i mcp gateway list-tools --full`.
 
+`call` rejects the global `--dry-run` flag.
+
+## MCP servers
+
+Register, configure, and inspect the MCP servers under a C1 app. C1 models an MCP server as a connector under an app, so you address one with `--app-id` plus its connector ID. Hosted servers run inside C1 from a catalog entry; external servers point at a third-party MCP URL. C1 seals auth secrets server-side, so reads only return `*_configured` booleans.
+
+After you register a server, its tools start in the pending-review state. Approve them with [`c1i mcp tools approve`](#mcp-tools) before the gateway proxies calls to them.
+
+| Command | Description |
+| :--- | :--- |
+| `c1i mcp servers list --app-id <app-id>` | List MCP servers registered under an app. [Paginates](#pagination-and-limits). |
+| [`c1i mcp servers get`](#mcp-servers-get) | Get a single MCP server. |
+| [`c1i mcp servers search`](#mcp-servers-search) | Search MCP servers within an app, with per-server tool counts. |
+| [`c1i mcp servers register`](#mcp-servers-register) | Register a new hosted or external MCP server under an existing app. |
+| [`c1i mcp servers update`](#mcp-servers-update) | Update an MCP server's editable metadata. |
+| [`c1i mcp servers update-credentials`](#mcp-servers-update-credentials) | Replace an MCP server's auth config and config fields. |
+| [`c1i mcp servers delete`](#mcp-servers-delete) | Soft-delete an MCP server. |
+| [`c1i mcp servers resync-tools`](#mcp-servers-resync-tools) | Re-run tool discovery for an external MCP server. |
+| [`c1i mcp servers test-connection`](#mcp-servers-test-connection) | Probe an external MCP server's reachability. |
+| [`c1i mcp servers discover-oidc`](#mcp-servers-discover-oidc) | Fetch an issuer's OIDC discovery document. |
+| [`c1i mcp servers catalog list`](#mcp-servers-catalog-list) | List the hosted MCP server catalog entries. |
+| `c1i mcp servers catalog get <catalog-id>` | Get one catalog entry by its catalog ID, including the full `authModes` and `config_schema` that you need to build a `register` request. Each auth mode carries its own `scopes` (required) and `optionalScopes`. |
+| `c1i mcp servers connections list` | List the passthrough-mode (per-user) MCP servers that you can connect to, and whether you currently have an active credential for each. [Paginates](#pagination-and-limits). |
+
+### `mcp servers get`
+
+An MCP server has no `id` field: its identity is `connectorId`, the value this command takes as its argument and that `mcp servers list` rows emit as `connector_id`.
+
+**Usage:**
+
+```bash
+c1i mcp servers get <connector-id> --app-id <app-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+
+### `mcp servers search`
+
+Search the MCP servers under one app. The server computes a tool count only when you set `--tool-state`, so without it c1i omits `tool_count` from each row instead of showing a `0` that looks like a server with no tools. [Paginates](#pagination-and-limits).
+
+**Usage:**
+
+```bash
+c1i mcp servers search --app-id <app-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--query string` | Fuzzy search on display name. |
+| `--tool-state string` | Tool state to count: `pending`, `approved`, `disabled`, or `removed`. Without it, `tool_count` is omitted. |
+| `--include-last-called-at` | Populate `last_called_at` per row (one extra read per server), to spot idle servers. |
+
+### `mcp servers register`
+
+For a hosted server, browse [`catalog list`](#mcp-servers-catalog-list) and pass an entry's ID with `--catalog-id`. For an external server, pass `--server-url`.
+
+**Usage:**
+
+```bash
+c1i mcp servers register --app-id <app-id> --type <hosted|external> \
+  --display-name <name> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID to register under. (Required unless `--print-config-template`.) |
+| `--type string` | Server type: `hosted` or `external`. (Required unless `--print-config-template`.) |
+| `--display-name string` | Display name. (Required unless `--print-config-template`.) |
+| `--description string` | Description. |
+| `--catalog-id string` | Catalog entry ID (hosted). |
+| `--source-app-id string` | Source app ID for connector-backed hosted servers. |
+| `--config-field stringArray` | Extra config field as `key=value` (hosted, repeatable). |
+| `--server-url string` | External MCP server URL (external). |
+| `--transport string` | Transport: `streamable-http` or `sse` (external). |
+| `--auth string` | Auth method: `none`, `bearer-token`, `custom-header`, or `basic-auth`. OAuth2, AWS, and Google auth go through the `--*-config-file` flags. |
+| `--bearer-token string` | Bearer token value (with `--auth bearer-token`). |
+| `--header-name string` | Custom header name (with `--auth custom-header`). |
+| `--header-value string` | Custom header value (with `--auth custom-header`). |
+| `--basic-auth-username string` | Basic-auth username (with `--auth basic-auth`). |
+| `--basic-auth-password string` | Basic-auth password (with `--auth basic-auth`). |
+| `--hosted-config-file string` | Full `hostedConfig` JSON (file, or `-` for stdin). |
+| `--external-config-file string` | Full `externalConfig` JSON (file, or `-` for stdin). |
+| `--print-config-template` | Print a ready-to-edit config skeleton for the `--auth` method (use with `--auth` and `--type`) instead of registering. |
+| `--token-sharing string` | Token sharing: `shared` or `per-user`. |
+| `--data-sensitivity string` | Data sensitivity: `public`, `internal`, `confidential`, or `restricted`. |
+| `--tool-prefix string` | Prefix for exposed tool names. |
+| `--require-tool-approval` | Per-server override for tool auto-approval (omit to leave unset). |
+| `--user-id stringArray` | Integration owner user ID (repeatable). |
+
+The `per-user` token-sharing mode works only with OAuth2 (authorization-code or passthrough), bearer-token, custom-header, and basic-auth methods. `register` requires `--app-id`; registering under a new managed app isn't reachable over REST.
+
+**Examples:**
+
+```bash
+# Print an OAuth2 config skeleton to edit
+c1i mcp servers register --print-config-template --auth oauth2 --type hosted
+
+# Register an external server with a bearer token
+c1i mcp servers register --app-id <app-id> --type external \
+  --display-name "Example MCP" --server-url https://mcp.example.com/v1 \
+  --auth bearer-token --bearer-token <token>
+```
+
+### `mcp servers update`
+
+c1i derives the update mask from the flags you set, so `--display-name` alone changes only the name. Auth config and URL aren't updatable here; use `update-credentials`.
+
+**Usage:**
+
+```bash
+c1i mcp servers update <connector-id> --app-id <app-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--display-name string` | New display name. |
+| `--description string` | New description. |
+| `--data-sensitivity string` | New data sensitivity: `public`, `internal`, `confidential`, or `restricted`. |
+| `--tool-prefix string` | New tool-name prefix. |
+| `--require-tool-approval` | Per-server override for tool auto-approval. |
+
+### `mcp servers update-credentials`
+
+Replace the auth config, extra config fields, or both on an existing MCP server. It uses the same convenience auth flags and `--*-config-file` flags as `register`, and re-seals secrets server-side.
+
+**Usage:**
+
+```bash
+c1i mcp servers update-credentials <connector-id> --app-id <app-id> \
+  --type <hosted|external> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+| `--type string` | Config shape, which must match the server: `hosted` or `external`. (Required.) |
+| `--catalog-id string` | Catalog entry ID (hosted). |
+| `--source-app-id string` | Source app ID (hosted). |
+| `--config-field stringArray` | Extra config field as `key=value` (hosted, repeatable). |
+| `--server-url string` | External MCP server URL (external). |
+| `--transport string` | Transport: `streamable-http` or `sse` (external). |
+| `--auth string` | Auth method: `none`, `bearer-token`, `custom-header`, or `basic-auth`. OAuth2, AWS, and Google auth go through the `--*-config-file` flags. |
+| `--bearer-token string` | Bearer token value (with `--auth bearer-token`). |
+| `--header-name string` | Custom header name (with `--auth custom-header`). |
+| `--header-value string` | Custom header value (with `--auth custom-header`). |
+| `--basic-auth-username string` | Basic-auth username (with `--auth basic-auth`). |
+| `--basic-auth-password string` | Basic-auth password (with `--auth basic-auth`). |
+| `--hosted-config-file string` | Full `hostedConfig` JSON (file, or `-` for stdin). |
+| `--external-config-file string` | Full `externalConfig` JSON (file, or `-` for stdin). |
+| `--token-sharing string` | Token sharing: `shared` or `per-user`. |
+| `--require-tool-approval` | Per-server override for tool auto-approval (omit to leave unset). |
+| `--update-mask string` | Comma-separated proto field paths to update (default: derived from the fields you supply). |
+
+The mask uses the auth oneof case name (`bearerToken`, `customHeader`, `basicAuth`, `oauth2`, or `none`), not the `hostedConfig` or `externalConfig` wrapper.
+
+### `mcp servers delete`
+
+This stops the connector, removes it from the tenant's MCP catalog, and revokes any per-user OAuth credentials issued against it. The connector record is retained for audit.
+
+**Usage:**
+
+```bash
+c1i mcp servers delete <connector-id> --app-id <app-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+
+<Warning>
+Deleting a server cascades: every toolset bound to the connector, and each toolset's app entitlement, is soft-deleted with it, which affects anyone whose access came through those entitlements. Check what depends on the server first with `c1i mcp toolsets list --app-id <app-id> --connector-id <connector-id>` and `c1i grants list --app-id <app-id> --entitlement-id <entitlement-id>`.
+</Warning>
+
+### `mcp servers resync-tools`
+
+Re-run tool discovery against an external MCP server using your own credential. Newly discovered tools land in the pending-review state; approve them with `c1i mcp tools approve`. Hosted servers return `resync is only supported for external MCP servers`.
+
+**Usage:**
+
+```bash
+c1i mcp servers resync-tools <connector-id> --app-id <app-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID. (Required.) |
+
+### `mcp servers test-connection`
+
+Probe whether an external MCP server is reachable with the credentials you supply. Outputs formatted JSON with `reachable` (whether the MCP initialize and `tools/list` calls both succeeded), `toolCount`, and a sanitized `failureReason`. Hosted servers return `test connection is only supported for external MCP servers`.
+
+The command has two modes. In create mode, supply the config to probe with `--server-url` and optional auth flags, or with `--external-config-file`. In edit mode, pass a connector ID with `--app-id` to probe an existing server, naming any changed fields in `--update-mask`; omit the mask to probe the stored config.
+
+**Usage:**
+
+```bash
+c1i mcp servers test-connection [<connector-id>] [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID of an existing external server (edit mode). |
+| `--server-url string` | External MCP server URL (create mode). |
+| `--transport string` | Transport: `streamable-http` or `sse`. |
+| `--auth string` | Auth method: `none`, `bearer-token`, `custom-header`, or `basic-auth`. OAuth2, AWS, and Google auth go through `--external-config-file`. |
+| `--bearer-token string` | Bearer token value (with `--auth bearer-token`). |
+| `--header-name string` | Custom header name (with `--auth custom-header`). |
+| `--header-value string` | Custom header value (with `--auth custom-header`). |
+| `--basic-auth-username string` | Basic-auth username (with `--auth basic-auth`). |
+| `--basic-auth-password string` | Basic-auth password (with `--auth basic-auth`). |
+| `--external-config-file string` | Full `externalConfig` JSON (file, or `-` for stdin). |
+| `--token-sharing string` | Token sharing: `shared` or `per-user`. |
+| `--require-tool-approval` | Per-server override for tool auto-approval (omit to leave unset). |
+| `--update-mask string` | Comma-separated changed `externalConfig` paths (edit mode). |
+
+### `mcp servers discover-oidc`
+
+Fetch the OpenID Connect discovery document for an issuer and return its authorization endpoint, token endpoint, supported scopes, and PKCE methods. Use it to fill in the OAuth2 fields of a `register` or `update-credentials` request.
+
+**Usage:**
+
+```bash
+c1i mcp servers discover-oidc --issuer-url <url>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--issuer-url string` | OIDC issuer base URL. C1 appends `/.well-known/openid-configuration` itself. (Required.) |
+
+### `mcp servers catalog list`
+
+Rows include `service_name`, `base_url`, `default_tool_prefix`, `stable`, and `required_scope_count` and `optional_scope_count`, which tell near-duplicate entries apart. Many services appear twice: once as a thin wrapper over the vendor's REST API, and once as the vendor's own hosted MCP endpoint, whose `service_name` typically ends in `-mcp`. [Paginates](#pagination-and-limits).
+
+| Flag | Description |
+| :--- | :--- |
+| `--query string` | Filter catalog entries by display name. |
+
+## MCP tools
+
+Manage the MCP tools that C1 discovers from a registered server. Newly discovered tools land in the pending-review state, and an admin approves them before the MCP gateway proxies calls to them. Every command requires `--app-id` and `--connector-id` to identify the server.
+
+| Command | Description |
+| :--- | :--- |
+| `c1i mcp tools list --app-id <app-id> --connector-id <connector-id>` | List the MCP tools discovered for a connector. [Paginates](#pagination-and-limits). |
+| `c1i mcp tools get <tool-id> --app-id <app-id> --connector-id <connector-id>` | Get a single MCP tool. |
+| [`c1i mcp tools search`](#mcp-tools-search) | Search MCP tools with filters. |
+| [`c1i mcp tools approve`](#mcp-tools-approve) | Approve one or more MCP tools. |
+| [`c1i mcp tools delete`](#mcp-tools-delete) | Soft-delete an MCP tool. |
+| [`c1i mcp tools history`](#mcp-tools-history) | Stream the change history for a single MCP tool, newest first. |
+
+### `mcp tools search`
+
+[Paginates](#pagination-and-limits).
+
+**Usage:**
+
+```bash
+c1i mcp tools search --app-id <app-id> --connector-id <connector-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--query string` | Fuzzy search on tool name or display name. |
+| `--state stringArray` | Filter by state: `pending`, `approved`, `disabled`, or `removed` (repeatable). |
+| `--classification stringArray` | Filter by classification: `read`, `write`, `destructive`, `sensitive`, or `dangerous` (repeatable). |
+
+### `mcp tools approve`
+
+Approve MCP tools by setting each tool's state to approved, which lets the MCP gateway proxy calls to them. Pass one or more tool IDs. The API has no batch approve, so c1i sends each ID as its own request and prints a confirmation line for each. If one fails, c1i still attempts the rest and exits non-zero.
+
+**Usage:**
+
+```bash
+c1i mcp tools approve <tool-id>... --app-id <app-id> \
+  --connector-id <connector-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--state string` | Target state: `pending`, `approved`, or `disabled` (default `approved`). |
+
 **Example:**
 
 ```bash
-c1i mcp gateway call my_tool --args '{"id":"abc"}'
+# Approve every pending read-only tool on a connector
+c1i mcp tools approve $(c1i mcp tools search --app-id <app-id> --connector-id <connector-id> \
+  --classification read --state pending --fields id | jq -r .id) \
+  --app-id <app-id> --connector-id <connector-id>
 ```
+
+### `mcp tools delete`
+
+The tool stays in the database for audit but is hidden from listings and unbound from any toolsets. Tools move to the removed state on their own during sync when they disappear from the upstream server; to block a tool without deleting it, use `c1i mcp tools approve --state disabled`.
+
+**Usage:**
+
+```bash
+c1i mcp tools delete <tool-id> --app-id <app-id> --connector-id <connector-id>
+```
+
+### `mcp tools history`
+
+Outputs NDJSON, one record per historical version. Each record carries the full tool snapshot at that point and the change-history envelope (actor, change kind, creation time, trace ID, system log event ID, and annotations). [Paginates](#pagination-and-limits); `--page-size` accepts up to 200.
+
+**Usage:**
+
+```bash
+c1i mcp tools history <tool-id> --app-id <app-id> \
+  --connector-id <connector-id> [flags]
+```
+
+## MCP toolsets
+
+Manage MCP toolsets: admin-curated groupings of tools, each bound to a single app entitlement so users can request and receive the whole bundle at once. Every command except `get-by-entitlement` and `requestable-connectors` requires `--app-id` and `--connector-id` to identify the server; `get-by-entitlement` requires only `--app-id`.
+
+| Command | Description |
+| :--- | :--- |
+| `c1i mcp toolsets list --app-id <app-id> --connector-id <connector-id>` | List MCP toolsets for a connector. [Paginates](#pagination-and-limits). |
+| `c1i mcp toolsets get <toolset-id> --app-id <app-id> --connector-id <connector-id>` | Get a single MCP toolset. |
+| [`c1i mcp toolsets get-by-entitlement`](#mcp-toolsets-get-by-entitlement) | Resolve a toolset by its app entitlement ID. |
+| [`c1i mcp toolsets create`](#mcp-toolsets-create) | Create an MCP toolset. |
+| [`c1i mcp toolsets update`](#mcp-toolsets-update) | Update a toolset's display name, description, or both. |
+| `c1i mcp toolsets delete <toolset-id> --app-id <app-id> --connector-id <connector-id>` | Soft-delete an MCP toolset. |
+| `c1i mcp toolsets requestable-connectors <user-id>` | For a user, list the app and connector ID pairs that have at least one toolset the user can currently request access to. Unlike most list commands, this endpoint isn't paginated server-side: it returns the full set in one response. |
+
+### `mcp toolsets get-by-entitlement`
+
+Look up the toolset that owns a given app entitlement. Each toolset creates one app entitlement at sync time, so this reverse lookup finds which toolset an entitlement ID from an access-request task represents.
+
+**Usage:**
+
+```bash
+c1i mcp toolsets get-by-entitlement <app-entitlement-id> --app-id <app-id>
+```
+
+### `mcp toolsets create`
+
+Create an MCP toolset (access profile) under a connector. After creating it, attach tools with [`c1i mcp bindings create`](#mcp-bindings).
+
+**Usage:**
+
+```bash
+c1i mcp toolsets create --app-id <app-id> --connector-id <connector-id> \
+  --display-name <name> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | Toolset display name. (Required.) |
+| `--description string` | Toolset description. |
+
+### `mcp toolsets update`
+
+c1i derives the update mask from the flags you set. Editing the app entitlement behind the toolset isn't supported here.
+
+**Usage:**
+
+```bash
+c1i mcp toolsets update <toolset-id> --app-id <app-id> \
+  --connector-id <connector-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | New display name (omit to leave unchanged). |
+| `--description string` | New description (omit to leave unchanged). |
+
+## MCP bindings
+
+Inspect and manage bindings between MCP tools and MCP toolsets (access profiles): which tools are members of which toolset. This is a different object from an entitlement proxy binding (entitlement to entitlement), which you manage with [`c1i entitlements proxy-bindings`](#entitlements-proxy-bindings). Every command requires `--app-id` and `--connector-id` to identify the server.
+
+| Command | Description |
+| :--- | :--- |
+| `c1i mcp bindings list --app-id <app-id> --connector-id <connector-id> --toolset-id <toolset-id>` | List the tool bindings of an MCP toolset (access profile). [Paginates](#pagination-and-limits). |
+| [`c1i mcp bindings by-tools`](#mcp-bindings-by-tools) | List the toolsets each given tool is bound to. |
+| [`c1i mcp bindings create`](#mcp-bindings-create) | Bind one or more MCP tools to a toolset. |
+| [`c1i mcp bindings delete`](#mcp-bindings-delete) | Remove one or more MCP tools from a toolset. |
+| [`c1i mcp bindings history`](#mcp-bindings-history) | Stream binding-change history for a toolset or a tool. |
+
+### `mcp bindings by-tools`
+
+Reverse lookup: given a batch of MCP tool IDs, emit one NDJSON record per tool with the toolsets it's bound to. Tools with no bindings are still emitted, with an empty `toolsets` array.
+
+**Usage:**
+
+```bash
+c1i mcp bindings by-tools --app-id <app-id> --connector-id <connector-id> \
+  --tool-id <tool-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--tool-id stringArray` | MCP tool ID to look up (repeatable; maximum 32). (Required.) |
+
+### `mcp bindings create`
+
+**Usage:**
+
+```bash
+c1i mcp bindings create --app-id <app-id> --connector-id <connector-id> \
+  --toolset-id <toolset-id> --tool-id <tool-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--toolset-id string` | MCP toolset (access profile) ID. (Required.) |
+| `--tool-id stringArray` | MCP tool ID to bind (repeatable; maximum 100). (Required.) |
+
+### `mcp bindings delete`
+
+The tool IDs travel in the request body, so c1i uses the `tool_bindings/delete` action route rather than an HTTP `DELETE`.
+
+**Usage:**
+
+```bash
+c1i mcp bindings delete --app-id <app-id> --connector-id <connector-id> \
+  --toolset-id <toolset-id> --tool-id <tool-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--toolset-id string` | MCP toolset (access profile) ID. (Required.) |
+| `--tool-id stringArray` | MCP tool ID to unbind (repeatable; maximum 100). (Required.) |
+
+### `mcp bindings history`
+
+Stream the binding-change history for either all tools bound to one toolset (`--toolset-id`) or all toolsets that contain one tool (`--tool-id`). Pass exactly one of the two. Outputs NDJSON, newest first. Each record carries a `list_history` metadata envelope plus the items added or removed in that transaction. [Paginates](#pagination-and-limits); `--page-size` accepts up to 200.
+
+**Usage:**
+
+```bash
+c1i mcp bindings history --app-id <app-id> --connector-id <connector-id> \
+  (--toolset-id <toolset-id> | --tool-id <tool-id>) [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--toolset-id string` | MCP toolset (access profile) ID. |
+| `--tool-id string` | MCP tool ID. |
 
 ## MCP classifiers
 
@@ -2123,64 +1877,30 @@ A classifier is a reusable, ordered rule cascade evaluated first-match-wins. Bin
 
 `create` and `update` take JSON objects through `--body-file` (or `-` for stdin), preserving nested CEL rules, hooks, gates, and template parameters without a lossy flag translation. Updates require an explicit `--update-mask` as a safeguard — including `rules` in the mask replaces the entire ordered cascade.
 
-**Usage:**
-
-```bash
-c1i mcp classifiers [command]
-```
-
-| Subcommand | Description |
+| Command | Description |
 | :--- | :--- |
-| `list` | List classifiers. |
-| `get` | Get a classifier. |
-| `create` | Create a classifier from JSON. |
-| `update` | Update selected classifier fields from JSON. |
-| `delete` | Delete a classifier. |
-| `bindings list` | List classifier bindings. |
-| `bindings create` | Bind a classifier to an enforcement surface from JSON. |
-| `bindings delete` | Delete a classifier binding. |
-| `templates list` | List classifier templates. |
-| `templates get` | Get a classifier template revision. |
-| `templates instantiate` | Instantiate a classifier template into an editable classifier. |
-| `templates add-rule` | Insert one rule from a template into a classifier. |
-| `policy show` | Show the singleton agent classifier policy. |
-| `policy update` | Update selected singleton policy fields from JSON. |
-| `tool-gates list` | List tool gates. |
-| `tool-gates search` | Search tool gates. |
-| `tool-gates get` | Get a tool gate. |
-| `tool-gates create` | Create a tool gate from JSON. |
-| `tool-gates update` | Update selected tool-gate fields from JSON. |
-| `tool-gates delete` | Delete a tool gate. |
+| `c1i mcp classifiers list` | List classifiers. [Paginates](#pagination-and-limits). |
+| `c1i mcp classifiers get <classifier-id>` | Get a classifier by ID. |
+| [`c1i mcp classifiers create`](#mcp-classifiers-create) | Create a named, reusable classifier from JSON. |
+| [`c1i mcp classifiers update`](#mcp-classifiers-update) | Update selected classifier fields from a JSON object. |
+| `c1i mcp classifiers delete <classifier-id>` | Delete a classifier. |
+| `c1i mcp classifiers bindings list` | List classifier bindings. [Paginates](#pagination-and-limits). |
+| [`c1i mcp classifiers bindings create`](#mcp-classifiers-bindings-create) | Bind a classifier to an enforcement surface. |
+| `c1i mcp classifiers bindings delete <binding-id>` | Delete a classifier binding. |
+| `c1i mcp classifiers templates list [--latest-only]` | List classifier templates; `--latest-only` returns only the latest revision of each. [Paginates](#pagination-and-limits). |
+| `c1i mcp classifiers templates get <template-id> [--template-version <version>]` | Get a classifier template revision (default: the latest version). |
+| [`c1i mcp classifiers templates instantiate`](#mcp-classifiers-templates-instantiate) | Instantiate a template into a tenant-owned, editable classifier. |
+| [`c1i mcp classifiers templates add-rule`](#mcp-classifiers-templates-add-rule) | Insert one rule from a template into a classifier. |
+| `c1i mcp classifiers policy show` | Show the tenant's singleton agent classifier policy. |
+| [`c1i mcp classifiers policy update`](#mcp-classifiers-policy-update) | Update selected singleton policy fields from JSON. |
+| `c1i mcp classifiers tool-gates list` | List tool gates. [Paginates](#pagination-and-limits). |
+| `c1i mcp classifiers tool-gates search [--query <text>]` | Search tool gates by text; without `--query`, it returns all tool gates. [Paginates](#pagination-and-limits). |
+| `c1i mcp classifiers tool-gates get <tool-gate-id>` | Get a tool gate by ID. |
+| [`c1i mcp classifiers tool-gates create`](#mcp-classifiers-tool-gates-create) | Create a tool gate from a complete JSON request object. |
+| [`c1i mcp classifiers tool-gates update`](#mcp-classifiers-tool-gates-update) | Update selected tool-gate fields from a JSON object. |
+| `c1i mcp classifiers tool-gates delete <tool-gate-id>` | Delete a tool gate. |
 
-### `list`
-
-List classifiers. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `get`
-
-Get a classifier by ID.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers get <classifier-id>
-```
-
-### `create`
-
-Create a named, reusable classifier.
+### `mcp classifiers create`
 
 **Usage:**
 
@@ -2194,14 +1914,13 @@ c1i mcp classifiers create --body-file <file>
 
 `displayName` is required. Rules are evaluated in listed order, first match wins; leave a new rule's `id` empty for the server to assign it.
 
-### `update`
-
-Update selected classifier fields from a JSON object.
+### `mcp classifiers update`
 
 **Usage:**
 
 ```bash
-c1i mcp classifiers update <classifier-id> --body-file <file> --update-mask <fields>
+c1i mcp classifiers update <classifier-id> --body-file <file> \
+  --update-mask <fields>
 ```
 
 | Flag | Description |
@@ -2211,35 +1930,7 @@ c1i mcp classifiers update <classifier-id> --body-file <file> --update-mask <fie
 
 The server requires `displayName` even when it's not in the mask. The positional ID overrides any `id` in the file. Including `rules` in the mask replaces every rule in evaluation order — read and preserve the existing classifier first if you're only changing some rules.
 
-### `delete`
-
-Delete a classifier.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers delete <classifier-id>
-```
-
-### `bindings list`
-
-List classifier bindings. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers bindings list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `bindings create`
-
-Bind a classifier to an enforcement surface.
+### `mcp classifiers bindings create`
 
 **Usage:**
 
@@ -2253,50 +1944,7 @@ c1i mcp classifiers bindings create --body-file <file>
 
 `surface` and `classifierId` are required; `targetId` identifies the applicable agent or gateway target when the selected surface uses one.
 
-### `bindings delete`
-
-Delete a classifier binding.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers bindings delete <binding-id>
-```
-
-### `templates list`
-
-List classifier templates. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers templates list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--latest-only` | Return only the latest revision of each template. |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `templates get`
-
-Get a classifier template revision.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers templates get <template-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--template-version string` | Template version (default: latest). |
-
-### `templates instantiate`
-
-Instantiate a template into a tenant-owned, editable classifier.
+### `mcp classifiers templates instantiate`
 
 **Usage:**
 
@@ -2310,9 +1958,7 @@ c1i mcp classifiers templates instantiate <template-id> [flags]
 
 Required params are declared by `templates get` and validated by the server.
 
-### `templates add-rule`
-
-Insert one rule from a template into a classifier.
+### `mcp classifiers templates add-rule`
 
 **Usage:**
 
@@ -2326,19 +1972,7 @@ c1i mcp classifiers templates add-rule <classifier-id> <template-id> [flags]
 
 `ruleIndex` defaults to `0`; an `insertIndex` at or past the end of the cascade appends the rule.
 
-### `policy show`
-
-Show the tenant's singleton agent classifier policy.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers policy show
-```
-
-### `policy update`
-
-Update selected fields of the singleton agent classifier policy from a JSON object.
+### `mcp classifiers policy update`
 
 **Usage:**
 
@@ -2353,52 +1987,7 @@ c1i mcp classifiers policy update --body-file <file> --update-mask <fields>
 
 The policy is implicitly created by its first update. Including `rules` in the mask replaces the entire first-match-wins cascade with the order supplied.
 
-### `tool-gates list`
-
-List tool gates. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers tool-gates list [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `tool-gates search`
-
-Search tool gates. Outputs NDJSON.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers tool-gates search [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--query string` | Text to search for (default: all tool gates). |
-| `--page-size int` | Number of results per page (max 100; values higher than 100 are clamped client-side). |
-| `--page-token string` | Pagination token for manual pagination. |
-| `--limit int` | Cap the total number of results emitted (0 = unlimited). |
-
-### `tool-gates get`
-
-Get a tool gate by ID.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers tool-gates get <tool-gate-id>
-```
-
-### `tool-gates create`
-
-Create a tool gate from a complete JSON request object.
+### `mcp classifiers tool-gates create`
 
 **Usage:**
 
@@ -2412,30 +2001,19 @@ c1i mcp classifiers tool-gates create --body-file <file>
 
 `displayName` and `grantPolicyId` are required. `filter` may set a CEL expression or a built-in pattern, but never both — the server resolves a built-in pattern to its own CEL expression.
 
-### `tool-gates update`
-
-Update selected tool-gate fields from a JSON object.
+### `mcp classifiers tool-gates update`
 
 **Usage:**
 
 ```bash
-c1i mcp classifiers tool-gates update <tool-gate-id> --body-file <file> --update-mask <fields>
+c1i mcp classifiers tool-gates update <tool-gate-id> --body-file <file> \
+  --update-mask <fields>
 ```
 
 | Flag | Description |
 | :--- | :--- |
 | `--body-file string` | Complete tool-gate JSON object (file, or `-` for stdin). (Required.) |
 | `--update-mask string` | Comma-separated camelCase field paths to update. (Required.) |
-
-### `tool-gates delete`
-
-Delete a tool gate.
-
-**Usage:**
-
-```bash
-c1i mcp classifiers tool-gates delete <tool-gate-id>
-```
 
 ## API
 
@@ -2450,22 +2028,21 @@ c1i api --path <path> [flags]
 | Flag | Description |
 | :--- | :--- |
 | `--path string` | API endpoint path. (Required.) |
-| `--method string` | HTTP method: `GET`, `POST`, `PUT`, or `DELETE`. (Default: `GET`.) |
-| `--body string` | Request body (JSON). |
-| `--paginate` | Auto-paginate and output results as NDJSON. |
+| `--method string` | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`. (Default: `GET`, or `POST` if a body is set.) |
+| `--body string` | JSON request body (implies `POST`). |
+| `--body-file string` | Read the JSON request body from a file (`-` for stdin); mutually exclusive with `--body`. |
+| `--allow-delete-body` | Allow `--body` or `--body-file` with `--method DELETE`. Some endpoints, such as remove-membership, require a body on `DELETE`; without this flag c1i refuses the request. |
+| `--header stringArray` | Extra request header as `key=value` (repeatable). |
+| `--query stringArray` | Query parameter as `key=value` (repeatable). |
+| `--paginate` | Automatically follow pagination to fetch all pages, and output results as NDJSON. |
+| `--list-key string` | Force the response field name to drain as the list (default: the first array-valued field, such as `list`, `automationExecutions`, or `automations`). |
 | `--limit int` | With `--paginate`, cap the total number of NDJSON rows emitted (0 = unlimited). Errors if used without `--paginate`. |
 
 **Examples:**
 
 ```bash
-# GET request
-c1i api --path /api/v1/apps
-
 # POST request — passing --body switches the method to POST automatically
 c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}'
-
-# Paginate through results as NDJSON
-c1i api --path /api/v1/apps --paginate
 
 # Paginate a POST search endpoint
 c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate
@@ -2479,13 +2056,13 @@ c1i sends `--body` to the API verbatim — it does not wrap or reshape the paylo
 
 ## Pagination and limits
 
-c1i list commands (and `c1i api --paginate`) auto-paginate by default — they keep fetching pages until the cursor is empty, so you don't have to manage tokens manually.
+Commands marked "Paginates" (and `c1i api --paginate`) auto-paginate by default — they keep fetching pages until the cursor is empty, so you don't have to manage tokens manually.
 
-Three flags control how much data flows:
+Each of those commands takes three flags that control how much data flows:
 
 | Flag | Effect |
 | :--- | :--- |
-| `--page-size N` | Per-call batch size. The C1 API caps this at 100; c1i clamps client-side, so `--page-size 500` is treated as 100. Default is 50. |
+| `--page-size N` | Rows to request per API page (max 100). The server may return more than asked, so use `--limit` for an exact count. Default is 50. `policies search` defaults to 25. The history commands (`mcp tools history`, `mcp bindings history`) accept up to 200. |
 | `--page-token TOKEN` | Resume from a specific cursor. When set, c1i fetches a single page and exits — auto-pagination is disabled. |
 | `--limit N` | Cap the *total* number of results emitted across all pages (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached, and c1i tightens the per-call request size when `--limit` is smaller than `--page-size` so it doesn't over-fetch. |
 
@@ -2497,9 +2074,6 @@ c1i users list --limit 5
 
 # Cap a wide query — useful for cost control or quick previews
 c1i tasks list --state open --limit 25
-
-# --limit also works with the raw api command, but only with --paginate
-c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate --limit 10
 ```
 
 `c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
@@ -2507,12 +2081,6 @@ c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' 
 ## Version
 
 Print the c1i version.
-
-**Usage:**
-
-```bash
-c1i version
-```
 
 You can also use `c1i --version`.
 
@@ -2530,7 +2098,7 @@ c1i completion <shell>
 
 ```bash
 # bash
-c1i completion bash > /etc/bash_completion.d/c1i
+c1i completion bash > ~/.local/share/bash-completion/completions/c1i
 
 # zsh
 c1i completion zsh > "${fpath[1]}/_c1i"
@@ -2538,8 +2106,12 @@ c1i completion zsh > "${fpath[1]}/_c1i"
 # fish
 c1i completion fish > ~/.config/fish/completions/c1i.fish
 
-# PowerShell
-c1i completion powershell > $PROFILE
+# PowerShell (current session; add the line to your $PROFILE to keep it)
+c1i completion powershell | Out-String | Invoke-Expression
 ```
+
+| Flag | Description |
+| :--- | :--- |
+| `--no-descriptions` | Disable completion descriptions. |
 
 For shell-specific install steps, run `c1i completion <shell> --help`.

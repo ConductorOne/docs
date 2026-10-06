@@ -1,154 +1,198 @@
 ---
 title: "Install c1i, the agent-oriented CLI"
 og:title: Install c1i, the agent-oriented CLI | Docs - C1
-og:description: c1i is an agent-oriented CLI for the C1 API, designed for automation, scripting, and AI agent workflows.
-description: c1i is an agent-oriented CLI for the C1 API, designed for automation, scripting, and AI agent workflows.
+og:description: Install c1i and connect it to your C1 tenant to automate C1 from scripts, CI jobs, and AI agents.
+description: Install c1i and connect it to your C1 tenant to automate C1 from scripts, CI jobs, and AI agents.
 sidebarTitle: "Install c1i"
 ---
 
-{/* Editor Refresh: 2026-05-07 */}
+{/* Editor Refresh: 2026-10-06 */}
+
+Install c1i, point it at your tenant, and log in once; every command after that uses the stored credential.
 
 ## What is c1i?
 
-c1i (pronounced "see-one-eye" — it looks like `cli`, get it?) is an **agent-oriented** command-line interface for the C1 API. It's purpose-built for automation, scripting, and AI agent workflows.
+c1i (pronounced "see-one-eye") is a command-line interface for the C1 API, built for automation. Its output is machine-readable and its behavior predictable, so scripts and agents can depend on it:
 
-Unlike [Cone](/product/cli/install), which is designed for interactive human use, c1i prioritizes machine-readable output and predictable behavior:
+- Structured output: list and search commands return NDJSON (one JSON object per line), and single-object commands return JSON.
+- Self-documenting API: the `docs` commands search C1 documentation and API schemas without credentials.
+- Predictable pagination: list commands fetch every page by default. `--page-token` gives you manual control, and `--limit` caps the number of results.
+- Raw API access: the `api` command calls any C1 API endpoint directly, with optional pagination.
 
-- **Structured output**: All data commands produce NDJSON (newline-delimited JSON) — never mixed or human-formatted output.
-- **Self-documenting API**: The `docs` commands let agents explore and understand the C1 API without credentials or external documentation.
-- **Predictable pagination**: List commands auto-paginate by default. `--page-token` gives manual control, and `--limit N` caps the total number of results when you want a quick peek.
-- **Raw API escape hatch**: The `api` command can call any C1 API endpoint directly, with optional NDJSON pagination.
+## Compare c1i and Cone
 
-## c1i vs Cone
+C1 provides two CLIs. Use Cone when you work at the terminal interactively, and c1i when you build automation, write scripts, or connect C1 to an AI agent.
 
-C1 provides two CLI tools for different use cases:
-
-| | **Cone** | **c1i** |
+| | Cone | c1i |
 | :--- | :--- | :--- |
-| **Designed for** | Humans | Agents, scripts, and automation |
-| **Output format** | Tables, interactive prompts | NDJSON, JSON |
-| **Key workflows** | Search, get, drop entitlements | List, query, and manage all C1 objects |
-| **API coverage** | Access request workflows | Broad API access with raw endpoint escape hatch |
-| **Interactive** | Yes (prompts, formatted output) | No (structured, parseable output only) |
+| Built for | People at a terminal | Agents, scripts, and automation |
+| Output format | Tables and interactive prompts | NDJSON and JSON |
+| Key workflows | Search, get, and drop entitlements | List, query, and manage C1 objects |
+| API coverage | Access request workflows | Broad API coverage, plus raw endpoint access |
+| Prompts | Yes | Only during `c1i auth login` and `c1i upgrade` |
 
-Use **Cone** when you're working at the terminal interactively. Use **c1i** when you're building automation, writing scripts, or integrating C1 into an AI agent workflow.
+See [Install Cone](/product/cli/install) to set up Cone.
 
 <Tip>
-**Using an AI coding agent?** Run `c1i docs skill` to generate a skill file that teaches your agent how to use c1i. See [Use c1i with AI agents](/product/cli/c1i-agent-skills) for setup instructions for Claude Code, Cursor, and other agents.
+If you use an AI coding agent, run `c1i docs agents` to generate a skill file that teaches it how to use c1i. See [Use c1i with AI agents](/product/cli/c1i-agent-skills) for setup steps for Claude Code, Cursor, and other agents.
 </Tip>
 
 ## Install c1i
 
-Download signed binaries with checksums, provenance, and SBOM attestations from the [C1 distribution center](https://dist.conductorone.com/ConductorOne/c1i).
+Download signed macOS, Linux, and Windows binaries, with checksums, provenance, and SBOM attestations, from the [C1 distribution center](https://dist.conductorone.com/ConductorOne/c1i), or install c1i with a package manager:
 
 ```shell
-# Install with Homebrew
+# Homebrew
 brew install conductorone/baton/c1i
 
-# Pull a version-pinned container image
+# Go
+go install github.com/ConductorOne/c1i@latest
+
+# Container image (tags omit the leading "v", for example 0.9.0)
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
+
+## Upgrade c1i
+
+Run `c1i upgrade` (alias `c1i update`) to install a newer release from the C1 distribution center. c1i asks for confirmation first; pass `-y` to skip the prompt, which is required when stdin is not a terminal.
+
+```shell
+c1i upgrade                       # upgrade to the latest stable release
+c1i upgrade --check               # print a JSON report and change nothing
+c1i upgrade --channel latest -y   # take the newest release without prompting
+```
+
+`--check` reports `current`, `latest`, `channel`, `update_available`, and `install_method`. `--channel` selects `stable` (the default), `latest`, or `preview`.
+
+Before replacing a standalone binary, c1i verifies the release manifest's Sigstore signature and the download's SHA-256. For a Homebrew, `go install`, or container install, `c1i upgrade` prints that method's upgrade command and exits without replacing anything.
 
 <Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
 
 ## Configure your C1 URL
 
-c1i needs to know your C1 tenant URL. You can provide it in any of these ways (listed in order of precedence):
+c1i needs your C1 tenant URL. It checks these sources in order and uses the first one that's set:
 
-1. **Flag**: `--url https://example.conductor.one`
-2. **Environment variable**: `C1I_URL=https://example.conductor.one`
-3. **Config file**: Create `~/.c1i.yaml` with:
+1. The `--url` flag: `--url https://example.conductor.one`
+2. The `C1I_URL` environment variable: `C1I_URL=https://example.conductor.one`
+3. The `url` key in `~/.c1i.yaml`:
 
 ```yaml
 url: https://example.conductor.one
 ```
 
-All of the following URL formats are equivalent:
+Pass the full host, with or without `https://`, such as `example.conductor.one`. c1i requires HTTPS and rejects a bare tenant name such as `example`.
 
-- `https://example.conductor.one`
-- `example.conductor.one`
-- `example` (expands to `https://example.conductor.one`)
+## Authenticate with your browser
 
-## Authenticate
-
-To authenticate c1i:
+Log in through your browser to create a credential for c1i:
 
 <Steps>
 <Step>
-Run `c1i auth login`, passing your tenant URL if it's not already configured:
+Run `c1i auth login`. If no URL is configured, c1i prompts for one, or you can pass it. The first time you log in from a terminal, c1i also asks whether to keep all of your roles; press Enter to keep them. See [Limit the credential to specific roles](#limit-the-credential-to-specific-roles).
 
 ```shell
 c1i auth login --url example.conductor.one
 ```
 </Step>
 <Step>
-A browser window opens with an authorization code. Verify the code matches the one shown in your terminal, then click **Authorize**.
+Open the authorization page. c1i opens it in your browser on macOS and Linux; otherwise, open the URL c1i prints in your terminal.
 </Step>
 <Step>
-c1i stores your credentials and you're ready to start using c1i. See [Credential storage](#credential-storage) for where credentials are kept on each platform.
+Confirm that the code on the page matches the one in your terminal, then click **Authorize**.
 </Step>
 </Steps>
 
-You can also authenticate non-interactively using API credentials:
+c1i stores the new credential for your tenant. In an interactive terminal, if the URL didn't come from `~/.c1i.yaml`, c1i then offers to save it there; press Enter to accept. Without a terminal and with no URL configured, `c1i auth login` exits with an error. See [Credential storage](#credential-storage) for where c1i keeps credentials on each platform.
+
+## Limit the credential to specific roles
+
+By default, browser login creates a credential with all of your roles. To give c1i less access, such as only the Basic User role, scope the credential when you log in:
+
+```shell
+# Name roles up front (repeatable); works in scripts
+c1i auth login --scoped-role basic-user
+
+# Choose roles from a menu after you approve in the browser (needs a terminal)
+c1i auth login --choose-roles
+```
+
+- A terminal login with no stored credential asks whether to keep all of your roles or choose; press Enter to keep them all, or pass `--choose-roles=false` to skip the question.
+- A scoped credential keeps only the overlap between its roles and your own access, so c1i offers the roles you hold, Basic User, and Read-Only Administrator. Super Administrators and Read-Only Administrators see every role.
+- `--scoped-role` takes a role name, such as `basic-user`, `Basic User`, or `system:user`, or a role ID from `c1i roles list`. A name that matches no role you can scope to exits with code 2 before your credential is created, and an unknown ID exits with code 4.
+- c1i checks the new credential with C1 before storing it, and deletes it if C1 scoped it differently or its roles give it no access. To read the role list, c1i briefly creates a temporary credential and deletes it before creating yours.
+
+The credential appears in C1 as "Created by c1i (Basic User)", and c1i prints its scope. Commands its roles don't cover fail with a permission error.
+
+## Authenticate with an existing API credential
+
+To use a client ID and secret you already have, such as a service principal's credential, store it instead of logging in through the browser:
 
 ```shell
 c1i auth login --client-id <your-client-id> --client-secret <your-client-secret>
 ```
 
-To check which credentials are active and where they came from:
+c1i checks the credential with C1 and keeps it only if it works.
+
+## Check and manage your credentials
+
+Use these commands to inspect or remove the credential c1i is using:
 
 ```shell
+# Verify that c1i can authenticate, and show the credential source and tenant
 c1i auth status
-```
 
-To remove stored credentials:
+# Show the authenticated principal (IDs, display name, role and permission counts) and the tenant, as JSON
+c1i auth whoami
 
-```shell
+# Print a short-lived access token for calling the C1 API directly
+c1i auth token
+
+# Remove the stored credential for your tenant
 c1i auth logout
 ```
 
-To identify the authenticated principal (user ID, display name, role/permission counts):
-
-```shell
-c1i auth whoami
-```
+Before a script makes changes, run `c1i auth whoami --fields tenant` to confirm which tenant it targets. `c1i auth logout` doesn't affect credentials set with `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, which still take precedence.
 
 ## Credential storage
 
 c1i reads credentials from the first source that has them, in this order:
 
-1. **Environment variables** — set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (alongside `C1I_URL`) for non-interactive scripts, CI runners, or container environments. Both must be set; if only one is set, the value is ignored. Credentials read from environment variables are never written to disk.
-2. **OS keyring** — Keychain on macOS, Credential Manager on Windows, Secret Service (such as gnome-keyring or KeePassXC) on Linux. Used by default whenever a keyring is available.
-3. **File fallback** — a `0600` JSON file under your config directory (`~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/` on macOS, `%AppData%\c1i\credentials\` on Windows). Used automatically when no OS keyring is available — typical on headless Linux servers, Docker and LXC containers, CI runners, and WSL without a desktop environment.
+1. Environment variables: set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, along with `C1I_URL`, for scripts, CI runners, and containers. Set both; c1i ignores one without the other. c1i doesn't store these credentials.
+2. OS keyring: Keychain on macOS, Credential Manager on Windows, and Secret Service (such as gnome-keyring or KeePassXC) on Linux. c1i uses it whenever one is available.
+3. File fallback: a `0600` file under your config directory: `~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/` on macOS, and `%AppData%\c1i\credentials\` on Windows. c1i uses it when no OS keyring is available, which is typical on headless Linux servers, containers, CI runners, and WSL without a desktop environment.
 
-`c1i auth login` writes to the OS keyring when it can and falls back to the file backend transparently. `c1i auth status` reports which source served the active credentials so you can confirm the storage path on your machine.
+`c1i auth login` writes to the OS keyring when it can and falls back to the file. `c1i auth status` reports which source supplied the active credentials.
+
+To avoid minting a new access token for every command, c1i caches it in the OS keyring, or in a `0600` file under `tokens/` in your config directory on Unix-like hosts without a keyring. `c1i auth token` always mints a fresh token. Set `C1I_NO_TOKEN_CACHE=1` to turn the cache off.
 
 ## Explore the API without credentials
 
-The `docs` commands work without authentication, so you can explore the C1 API before logging in:
+The `docs` commands work without authentication, so you can explore the C1 API before you log in:
 
 ```shell
-# Search documentation
+# Search the documentation
 c1i docs search "access requests"
 
 # List all API endpoints
 c1i docs endpoints
 
-# View the schema for a specific endpoint
+# Show the schema for one endpoint
 c1i docs endpoint /api/v1/users
 
-# Fetch a full documentation page
-c1i docs page /getting-started
+# Fetch a full documentation page by its path
+c1i docs page product/admin/campaigns
 ```
 
 ## Output conventions
 
-c1i is designed to produce output that's easy for programs to parse:
+c1i output is built for programs to parse:
 
-- **List commands** (`users list`, `apps list`, etc.) output NDJSON — one JSON object per line.
-- **The `api` command** outputs pretty-printed JSON by default, or NDJSON when called with `--paginate`.
-- **The `docs` commands** output varies by subcommand: NDJSON for search results, plain text for pages, JSON for endpoint schemas, and YAML for the OpenAPI spec.
+- List and search commands, such as `users list` and `apps list`, output NDJSON: one JSON object per line.
+- Single-object commands, such as `users get` and `auth whoami`, output formatted JSON.
+- `auth login`, `auth status`, and `auth logout` print plain text.
+- The `api` command outputs formatted JSON, or NDJSON when you add `--paginate`.
+- The `docs` commands vary by subcommand: NDJSON for `search` and `endpoints`, Markdown for `page`, JSON for `endpoint`, and YAML for `openapi`.
 
-List commands auto-paginate by default. To control pagination manually, use the `--page-token` flag. To cap total output (e.g., for a quick preview without fetching everything), use the `--limit` flag — c1i will tighten the per-call request size to avoid over-fetching.
+List commands fetch every page by default. To page manually, pass `--page-token`. To cap the number of results, pass `--limit`; c1i requests only as many results as it needs.
 
-See the [c1i command reference](/product/cli/c1i-commands) for a complete list of commands, subcommands, and flags.
+See the [c1i command reference](/product/cli/c1i-commands) for every command, subcommand, and flag.
