@@ -20,6 +20,8 @@ Run `c1i <command> --help` or `c1i <command> -h` for help with a specific comman
 
 c1i interacts with the C1 API to manage identities, apps, access, policies, automations, MCP servers, and more.
 
+List and search commands output NDJSON, one JSON object per line, and single-object commands output pretty JSON; a command's section notes any other output. See [Output conventions](/product/cli/c1i#output-conventions).
+
 | Command | Subcommands | Description |
 | :--- | :--- | :--- |
 | `docs` | `search` `page` `endpoints` `endpoint` `openapi` `guide` `agents` | Explore API documentation and agent guidance (no auth required). |
@@ -190,26 +192,7 @@ Authenticate to C1. Opens a browser for OAuth device flow authorization, or acce
 | `--choose-roles` | Choose the browser-login credential's roles from a menu after approval (needs a terminal). `--choose-roles=false` skips the role question. |
 | `--scoped-role stringArray` | Restrict the browser-login credential to a role, by name (such as `basic-user`) or ID (repeatable). |
 
-Use the global `--url` flag to choose the tenant.
-
-A browser login creates a personal client credential with all of your roles. To limit it, pick roles from a menu with `--choose-roles`, or name them with `--scoped-role`. A terminal login with no stored credential asks which you want: press Enter to keep all of your roles, or pass `--choose-roles=false` to skip the question. `--choose-roles` and `--scoped-role` can't be combined, and neither works with `--client-id` and `--client-secret`. `auth login` rejects `--dry-run` (exit 2), because it can't preview creating a credential.
-
-`--scoped-role` takes a role name (`basic-user`, `"Basic User"`, or `system:user`) or a role ID from [`c1i roles list`](#roles). A name that matches no role you can scope to exits with code 2 before c1i creates your credential. An unknown role ID exits with code 4. c1i checks the new credential before storing it and deletes it if the check fails.
-
-**Examples:**
-
-```bash
-# Browser-based login
-c1i auth login --url example.conductor.one
-
-# Browser-based login, limited to one role
-c1i auth login --url example.conductor.one --scoped-role basic-user
-
-# Credential-based login
-c1i auth login --client-id <id> --client-secret <secret>
-```
-
-For non-interactive scripts and CI environments, you can skip stored credentials entirely by setting `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (alongside `C1I_URL`) as environment variables. Both must be set; partial values are ignored. See [Credential storage](#credential-storage) for the full precedence order.
+A browser login creates a credential with all of your roles; see [Limit the credential to specific roles](/product/cli/c1i#limit-the-credential-to-specific-roles) and [Credential storage](/product/cli/c1i#credential-storage). `--scoped-role` takes a role name or a role ID from [`c1i roles list`](#roles). A name that matches no role you can scope to exits with code 2 before c1i creates your credential. An unknown role ID exits with code 4. `--choose-roles` and `--scoped-role` can't be combined, and neither works with `--client-id` and `--client-secret`. `auth login` rejects `--dry-run` (exit 2), because it can't preview creating a credential.
 
 ### `auth logout`
 
@@ -254,22 +237,9 @@ The token is audience-scoped to the C1 API host.
 
 ## Credential storage
 
-c1i reads credentials from the first source that has them, in this order:
+c1i reads credentials from `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, then the OS keyring, then a `0600` file under your config directory. It caches the access token it mints until it's close to expiry, so a burst of commands doesn't mint and log a new `client_credentials` grant each time. See [Credential storage](/product/cli/c1i#credential-storage) for each source's location and `C1I_NO_TOKEN_CACHE`.
 
-1. Environment variables: `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (combined with `C1I_URL`). Both must be set. Used for non-interactive scripts, CI, and containers. Never written to disk.
-2. OS keyring: Keychain (macOS), Credential Manager (Windows), or Secret Service (Linux). Default when available.
-3. File fallback: a `0600` JSON file under your config directory:
-   - Linux: `~/.config/c1i/credentials/`
-   - macOS: `~/Library/Application Support/c1i/credentials/`
-   - Windows: `%AppData%\c1i\credentials\`
-
-The file fallback is used automatically when no OS keyring is available — typical on headless Linux servers, Docker or LXC containers, CI runners, and WSL without a desktop environment. `c1i auth login` writes to the keyring when it can and to the file otherwise; `c1i auth status` reports the active source.
-
-### Access-token caching
-
-c1i caches the short-lived OAuth access token it mints from your stored credentials — not the credentials themselves — in the OS keyring, or in a `0600` file under `tokens/` in your config directory on Unix-like hosts without a keyring, and reuses it across invocations until it's close to expiry. `auth token` and `mcp gateway` always mint a fresh token. Without this, a burst of one-shot commands (common in scripts and agent workflows) would mint, and log, a fresh `client_credentials` grant on every single invocation.
-
-A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint a fresh token on every invocation.
+`auth token` and `mcp gateway` always mint a fresh token. A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once.
 
 ## Roles
 
@@ -282,11 +252,11 @@ List and inspect IAM roles, including the role IDs that `c1i auth login --scoped
 
 ### `roles list`
 
-List IAM roles. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List IAM roles. [Paginates](#pagination-and-limits).
 
 ### `roles get`
 
-Get a single IAM role, including its permissions. Outputs pretty JSON.
+Get a single IAM role, including its permissions.
 
 **Usage:**
 
@@ -305,7 +275,7 @@ Manage C1 users.
 
 ### `users list`
 
-Search and list C1 users. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search and list C1 users. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -321,7 +291,7 @@ c1i users list --email user@example.com
 
 ### `users get`
 
-Get a single user by ID. Outputs pretty JSON.
+Get a single user by ID.
 
 **Usage:**
 
@@ -346,11 +316,11 @@ Manage applications and their owners.
 
 ### `apps list`
 
-List applications. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List applications. [Paginates](#pagination-and-limits).
 
 ### `apps get`
 
-Get a single app by ID. Outputs pretty JSON.
+Get a single app by ID.
 
 **Usage:**
 
@@ -393,7 +363,7 @@ c1i apps delete <app-id>
 
 ### `apps owners`
 
-List an app's owners. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List an app's owners. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -470,7 +440,7 @@ Manage application accounts (app users).
 
 ### `accounts list`
 
-Search and list accounts for an application. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search and list accounts for an application. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -516,7 +486,7 @@ An entitlement ID is only unique within an app, so always key on the app ID and 
 
 ### `entitlements list`
 
-Search and list application entitlements. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search and list application entitlements. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -525,7 +495,7 @@ Search and list application entitlements. Outputs NDJSON. [Paginates](#paginatio
 
 ### `entitlements get`
 
-Get a single app entitlement by ID. Outputs pretty JSON.
+Get a single app entitlement by ID.
 
 **Usage:**
 
@@ -633,7 +603,7 @@ Query access grants: the bindings between accounts or users and entitlements. An
 
 ### `grants list`
 
-Search and list grants. Outputs NDJSON. At least one filter is required. [Paginates](#pagination-and-limits).
+Search and list grants. At least one filter is required. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -678,7 +648,7 @@ Manage access request tasks.
 
 ### `tasks list`
 
-Search and list access request tasks. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search and list access request tasks. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -855,7 +825,7 @@ Create, list, and inspect access requests.
 
 ### `requests list`
 
-List access requests: the grant and revoke tasks a requester files. By default it shows requests you opened or are the subject of, which complements `c1i tasks list` (the approver's view). Outputs NDJSON. [Paginates](#pagination-and-limits).
+List access requests: the grant and revoke tasks a requester files. By default it shows requests you opened or are the subject of, which complements `c1i tasks list` (the approver's view). [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -925,7 +895,7 @@ Manage connectors.
 
 ### `connectors list`
 
-List connectors for an application. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List connectors for an application. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -959,7 +929,7 @@ A policy's shape is deeply nested: `policySteps` holds an ordered list of steps,
 
 ### `policies list`
 
-List every policy in the tenant, auto-paginating through the full result. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List every policy in the tenant, auto-paginating through the full result. [Paginates](#pagination-and-limits).
 
 Unlike most list commands, this takes no query filter at all — only pagination. Use `search` for filtering.
 
@@ -967,7 +937,7 @@ Rows carry `step_kinds` (the kind of each step in the policy's baseline sequence
 
 ### `policies search`
 
-Search policies by a fuzzy query (display name + description), an exact display-name match, one or more policy types, or include soft-deleted policies. Outputs NDJSON. [Paginates](#pagination-and-limits); `--page-size` defaults to 25.
+Search policies by a fuzzy query (display name + description), an exact display-name match, one or more policy types, or include soft-deleted policies. [Paginates](#pagination-and-limits); `--page-size` defaults to 25.
 
 | Flag | Description |
 | :--- | :--- |
@@ -1104,7 +1074,7 @@ A profile's visibility bindings can only be added once it's published: adding a 
 
 ### `access-profiles list`
 
-List access profiles. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List access profiles. [Paginates](#pagination-and-limits).
 
 Rows don't carry a member count — the list endpoint reports it as `0` for every profile and takes no parameter that would populate it. Use `get` for a real count.
 
@@ -1186,7 +1156,7 @@ The profile is retained for audit: it drops out of `list`, but `get` still retur
 
 ### `access-profiles requestable-entitlements list`
 
-List entitlements users can request from an access profile. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List entitlements users can request from an access profile. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -1253,7 +1223,7 @@ Every existing requestable entitlement not in the array is removed; pass `[]` to
 
 ### `access-profiles visibility-entitlements list`
 
-List entitlements required to see an access profile. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List entitlements required to see an access profile. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -1384,7 +1354,7 @@ Manage access-review campaigns — the governance campaigns the API calls access
 
 ### `access-reviews list`
 
-List access-review campaigns. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List access-review campaigns. [Paginates](#pagination-and-limits).
 
 ### `access-reviews get`
 
@@ -1431,7 +1401,7 @@ The command inserts the campaign ID into the body and wraps the request; both fl
 
 ### `access-reviews reports list`
 
-List an access-review campaign's generated reports. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List an access-review campaign's generated reports. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -1489,7 +1459,7 @@ Manage security findings and the public API surfaces that govern them: routing r
 
 ### `findings search`
 
-Search findings with an optional JSON query object. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search findings with an optional JSON query object. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -1593,7 +1563,7 @@ c1i findings bulk-create-tasks --body-file <file>
 
 ### `findings routing-rules list`
 
-List finding routing rules. Outputs NDJSON.
+List finding routing rules.
 
 | Flag | Description |
 | :--- | :--- |
@@ -1651,7 +1621,7 @@ c1i findings routing-rules delete <rule-id>
 
 ### `findings transformation-rules list`
 
-List finding transformation rules. Outputs NDJSON.
+List finding transformation rules.
 
 | Flag | Description |
 | :--- | :--- |
@@ -1727,7 +1697,7 @@ c1i findings settings update --body-file <file>
 
 ### `findings audits search`
 
-Search finding audit events from an optional JSON object. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search finding audit events from an optional JSON object. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -1737,7 +1707,7 @@ A missing `--body-file` searches all accessible audit events.
 
 ### `findings shadow-mcp-occurrences search`
 
-Search occurrences behind shadow MCP findings from a JSON object. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search occurrences behind shadow MCP findings from a JSON object. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -1780,7 +1750,7 @@ Queue an organization-wide role mining analysis.
 
 ### `role-mining suggestions list`
 
-List role mining suggestions. Outputs NDJSON.
+List role mining suggestions.
 
 | Flag | Description |
 | :--- | :--- |
@@ -1790,7 +1760,7 @@ This returns a single, fixed-size page — there's no `--page-size`/`--page-toke
 
 ### `role-mining suggestions search`
 
-Search role mining suggestions from a JSON object. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search role mining suggestions from a JSON object. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -1828,7 +1798,7 @@ c1i role-mining suggestions state <suggestion-id> --body-file <file>
 
 ### `role-mining suggestions users`
 
-Search the users in a suggestion's cohort from a JSON object. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search the users in a suggestion's cohort from a JSON object. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -1860,7 +1830,7 @@ c1i role-mining config update --body-file <file>
 
 ### `role-mining runs list`
 
-List role mining analysis runs. Outputs NDJSON.
+List role mining analysis runs.
 
 | Flag | Description |
 | :--- | :--- |
@@ -1874,7 +1844,7 @@ Get the latest role mining analysis run.
 
 ### `role-mining custom-analysis list`
 
-List personal role mining custom analyses. Outputs NDJSON.
+List personal role mining custom analyses.
 
 | Flag | Description |
 | :--- | :--- |
@@ -1948,7 +1918,7 @@ List C1 automations, inspect one, and query the run history of their executions.
 
 ### `automations list`
 
-List automations. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List automations. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -1957,7 +1927,7 @@ List automations. Outputs NDJSON. [Paginates](#pagination-and-limits).
 
 ### `automations get`
 
-Get a single automation. Outputs pretty JSON.
+Get a single automation.
 
 **Usage:**
 
@@ -1967,7 +1937,7 @@ c1i automations get <automation-id>
 
 ### `automations executions list`
 
-Stream automation execution history. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Stream automation execution history. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -1996,7 +1966,7 @@ Inspect C1 functions: the serverless TypeScript modules that run in C1's sandbox
 
 ### `functions list`
 
-List C1 functions. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List C1 functions. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -2005,7 +1975,7 @@ List C1 functions. Outputs NDJSON. [Paginates](#pagination-and-limits).
 
 ### `functions get`
 
-Get a single function's metadata. Outputs pretty JSON.
+Get a single function's metadata.
 
 **Usage:**
 
@@ -2015,7 +1985,7 @@ c1i functions get <function-id>
 
 ### `functions commits`
 
-List a function's commit history. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List a function's commit history. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2092,7 +2062,7 @@ c1i export events --since-event-uid <last-event-uid>
 
 Check for and install a newer c1i release. The command is aliased as `update`.
 
-c1i follows a release channel from the C1 distribution center (`dist.conductorone.com`). Before it replaces a standalone binary, it verifies the release manifest's Sigstore signature (signed by the release workflow run for that c1i tag) and the download's SHA-256 from that manifest. For a Homebrew, `go install`, or container install, `upgrade` prints that method's upgrade command and exits 0 without replacing anything.
+c1i follows a release channel from the C1 distribution center (`dist.conductorone.com`); see [Upgrade c1i](/product/cli/c1i#upgrade-c1i). Before it replaces a standalone binary, it verifies the release manifest's Sigstore signature (signed by the release workflow run for that c1i tag) and the download's SHA-256 from that manifest. For a Homebrew, `go install`, or container install, `upgrade` prints that method's upgrade command and exits 0 without replacing anything.
 
 | Flag | Description |
 | :--- | :--- |
@@ -2116,19 +2086,6 @@ Windows and system installs print a hint but no `upgrade_command`.
 With the global `--dry-run` flag, `upgrade` fetches and verifies the release (index, manifest, signature, and TUF root) and checks that the install directory is writable. It then prints what it would download and replace. It takes no lock, doesn't prompt, and installs nothing.
 
 `upgrade` treats the distribution center as a system beyond C1. A distribution center `404`, `429`, or `5xx` exits `4`, `5`, or `6`, and a same-path redirect loop exits `6`. Any other `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature, or checksum failure exits `8`.
-
-**Examples:**
-
-```bash
-# Upgrade to the latest stable release (asks first)
-c1i upgrade
-
-# Report whether a newer release is available
-c1i upgrade --check
-
-# Take the newest release without prompting
-c1i upgrade --channel latest -y
-```
 
 ## Service principals
 
@@ -2154,7 +2111,7 @@ A service principal is an identity; a client credential on it is what a caller a
 
 ### `service-principals list`
 
-List service principals. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List service principals. [Paginates](#pagination-and-limits).
 
 ### `service-principals get`
 
@@ -2206,7 +2163,7 @@ c1i service-principals delete <sp-id>
 
 ### `service-principals credentials list`
 
-List a service principal's client credentials. Outputs NDJSON. The secret itself is never part of a row — it's returned only once, at creation. [Paginates](#pagination-and-limits).
+List a service principal's client credentials. The secret itself is never part of a row — it's returned only once, at creation. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2306,7 +2263,7 @@ Exactly one subject must be given, and an app-scoped subject (`--sso-application
 
 ### `service-principals bindings list`
 
-List the service principals a subject is bound to. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List the service principals a subject is bound to. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2401,7 +2358,7 @@ After you register a server, its tools start in the pending-review state. Approv
 
 ### `mcp servers list`
 
-List MCP servers registered under an app. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List MCP servers registered under an app. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2429,7 +2386,7 @@ c1i mcp servers get <connector-id> --app-id <app-id>
 
 ### `mcp servers search`
 
-Search the MCP servers under one app. Outputs NDJSON. The server computes a tool count only when you set `--tool-state`, so without it c1i omits `tool_count` from each row instead of showing a `0` that looks like a server with no tools. [Paginates](#pagination-and-limits).
+Search the MCP servers under one app. The server computes a tool count only when you set `--tool-state`, so without it c1i omits `tool_count` from each row instead of showing a `0` that looks like a server with no tools. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2446,7 +2403,7 @@ c1i mcp servers search --app-id <app-id> [flags]
 
 ### `mcp servers register`
 
-Register a new hosted or external MCP server under an existing app. For a hosted server, browse [`catalog list`](#mcp-servers-catalog-list) and pass an entry's ID with `--catalog-id`. For an external server, pass `--server-url`. Outputs pretty JSON.
+Register a new hosted or external MCP server under an existing app. For a hosted server, browse [`catalog list`](#mcp-servers-catalog-list) and pass an entry's ID with `--catalog-id`. For an external server, pass `--server-url`.
 
 **Usage:**
 
@@ -2496,7 +2453,7 @@ c1i mcp servers register --app-id <app-id> --type external \
 
 ### `mcp servers update`
 
-Update an MCP server's editable metadata. c1i derives the update mask from the flags you set, so `--display-name` alone changes only the name. Auth config and URL aren't updatable here; use `update-credentials`. Outputs pretty JSON.
+Update an MCP server's editable metadata. c1i derives the update mask from the flags you set, so `--display-name` alone changes only the name. Auth config and URL aren't updatable here; use `update-credentials`.
 
 **Usage:**
 
@@ -2515,7 +2472,7 @@ c1i mcp servers update <connector-id> --app-id <app-id> [flags]
 
 ### `mcp servers update-credentials`
 
-Replace the auth config, extra config fields, or both on an existing MCP server. It uses the same convenience auth flags and `--*-config-file` flags as `register`, and re-seals secrets server-side. Outputs pretty JSON.
+Replace the auth config, extra config fields, or both on an existing MCP server. It uses the same convenience auth flags and `--*-config-file` flags as `register`, and re-seals secrets server-side.
 
 **Usage:**
 
@@ -2608,7 +2565,7 @@ c1i mcp servers test-connection [<connector-id>] [flags]
 
 ### `mcp servers discover-oidc`
 
-Fetch the OpenID Connect discovery document for an issuer and return its authorization endpoint, token endpoint, supported scopes, and PKCE methods. Use it to fill in the OAuth2 fields of a `register` or `update-credentials` request. Outputs pretty JSON.
+Fetch the OpenID Connect discovery document for an issuer and return its authorization endpoint, token endpoint, supported scopes, and PKCE methods. Use it to fill in the OAuth2 fields of a `register` or `update-credentials` request.
 
 **Usage:**
 
@@ -2622,7 +2579,7 @@ c1i mcp servers discover-oidc --issuer-url <url>
 
 ### `mcp servers catalog list`
 
-List the hosted MCP server catalog entries. Outputs NDJSON. Rows include `service_name`, `base_url`, `default_tool_prefix`, `stable`, and `required_scope_count` and `optional_scope_count`, which tell near-duplicate entries apart. Many services appear twice: once as a thin wrapper over the vendor's REST API, and once as the vendor's own hosted MCP endpoint, whose `service_name` typically ends in `-mcp`. [Paginates](#pagination-and-limits).
+List the hosted MCP server catalog entries. Rows include `service_name`, `base_url`, `default_tool_prefix`, `stable`, and `required_scope_count` and `optional_scope_count`, which tell near-duplicate entries apart. Many services appear twice: once as a thin wrapper over the vendor's REST API, and once as the vendor's own hosted MCP endpoint, whose `service_name` typically ends in `-mcp`. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -2630,7 +2587,7 @@ List the hosted MCP server catalog entries. Outputs NDJSON. Rows include `servic
 
 ### `mcp servers catalog get`
 
-Get one catalog entry by its catalog ID, including the full `authModes` and `config_schema` that you need to build a `register` request. Each auth mode carries its own `scopes` (required) and `optionalScopes`. Outputs pretty JSON.
+Get one catalog entry by its catalog ID, including the full `authModes` and `config_schema` that you need to build a `register` request. Each auth mode carries its own `scopes` (required) and `optionalScopes`.
 
 **Usage:**
 
@@ -2640,7 +2597,7 @@ c1i mcp servers catalog get <catalog-id>
 
 ### `mcp servers connections list`
 
-List the passthrough-mode (per-user) MCP servers that you can connect to, and whether you currently have an active credential for each. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List the passthrough-mode (per-user) MCP servers that you can connect to, and whether you currently have an active credential for each. [Paginates](#pagination-and-limits).
 
 ## MCP tools
 
@@ -2657,7 +2614,7 @@ Manage the MCP tools that C1 discovers from a registered server. Newly discovere
 
 ### `mcp tools list`
 
-List the MCP tools discovered for a connector. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List the MCP tools discovered for a connector. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2672,7 +2629,7 @@ c1i mcp tools list --app-id <app-id> --connector-id <connector-id> [flags]
 
 ### `mcp tools get`
 
-Get a single MCP tool. Outputs pretty JSON.
+Get a single MCP tool.
 
 **Usage:**
 
@@ -2687,7 +2644,7 @@ c1i mcp tools get <tool-id> --app-id <app-id> --connector-id <connector-id>
 
 ### `mcp tools search`
 
-Search MCP tools with filters. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search MCP tools with filters. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2774,7 +2731,7 @@ Manage MCP toolsets: admin-curated groupings of tools, each bound to a single ap
 
 ### `mcp toolsets list`
 
-List MCP toolsets for a connector. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List MCP toolsets for a connector. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2789,7 +2746,7 @@ c1i mcp toolsets list --app-id <app-id> --connector-id <connector-id> [flags]
 
 ### `mcp toolsets get`
 
-Get a single MCP toolset. Outputs pretty JSON.
+Get a single MCP toolset.
 
 **Usage:**
 
@@ -2804,7 +2761,7 @@ c1i mcp toolsets get <toolset-id> --app-id <app-id> --connector-id <connector-id
 
 ### `mcp toolsets get-by-entitlement`
 
-Look up the toolset that owns a given app entitlement. Each toolset creates one app entitlement at sync time, so this reverse lookup finds which toolset an entitlement ID from an access-request task represents. Outputs pretty JSON.
+Look up the toolset that owns a given app entitlement. Each toolset creates one app entitlement at sync time, so this reverse lookup finds which toolset an entitlement ID from an access-request task represents.
 
 **Usage:**
 
@@ -2818,7 +2775,7 @@ c1i mcp toolsets get-by-entitlement <app-entitlement-id> --app-id <app-id>
 
 ### `mcp toolsets create`
 
-Create an MCP toolset (access profile) under a connector. After creating it, attach tools with [`c1i mcp bindings create`](#mcp-bindings). Outputs pretty JSON.
+Create an MCP toolset (access profile) under a connector. After creating it, attach tools with [`c1i mcp bindings create`](#mcp-bindings).
 
 **Usage:**
 
@@ -2835,7 +2792,7 @@ c1i mcp toolsets create --app-id <app-id> --connector-id <connector-id> --displa
 
 ### `mcp toolsets update`
 
-Update a toolset's display name, description, or both. c1i derives the update mask from the flags you set. Editing the app entitlement behind the toolset isn't supported here. Outputs pretty JSON.
+Update a toolset's display name, description, or both. c1i derives the update mask from the flags you set. Editing the app entitlement behind the toolset isn't supported here.
 
 **Usage:**
 
@@ -2867,7 +2824,7 @@ c1i mcp toolsets delete <toolset-id> --app-id <app-id> --connector-id <connector
 
 ### `mcp toolsets requestable-connectors`
 
-For a user, list the app and connector ID pairs that have at least one toolset the user can currently request access to. Outputs NDJSON. Unlike most list commands, this endpoint isn't paginated server-side: it returns the full set in one response.
+For a user, list the app and connector ID pairs that have at least one toolset the user can currently request access to. Unlike most list commands, this endpoint isn't paginated server-side: it returns the full set in one response.
 
 **Usage:**
 
@@ -2889,7 +2846,7 @@ Inspect and manage bindings between MCP tools and MCP toolsets (access profiles)
 
 ### `mcp bindings list`
 
-List tool bindings for an MCP toolset. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List tool bindings for an MCP toolset. [Paginates](#pagination-and-limits).
 
 **Usage:**
 
@@ -2921,7 +2878,7 @@ c1i mcp bindings by-tools --app-id <app-id> --connector-id <connector-id> --tool
 
 ### `mcp bindings create`
 
-Bind one or more MCP tools to a toolset. Outputs pretty JSON.
+Bind one or more MCP tools to a toolset.
 
 **Usage:**
 
@@ -3003,7 +2960,7 @@ A classifier is a reusable, ordered rule cascade evaluated first-match-wins. Bin
 
 ### `mcp classifiers list`
 
-List classifiers. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List classifiers. [Paginates](#pagination-and-limits).
 
 ### `mcp classifiers get`
 
@@ -3060,7 +3017,7 @@ c1i mcp classifiers delete <classifier-id>
 
 ### `mcp classifiers bindings list`
 
-List classifier bindings. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List classifier bindings. [Paginates](#pagination-and-limits).
 
 ### `mcp classifiers bindings create`
 
@@ -3090,7 +3047,7 @@ c1i mcp classifiers bindings delete <binding-id>
 
 ### `mcp classifiers templates list`
 
-List classifier templates. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List classifier templates. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
@@ -3165,11 +3122,11 @@ The policy is implicitly created by its first update. Including `rules` in the m
 
 ### `mcp classifiers tool-gates list`
 
-List tool gates. Outputs NDJSON. [Paginates](#pagination-and-limits).
+List tool gates. [Paginates](#pagination-and-limits).
 
 ### `mcp classifiers tool-gates search`
 
-Search tool gates. Outputs NDJSON. [Paginates](#pagination-and-limits).
+Search tool gates. [Paginates](#pagination-and-limits).
 
 | Flag | Description |
 | :--- | :--- |
