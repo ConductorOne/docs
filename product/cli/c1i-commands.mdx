@@ -20,7 +20,7 @@ Run `c1i <command> --help` or `c1i <command> -h` for help with a specific comman
 
 c1i interacts with the C1 API to manage identities, apps, access, policies, automations, MCP servers, and more.
 
-List and search commands output NDJSON, one JSON object per line, and single-object commands output pretty JSON; a command's section notes any other output. See [Output conventions](/product/cli/c1i#output-conventions).
+List and search commands output NDJSON, one JSON object per line. Most other commands output pretty JSON, but some delete and action commands, such as `apps delete` and `tasks approve`, print a one-line confirmation instead. See [Output conventions](/product/cli/c1i#output-conventions) for `auth`, `docs`, and `api` output.
 
 | Command | Description |
 | :--- | :--- |
@@ -56,6 +56,8 @@ List and search commands output NDJSON, one JSON object per line, and single-obj
 | [`completion`](#completion) | Generate a shell completion script for bash, fish, PowerShell, or zsh. |
 
 ## Global flags
+
+Every command accepts these flags.
 
 | Flag | Description |
 | :--- | :--- |
@@ -176,6 +178,10 @@ For step-by-step setup instructions for Claude Code, Cursor, and other agents, s
 
 ## Auth
 
+Log in, check which identity and credential c1i is using, and mint access tokens.
+
+c1i reads credentials from `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, then the OS keyring, then a `0600` file, and caches each access token it mints until it's close to expiry; see [Credential storage](/product/cli/c1i#credential-storage). `auth token` and `mcp gateway` always mint a fresh token. A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once.
+
 | Subcommand | Description |
 | :--- | :--- |
 | `login` | Authenticate via browser or API credentials. |
@@ -195,7 +201,7 @@ Authenticate to C1. Opens a browser for OAuth device flow authorization, or acce
 | `--choose-roles` | Choose the browser-login credential's roles from a menu after approval (needs a terminal). `--choose-roles=false` skips the role question. |
 | `--scoped-role stringArray` | Restrict the browser-login credential to a role, by name (such as `basic-user`) or ID (repeatable). |
 
-A browser login creates a credential with all of your roles; see [Limit the credential to specific roles](/product/cli/c1i#limit-the-credential-to-specific-roles) and [Credential storage](/product/cli/c1i#credential-storage). `--scoped-role` takes a role name or a role ID from [`c1i roles list`](#roles). A name that matches no role you can scope to exits with code 2 before c1i creates your credential. An unknown role ID exits with code 4. `--choose-roles` and `--scoped-role` can't be combined, and neither works with `--client-id` and `--client-secret`. `auth login` rejects `--dry-run` (exit 2), because it can't preview creating a credential.
+A browser login creates a credential with all of your roles; see [Limit the credential to specific roles](/product/cli/c1i#limit-the-credential-to-specific-roles). `--scoped-role` takes a role name or a role ID from [`c1i roles list`](#roles). A name that matches no role you can scope to exits with code 2 before c1i creates your credential. An unknown role ID exits with code 4. `--choose-roles` and `--scoped-role` can't be combined, and neither works with `--client-id` and `--client-secret`. `auth login` rejects `--dry-run` (exit 2), because it can't preview creating a credential.
 
 ### `auth logout`
 
@@ -237,12 +243,6 @@ curl -H "Authorization: Bearer $(c1i auth token)" \
 ```
 
 The token is audience-scoped to the C1 API host.
-
-## Credential storage
-
-c1i reads credentials from `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, then the OS keyring, then a `0600` file under your config directory. It caches the access token it mints until it's close to expiry, so a burst of commands doesn't mint and log a new `client_credentials` grant each time. See [Credential storage](/product/cli/c1i#credential-storage) for each source's location and `C1I_NO_TOKEN_CACHE`.
-
-`auth token` and `mcp gateway` always mint a fresh token. A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once.
 
 ## Roles
 
@@ -293,6 +293,8 @@ c1i users get <user-id>
 ```
 
 ## Apps
+
+Create, inspect, and delete applications, and manage their owners.
 
 | Subcommand | Description |
 | :--- | :--- |
@@ -457,6 +459,8 @@ c1i accounts set-owner <app-user-id> --app-id <app-id> --user-id <user-id>
 
 ## Entitlements
 
+Find, inspect, and create app entitlements, and link entitlements to each other with proxy bindings.
+
 | Subcommand | Description |
 | :--- | :--- |
 | `list` | Search and list application entitlements. |
@@ -607,6 +611,8 @@ c1i grants list --user-id <user-id>
 ```
 
 ## Tasks
+
+List access request tasks and act on them: approve, deny, comment, reassign, or move them through their policy.
 
 | Subcommand | Description |
 | :--- | :--- |
@@ -789,6 +795,8 @@ The action subcommands (`close`, `process`, `reassign`, `reset`, `restart`, `ski
 </Note>
 
 ## Requests
+
+File grant and revoke requests, and track their status.
 
 | Subcommand | Description |
 | :--- | :--- |
