@@ -1337,58 +1337,19 @@ A service principal is an identity; a client credential on it is what a caller a
 | :--- | :--- |
 | `c1i service-principals list` | List service principals. [Paginates](#pagination-and-limits). |
 | `c1i service-principals get <sp-id>` | Get a single service principal by ID. |
-| [`c1i service-principals create`](#service-principals-create) | Create a service principal. |
-| [`c1i service-principals update`](#service-principals-update) | Update a service principal's display name. |
+| `c1i service-principals create --display-name <name>` | Create a service principal. |
+| `c1i service-principals update <sp-id> --display-name <name>` | Update a service principal's display name. |
 | `c1i service-principals delete <sp-id>` | Delete a service principal and all its credentials. Prints a one-line confirmation, not JSON. |
 | `c1i service-principals credentials list <sp-id>` | List a service principal's client credentials. The secret itself is never part of a row — it's returned only once, at creation. [Paginates](#pagination-and-limits). |
-| [`c1i service-principals credentials get`](#service-principals-credentials-get) | Get a single client credential. |
+| `c1i service-principals credentials get <credential-id> --service-principal-id <sp-id>` | Get a single client credential. |
 | [`c1i service-principals credentials create`](#service-principals-credentials-create) | Create a client credential (the secret is shown once). |
-| [`c1i service-principals credentials update`](#service-principals-credentials-update) | Update a client credential's display name. |
-| [`c1i service-principals credentials revoke`](#service-principals-credentials-revoke) | Revoke (delete) a client credential. |
+| `c1i service-principals credentials update <credential-id> --service-principal-id <sp-id> --display-name <name>` | Update a client credential's display name. |
+| `c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>` | Revoke (delete) a client credential. Prints a one-line confirmation, not JSON. |
 | [`c1i service-principals bindings add`](#service-principals-bindings-add) | Bind a subject to a service principal. |
-| [`c1i service-principals bindings list`](#service-principals-bindings-list) | List the service principals a subject is bound to. |
-| [`c1i service-principals bindings delete`](#service-principals-bindings-delete) | Remove a subject's binding to a service principal. |
-
-### `service-principals create`
-
-**Usage:**
-
-```bash
-c1i service-principals create --display-name <name>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--display-name string` | Display name for the new service principal. (Required.) |
-
-### `service-principals update`
-
-**Usage:**
-
-```bash
-c1i service-principals update <sp-id> --display-name <name>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--display-name string` | New display name. |
-
-### `service-principals credentials get`
-
-**Usage:**
-
-```bash
-c1i service-principals credentials get <credential-id> \
-  --service-principal-id <sp-id>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--service-principal-id string` | Owning service principal ID. (Required.) |
+| `c1i service-principals bindings list [subject flags]` | List the service principals a subject is bound to. Takes the same subject flags as `bindings add`. [Paginates](#pagination-and-limits). |
+| `c1i service-principals bindings delete --service-principal-id <sp-id> [subject flags]` | Remove a subject's binding to a service principal. Takes the same flags as `bindings add`. Idempotent; prints a one-line confirmation, not JSON. |
 
 ### `service-principals credentials create`
-
-Create a client credential. The secret is shown once, at creation.
 
 **Usage:**
 
@@ -1403,41 +1364,6 @@ c1i service-principals credentials create <sp-id> --display-name <name> [flags]
 | `--allow-cidr stringArray` | Restrict the credential to a source CIDR (repeatable). |
 | `--expires string` | Time until the credential expires, as a Go duration (for example `720h`); the server accepts the range `(0s, 4320h]` (up to 180 days). |
 | `--require-dpop` | Require DPoP proof-of-possession for token exchange. |
-
-**Example:**
-
-```bash
-c1i service-principals credentials create sp_abc123 --display-name ci --expires 720h
-```
-
-### `service-principals credentials update`
-
-**Usage:**
-
-```bash
-c1i service-principals credentials update <credential-id> \
-  --service-principal-id <sp-id> --display-name <name>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--service-principal-id string` | Owning service principal ID. (Required.) |
-| `--display-name string` | New display name. |
-
-### `service-principals credentials revoke`
-
-Prints a one-line confirmation, not JSON.
-
-**Usage:**
-
-```bash
-c1i service-principals credentials revoke <credential-id> \
-  --service-principal-id <sp-id>
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--service-principal-id string` | Owning service principal ID. (Required.) |
 
 ### `service-principals bindings add`
 
@@ -1463,33 +1389,6 @@ c1i service-principals bindings add --service-principal-id <sp-id> \
 
 Exactly one subject must be given, and an app-scoped subject (`--sso-application-id`, `--authzen-server-id`, `--edge-id`) requires its paired `--*-app-id` flag.
 
-### `service-principals bindings list`
-
-[Paginates](#pagination-and-limits).
-
-**Usage:**
-
-```bash
-c1i service-principals bindings list [subject flags] [flags]
-```
-
-Takes the same subject flags as `bindings add`, plus the standard `--page-size`/`--page-token`/`--limit` pagination flags.
-
-### `service-principals bindings delete`
-
-Idempotent; prints a one-line confirmation, not JSON.
-
-**Usage:**
-
-```bash
-c1i service-principals bindings delete --service-principal-id <sp-id> \
-  [subject flags]
-```
-
-Takes the same flags as `bindings add`.
-
-<Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
-
 ## MCP gateway
 
 Call the C1 MCP gateway directly over its MCP transport — the same handshake an MCP host performs — to verify what a registered server actually exposes. This closes the configure-then-verify loop: register a server, approve its tools, then list or call them here.
@@ -1498,7 +1397,7 @@ Call the C1 MCP gateway directly over its MCP transport — the same handshake a
 | :--- | :--- |
 | `--gateway-url string` | MCP gateway endpoint (default: derived from `--url` by inserting `-mcp` into the host — `https://acme.conductor.one` becomes `https://acme-mcp.conductor.one/v1`). |
 
-Authentication uses your stored c1i credentials — the standard API token is accepted by the gateway, so no extra setup is needed.
+The gateway accepts your stored c1i credentials, so no extra setup is needed.
 
 ### `mcp gateway list-tools`
 
@@ -1526,12 +1425,6 @@ Find tool names and their input schemas with `c1i mcp gateway list-tools --full`
 
 `call` rejects the global `--dry-run` flag.
 
-**Example:**
-
-```bash
-c1i mcp gateway call my_tool --args '{"id":"abc"}'
-```
-
 ## MCP servers
 
 Register, configure, and inspect the MCP servers under a C1 app. C1 models an MCP server as a connector under an app, so you address one with `--app-id` plus its connector ID. Hosted servers run inside C1 from a catalog entry; external servers point at a third-party MCP URL. C1 seals auth secrets server-side, so reads only return `*_configured` booleans.
@@ -1540,7 +1433,7 @@ After you register a server, its tools start in the pending-review state. Approv
 
 | Command | Description |
 | :--- | :--- |
-| [`c1i mcp servers list`](#mcp-servers-list) | List MCP servers registered under an app. |
+| `c1i mcp servers list --app-id <app-id>` | List MCP servers registered under an app. [Paginates](#pagination-and-limits). |
 | [`c1i mcp servers get`](#mcp-servers-get) | Get a single MCP server. |
 | [`c1i mcp servers search`](#mcp-servers-search) | Search MCP servers within an app, with per-server tool counts. |
 | [`c1i mcp servers register`](#mcp-servers-register) | Register a new hosted or external MCP server under an existing app. |
@@ -1554,23 +1447,9 @@ After you register a server, its tools start in the pending-review state. Approv
 | `c1i mcp servers catalog get <catalog-id>` | Get one catalog entry by its catalog ID, including the full `authModes` and `config_schema` that you need to build a `register` request. Each auth mode carries its own `scopes` (required) and `optionalScopes`. |
 | `c1i mcp servers connections list` | List the passthrough-mode (per-user) MCP servers that you can connect to, and whether you currently have an active credential for each. [Paginates](#pagination-and-limits). |
 
-### `mcp servers list`
-
-[Paginates](#pagination-and-limits).
-
-**Usage:**
-
-```bash
-c1i mcp servers list --app-id <app-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--app-id string` | Application ID. (Required.) |
-
 ### `mcp servers get`
 
-Get a single MCP server by its connector ID. Outputs the server object as pretty JSON. An MCP server has no `id` field: its identity is `connectorId`, the value this command takes as its argument and that `mcp servers list` rows emit as `connector_id`.
+An MCP server has no `id` field: its identity is `connectorId`, the value this command takes as its argument and that `mcp servers list` rows emit as `connector_id`.
 
 **Usage:**
 
@@ -1791,30 +1670,12 @@ Manage the MCP tools that C1 discovers from a registered server. Newly discovere
 
 | Command | Description |
 | :--- | :--- |
-| [`c1i mcp tools list`](#mcp-tools-list) | List the MCP tools discovered for a connector. |
-| [`c1i mcp tools get`](#mcp-tools-get) | Get a single MCP tool. |
+| `c1i mcp tools list --app-id <app-id> --connector-id <connector-id>` | List the MCP tools discovered for a connector. [Paginates](#pagination-and-limits). |
+| `c1i mcp tools get <tool-id> --app-id <app-id> --connector-id <connector-id>` | Get a single MCP tool. |
 | [`c1i mcp tools search`](#mcp-tools-search) | Search MCP tools with filters. |
 | [`c1i mcp tools approve`](#mcp-tools-approve) | Approve one or more MCP tools. |
 | [`c1i mcp tools delete`](#mcp-tools-delete) | Soft-delete an MCP tool. |
 | [`c1i mcp tools history`](#mcp-tools-history) | Stream the change history for a single MCP tool, newest first. |
-
-### `mcp tools list`
-
-[Paginates](#pagination-and-limits).
-
-**Usage:**
-
-```bash
-c1i mcp tools list --app-id <app-id> --connector-id <connector-id> [flags]
-```
-
-### `mcp tools get`
-
-**Usage:**
-
-```bash
-c1i mcp tools get <tool-id> --app-id <app-id> --connector-id <connector-id>
-```
 
 ### `mcp tools search`
 
@@ -1883,32 +1744,13 @@ Manage MCP toolsets: admin-curated groupings of tools, each bound to a single ap
 
 | Command | Description |
 | :--- | :--- |
-| [`c1i mcp toolsets list`](#mcp-toolsets-list) | List MCP toolsets for a connector. |
-| [`c1i mcp toolsets get`](#mcp-toolsets-get) | Get a single MCP toolset. |
+| `c1i mcp toolsets list --app-id <app-id> --connector-id <connector-id>` | List MCP toolsets for a connector. [Paginates](#pagination-and-limits). |
+| `c1i mcp toolsets get <toolset-id> --app-id <app-id> --connector-id <connector-id>` | Get a single MCP toolset. |
 | [`c1i mcp toolsets get-by-entitlement`](#mcp-toolsets-get-by-entitlement) | Resolve a toolset by its app entitlement ID. |
 | [`c1i mcp toolsets create`](#mcp-toolsets-create) | Create an MCP toolset. |
 | [`c1i mcp toolsets update`](#mcp-toolsets-update) | Update a toolset's display name, description, or both. |
-| [`c1i mcp toolsets delete`](#mcp-toolsets-delete) | Soft-delete an MCP toolset. |
+| `c1i mcp toolsets delete <toolset-id> --app-id <app-id> --connector-id <connector-id>` | Soft-delete an MCP toolset. |
 | `c1i mcp toolsets requestable-connectors <user-id>` | For a user, list the app and connector ID pairs that have at least one toolset the user can currently request access to. Unlike most list commands, this endpoint isn't paginated server-side: it returns the full set in one response. |
-
-### `mcp toolsets list`
-
-[Paginates](#pagination-and-limits).
-
-**Usage:**
-
-```bash
-c1i mcp toolsets list --app-id <app-id> --connector-id <connector-id> [flags]
-```
-
-### `mcp toolsets get`
-
-**Usage:**
-
-```bash
-c1i mcp toolsets get <toolset-id> --app-id <app-id> \
-  --connector-id <connector-id>
-```
 
 ### `mcp toolsets get-by-entitlement`
 
@@ -1952,41 +1794,17 @@ c1i mcp toolsets update <toolset-id> --app-id <app-id> \
 | `--display-name string` | New display name (omit to leave unchanged). |
 | `--description string` | New description (omit to leave unchanged). |
 
-### `mcp toolsets delete`
-
-**Usage:**
-
-```bash
-c1i mcp toolsets delete <toolset-id> --app-id <app-id> \
-  --connector-id <connector-id>
-```
-
 ## MCP bindings
 
 Inspect and manage bindings between MCP tools and MCP toolsets (access profiles): which tools are members of which toolset. This is a different object from an entitlement proxy binding (entitlement to entitlement), which you manage with [`c1i entitlements proxy-bindings`](#entitlements-proxy-bindings). Every command requires `--app-id` and `--connector-id` to identify the server.
 
 | Command | Description |
 | :--- | :--- |
-| [`c1i mcp bindings list`](#mcp-bindings-list) | List tool bindings for an MCP toolset. |
+| `c1i mcp bindings list --app-id <app-id> --connector-id <connector-id> --toolset-id <toolset-id>` | List the tool bindings of an MCP toolset (access profile). [Paginates](#pagination-and-limits). |
 | [`c1i mcp bindings by-tools`](#mcp-bindings-by-tools) | List the toolsets each given tool is bound to. |
 | [`c1i mcp bindings create`](#mcp-bindings-create) | Bind one or more MCP tools to a toolset. |
 | [`c1i mcp bindings delete`](#mcp-bindings-delete) | Remove one or more MCP tools from a toolset. |
 | [`c1i mcp bindings history`](#mcp-bindings-history) | Stream binding-change history for a toolset or a tool. |
-
-### `mcp bindings list`
-
-[Paginates](#pagination-and-limits).
-
-**Usage:**
-
-```bash
-c1i mcp bindings list --app-id <app-id> --connector-id <connector-id> \
-  --toolset-id <toolset-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--toolset-id string` | MCP toolset (access profile) ID. (Required.) |
 
 ### `mcp bindings by-tools`
 
@@ -2061,28 +1879,26 @@ A classifier is a reusable, ordered rule cascade evaluated first-match-wins. Bin
 | :--- | :--- |
 | `c1i mcp classifiers list` | List classifiers. [Paginates](#pagination-and-limits). |
 | `c1i mcp classifiers get <classifier-id>` | Get a classifier by ID. |
-| [`c1i mcp classifiers create`](#mcp-classifiers-create) | Create a classifier from JSON. |
+| [`c1i mcp classifiers create`](#mcp-classifiers-create) | Create a named, reusable classifier from JSON. |
 | [`c1i mcp classifiers update`](#mcp-classifiers-update) | Update selected classifier fields from a JSON object. |
 | `c1i mcp classifiers delete <classifier-id>` | Delete a classifier. |
 | `c1i mcp classifiers bindings list` | List classifier bindings. [Paginates](#pagination-and-limits). |
 | [`c1i mcp classifiers bindings create`](#mcp-classifiers-bindings-create) | Bind a classifier to an enforcement surface. |
 | `c1i mcp classifiers bindings delete <binding-id>` | Delete a classifier binding. |
-| [`c1i mcp classifiers templates list`](#mcp-classifiers-templates-list) | List classifier templates. |
-| [`c1i mcp classifiers templates get`](#mcp-classifiers-templates-get) | Get a classifier template revision. |
+| `c1i mcp classifiers templates list [--latest-only]` | List classifier templates; `--latest-only` returns only the latest revision of each. [Paginates](#pagination-and-limits). |
+| `c1i mcp classifiers templates get <template-id> [--template-version <version>]` | Get a classifier template revision (default: the latest version). |
 | [`c1i mcp classifiers templates instantiate`](#mcp-classifiers-templates-instantiate) | Instantiate a template into a tenant-owned, editable classifier. |
 | [`c1i mcp classifiers templates add-rule`](#mcp-classifiers-templates-add-rule) | Insert one rule from a template into a classifier. |
 | `c1i mcp classifiers policy show` | Show the tenant's singleton agent classifier policy. |
 | [`c1i mcp classifiers policy update`](#mcp-classifiers-policy-update) | Update selected singleton policy fields from JSON. |
 | `c1i mcp classifiers tool-gates list` | List tool gates. [Paginates](#pagination-and-limits). |
-| [`c1i mcp classifiers tool-gates search`](#mcp-classifiers-tool-gates-search) | Search tool gates. |
+| `c1i mcp classifiers tool-gates search [--query <text>]` | Search tool gates by text; without `--query`, it returns all tool gates. [Paginates](#pagination-and-limits). |
 | `c1i mcp classifiers tool-gates get <tool-gate-id>` | Get a tool gate by ID. |
-| [`c1i mcp classifiers tool-gates create`](#mcp-classifiers-tool-gates-create) | Create a tool gate from JSON. |
+| [`c1i mcp classifiers tool-gates create`](#mcp-classifiers-tool-gates-create) | Create a tool gate from a complete JSON request object. |
 | [`c1i mcp classifiers tool-gates update`](#mcp-classifiers-tool-gates-update) | Update selected tool-gate fields from a JSON object. |
 | `c1i mcp classifiers tool-gates delete <tool-gate-id>` | Delete a tool gate. |
 
 ### `mcp classifiers create`
-
-Create a named, reusable classifier.
 
 **Usage:**
 
@@ -2126,26 +1942,6 @@ c1i mcp classifiers bindings create --body-file <file>
 
 `surface` and `classifierId` are required; `targetId` identifies the applicable agent or gateway target when the selected surface uses one.
 
-### `mcp classifiers templates list`
-
-[Paginates](#pagination-and-limits).
-
-| Flag | Description |
-| :--- | :--- |
-| `--latest-only` | Return only the latest revision of each template. |
-
-### `mcp classifiers templates get`
-
-**Usage:**
-
-```bash
-c1i mcp classifiers templates get <template-id> [flags]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--template-version string` | Template version (default: latest). |
-
 ### `mcp classifiers templates instantiate`
 
 **Usage:**
@@ -2176,8 +1972,6 @@ c1i mcp classifiers templates add-rule <classifier-id> <template-id> [flags]
 
 ### `mcp classifiers policy update`
 
-Update selected fields of the singleton agent classifier policy from a JSON object.
-
 **Usage:**
 
 ```bash
@@ -2191,17 +1985,7 @@ c1i mcp classifiers policy update --body-file <file> --update-mask <fields>
 
 The policy is implicitly created by its first update. Including `rules` in the mask replaces the entire first-match-wins cascade with the order supplied.
 
-### `mcp classifiers tool-gates search`
-
-[Paginates](#pagination-and-limits).
-
-| Flag | Description |
-| :--- | :--- |
-| `--query string` | Text to search for (default: all tool gates). |
-
 ### `mcp classifiers tool-gates create`
-
-Create a tool gate from a complete JSON request object.
 
 **Usage:**
 
@@ -2255,14 +2039,8 @@ c1i api --path <path> [flags]
 **Examples:**
 
 ```bash
-# GET request
-c1i api --path /api/v1/apps
-
 # POST request — passing --body switches the method to POST automatically
 c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}'
-
-# Paginate through results as NDJSON
-c1i api --path /api/v1/apps --paginate
 
 # Paginate a POST search endpoint
 c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate
@@ -2294,9 +2072,6 @@ c1i users list --limit 5
 
 # Cap a wide query — useful for cost control or quick previews
 c1i tasks list --state open --limit 25
-
-# --limit also works with the raw api command, but only with --paginate
-c1i api --path /api/v1/search/tasks --body '{"taskStates":["TASK_STATE_OPEN"]}' --paginate --limit 10
 ```
 
 `c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
