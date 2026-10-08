@@ -29,7 +29,9 @@ role permissions.
 
   <Step>
     Grant the integration Employee read access. For the v2 API, the credential
-    must include `personio:persons:read`.
+    must include `personio:persons:read`. It must also be able to read each
+    person's employments (`GET /v2/persons/{id}/employments`); if that call is
+    denied, the sync fails.
   </Step>
 
   <Step>
@@ -82,8 +84,12 @@ role permissions.
 - Each person is enriched with one employment: an active, onboarding, or
   on-leave one in preference to any other, and the most recent by start date
   among those.
-- If employment enrichment fails for one person, the person is still emitted
-  with person-level fields.
+- If the employments lookup fails for a person, the sync fails instead of
+  syncing that person without employment fields, so a lookup error can't look
+  like a change to `c1_personio_raw_employment_status` or any other
+  employment field. Transient server errors are retried first. The only
+  exception is a person deleted during the sync, who syncs with person-level
+  fields only.
 - The following employment fields sync as a human-readable display name
   resolved via a secondary lookup against Personio, instead of the raw
   Personio ID:
