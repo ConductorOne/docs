@@ -1,0 +1,324 @@
+---
+title: Set up the Google Ads MCP server
+description: Configure Google Cloud and Google Ads for per-user OAuth, then register the Google Ads MCP server in C1 and govern its campaign, reporting, and budget tools.
+og:title: Set up the Google Ads MCP server
+og:description: Configure Google Cloud and Google Ads for per-user OAuth, then register the Google Ads MCP server in C1 and govern its campaign, reporting, and budget tools.
+sidebarTitle: Google Ads
+---
+
+{/* Editor Refresh: 2026-10-09 */}
+
+<Note>
+**Activation required.** AI access management must be enabled for your tenant before you can use it. To get started, [contact the C1 support team](mailto:support@c1.ai) for a walkthrough.
+</Note>
+
+Set up the Google Ads MCP server to govern how AI clients report on and change your Google Ads campaigns, ad groups, ads, keywords, and budgets. You configure a Google Cloud project, prepare the Google Ads account, and then register the server in C1.
+
+Google Ads uses **per-user OAuth**. Each person authorizes with their own Google account, so every tool call runs under that user's Google Ads identity and can reach only the accounts and access level that user already has.
+
+<Note>
+This page covers the MCP server, which lets AI clients call Google Ads tools. To sync Google Ads users, accounts, and roles into C1 for access reviews, see the [Google Ads connector](/baton/googleads) instead.
+</Note>
+
+## How C1 connects to Google Ads
+
+C1 hosts the Google Ads MCP server, so your users' AI clients only ever see MCP tools. They never call Google Ads directly. When an AI client calls one of these tools, C1 makes the matching request to the Google Ads API with the calling user's OAuth token, then returns the result to the AI client.
+
+Each request depends on two things you set up in this guide:
+
+| What | Where you set it up | Why it matters |
+| :--- | :--- | :--- |
+| **Google Cloud project** | Google Cloud console | Owns the OAuth client. Google grants Google Ads API access to this project, and its **access level** decides whether calls can reach production accounts and how many operations run per day. |
+| **Google Ads account access** | Google Ads | Each user who authorizes must have access to the Google Ads account the server targets. Their Google Ads access level limits what their tool calls can change. |
+
+<Note>
+Google retired Google Ads API developer tokens on September 9, 2026. API access now belongs to the Google Cloud project that owns your OAuth client, so you don't need a developer token or the Google Ads **API Center** to set up this server. See Google's [developer token sunset](https://developers.google.com/google-ads/api/docs/get-started/dev-token) notice.
+</Note>
+
+## Before you begin
+
+Gather the following access before you start. The Google Cloud and Google Ads steps can be done by different people.
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- Access to the [Google Cloud console](https://console.cloud.google.com/) with permission to create or select a project, enable APIs, and manage its Google Ads API access level. The **Owner**, **Editor**, **Quota Administrator**, and **Service Usage Admin** roles include the access-level permissions.
+- **Admin** access to the Google Ads account you want to connect, or to the manager account above it, so you can add users.
+- Every user who will authorize must have **2-Step Verification** turned on for their Google account. Google requires it to issue Google Ads API tokens, and some accounts must sign in with a **passkey**. See Google's [Security requirements for user authentication](https://developers.google.com/google-ads/api/docs/oauth/security-requirements).
+
+<Note>
+If you don't see **Google Ads** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Set up Google Cloud
+
+Google Ads uses the same Google Cloud project and OAuth client as C1's other Google MCP servers, but it doesn't use a quota project. If you've already followed [Set up a Google Cloud project for MCP servers](/product/admin/mcp-server/google-cloud-project-setup), reuse that project and OAuth client. Then enable the Google Ads API and request production access, both described below.
+
+### Create or select a Google Cloud project
+
+Pick the project that owns your OAuth client. Google ties Google Ads API access to this project, so use the same project for the API and the OAuth client.
+
+<Steps>
+<Step>
+Sign in to the [Google Cloud console](https://console.cloud.google.com/).
+</Step>
+<Step>
+Create a project for C1, or select the project you already use for C1's Google MCP servers.
+</Step>
+</Steps>
+
+### Enable the Google Ads API
+
+Enabling the API gives the project **Test** access to Google Ads automatically.
+
+<Steps>
+<Step>
+Go to **APIs & Services** > **Library**, search for **Google Ads API**, and select **Enable**. You can also open the [enable flow](https://console.cloud.google.com/flows/enableapi?apiid=googleads.googleapis.com) directly.
+</Step>
+</Steps>
+
+To enable it from the command line instead:
+
+```bash
+gcloud services enable googleads.googleapis.com --project=YOUR_PROJECT_ID
+```
+
+### Request production access for the project
+
+A project with **Test** access can call only Google Ads test accounts. To use the server with accounts that serve real ads, request a higher access level on the **Google Ads API Overview** page. Google offers only the next level up, so a project moves from Test to Explorer, then to Basic, then to Standard.
+
+| Access level | Reaches | Daily operations | How Google approves it |
+| :--- | :--- | :--- | :--- |
+| **Test** | Test accounts only | 15,000 | Granted when you enable the API |
+| **Explorer** | Test and production accounts | 2,880 against production accounts; 15,000 against test accounts | Usually approved automatically |
+| **Basic** | Test and production accounts | 15,000 | Requires [brand verification](https://developers.google.com/google-ads/api/docs/api-policy/brand-verification) first, then reviewed automatically |
+| **Standard** | Test and production accounts | Unlimited | Manual review, typically about 10 business days |
+
+Explorer access covers every tool this server exposes. It restricts only features this server doesn't use, such as account creation, user management, keyword planning, and billing. Continue to Basic, and then Standard, if your users will run more operations per day than Explorer allows.
+
+<Steps>
+<Step>
+Open the [Google Ads API Overview](https://console.cloud.google.com/google/ads-apis/overview) page for your project and confirm the current access level.
+</Step>
+<Step>
+Expand **Upgrade access level** and confirm the **Next access level** shown is the one you want.
+</Step>
+<Step>
+Select **Apply for access**. For Standard access, the button is **Start application**, followed by Google's review questions.
+</Step>
+</Steps>
+
+The Overview page shows the new access level once Google approves the application. For details on each level, see Google's [Access levels and permissible use](https://developers.google.com/google-ads/api/docs/api-policy/access-levels) documentation.
+
+<Note>
+Don't apply for a developer token or API access from the **API Center** in a Google Ads manager account. Google no longer processes applications made there.
+</Note>
+
+### Configure the OAuth consent screen
+
+The consent screen controls who can authorize the app and which scope they grant.
+
+<Steps>
+<Step>
+Go to **APIs & Services** > **OAuth consent screen** (labeled **Google Auth Platform** on newer projects).
+</Step>
+<Step>
+Choose the audience:
+- **Internal** limits authorization to accounts in your Google Workspace organization and skips Google's app verification. Use it when every user signs in with a Workspace account.
+- **External** allows any Google account. Use it if users sign in to Google Ads with accounts outside your Workspace.
+</Step>
+<Step>
+On the **Data Access** page, add the scope `https://www.googleapis.com/auth/adwords`.
+</Step>
+</Steps>
+
+<Note>
+For an **External** app that Google hasn't verified, add each user as a **test user** on the consent screen. Otherwise they see a "Google hasn't verified this app" screen and can't authorize. To remove that limit, complete Google's [OAuth app verification](https://support.google.com/cloud/answer/13461325).
+</Note>
+
+### Create the OAuth client
+
+Create a web application OAuth client so C1 can send each user through Google's sign-in.
+
+<Steps>
+<Step>
+Go to **APIs & Services** > **Credentials** > **Create Client** > **Web application**. For details, see Google's [Manage OAuth Clients](https://support.google.com/cloud/answer/15549257) documentation.
+</Step>
+<Step>
+Under **Authorized redirect URIs**, add exactly the URI that matches your C1 tenant's domain:
+
+- Default instance: `https://accounts.conductor.one/auth/callback`
+- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
+
+The value must match exactly. Even a trailing-slash difference causes a `redirect_uri_mismatch` error.
+</Step>
+<Step>
+Select **Create**, then copy the **Client ID** and **Client secret**. Google shows the client secret only once.
+</Step>
+</Steps>
+
+If your users are on Google Workspace, a Workspace administrator may also need to allow the OAuth client under **Admin Console** > **Security** > **Access and data control** > **API controls** > **App access control**.
+
+<Note>
+Unlike some other Google MCP servers, Google Ads doesn't ask for a **Google Cloud Quota Project ID**. Google Ads API access and limits follow the project that owns the OAuth client, so your users don't need the **Service Usage Consumer** role for this server.
+</Note>
+
+## Set up Google Ads
+
+Next, collect the Google Ads account IDs C1 needs and confirm that every user who will authorize can reach the account.
+
+### Find your Google Ads customer ID
+
+The customer ID identifies the Google Ads account the server works with.
+
+<Steps>
+<Step>
+Sign in to [Google Ads](https://ads.google.com/) and open the account you want to connect.
+</Step>
+<Step>
+Copy the 10-digit customer ID shown in the top-right corner, under the account name.
+</Step>
+<Step>
+Remove the hyphens. For example, enter `123-456-7890` as `1234567890`.
+</Step>
+</Steps>
+
+### Decide whether users connect through a manager account
+
+A Google Ads **manager account** (also called an MCC) manages other Google Ads accounts. How your users reach the target account determines whether you need a **Login Customer ID**:
+
+- **Users have direct access** to the account. Leave **Login Customer ID (MCC)** blank.
+- **Users have access through a manager account** that the target account is linked under. Set **Login Customer ID (MCC)** to the manager account's 10-digit customer ID, without hyphens.
+
+C1 applies the Login Customer ID to every user of the server, so all of your users need the same access path. If the setting doesn't match how a user reaches the account, their calls fail with `USER_PERMISSION_DENIED`.
+
+You don't need a manager account to use the Google Ads API. Use one only if you already manage several accounts through it.
+
+### Give each user access to the Google Ads account
+
+Each user's tool calls run with that user's own Google Ads permissions. Add anyone who doesn't already have access to the account, or to the manager account above it.
+
+<Steps>
+<Step>
+In Google Ads, go to **Admin** > **Access and security**.
+</Step>
+<Step>
+Select the **+** (plus) button.
+</Step>
+<Step>
+Enter the user's email address and choose an access level:
+- **Read only** for users who only need reporting and list tools.
+- **Standard** or **Admin** for users who need to create, update, or remove campaigns, ad groups, ads, keywords, or budgets.
+</Step>
+<Step>
+Select **Send invitation**. The user must accept the invitation before they can authorize C1.
+</Step>
+</Steps>
+
+Google Ads enforces these access levels on every API call. For example, a **Read only** user's write tool calls fail even if you approve those tools in C1. For more, see Google's [Manage access to your Google Ads account](https://support.google.com/google-ads/answer/6372672) and [About access levels in your Google Ads account](https://support.google.com/google-ads/answer/9978556) documentation.
+
+### Optional: Use a Google Ads test account
+
+If your project still has **Test** access, the server can reach only Google Ads test accounts. Test accounts don't serve ads, so you can use one to validate your setup while Google reviews your access application.
+
+<Steps>
+<Step>
+Open Google's [create a test manager account](https://ads.google.com/nav/selectaccount?sf=mt) page and sign in with a Google account that isn't linked to a production Google Ads manager account.
+</Step>
+<Step>
+From the test manager account, select **Accounts** > **+** > **Create new account** to create a test client account.
+</Step>
+<Step>
+Use the test client account's customer ID as the **Google Ads Customer ID** when you register the server, and the test manager account's ID as the **Login Customer ID (MCC)**.
+</Step>
+</Steps>
+
+For more, see Google's [Test accounts](https://developers.google.com/google-ads/api/docs/best-practices/test-accounts) documentation.
+
+## Google Ads OAuth scope
+
+The Google Ads API uses a single OAuth scope for both reading and writing:
+
+```text
+https://www.googleapis.com/auth/adwords
+```
+
+C1 requests this scope when each user authorizes. Google doesn't offer a narrower read-only scope for Google Ads. To keep users read-only, give them **Read only** access in Google Ads, and approve only the read tools in C1.
+
+## Register the Google Ads MCP server in C1
+
+With your Google Cloud project and Google Ads account ready, register the server and enter its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Google Ads** from the catalog.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your OAuth client's **Client ID** and **Client secret**, plus the scope `https://www.googleapis.com/auth/adwords`.
+</Step>
+<Step>
+Fill in the Google Ads settings:
+
+| Field | Required | Value |
+| :--- | :--- | :--- |
+| **Google Ads Customer ID** | Yes | The 10-digit customer ID of the account to connect, without hyphens. |
+| **Login Customer ID (MCC)** | Only through a manager account | The manager account's 10-digit customer ID, without hyphens. Leave blank if users have direct access. |
+</Step>
+<Step>
+Save your changes. The first time a user calls a Google Ads tool from their AI client, C1 prompts them to connect their Google account.
+</Step>
+</Steps>
+
+C1 now sends each user's Google Ads tool calls to the account you configured, under that user's own Google Ads access.
+
+## Tools the Google Ads MCP server provides
+
+The server exposes read tools for reporting and write tools for changing the account. Each user's Google Ads access level still limits what their calls can do.
+
+| Tool group | What it does |
+| :--- | :--- |
+| **List tools** | List campaigns, ad groups, ads, keywords, and campaign budgets. |
+| **Run a GAQL query** | Runs a [Google Ads Query Language (GAQL)](https://developers.google.com/google-ads/api/docs/query/overview) query for custom reports and metrics. |
+| **Mutate tools** | Create, update, or remove campaigns, ad groups, ads, and keywords. |
+| **Mutate campaign budgets** | Create, update, or remove campaign budgets. This tool changes how much the account can spend. |
+
+Review the write tools, and the budget tool in particular, before you approve them.
+
+## How Google Ads credentials are shared
+
+Each user authorizes with their own Google account, so tool calls run under that user's Google Ads identity and access level. The OAuth client ID, client secret, customer ID, and Login Customer ID are shared settings on the server. They apply to every user.
+
+C1 also records each call in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Google Ads. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCPs** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Google Ads tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Google Ads setup when an approved user successfully calls a Google Ads tool from their AI client.
+</Note>
+
+## Manage your Google Ads credentials
+
+- **Rotate the OAuth client secret** in your Google Cloud project under **APIs & Services** > **Credentials**, then update the secret on the server's authentication settings in C1.
+- **Change a user's Google Ads access** in Google Ads under **Admin** > **Access and security**. The change applies to that user's next tool call.
+- **An individual user can revoke access at any time** from their Google Account's linked apps page. See Google's [Manage third-party apps & services with access to your account](https://support.google.com/accounts/answer/3466521) documentation.
+
+## Troubleshoot Google Ads MCP server errors
+
+Most setup problems show up as an error on a user's first tool call.
+
+| Symptom | Cause | Fix |
+| :--- | :--- | :--- |
+| `CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION` or `ACTION_NOT_PERMITTED` | The project has **Test** access and the customer ID is a production account. | [Request production access for the project](#request-production-access-for-the-project), or use a [test account](#optional-use-a-google-ads-test-account). |
+| Explorer or Basic access application is rejected | Google currently rejects these applications for projects on the Google Cloud Free Trial or with a suspended or disabled billing account. | Upgrade the project's billing account to a paid tier, or apply from a different project, then try again. See Google's [developer token sunset](https://developers.google.com/google-ads/api/docs/get-started/dev-token) notice for the current status. |
+| `SERVICE_DISABLED` | The Google Ads API isn't enabled in the project that owns the OAuth client. | [Enable the Google Ads API](#enable-the-google-ads-api). |
+| `USER_PERMISSION_DENIED` | The user reaches the account through a manager account, but **Login Customer ID (MCC)** is blank or set to a different manager account. | Set **Login Customer ID (MCC)** to the manager account the user has access through. See [Decide whether users connect through a manager account](#decide-whether-users-connect-through-a-manager-account). |
+| A permission error for one user while others succeed | That user doesn't have access to the Google Ads account, or hasn't accepted the invitation. | [Give each user access to the Google Ads account](#give-each-user-access-to-the-google-ads-account). |
+| `TWO_STEP_VERIFICATION_NOT_ENROLLED`, or Google prompts the user to set up 2-Step Verification or a passkey | The user's Google account doesn't meet Google's sign-in requirements for the Google Ads API. | Have the user turn on 2-Step Verification, or create a passkey if Google prompts for one, then reconnect their Google account. |
+| `redirect_uri_mismatch` during authorization | The OAuth client's redirect URI doesn't match your C1 tenant. | Set it to exactly `https://accounts.conductor.one/auth/callback`, or `https://accounts.c1eu.ai/auth/callback` for the EU data residency instance. |
+| "Google hasn't verified this app" blocks sign-in | The consent screen is **External**, unverified, and the user isn't a test user. | Add the user as a **test user**, or complete Google's app verification. |
+| `AUTHORIZATION_ERROR` on production accounts after you upgraded the project's access level | A known Google issue affects some projects that were upgraded after September 9, 2026. | Apply for Explorer access from a new Google Cloud project. See Google's [developer token sunset](https://developers.google.com/google-ads/api/docs/get-started/dev-token) notice for the current status. |
+| Calls fail after many requests in a day | The project reached its daily operation limit. Explorer allows 2,880 operations per day against production accounts. | Apply for the next access level on the [Google Ads API Overview](https://console.cloud.google.com/google/ads-apis/overview) page. |
