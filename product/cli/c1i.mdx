@@ -6,7 +6,7 @@ description: Install c1i and connect it to your C1 tenant to automate C1 from sc
 sidebarTitle: "Install c1i"
 ---
 
-{/* Editor Refresh: 2026-10-06 */}
+{/* Editor Refresh: 2026-10-09 */}
 
 Install c1i, point it at your tenant, and log in once; every command after that uses the stored credential.
 
@@ -48,7 +48,7 @@ brew install conductorone/baton/c1i
 # Go
 go install github.com/ConductorOne/c1i@latest
 
-# Container image (tags omit the leading "v", for example 0.9.0)
+# Container image (tags omit the leading "v", for example 0.9.1)
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
 
@@ -163,7 +163,7 @@ c1i reads credentials from the first source that has them, in this order:
 
 `c1i auth login` writes to the OS keyring when it can and falls back to the file. `c1i auth status` reports which source supplied the active credentials.
 
-To avoid minting a new access token for every command, c1i caches it in the OS keyring, or in a `0600` file under `tokens/` in your config directory on Unix-like hosts without a keyring. `c1i auth token` always mints a fresh token. Set `C1I_NO_TOKEN_CACHE=1` to turn the cache off.
+To avoid minting a new access token for every command, c1i caches it in the OS keyring, or in a `0600` file under `tokens/` in your config directory on Unix-like hosts without a keyring. On those hosts, each write to the file cache deletes expired or unusable token files left in that folder. `c1i auth token` always mints a fresh token. Set `C1I_NO_TOKEN_CACHE=1` to turn the cache off.
 
 ## Explore the API without credentials
 
@@ -182,6 +182,39 @@ c1i docs endpoint /api/v1/users
 # Fetch a full documentation page by its path
 c1i docs page product/admin/campaigns
 ```
+
+The endpoint commands read the public API spec, which c1i caches for 24 hours. See [Docs commands](/product/cli/c1i-commands#docs) for the spec source and cache location.
+
+## Uninstall c1i
+
+Removing the c1i binary leaves its configuration, credentials, and caches behind. Remove them to finish the uninstall:
+
+- `~/.c1i/`: the OpenAPI spec cache.
+- `~/.c1i.yaml`: the config file.
+- `<UserConfigDir>/c1i/`: the file-fallback credentials (`credentials/`) and the access-token file cache (`tokens/`). See [Credential storage](#credential-storage) for each OS's config directory.
+- OS keyring entries: credentials under `c1i/<host>`, and cached access tokens under `com.conductorone.c1i.tokens`. Older releases stored a `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
+
+c1i can't list keyring entries or keep track of the tenants you've logged in to, so run `c1i auth logout` once for each tenant before you remove the binary. If `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` are both set, unset them first. Otherwise logout still removes the stored credentials, but drops the cached token for the environment-variable credentials instead of theirs.
+
+```shell
+c1i auth logout --url example.conductor.one
+```
+
+Logout also drops the cached token for the credentials stored now. A token cached under credentials you have since replaced stays in the keyring. To remove keyring entries by hand, replace `<host>` with a tenant's host, such as `example.conductor.one`, or with `<name>` for an entry an older release stored:
+
+```shell
+# macOS: each call deletes one item; repeat until it reports "could not be found"
+security delete-generic-password -s 'c1i/<host>'
+security delete-generic-password -s com.conductorone.c1i.tokens
+
+# Linux (Secret Service): each call deletes every matching item
+secret-tool clear service 'c1i/<host>'
+secret-tool clear service com.conductorone.c1i.tokens
+```
+
+On Windows, open **Credential Manager** > **Windows Credentials** and remove `c1i/<host>:client_id`, `c1i/<host>:client_secret`, and every `com.conductorone.c1i.tokens:` entry. To find which hosts you have, search for `c1i` in Keychain Access on macOS, Seahorse on Linux, or Credential Manager on Windows.
+
+Leave `~/.sigstore/root/` in place. `c1i upgrade` uses it to verify releases, and other Sigstore tools share it.
 
 ## Output conventions
 
