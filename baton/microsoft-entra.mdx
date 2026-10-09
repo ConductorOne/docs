@@ -69,7 +69,7 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | set_manager | `user_id` (string, required)<br/>`manager_identifier` (string, optional) | Sets or updates a user's manager relationship. Accepts manager ID, UPN, or Employee ID. Leave manager_identifier empty to remove the current manager. |
 | check_upn | `proposed_upn` (string, required) | Checks if a User Principal Name (UPN) is available. If taken, finds an available UPN by appending incrementing numbers. |
 | update_profile | `user_id` (string, required)<br/>Plus optional profile fields | Updates user profile attributes including mail, displayName, jobTitle, employeeId, department, companyName, country, and extensionAttribute1 through extensionAttribute15. |
-| create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner<br/>`userMembers` (resource ID list, optional): initial group members | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership. Requires the `Group.Create` permission. |
+| create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner; must be a user resource<br/>`userMembers` (resource ID list, optional): initial group members; must be user resources. `owner` and `userMembers` bind at most 20 relationships combined — Microsoft Graph's limit for group creation. | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership; `microsoft_365` is unavailable when `security-groups-only` is enabled. If a principal is not a user, or the 20-relationship limit is exceeded, the action fails without creating anything — retry within the limit and add the remaining members after the group exists. Returns `resource` (the new group), `entitlements` (its `owner` and `member` entitlements), and grants for memberships bound at create time, except members excluded by `skip-ad-groups` or whose on-prem status cannot be determined during creation. Requires the `Group.Create` permission. |
 | revoke_sessions | `user_id` (string, required) | Revokes all active sign-in sessions for a user by invalidating their refresh tokens, forcing re-authentication (`POST /users/{id}/revokeSignInSessions`). Refresh tokens are invalidated immediately, but existing access tokens can remain valid for up to ~1 hour unless Continuous Access Evaluation (CAE) is enabled. Requires the `User.RevokeSessions.All` permission. |
 | revoke_mfa | `user_id` (string, required) | Deletes a user's registered MFA (authentication) methods, forcing re-registration at next sign-in. Lists the user's methods and deletes each deletable one; password methods are skipped. Graph refuses to delete the user's default method while other methods remain (HTTP 400), so MFA may not be fully revocable in one invocation — per-method failures are reported and do not abort the action. Returns `success` (true only if every deletable method was deleted), `deleted_count`, `failed_count`, `skipped_count`, and per-method `results`. Requires the `UserAuthenticationMethod.ReadWrite.All` permission. |
 
@@ -353,6 +353,11 @@ Paste the client secret into the **Entra client secret** field.
    <Warning>Toggling this setting on an existing connection will cause C1 to add or remove previously-synced enterprise applications and their associated entitlements and grants on the next sync to reflect the new filter.</Warning>
 </Step>
 <Step>
+**Optional.** Click to enable **Sync application permissions of enterprise applications** to sync app roles granted to applications, such as Microsoft Graph application permissions. Requires the Directory.Read.All permission. Applications excluded by **Skip enterprise applications without assignments** won't show their permissions. The permissions appear on each application's **Access** tab, as entitlements of the API that grants them (for example, Microsoft Graph).
+
+   <Warning>Toggling this setting on an existing connection will cause C1 to add or remove these entitlements and grants on the next sync.</Warning>
+</Step>
+<Step>
 Click **Save**.
 </Step>
 <Step>
@@ -436,6 +441,11 @@ Upload your PEM-encoded private key file (.pem or .key) in the **Client Certific
    <Warning>Toggling this setting on an existing connection will cause C1 to add or remove previously-synced enterprise applications and their associated entitlements and grants on the next sync to reflect the new filter.</Warning>
 </Step>
 <Step>
+**Optional.** Click to enable **Sync application permissions of enterprise applications** to sync app roles granted to applications, such as Microsoft Graph application permissions. Requires the Directory.Read.All permission. Applications excluded by **Skip enterprise applications without assignments** won't show their permissions. The permissions appear on each application's **Access** tab, as entitlements of the API that grants them (for example, Microsoft Graph).
+
+   <Warning>Toggling this setting on an existing connection will cause C1 to add or remove these entitlements and grants on the next sync.</Warning>
+</Step>
+<Step>
 Click **Save**.
 </Step>
 <Step>
@@ -508,6 +518,11 @@ Specify the ID of the Entra tenant you're integrating in the **Entra tenant ID**
 **Optional.** Click to enable **Skip enterprise applications without assignments** to exclude enterprise applications that have no app role assignments from the sync. This can substantially reduce sync output in tenants that have accumulated many auto-registered service principals.
 
    <Warning>Toggling this setting on an existing connection will cause C1 to add or remove previously-synced enterprise applications and their associated entitlements and grants on the next sync to reflect the new filter.</Warning>
+</Step>
+<Step>
+**Optional.** Click to enable **Sync application permissions of enterprise applications** to sync app roles granted to applications, such as Microsoft Graph application permissions. Requires the Directory.Read.All permission. Applications excluded by **Skip enterprise applications without assignments** won't show their permissions. The permissions appear on each application's **Access** tab, as entitlements of the API that grants them (for example, Microsoft Graph).
+
+   <Warning>Toggling this setting on an existing connection will cause C1 to add or remove these entitlements and grants on the next sync.</Warning>
 </Step>
 <Step>
 Click **Login with OAuth**. 
@@ -631,6 +646,11 @@ stringData:
   # Optional: include if you want to connect to a domain other than graph.microsoft.com
   # BATON_GRAPH_DOMAIN: <Microsoft Graph API domain>
 
+  # Optional: set to "china" for tenants in the 21Vianet-operated cloud. Selects the
+  # Entra ID login authority, Graph domain, Exchange Online host and portal links for
+  # that cloud. OAuth is not supported outside the public cloud.
+  # BATON_AZURE_CLOUD: "china"
+
   # Optional: include to fetch user sign-in activity (requires Entra ID P1 or P2 license)
   # BATON_SIGN_IN_ACTIVITY: "true"
 
@@ -645,6 +665,9 @@ stringData:
 
   # Optional: include to skip syncing enterprise applications that have no app role assignments
   # BATON_SKIP_UNASSIGNED_APPS: "true"
+
+  # Optional: include to sync application permissions (app roles granted to applications); requires Directory.Read.All
+  # BATON_SYNC_APPLICATION_PERMISSIONS: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
