@@ -53,12 +53,21 @@ C1 can create and track Zendesk tickets as part of access request workflows (ext
 - A ticket is considered complete when its status reaches `solved` or `closed`.
 
 <Note>
-**Ticketing limitations.** Number-type (integer and decimal) custom fields are not exposed as schema fields, and Zendesk custom ticket statuses are not supported — the six system statuses are used. The API token must be able to read ticket fields and ticket forms and create and read tickets.
+**Ticketing limitations.** Number-type (integer and decimal) custom fields are not exposed as schema fields, and Zendesk custom ticket statuses are not supported — the six system statuses are used. The credential must be able to read ticket fields and ticket forms and create and read tickets.
 </Note>
 
  ## Gather Zendesk credentials 
 
 Configuring the connector requires you to pass in credentials generated in Zendesk. Gather these credentials before you move on. 
+
+The connector can authenticate with Zendesk in two ways:
+
+- **OAuth client credentials (recommended):** you create an OAuth client in Zendesk and give C1 its identifier and secret. C1 then obtains and renews access automatically.
+- **API token (deprecated):** Zendesk is retiring API tokens. Use this option only for existing connections until you switch to OAuth.
+
+<Warning>
+**Zendesk is removing API tokens.** Accounts created on or after July 28, 2026 can't create or use API tokens. From October 27, 2026, no Zendesk account can create new API tokens. On April 30, 2027, all remaining API tokens stop working. Set up new connections with OAuth client credentials, and switch existing connections before April 30, 2027.
+</Warning>
 
 <Warning>
 A user with **System Admin** access and the permission to create and delete users in Zendesk must perform this task.
@@ -77,7 +86,48 @@ Locate your Zendesk subdomain in the top right corner of the page. Your subdomai
 Make a note of your subdomain.
 </Step>
 </Steps>
-### Create an API token
+
+### Option 1 (recommended): Create an OAuth client
+
+<Note>
+Zendesk records every change C1 makes (such as user, membership, and ticket updates) as made by the admin who **created the OAuth client**, and the connector has the same permissions as that admin. If that admin loses their admin role or is deactivated, the connector stops working. We recommend creating the client from a dedicated admin account that won't be deprovisioned.
+</Note>
+
+The scopes you allow on the OAuth client decide what C1 can do in Zendesk. Choose one of these access levels:
+
+| Access level | Scopes | What C1 can do |
+| :--- | :--- | :--- |
+| Read-only | `read` | Sync users, groups, organizations, and roles for access reviews. Provisioning and external ticketing don't work. |
+| Read and write | `read` and `write` | Everything in read-only, plus provisioning (granting and revoking access, and creating, deleting, enabling, and disabling accounts) and external ticketing. |
+
+<Warning>
+Use the same scopes in the connector's **OAuth Scopes** setting when you configure it below. If the connector asks for scopes the OAuth client doesn't allow, Zendesk rejects the connection.
+</Warning>
+
+<Steps>
+<Step>
+Log in to your Zendesk account at `yoursubdomain.zendesk.com` as an admin, then go to the **Admin Center** module.
+</Step>
+<Step>
+On the left sidebar click on **Apps and integrations** > **APIs** > **OAuth clients** and click **Add OAuth client**.
+</Step>
+<Step>
+Enter a **Name** and **Description** (for example, "C1 Integration"), and set **Client kind** to **Confidential**.
+
+If the form asks for a redirect URL, enter any HTTPS URL your organization controls. The connector doesn't use it.
+</Step>
+<Step>
+If the form lets you choose which scopes the client can use, allow **read** for read-only access, or **read** and **write** for read and write access.
+</Step>
+<Step>
+Copy the value in the **Identifier** field. This is your OAuth client ID.
+</Step>
+<Step>
+Click **Save**, then copy the **Secret** right away. Zendesk shows it only once.
+</Step>
+</Steps>
+
+### Option 2 (deprecated): Create an API token
 
 <Steps>
 <Step>
@@ -148,10 +198,10 @@ Find the **Settings** area of the page and click **Edit**.
 In the **Subdomain** field, enter the subdomain.
 </Step>
 <Step>
-In the **Email** field, enter the email address associated with your System Admin account in Zendesk.
-</Step>
-<Step>
-Paste the token into the **API Token** field.
+Choose how the connector authenticates with Zendesk:
+
+- **OAuth client credentials (recommended):** paste the client identifier into the **OAuth Client ID** field and the secret into the **OAuth Client Secret** field. In **OAuth Scopes**, enter the same scopes you allowed on the OAuth client: `read` for read-only access, or `read` and `write` (the default) for read and write access.
+- **API token (deprecated):** in the **Email** field, enter the email address associated with your System Admin account in Zendesk, then paste the token into the **API Token** field.
 </Step>
 <Step>
 **Optional.** Enter a comma-separated list of the organizations you want to sync in the **Organizations** field. If this field is left blank C1 will sync all available organizations. 
@@ -180,7 +230,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
 <Step>
-In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -226,9 +276,19 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
   
   # Zendesk credentials
-  BATON_API_TOKEN: <Zendesk API token>
-  BATON_EMAIL: <Email address associated with your System Admin account in Zendesk>
   BATON_SUBDOMAIN: <Zendesk subdomain>
+
+  # OAuth client credentials (recommended)
+  BATON_AUTH_METHOD: oauth-client-credentials
+  BATON_OAUTH_CLIENT_ID: <Zendesk OAuth client identifier>
+  BATON_OAUTH_CLIENT_SECRET: <Zendesk OAuth client secret>
+  # Optional: read,write (default) for read and write access, or read for read-only access.
+  # Must match the scopes allowed on the Zendesk OAuth client.
+  # BATON_OAUTH_SCOPES: read
+
+  # API token (deprecated): remove the OAuth lines above and use these instead
+  # BATON_EMAIL: <Email address associated with your System Admin account in Zendesk>
+  # BATON_API_TOKEN: <Zendesk API token>
 
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true

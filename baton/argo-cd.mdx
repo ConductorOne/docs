@@ -15,10 +15,11 @@ sidebarTitle: "ArgoCD"
 
 The ArgoCD connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
-When a new account is created by C1, the account's password will be sent to a [vault](/product/admin/vaults).
+C1 can create a new account with a random password, which is sent to a [vault](/product/admin/vaults),
+or with a password it supplies.
 
-The connector also supports credential rotation for local accounts: C1 sets a new random password
-and sends it to a vault. ArgoCD rejects every session and API token issued before a password
+The connector also supports credential rotation for local accounts: C1 sets either a new random
+password, which is sent to a vault, or a password it supplies. ArgoCD rejects every session and API token issued before a password
 change, so rotation also cuts off the account's existing access.
 
 ## Connector actions
@@ -47,11 +48,12 @@ permissions described in [Gather ArgoCD credentials](#gather-argocd-credentials)
   accepts again once it is enabled.
 - **Revoke API tokens** (the `revoke_tokens` action) removes the account's API tokens without
   touching the account itself.
-- **Rotate password** (credential rotation) sets a new random password and invalidates every
+- **Rotate password** (credential rotation) sets a new password (random or C1-supplied) and invalidates every
   session and API token issued before it.
-- **Delete** (account deprovisioning) is permanent. It revokes the account's API tokens, removes
-  its role grants and direct permissions, removes the account, and purges its stored credentials,
-  so an account created later with the same name inherits none of them.
+- **Delete** (account deprovisioning) is permanent. It revokes the account's API tokens, purges
+  its stored credentials, removes its role grants and direct permissions, and then removes the
+  account, so an account created later with the same name inherits none of them. If any step
+  fails, the account is not removed and the delete can be retried.
 
 Use `disable_user` to suspend access you may need to restore, and delete to remove the account
 for good.
@@ -67,7 +69,15 @@ for good.
   and rotation fail with a not-found error for an account ArgoCD does not know.
 - Account names may contain only alphanumerics, `-` and `_`. Names containing `.` are rejected,
   since ArgoCD cannot address them as accounts.
-- Deleting an account rewrites `policy.csv` in `argocd-rbac-cm`, which removes its `#` comment lines.
+- Deleting an account rewrites `policy.csv` and every `policy.<x>.csv` overlay key in `argocd-rbac-cm`
+  that contains one of its lines, which removes their `#` comment lines.
+- ArgoCD policy subjects are not typed: when SSO is configured, a role grant such as
+  `g, ci-bot, role:deployer` also applies to SSO users in a group named `ci-bot`. Deleting the
+  local account `ci-bot` therefore also removes that role from such a group. The connector cannot
+  list SSO groups to detect this, so when SSO is configured and a deletion removes role grants, it
+  logs a warning listing the removed lines. To avoid the overlap, give local accounts names that
+  cannot match an SSO group, as
+  [ArgoCD recommends](https://argo-cd.readthedocs.io/en/stable/operator-manual/rbac/#local-usersaccounts).
 - Revoking tokens and rotating another account's password need the `accounts, update` ArgoCD RBAC
   permission for the connector's account. Deleting accounts also requires the `secrets` Kubernetes
   permissions described below.
@@ -111,8 +121,8 @@ rules:
 
 <Warning>
   The `argocd-secret` permissions are new. Existing deployments must re-apply this role before
-  account deletion is used. Without them the credential-purge step fails with a `403` after the
-  account has already been deleted, leaving its stored credentials in place.
+  account deletion is used. Without them the credential-purge step fails with a `403` and the
+  delete fails, leaving the account in place until the role is re-applied and the delete retried.
 </Warning>
 
 Apply with:
@@ -175,7 +185,7 @@ To set up the connector, you'll need:
     </Step>
 </Steps>
 
-**Done.** Next, move on to the connector configuration instructions.
+**That's it!** Next, move on to the connector configuration instructions.
 
 ## Configure the ArgoCD connector
 
@@ -205,7 +215,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
     <Step>
-    In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+    In C1, navigate to **Apps** > **Connectors** > **Add connector**.
     </Step>
     <Step>
     Search for **Baton** and click **Add**.
@@ -213,7 +223,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
     <Step>
     Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+    If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
     Set the connector's **Name** and, optionally, a **Description**.
@@ -312,8 +322,6 @@ spec:
     </Step>
 </Steps>
 
-**Done.** Your ArgoCD connector is now pulling access data into C1.
+**That's it!** Your ArgoCD connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-

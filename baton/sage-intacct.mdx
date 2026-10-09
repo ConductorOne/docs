@@ -1,25 +1,32 @@
 ---
 title: "Set up a Sage Intacct connector"
 og:title: "Set up a Sage Intacct connector"
-description: "C1 provides identity governance for Sage Intacct. Integrate your Sage Intacct instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
-og:description: "C1 provides identity governance for Sage Intacct. Integrate your Sage Intacct instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+description: "C1 provides identity governance and just-in-time provisioning for Sage Intacct. Integrate your Sage Intacct instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Sage Intacct. Integrate your Sage Intacct instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 sidebarTitle: "Sage Intacct"
 ---
 
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
 ## Capabilities
+
+The Sage Intacct connector syncs the following resources:
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
-| Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
-| Roles | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Create |
+| User groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> Grant, Revoke |
+
+{/* AUTO-GENERATED:END - capabilities */}
 
 **Notes:**
 
-- All sync and provisioning goes through the classic XML gateway (`api.intacct.com/ia/xml/xmlgw.phtml`).
-- User provisioning creates users in Sage Intacct. Sage sends a password-reset email on creation; no password is set via the connector. User accounts are persistent and cannot be deleted once they have any history; use the `disable_user` action to deactivate an account.
-- Role provisioning grants and revokes role assignments.
-- User-group membership is sync-only. Sage Intacct does not expose a write path for user-group memberships. Grant role-based access instead.
+- All sync and provisioning goes through the classic XML Web Services gateway (`api.intacct.com/ia/xml/xmlgw.phtml`).
+- User provisioning creates users in Sage Intacct. Sage sends a password-reset email on creation; the connector never sets a password. User accounts are persistent and cannot be deleted once they have any history — use the `disable_user` action to deactivate an account instead.
+- Role provisioning grants and revokes role assignments (`role:assigned`) for user principals.
+- User-group membership is sync-only. Sage Intacct exposes no write path for user-group memberships; grant role-based access instead.
 
 ### Connector actions
 
@@ -27,31 +34,198 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
-| disable_user | `user_id` (string, required) | Sets STATUS=inactive on the user. The user can no longer sign in; the record stays for audit. |
-| enable_user | `user_id` (string, required) | Sets STATUS=active on the user, restoring sign-in. |
+| `disable_user` | `user_id` (string, required) | Sets `STATUS=inactive` on the user. The user can no longer sign in; the record stays for audit. |
+| `enable_user` | `user_id` (string, required) | Sets `STATUS=active` on the user, restoring sign-in. |
 
-## Overview
+## Gather Sage Intacct credentials
 
-`baton-sage-intacct` connects to Sage Intacct over the classic XML Web Services gateway. Users, user groups, roles, role assignments, and user-group memberships are all sourced from XML objects (`USERINFO`, `USERGROUP`, `ROLES`, `USERROLES`, `ROLEGROUPS`, `MEMBERUSERGROUP`). The connector uses a sender/login envelope with cached session tokens.
+<Warning>
+  You need Sage Intacct administrator access (a Business user with Full admin privileges) to authorize a Web Services sender ID and create the Web Services user. You also need Web Services sender credentials issued by Sage — these are not self-serve.
+</Warning>
 
-## Credentials
+### Request Web Services sender credentials
 
-| Field | Description |
-|---|---|
-| `sage-intacct-company-id` | Sage Intacct company ID. |
-| `sage-intacct-sender-id` | Partner sender ID for the XML gateway (authorized under Company > Setup > Company > Security > Web Services authorizations). |
-| `sage-intacct-sender-password` | Password matching the sender ID. |
-| `sage-intacct-user-id` | Sage user ID for the `<login>` block. Needs read access to all company objects and read/write access to `MEMBERUSERGROUP` for provisioning. |
-| `sage-intacct-password` | Password for `sage-intacct-user-id`. |
+<Steps>
+  <Step>
+    Confirm your organization has an active Sage Intacct Web Services / Marketplace Partner registration through the [Sage Intacct Developer Program](https://developer.intacct.com/web-services/).
+  </Step>
+  <Step>
+    Contact your Sage Intacct account representative (or log a case through Sage Community) to request Web Services sender credentials.
+  </Step>
+  <Step>
+    Record the **Sender ID** and **Sender Password** that Sage issues. These are used in the connector's `sage-intacct-sender-id` and `sage-intacct-sender-password` fields.
 
-All five fields are required together.
+    <Note>
+      The sender ID/password pair is distinct from the gateway login user (created below). The sender credentials populate the request `<control>` block; the user credentials populate the `<login>` block.
+    </Note>
+  </Step>
+</Steps>
 
-## Permissions
+### Authorize the sender ID for your company
 
-The XML user (`sage-intacct-user-id`) needs at minimum:
+<Steps>
+  <Step>
+    Go to **Company > Setup > Configuration > Company**.
+  </Step>
+  <Step>
+    Select the **Security** tab, then select **Edit**.
+  </Step>
+  <Step>
+    In the **Web Services authorizations** section, select **Add**.
+  </Step>
+  <Step>
+    Enter the **Sender ID** (case-sensitive; it cannot be changed after saving) and, optionally, a description. Set **Status** to **Active**.
+  </Step>
+  <Step>
+    Select **Save**.
+  </Step>
+</Steps>
 
-- Read access to `USERINFO`, `USERGROUP`, `ROLES`, `USERROLES`, `ROLEGROUPS`, `MEMBERUSERGROUP`.
-- Read/write access to `USERROLES` for Grant/Revoke on `role:assigned`.
-- Read/write access to `USERINFO` for account creation and deactivation.
+### Create the Web Services user
 
-Assign via Company > Admin > Roles in the Sage Intacct UI.
+<Steps>
+  <Step>
+    Go to **Company > Admin > Users, roles, and groups** and select **Add** next to **Web Services users**.
+  </Step>
+  <Step>
+    Enter a unique **User ID** (it cannot reuse a standard user's ID and cannot be changed after saving). This is the value for the connector's `sage-intacct-user-id` field.
+  </Step>
+  <Step>
+    Enter a **Username**, **Account email address**, and **Contact name**. Set **User type** to **Business user**.
+  </Step>
+  <Step>
+    Grant the user access to the objects the connector reads and writes — `USERINFO`, `USERGROUP`, `ROLES`, `USERROLES`, `ROLEGROUPS`, and `MEMBERUSERGROUP` — with read/write on `USERINFO` and `USERROLES` (needed for account creation, activation/deactivation, and role grant/revoke).
+
+    <Warning>
+      **Verify before publishing.** Sage's role UI grants permissions by application/module checkbox rather than by these XML object names. The simplest confirmed setup is to set **Admin privileges** to **Full** on the Web Services user, which covers every object. To use a scoped custom role instead, confirm in a live tenant which permission checkboxes map to the objects above, create the role under **Company > Admin > Users, roles, and groups > Roles**, then assign it in the user's **Role** table. Role assignment is only available when the company uses role-based permissions.
+    </Warning>
+  </Step>
+  <Step>
+    Select **Save**, then confirm with your admin password. Sage emails an auto-generated password to the account email — this is the value for the connector's `sage-intacct-password` field.
+  </Step>
+</Steps>
+
+That's it! You now have the company ID, sender ID/password, and user ID/password needed to configure the connector.
+
+## Configure the Sage Intacct connector
+
+<Warning>
+  You need the **Connector Administrator** or **Super Administrator** role in C1, plus the Sage Intacct company ID, sender ID, sender password, user ID, and user password gathered above.
+</Warning>
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    <Steps>
+      <Step>
+        In C1, select **Add connector** and search for **Sage Intacct**.
+      </Step>
+      <Step>
+        Choose the Sage Intacct app, set the connector owner, and select **Next**.
+      </Step>
+      <Step>
+        Select **Edit Settings**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the required configuration:
+
+        - **Sage Intacct Company ID**: Sage Intacct company ID.
+        - **Sage Intacct Sender ID**: XML gateway partner sender ID written into every request's `<control>` block.
+        - **Sage Intacct Sender Password**: XML gateway partner sender password matching the sender ID.
+        - **Sage Intacct User ID**: XML gateway user written into the `<login>` block.
+        - **Sage Intacct Password**: Password for the user ID.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Select **Save**. The connector begins syncing; its status moves to **Syncing** and then **Connected**.
+      </Step>
+    </Steps>
+
+    **Done.** Your Sage Intacct connector is now pulling access data into C1.
+  </Tab>
+  <Tab title="Self-hosted">
+    ### Resources
+
+    - Download the latest release from the [C1 download center](https://dist.conductorone.com/ConductorOne/baton-sage-intacct).
+    - View the source on [GitHub](https://github.com/conductorone/baton-sage-intacct).
+
+    ### Step 1: Set up the connector in C1
+
+    <Steps>
+      <Step>
+        In C1, select **Add connector**, search for **Sage Intacct**, and add it.
+      </Step>
+      <Step>
+        Set the connector owner and select **Next**.
+      </Step>
+      <Step>
+        Rotate the connector's credentials to generate a **C1 Client ID** and **Client Secret**. Save these — you'll need them for the deployment.
+      </Step>
+    </Steps>
+
+    ### Step 2: Deploy the connector
+
+    Create a Kubernetes Secret with the Sage Intacct credentials and the C1 client credentials:
+
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-sage-intacct
+    type: Opaque
+    stringData:
+      BATON_SAGE_INTACCT_COMPANY_ID: "your-company-id"
+      BATON_SAGE_INTACCT_SENDER_ID: "your-sender-id"
+      BATON_SAGE_INTACCT_SENDER_PASSWORD: "your-sender-password"
+      BATON_SAGE_INTACCT_USER_ID: "your-user-id"
+      BATON_SAGE_INTACCT_PASSWORD: "your-user-password"
+      BATON_CLIENT_ID: "your-c1-client-id"
+      BATON_CLIENT_SECRET: "your-c1-client-secret"
+    ```
+
+    Then create a Deployment that runs the connector against the C1 platform:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-sage-intacct
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: baton-sage-intacct
+      template:
+        metadata:
+          labels:
+            app: baton-sage-intacct
+        spec:
+          containers:
+            - name: baton-sage-intacct
+              image: public.ecr.aws/conductorone/baton-sage-intacct:latest
+              envFrom:
+                - secretRef:
+                    name: baton-sage-intacct
+    ```
+
+    ### Step 3: Apply and verify
+
+    <Steps>
+      <Step>
+        Apply the manifests: `kubectl apply -f secret.yaml -f deployment.yaml`.
+      </Step>
+      <Step>
+        Confirm the connector reaches **Connected** in C1 and that Sage Intacct users, user groups, and roles appear in your access data.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+<Tip>
+  Prebuilt binaries and container images for every release are available at [dist.conductorone.com/ConductorOne/baton-sage-intacct](https://dist.conductorone.com/ConductorOne/baton-sage-intacct).
+</Tip>
