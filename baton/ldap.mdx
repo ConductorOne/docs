@@ -63,11 +63,16 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | Action name | Additional fields | Description |
 | ----------- | ----------------- | ----------- |
 | `create_ou` | `name` (string, required), `parent_dn` (string), `description` (string) | Create an LDAP organizational unit (`organizationalUnit`) under a parent container. `parent_dn` defaults to the configured base DN; a parent outside the base DN is rejected. Idempotent — creating an OU that already exists succeeds. |
+| `create_group` | `name` (string, required), `parent_dn` (string), `description` (string) | Create an LDAP group (`groupOfUniqueNames` or `groupOfNames`) under a parent container. `parent_dn` defaults to the configured group search DN; a parent outside the group search DN is rejected. The object class comes from the `create-group-object-class` setting, which defaults from `group-member-attribute`; the action is not offered when `group-member-attribute` is `memberUid`. Fails with `AlreadyExists` when an entry already exists at the DN; after a transport failure the add is retried and can report `AlreadyExists` for a group this call created, so check the entry at the DN named in the error before treating it as a collision. Returns `success`, `group_dn` and `group`. On a directory whose schema requires a group member, set `create-group-placeholder-member` to a dedicated DN; sync does not report that DN as a member. Set it on every connector invocation, sync as well as actions, and use a dedicated DN that is not a real user — a real user's DN would hide that user's memberships, and removing the setting makes each placeholder appear as a user grant for the placeholder DN. Active Directory is not supported. |
 | `enable_user` | `user_id` (account resource ID, required) | Mark a user account as enabled by writing the attributes configured in `enable-user-attributes`. Registered only when that configuration is set. |
 | `disable_user` | `user_id` (account resource ID, required) | Mark a user account as disabled by writing the attributes configured in `disable-user-attributes`. Registered only when that configuration is set. |
 
 <Note>
   To use `create_ou`, the connector's bind account must have permission to add child entries under the target parent DN (by default, the configured base DN). For OpenLDAP and similar servers, this is write/add access on the parent container; for Active Directory, delegate the **Create Organizational Unit objects** right on the parent OU.
+</Note>
+
+<Note>
+  To use `create_group`, the connector's bind account must have permission to add child entries under the target parent DN (by default, the configured group search DN). For OpenLDAP and similar servers, this is write/add access on the parent container.
 </Note>
 
 #### User enable/disable attributes

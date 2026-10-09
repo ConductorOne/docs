@@ -15,31 +15,36 @@ The Jamf connector syncs the following resources:
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Users | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Create, Delete |
-| User Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Create, Delete |
-| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| User Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Sites | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
-| Managed Devices | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Users | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| User Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| User Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Roles | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Sites | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
+| Managed Devices | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 {/* AUTO-GENERATED:END - capabilities */}
 
 **Notes:**
-- Jamf has two distinct account types: **Users** (directory users) and **User Accounts** (Jamf Pro console admins). The connector can only create **one** of these types per connector instance — set by the **Account Provisioning Target** configuration field. Deletion works for both types regardless of this setting.
-- Groups, User Groups, Roles, and Sites are synced for visibility (including membership) but are not provisionable — access changes to these resources must be made directly in Jamf Pro.
-- When creating a **User Account**, the `privilege_set` profile field sets its access level (`Administrator`, `Auditor`, `Enrollment Only`, or `Custom`). For `Custom`, at least one of `privileges_jss_objects`, `privileges_jss_settings`, `privileges_jss_actions`, `privileges_recon`, `privileges_casper_admin`, `privileges_casper_remote`, or `privileges_casper_imaging` must be set to a list of Jamf privilege names — Jamf validates these names server-side, not the connector.
+- Jamf has two distinct account types: **Users** (directory users) and **User Accounts** (Jamf Pro console admins). The connector can only create **one** of these types per connector instance — set by the **Account Provisioning Target** configuration field. Deletion works for both types regardless of this setting. Created accounts are `Enabled`, `Full Access`, and default to the `Auditor` privilege set; a random password is generated and returned once, as plaintext. See [Jamf account privileges](#jamf-account-privileges) below for the privileges this requires.
+- **User Groups**: Grant/Revoke adds or removes a Jamf user from a **static** User Group only — Smart User Groups are rejected.
+- **Sites**: Grant/Revoke is only supported for the `user` principal — a Jamf user's site membership is a true multi-valued list. `userGroup`/`userAccount`/`group` site membership remains sync-only (each of those objects can only belong to one site at a time, so granting a new one would silently displace the old one instead of adding a membership).
+- **Managed Devices**: Grant/Revoke sets or clears a device's `assigned` user (computer or mobile device) — single-valued, so granting to a new user displaces whichever user was previously assigned. Devices with no assignee expose no grantable `assigned` entitlement. Computers use the Jamf Pro v4 computers-inventory API: Grant overwrites the assignee's username, name, email, position and phone with the new user's values (Jamf never auto-populates these for computers), and Revoke clears all five. Mobile devices take these fields from the directory user automatically — Grant only sets the username, and Revoke clears it (and everything Jamf derived from it) by clearing the username.
+- **Groups** (Jamf Pro admin account groups): Grant/Revoke a `userAccount` with **Group Access** only — a **Full** or **Site Access** account's rights come from its own privilege_set, not its groups, so Grant rejects adding one. A group with no members cannot receive its first member through the connector, and Revoke on such a group returns a retryable error instead of reporting success (an ambiguous empty read is never written over, or assumed to mean someone was removed). Do not use Grant/Revoke on directory (LDAP) groups: their membership is managed by the directory and the connector does not detect them.
+- **Roles**: Grant/Revoke sets or clears a `userAccount` or `group`'s role — the three built-in privilege sets (`Administrator`, `Auditor`, `Enrollment Only`) and every individual privilege are grantable; `Custom` itself is not a role you grant directly. Revoke moves the principal to `Custom` with only the `Read License Information` privilege (Jamf's lowest access, and not itself revocable). Individual privileges can only be granted while the principal is already `Custom`: revoke the current set first, then grant the individual privileges. **Group Access** accounts are rejected for Role Grant/Revoke — assign the role to the group instead. Changing a **Full** or **Site Access** account's role removes it from any admin group it belonged to (that membership granted it nothing).
 
 <Note>
-**Managed Devices is opt-in.** This resource type is off by default so existing connectors keep working after upgrading. Enable it by selecting the **Managed Device** resource type in the connector's sync configuration. When enabled, the Jamf API role used by the connector must additionally have the **Read Computers** and **Read Mobile Devices** privileges, or the sync will fail.
+**Managed Devices is opt-in.** This resource type is off by default so existing connectors keep working after upgrading. Enable it by selecting the **Managed Device** resource type in the connector's sync configuration (cloud-hosted), or via `--sync-resource-types`/`$BATON_SYNC_RESOURCE_TYPES` (self-hosted). When enabled, the Jamf account used by the connector must additionally have the **Read Computers** and **Read Mobile Devices** privileges, or the sync will fail.
 </Note>
+
+Tested with Jamf Pro 11.32.1. Managed Devices use the Jamf Pro API v4 computers-inventory and v2 mobile-devices endpoints.
 
 ## Gather Jamf credentials 
 
 Configuring the connector requires you to pass in credentials generated in Jamf. Gather these credentials before you move on. 
 
 <Warning>
-A user the **Administrator** role in Jamf Pro must perform this task.
+A Jamf Pro user with the **Administrator** privilege set must perform this task.
 </Warning>
 
 ### (Optional) Create a service account
@@ -56,6 +61,31 @@ Give the user you create full access to the Jamf Pro instance and the Administra
 </Steps>
 
 **Done.** Next, move on to the connector configuration instructions. 
+
+### Jamf account privileges
+
+The **Administrator** privilege set covers everything. For least privilege, grant:
+
+| Task | Privilege |
+|---|---|
+| Startup, config validation, token refresh | None — any enabled local Jamf Pro account (every `Custom` set also keeps `Read License Information`) |
+| Sync users | `Read User` |
+| Sync user accounts and groups | `Read Accounts` |
+| Sync user groups | `Read Static User Groups`, `Read Smart User Groups` (Smart is only needed when smart groups exist — it's checked per group) |
+| Sync sites | `Read Sites`, `Read User`, `Read Static User Groups`, `Read Smart User Groups`, `Read Accounts` (site grants are built by reading users, user groups and accounts) |
+| Sync roles | `Read API Roles`, `Read Accounts` |
+| Sync managed devices (opt-in) | `Read Computers`, `Read Mobile Devices`, `Read User` (needed even if `user` isn't synced) |
+| Create/delete users | `Create User` and `Read User` (the connector reads the user back after creating); `Delete User` |
+| Create/delete user accounts | `Create Accounts` and `Read Accounts`; `Delete Accounts` |
+| Group Grant/Revoke (`userAccount` principal) | `Read Accounts`, `Update Accounts` |
+| Role Grant/Revoke (`userAccount`/`group` principal) | `Read Accounts`, `Update Accounts` (`Read API Roles` is not needed for writes) |
+| User Group Grant/Revoke (static group) | `Read Static User Groups`, `Update Static User Groups` |
+| Site Grant/Revoke (`user` principal) | `Read User`, `Update User` |
+| Managed Device Grant/Revoke | Computers: `Read Computers`, `Update Computers`, `Read User`. Mobile devices: `Read Mobile Devices`, `Update Mobile Devices`, `Read User`, plus `Assign Users to Mobile Devices` to Grant (clearing the assignee on Revoke doesn't need it) |
+
+`Read Accounts`/`Create Accounts`/`Update Accounts`/`Delete Accounts` cover both admin user accounts and admin groups — Jamf has no separate privilege for account groups. Every write path reads the object first, so each `Update` privilege above needs its `Read` counterpart too.
+
+Jamf reports a denied write differently depending on which API it uses. The Classic API (`/JSSResource` — Users, Accounts, Static User Groups) answers a missing privilege with HTTP 401, indistinguishable from an invalid or expired token. The Jamf Pro API (`/api/v1`, `/api/v2`, `/api/v4` — the roles catalog, Computers, Mobile Devices) answers with HTTP 403, reported as a permission error.
 
 ## Configure the Jamf connector
 
@@ -101,7 +131,7 @@ Find the **Settings** area of the page and click **Edit**.
 <Step>
 Enter the required configuration:
 
-- **Instance URL**: The URL of your Jamf Pro instance.
+- **Instance URL**: The base URL of your Jamf Pro instance, including `https://` (for example `https://yourcompany.jamfcloud.com`).
 - **Username**: The username of the service account you created (or the username of a Jamf Pro user with Administrator permissions).
 - **Password**: The password associated with the username.
 - **Account Provisioning Target** (optional): Which Jamf account type ConductorOne should create when provisioning accounts — **user** (default) creates directory users, **userAccount** creates Jamf Pro console admin accounts. Only one type can be created at a time per connector instance.
@@ -193,7 +223,7 @@ stringData:
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
 
 <Note>
-To provision accounts (create/delete) in self-hosted mode, the deployment also needs `BATON_PROVISIONING: "true"` set — see the Deployment configuration below.
+To use any provisioning action in self-hosted mode — Grant/Revoke, or account create/delete — the deployment also needs `BATON_PROVISIONING: "true"` set — see the Deployment configuration below.
 </Note>
 
 #### Deployment configuration
@@ -224,7 +254,7 @@ spec:
         env:
         - name: BATON_HOST_ID
           value: baton-jamf
-        # Uncomment to enable account provisioning (create/delete):
+        # Uncomment to enable provisioning (Grant/Revoke and account create/delete):
         # - name: BATON_PROVISIONING
         #   value: "true"
         envFrom:

@@ -49,9 +49,9 @@ If manager resolution fails, the user is still created and a warning is logged.
 
 The `additionalAttributes` field accepts a JSON string containing any writable [Microsoft Graph user property](https://learn.microsoft.com/en-us/graph/api/user-post-users). For example: `{"city":"Springfield","usageLocation":"US","companyName":"SNPP"}`. This field cannot override any of the explicitly named fields listed above.
 
-<Note>
+<Info>
 **Tip:** If you plan to assign licenses to the user (either directly or via a group), include `usageLocation` in `additionalAttributes`. Microsoft requires a usage location before a license can be assigned.
-</Note>
+</Info>
 
 *Due to limitations of the Microsoft Graph API and Office 365 Exchange Online API, the connector cannot provision Mail Enabled Security groups or Distribution groups using OAuth. 
 
@@ -69,7 +69,7 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | set_manager | `user_id` (string, required)<br/>`manager_identifier` (string, optional) | Sets or updates a user's manager relationship. Accepts manager ID, UPN, or Employee ID. Leave manager_identifier empty to remove the current manager. |
 | check_upn | `proposed_upn` (string, required) | Checks if a User Principal Name (UPN) is available. If taken, finds an available UPN by appending incrementing numbers. |
 | update_profile | `user_id` (string, required)<br/>Plus optional profile fields | Updates user profile attributes including mail, displayName, jobTitle, employeeId, department, companyName, country, and extensionAttribute1 through extensionAttribute15. |
-| create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner; must be a user resource<br/>`userMembers` (resource ID list, optional): initial group members; must be user resources. `owner` and `userMembers` bind at most 20 relationships combined — Microsoft Graph's limit for group creation. | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership; `microsoft_365` is unavailable when `security-groups-only` is enabled. If a principal is not a user, or the 20-relationship limit is exceeded, the action fails without creating anything — retry within the limit and add the remaining members after the group exists. Returns `resource` (the new group), `entitlements` (its `owner` and `member` entitlements), and grants for memberships bound at create time, except members excluded by `skip-ad-groups` or whose on-prem status cannot be determined during creation. Requires the `Group.Create` permission. |
+| create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner; must be a user resource<br/>`userMembers` (resource ID list, optional): initial group members; must be user resources, at most 500 distinct users. Microsoft Graph's create limit of 20 relationships covers the create request; any remaining members are added in batches once the group exists. Every selected member is looked up before the group is created, so an unknown or malformed resource ID fails the action with `InvalidArgument` and no group is created. Returns `unadded_members`: selected users not confirmed as added (for example when Graph rejected a member addition, such as for a missing permission or a member deleted after validation, throttled batches past the retry budget or attempt limit, or the action's 3 minute 30 second time limit was reached). A rejected member does not end the batch work — later members are still added; only a lost permission (401/403) stops the remaining batches. Add unadded users through the group's members entitlement. | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership; `microsoft_365` is unavailable when `security-groups-only` is enabled. Microsoft Graph caps a create at 20 relationships, so up to 20 owner and member bindings ride along in the create request and any remaining selected members are added in batches once the group exists; if a principal is not a user, a resource ID is not a directory object GUID, or a selected member does not exist, the action fails without creating anything. Returns `success` (true only when the group was created with every selected member added), `resource` (the new group), `entitlements` (its `owner` and `member` entitlements), grants for every confirmed membership (create-time bindings and batch-added members alike) except on-premises-synced members when `skip-ad-groups` is enabled without `include-on-prem-group-members`, and `unadded_members` (selected users left unconfirmed, for example when Graph rejected a member addition, such as for a missing permission or a member deleted after validation, throttled batches past the retry budget or attempt limit, or the time limit below was reached; a rejected member does not end the batch work — later members are still added, and only a lost permission (401/403) stops the remaining batches) to add through the group's members entitlement; `success` is false while any selected member is unadded. All Microsoft Graph work for one create is limited to 3 minutes 30 seconds, including a reserved 30-second confirmation window. Validation, creation and member additions stop after at most 3 minutes, leaving confirmation and result delivery ahead of ConductorOne's hosted invocation window. When Graph answers a batch with a `Retry-After` hint, that window is honoured by the remaining batches of the same phase as well — including batches not yet attempted — so the action stops earlier and reports those members in `unadded_members` instead of sending them into a window Graph said is closed. If the limit is reached after the group is created, the action returns the group with `success` false and the members not yet added in `unadded_members`; add them through the group's members entitlement rather than re-running the action. If the limit is reached before the create request is sent, the action fails with `DeadlineExceeded` and no group is created. DNS and connection-establishment failures are reported as requests that were not sent, with no group created. If the create response is lost, Graph accepts the create but its response cannot be read, or Graph answers it with a gateway timeout or another 5xx that does not establish whether the group was created, the action attempts confirmation before deciding what to report: it retries fresh default-query reads within the reserved window, without using the SDK HTTP cache, looking for a group carrying the requested `mailNickname` **and** this request's `displayName`, `description`, `mailEnabled`, `securityEnabled`, `isAssignableToRole` and `groupTypes`, created at or after the moment the action started less a one-minute clock-skew allowance. A paginated result or multiple matching candidates cannot establish a unique group, so recovery is refused. A single matching candidate is returned as the `resource` with `success` false, no confirmed grants, and every selected user in `unadded_members` (nothing the unanswered create would have bound can be confirmed, the owner included; add them through the members and owners entitlements, which is idempotent). If confirmation remains inconclusive — including when an older or differently-described group already holds the nickname — the action fails with `FailedPrecondition` because the group may still exist: check Microsoft Entra before retrying. Raising the connector's Lambda timeout does not extend this limit. Requires the `Group.Create` permission. |
 | revoke_sessions | `user_id` (string, required) | Revokes all active sign-in sessions for a user by invalidating their refresh tokens, forcing re-authentication (`POST /users/{id}/revokeSignInSessions`). Refresh tokens are invalidated immediately, but existing access tokens can remain valid for up to ~1 hour unless Continuous Access Evaluation (CAE) is enabled. Requires the `User.RevokeSessions.All` permission. |
 | revoke_mfa | `user_id` (string, required) | Deletes a user's registered MFA (authentication) methods, forcing re-registration at next sign-in. Lists the user's methods and deletes each deletable one; password methods are skipped. Graph refuses to delete the user's default method while other methods remain (HTTP 400), so MFA may not be fully revocable in one invocation — per-method failures are reported and do not abort the action. Returns `success` (true only if every deletable method was deleted), `deleted_count`, `failed_count`, `skipped_count`, and per-method `results`. Requires the `UserAuthenticationMethod.ReadWrite.All` permission. |
 
@@ -80,10 +80,6 @@ Configuring the connector requires you to pass in credentials generated in Entra
 <Tip>
 If you prefer to set up a cloud-hosted Entra ID connector using OAuth, skip ahead to the **OAuth** tab below.
 </Tip>
-
-<Note>
-The steps below generate a **client secret** for the app registration. If you plan to use the connector's **Certificate** tab instead (recommended for FedRAMP and other high-compliance environments where client secrets aren't permitted), you'll upload a certificate to the same app registration rather than creating a client secret. Follow Microsoft's guidance on adding a certificate credential to an app registration, then have the PEM-encoded certificate and its private key ready for the Certificate tab further down this page.
-</Note>
 
 <Warning>
 A user with the **Global Administrator** permission in Entra ID must perform this task.
@@ -182,7 +178,7 @@ Click **Application permissions**. Select each permission in the relevant set be
 
    To deprovision users who have a privileged role assigned to them, the app requires, in addition to the stated permissions, a privileged role such as Global Administrator or Privileged Authentication Administrator.
 
-   <Note>
+   <Info>
    **Optional:** To enable group management (creating groups via connector actions), add the following permission in addition to the provisioning permissions above:
 
    ```bash
@@ -190,9 +186,9 @@ Click **Application permissions**. Select each permission in the relevant set be
    ```
 
    This permission is only required if group management is enabled on the connector.
-   </Note>
+   </Info>
 
-   <Note>
+   <Info>
    **Optional:** To enable the offboarding connector actions (`revoke_sessions` and `revoke_mfa`), add the following permissions in addition to the provisioning permissions above:
 
    ```bash
@@ -201,7 +197,7 @@ Click **Application permissions**. Select each permission in the relevant set be
    ```
 
    `User.RevokeSessions.All` is required for the `revoke_sessions` action, and `UserAuthenticationMethod.ReadWrite.All` is required for the `revoke_mfa` action. **To revoke sessions or MFA methods for users with admin roles, the app must additionally hold the Privileged Authentication Administrator directory role (or Global Administrator).**
-   </Note>
+   </Info>
 </Step>
 <Step>
 Navigate to **Identity** > **Applications** > **Enterprise applications** > **All applications**.
@@ -296,7 +292,7 @@ Search for **Entra ID** and click **Add**.
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
@@ -381,7 +377,7 @@ Search for **Entra ID** and click **Add**.
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
@@ -469,7 +465,7 @@ Search for **Entra ID** and click **Add**.
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
@@ -582,7 +578,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 ### Step 1: Set up a new Entra ID connector
 <Steps>
 <Step>
-In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+In C1, navigate to **Apps** > **Connectors** > **Add connector**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -590,7 +586,7 @@ Search for **Baton** and click **Add**.
 <Step>
 Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-   If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
 </Step>
 <Step>
 Set the connector's **Name** and, optionally, a **Description**.
@@ -634,7 +630,7 @@ stringData:
   BATON_ENTRA_TENANT_ID: <Entra ID directory (tenant) ID>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: "true"
+  BATON_PROVISIONING: true
 
   # Optional: include if you want to skip syncing Active Directory Server groups
   # BATON_SKIP_AD_GROUPS: "true"
@@ -690,7 +686,7 @@ spec:
     metadata:
       labels:
         app: baton-microsoft-entra
-        baton: "true"
+        baton: true
         baton-app: microsoft-entra
     spec:
       containers:
@@ -746,7 +742,3 @@ This setting has no effect unless **Skip Active Directory Server groups** is als
 ### What's next?
 
 If Entra ID is your company's identity provider (meaning that it is used to SSO into other software), the integration sync will automatically create applications in C1 for all of your SCIMed software. Before you move on, review the [Create applications](/product/admin/applications) page for important information about how to set up integrations with the SCIMed apps.
-
-
-
-
