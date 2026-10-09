@@ -187,20 +187,35 @@ The endpoint commands read the public API spec, which c1i caches for 24 hours. S
 
 ## Uninstall c1i
 
-Removing the c1i binary leaves its configuration, credentials, and caches behind. Remove them to finish the uninstall:
+Removing the c1i binary leaves its configuration, credentials, and caches behind. c1i can't list keyring entries or keep track of the tenants you've logged in to, so log out of each tenant before you remove the binary.
 
-- `~/.c1i/`: the OpenAPI spec cache.
-- `~/.c1i.yaml`: the config file.
-- `<UserConfigDir>/c1i/`: the file-fallback credentials (`credentials/`) and the access-token file cache (`tokens/`). See [Credential storage](#credential-storage) for each OS's config directory.
-- OS keyring entries: credentials under `c1i/<host>`, and cached access tokens under `com.conductorone.c1i.tokens`. Older releases stored a `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
+To uninstall c1i completely:
 
-c1i can't list keyring entries or keep track of the tenants you've logged in to, so run `c1i auth logout` once for each tenant before you remove the binary. If `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` are both set, unset them first. Otherwise logout still removes the stored credentials, but drops the cached token for the environment-variable credentials instead of theirs.
+<Steps>
+<Step>
+If `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` are both set, unset them. Otherwise logout still removes the stored credentials, but drops the cached token for the environment-variable credentials instead of the token for the stored credentials.
+</Step>
+<Step>
+Run `c1i auth logout` once for each tenant you've logged in to. Logout removes the stored credentials and their cached token. A token cached under credentials you have since replaced stays in the keyring.
 
 ```shell
 c1i auth logout --url example.conductor.one
 ```
+</Step>
+<Step>
+Remove the c1i binary using the same method you installed it with.
+</Step>
+<Step>
+Delete the files c1i leaves behind:
 
-Logout also drops the cached token for the credentials stored now. A token cached under credentials you have since replaced stays in the keyring. To remove keyring entries by hand, replace `<host>` with a tenant's host, such as `example.conductor.one`, or with `<name>` for an entry an older release stored:
+- `~/.c1i/`: the OpenAPI spec cache.
+- `~/.c1i.yaml`: the config file.
+- `<UserConfigDir>/c1i/`: the file-fallback credentials (`credentials/`) and the access-token file cache (`tokens/`). See [Credential storage](#credential-storage) for each OS's config directory.
+
+Leave `~/.sigstore/root/` in place. `c1i upgrade` uses it to verify releases, and other Sigstore tools share it.
+</Step>
+<Step>
+**Optional.** Remove leftover keyring entries by hand. c1i stores credentials under `c1i/<host>` and cached access tokens under `com.conductorone.c1i.tokens`. Older releases stored a `<name>.conductor.one` tenant's credentials under `c1i/<name>`. Replace `<host>` with a tenant's host, such as `example.conductor.one`, or with `<name>` for an entry an older release stored:
 
 ```shell
 # macOS: each call deletes one item; repeat until it reports "could not be found"
@@ -213,8 +228,10 @@ secret-tool clear service com.conductorone.c1i.tokens
 ```
 
 On Windows, open **Credential Manager** > **Windows Credentials** and remove `c1i/<host>:client_id`, `c1i/<host>:client_secret`, and every `com.conductorone.c1i.tokens:` entry. To find which hosts you have, search for `c1i` in Keychain Access on macOS, Seahorse on Linux, or Credential Manager on Windows.
+</Step>
+</Steps>
 
-Leave `~/.sigstore/root/` in place. `c1i upgrade` uses it to verify releases, and other Sigstore tools share it.
+c1i, its configuration, and its stored credentials are now removed from the host.
 
 ## Output conventions
 
