@@ -1,0 +1,263 @@
+---
+title: "Set up a Microsoft 365 connector"
+og:title: "Set up a Microsoft 365 connector"
+description: "C1 provides identity governance and just-in-time provisioning for Microsoft 365. Integrate your Microsoft 365 instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Microsoft 365. Integrate your Microsoft 365 instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Microsoft 365"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Licenses | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+## Gather Microsoft 365 credentials
+
+<Warning>
+To configure the Microsoft 365 connector, you need an Entra ID (Azure AD) tenant administrator to register an application and grant the required Microsoft Graph application permissions.
+</Warning>
+
+The connector authenticates to Microsoft Graph using the OAuth 2.0 client credentials flow. You will register an application in Entra ID and authenticate using either a client secret or a client certificate.
+
+<Steps>
+  <Step>
+    Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com) as a user with the **Application Administrator** or **Global Administrator** role.
+  </Step>
+
+  <Step>
+    Navigate to **Identity** > **Applications** > **App registrations** and click **New registration**.
+
+    1. Enter a name: `ConductorOne`
+    2. Under **Supported account types**, select **Accounts in this organizational directory only (Single tenant)**.
+    3. Leave **Redirect URI** blank.
+    4. Click **Register**.
+  </Step>
+
+  <Step>
+    On the application **Overview** page, copy and save the **Application (client) ID** and the **Directory (tenant) ID**. You will use these to configure the connector.
+  </Step>
+
+  <Step>
+    Create a client credential. Choose either a client secret or a client certificate.
+
+    **Option 1: Client secret**
+
+    1. Navigate to **Certificates & secrets** > **Client secrets** > **New client secret**.
+    2. Enter a description and select an expiration period.
+    3. Click **Add**.
+    4. Copy and save the secret **Value** immediately — it is only shown once.
+
+    **Option 2: Client certificate**
+
+    1. Navigate to **Certificates & secrets** > **Certificates** > **Upload certificate**.
+    2. Upload your PEM-encoded public certificate.
+    3. Save the local path to the corresponding certificate file — you will pass it to the connector at runtime.
+  </Step>
+
+  <Step>
+    Grant Microsoft Graph application permissions.
+
+    1. Navigate to **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions**.
+    2. Select the following permissions:
+       - `User.Read.All` — Read user profiles
+       - `Group.ReadWrite.All` — Read and manage group membership (use `Group.Read.All` if you do not want C1 to manage groups)
+       - `RoleManagement.ReadWrite.All` — Read and manage directory role assignments (use `RoleManagement.Read.All` if you do not want C1 to manage role assignments)
+    3. Click **Add permissions**.
+    4. Click **Grant admin consent for &lt;tenant&gt;** and confirm.
+
+    <Warning>
+    The **Group.ReadWrite.All** and **RoleManagement.ReadWrite.All** permissions are used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, grant only the read-only variants.**
+    </Warning>
+  </Step>
+</Steps>
+
+For more information, see [Microsoft's app registration documentation](https://learn.microsoft.com/en-gb/graph/auth-register-app-v2).
+
+## Configure the Microsoft 365 connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Microsoft 365** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Microsoft 365 connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Paste the credentials into the relevant fields:
+
+        - **MS365 Tenant ID**: The **Directory (tenant) ID** from the Entra app registration
+        - **MS365 Client ID**: The **Application (client) ID** from the Entra app registration
+        - **MS365 Client Secret**: The client secret value (if using secret authentication)
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Microsoft 365 connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Microsoft 365](https://github.com/conductorone/baton-ms365) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+    ### Step 1: Set up a new Microsoft 365 connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Microsoft 365 connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Microsoft 365 connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-ms365-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-ms365-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Microsoft 365 credentials
+      BATON_MS365_TENANT_ID: <Your Entra tenant ID>
+      BATON_MS365_CLIENT_ID: <Your Entra application (client) ID>
+      BATON_MS365_CLIENT_SECRET: <Your Entra client secret>
+
+      # Optional: include if you want C1 to provision access using this connector
+      BATON_PROVISIONING: true
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-ms365.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-ms365
+      labels:
+        app: baton-ms365
+    spec:
+      selector:
+        matchLabels:
+          app: baton-ms365
+      template:
+        metadata:
+          labels:
+            app: baton-ms365
+            baton: true
+            baton-app: ms365
+        spec:
+          containers:
+          - name: baton-ms365
+            image: public.ecr.aws/conductorone/baton-ms365:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-ms365
+            envFrom:
+            - secretRef:
+                name: baton-ms365-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Microsoft 365 connector to. Microsoft 365 data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Microsoft 365 connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
