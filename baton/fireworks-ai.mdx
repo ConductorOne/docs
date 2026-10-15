@@ -14,8 +14,8 @@ members, machine identities, role assignments, and API key metadata.
 |Resource|Sync|Provision|
 |-|-|-|
 |Accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
-|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create|
-|Service accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create|
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create; issue API keys|
+|Service accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create; issue API keys|
 |Roles and assignments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Assign|
 |API keys|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Delete|
 
@@ -25,6 +25,8 @@ members, machine identities, role assignments, and API key metadata.
 The API key must belong to a Fireworks AI account administrator. Other roles
 can view users and service accounts, but only administrators can manage users,
 access, and other users' API keys.
+Credential issuance requires permission to list, create, and delete API keys
+for the target user or service account.
 </Warning>
 
 <Steps>
@@ -109,6 +111,18 @@ access, and other users' API keys.
   user and service account to have exactly one role, so the connector does not
   offer a role-only revoke operation.
 - Deleting an API key removes the key permanently.
+- Issue an API key for an existing user or service account, optionally with an
+  expiry time. The connector returns the one-time key value encrypted for the
+  requester and syncs only key metadata. Issued keys can be deleted by their
+  Fireworks key ID. Before every issuance, the connector lists all pages of the
+  owner's API keys. This adds listing requests and confirms list access, which
+  is needed for key discovery and later revocation checks. If the listing fails
+  or access is denied, issuance stops before creating a key.
+  If Fireworks returns an unusable key or ignores the requested
+  expiry, the connector attempts to delete the created key before failing issuance.
+  When the response omits its key ID, cleanup requires a single new matching key
+  in the owner's API-key listing. If cleanup cannot be confirmed, or creation
+  fails without a response, inspect the owner's API keys before retrying.
 
 Fireworks exposes user deletion through `firectl`, but its public REST API does
 not document a delete-user operation. The connector therefore does not delete

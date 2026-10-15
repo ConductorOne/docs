@@ -23,7 +23,7 @@ Use this integration if your organization accesses GitHub at `github.com`. If yo
 | GitHub Apps (NHI) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Secrets - API keys | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
-The GitHub connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). New accounts will send an invitation to the account owner; if an invitation is pending, the account status will be shown as **Unspecified**. 
+The GitHub connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). New accounts will send an invitation to the account owner; while an invitation is pending, the account status will be shown as **Pending**. Expired invitations also report **Pending**, distinguished by `invitation_expired` in the status details. 
 
 Repository permissions that are inherited through team membership are labeled as such on the relevant entitlement's **Grants** tab in the C1 web app. 
 
@@ -216,6 +216,13 @@ Scroll down to the **Private keys** section of the app's page and click **Genera
 </Step>
 <Step>
 Carefully save the private key file.
+
+   The connector accepts a PEM-encoded **RSA** private key in either format, so no conversion is needed:
+
+   - **PKCS#1** — header line `-----BEGIN RSA PRIVATE KEY-----`, which is what **Generate a private key** produces
+   - **PKCS#8** — header line `-----BEGIN PRIVATE KEY-----`, which is what OpenSSL 3.0+ produces by default
+
+   When you configure the connector, you can supply either the key file itself or the PEM contents of that file.
 </Step>
 <Step>
 Finally, install the new app on your GitHub organization. Navigate to **Developer Settings** > **GitHub Apps**.
@@ -293,7 +300,15 @@ If you're using a GitHub app to set up the connector:
 
    1. Enter your app ID into the **GitHub app ID** field.
 
-   1. Click **Choose file** and upload your private key file.
+   1. Provide the GitHub App's private key one of two ways:
+      - Click **Choose file** and upload your private key (`.pem`) file, or
+      - Paste the key's raw PEM contents into the **GitHub App private key (PEM)** field. Because this field only accepts a single line of text, replace every line break in the PEM with a literal `\n` (backslash, then the letter `n`) before pasting it in — the connector unescapes these back into real line breaks. If both fields are filled in, the pasted **GitHub App private key (PEM)** value takes precedence.
+
+        Pasting the file's contents unchanged does not work: the browser replaces the line breaks with spaces, and the connector rejects the value with `invalid private key PEM format`. Run this to produce the single-line form, then paste the result:
+
+        ```bash
+        awk '{printf "%s\\n", $0}' your-private-key.pem
+        ```
 
    1. In the **Organization** field, enter the name of the GitHub organization associated with the GitHub app. **You must enter a single organization name in this field or the connector configuration will fail.**
 
@@ -382,7 +397,10 @@ stringData:
 
   # GitHub credentials if configuring with a GitHub app
   BATON_APP_ID: <GitHub app ID>
+  # Supply the private key one of two ways:
   BATON_APP_PRIVATEKEY_PATH: /etc/baton-github/keys/private-key.pem
+  # ...or pass the raw PEM contents directly (takes precedence when both are set):
+  # BATON_APP_PRIVATEKEY: <Raw PEM contents of the private key for the GitHub app>
   BATON_ORGS: <Name of the single GitHib org the app was created for>
 
   # Optional: include if you want C1 to provision access using this connector
@@ -407,7 +425,7 @@ stringData:
     <Contents of the GitHub app's private key (.pem) file>
 ```
 
-If you're configuring the connector with a GitHub app, the private key must be mounted into the container as a file rather than passed as an environment variable. The manifest above stores the key in its own Secret so it can be mounted as a volume in the deployment configuration below. Set `BATON_APP_PRIVATEKEY_PATH` to the path where the key will be mounted.
+If you're using `BATON_APP_PRIVATEKEY_PATH`, the private key must be mounted into the container as a file rather than passed as an environment variable. The manifest above stores the key in its own Secret so it can be mounted as a volume in the deployment configuration below. Set `BATON_APP_PRIVATEKEY_PATH` to the path where the key will be mounted. If you use `BATON_APP_PRIVATEKEY` instead, the raw PEM contents are passed directly and no volume mount is needed.
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
 
@@ -452,7 +470,7 @@ spec:
           secretName: baton-github-app-key
 ```
 
-The `volumeMounts` and `volumes` entries above are only needed if you're configuring the connector with a GitHub app. Omit them if you're using an access token instead.
+The `volumeMounts` and `volumes` entries above are only needed if you're configuring the connector with a GitHub app using `BATON_APP_PRIVATEKEY_PATH`. Omit them if you're using an access token or `BATON_APP_PRIVATEKEY` instead.
 
 ### Step 3: Deploy the connector
 
