@@ -16,6 +16,7 @@ The Cisco Ise connector syncs the following resources:
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
 | Accounts | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
+| Admin Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
 | Admin Users | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | |
 | Identity Groups | <Icon icon="square-check" iconType="solid" color="#65DE23"/> | <Icon icon="square-check" iconType="solid" color="#65DE23"/> |
 
@@ -44,7 +45,7 @@ New accounts are created in the enabled state with a randomly generated password
 | :--- | :--- | :--- |
 | Identity Group | Member | Add an internal user to the identity group, or remove them from it |
 
-Identity group membership is the only access C1 can change in Cisco ISE. Admin users are read for inventory and access reviews only: they carry no entitlements, and C1 does not create, delete, or modify them.
+Identity group membership is the only access C1 can change in Cisco ISE. Admin users are read for inventory and access reviews: their admin-group membership is synced as a grant, and C1 does not create, delete, modify, grant, or revoke it.
 
 **Notes:**
 
@@ -64,13 +65,39 @@ If **Enable CSRF Check for Enhanced Security** is selected instead, the connecto
 </Warning>
 
 <Warning>
-Admin user syncing is opt-in, and it fails closed. Not every ISE deployment lets an ERS account read administrator accounts — that access comes from the account's ISE admin group membership, not from a permission you request. If you enable the Admin Users resource for an account that cannot read administrator accounts, the entire sync stops with a permission error, so accounts and identity groups do not finish syncing either. Either leave the Admin Users resource disabled, or use an ISE administrator whose admin group is allowed to read administrator accounts.
+**ISE's TLS certificate must be one the connector trusts.** Cisco ISE ships with a self-signed certificate, and many deployments keep an internally-issued one. The connector verifies it like any HTTPS client, so an untrusted certificate stops the sync before ISE ever sees the credentials, with an error naming `x509: certificate signed by unknown authority`. Connecting by IP address fails the same way for a second reason — ISE's default certificate carries no IP SAN, so the error instead reads `cannot validate certificate for <address> because it doesn't contain any IP SANs`.
+
+A **cloud-hosted** connector has no setting to skip verification or add a CA, so ISE needs a publicly trusted certificate. Replace it under **Administration** > **System** > **Certificates** > **System Certificates**, and make sure the name you configure in C1 matches a name on the certificate. For a private CA, run the connector self-hosted, where that host can trust it.
+
+A **self-hosted** connector can be told to skip verification with `BATON_INSECURE: "true"`, which exists for test environments. It disables the check that the node is the one it claims to be, so do not use it against production ISE.
+</Warning>
+
+<Warning>
+**Use a dedicated ERS account, not one a person signs in with.** ISE suspends an administrator account after a number of consecutive failed sign-ins. For admin accounts that setting is **Administration** > **System** > **Admin Access** > **Authentication** > **Lock/Suspend Settings**, not the internal-user password policy under Identity Management. The ISE administrator sets how many failed attempts trigger it and how long it lasts.
+
+Those attempts are counted per account across everything that uses it, so a connector configured with the wrong password suspends the account for the people who share it, and a person mistyping it suspends the connector. A suspended account is refused over ERS even with the right password. ISE answers that with 401, which the connector reports as an authentication error, the same shape as a wrong password.
+
+That setting offers **Lock** or **Suspend**. Waiting out the window only works for Suspend. With Lock, another administrator has to reset the account before ERS will accept it again.
+
+Expect recovery to take longer than the configured window. On ISE 3.4, a suspended account stayed refused well past the window while a self-hosted connector kept retrying it. Correcting the password does not end an active suspension. Stop the sync attempts first, then wait the window out.
+
+How you stop them depends on the deployment. For a **self-hosted** connector, scale the Deployment to 0, correct `BATON_PASSWORD` in the Secret, wait, then scale it back up. For a **cloud-hosted** connector, select **Pause** on the connector in C1, correct the credentials there, and resume it after the window.
+
+Give the connector an administrator of its own, in the ERS group it needs and used by nothing else, so a suspension costs you that connector and nothing else.
+</Warning>
+
+<Warning>
+**Admin groups are identified by name.** ERS 3.4 serves no admin-group collection, so the groups come from the `adminGroups` field of the administrators themselves and the group's name is the only identifier ISE publishes for it. Two consequences: renaming an admin group in ISE reads as deleting one group and creating another, which drops the memberships C1 recorded against the old name until the next sync rebuilds them under the new one; and a group whose name contains a comma cannot be read correctly, because ISE packs an administrator's groups into one comma-separated string with no escaping. Enable Admin Groups together with Admin Users — the groups are derived from the administrators, so selecting the groups alone syncs them with no members.
+</Warning>
+
+<Warning>
+Admin user and admin group syncing is opt-in, and it fails closed. Not every ISE deployment lets an ERS account read administrator accounts — that access comes from the account's ISE admin group membership, not from a permission you request. If you enable Admin Users or Admin Groups for an account that cannot read administrator accounts, the entire sync stops with a permission error, so accounts and identity groups do not finish syncing either. Either leave both resources disabled, or use an ISE administrator whose admin group is allowed to read administrator accounts. Admin groups are derived from those administrators, so enable them together.
 </Warning>
 
 ## Gather Cisco ISE credentials
 
 <Warning>
-To configure the Cisco ISE connector, you need an ISE administrator account with ERS (External RESTful Services) API access. Membership in the **ERS Operator** group is enough to sync access data. For C1 to also provision access — create and delete internal users, and change identity group membership — the account needs to be an **ERS Admin** or a **Super Admin**.
+To configure the Cisco ISE connector, you need a dedicated ISE administrator with ERS (External RESTful Services) API access — create one for the connector rather than sharing a person's **Super Admin** account. Membership in the **ERS Operator** group is enough to sync access data. For C1 to also provision access — create and delete internal users, and change identity group membership — the account needs to be in the **ERS Admin** group. The steps below cover creating that account.
 </Warning>
 
 ### Create an ERS administrator account
@@ -95,7 +122,11 @@ To configure the Cisco ISE connector, you need an ISE administrator account with
   <Step>
     Create or designate an admin user in the right ERS group:
 
-    Go to **Administration** > **System** > **Admin Access** > **Administrators** > **Admin Users**, then create a new user or select an existing one and add it to the **ERS Operator** group to sync access data, or to the **ERS Admin** group if C1 also provisions access. An existing **Super Admin** account also works for both.
+    Go to **Administration** > **System** > **Admin Access** > **Administrators** > **Admin Users** and create a new administrator for this connector, in the **ERS Operator** group to sync internal users and identity groups, or in the **ERS Admin** group if C1 also provisions access.
+
+    Create one rather than reusing an existing account. A **Super Admin** account does satisfy both groups, but sharing it with the connector means a wrong password on either side suspends it for both.
+
+    Leave **Admin Users** and **Admin Groups** disabled unless this account can read `/ers/config/adminuser`. That read is granted by the admin group, and membership in ERS Operator or ERS Admin does not by itself show that it is allowed. Without it those two opt-in types fail the whole sync.
   </Step>
 
   <Step>
@@ -149,7 +180,7 @@ To configure this connector, you need the **Connector Administrator** or **Super
       <Step>
         Enter the required configuration:
 
-        - **Hostname**: Your Cisco ISE server address, either a hostname or an IP (e.g., `ise.example.com` or `198.18.133.27`)
+        - **Hostname**: The ISE PAN hostname (e.g. ise.example.com). An IP address fails TLS verification when the certificate has no IP SAN.
         - **Username**: ERS API administrator username
         - **Password**: ERS API administrator password
       </Step>
@@ -241,7 +272,11 @@ To configure this connector, you need the **Connector Administrator** or **Super
       BATON_PASSWORD: <Cisco ISE ERS administrator password>
 
       # Optional: include if you want C1 to provision access using this connector
-      BATON_PROVISIONING: true
+      BATON_PROVISIONING: "true"
+
+      # Test environments only: uncomment to skip verification of ISE's TLS
+      # certificate. Against production ISE, trust the certificate instead.
+      # BATON_INSECURE: "true"
     ```
 
     See the connector's README or run `--help` to see all available configuration flags and environment variables.
