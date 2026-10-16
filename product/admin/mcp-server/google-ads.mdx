@@ -95,9 +95,11 @@ A project with **Test** access can call only Google Ads test accounts. To use th
 | **Test** | Test accounts only | 15,000 | Granted when you enable the API |
 | **Explorer** | Test and production accounts | 2,880 against production accounts; 15,000 against test accounts | Automated review |
 | **Basic** | Test and production accounts | 15,000 | Requires Explorer access and [brand verification](https://developers.google.com/google-ads/api/docs/api-policy/brand-verification), then an automated review |
-| **Standard** | Test and production accounts | Unlimited | Manual review, typically about 10 business days |
+| **Standard** | Test and production accounts | Unlimited | Requires [brand verification](https://developers.google.com/google-ads/api/docs/api-policy/brand-verification), then a manual review, typically about 10 business days |
 
 Explorer access covers every tool this server exposes. It blocks only features this server doesn't use, such as creating client accounts, managing user access, keyword planning, audience insights, reach planning, and billing. Continue to Basic, and then Standard, if your users will run more operations per day than Explorer allows.
+
+Basic and Standard applications require [brand verification](https://developers.google.com/google-ads/api/docs/api-policy/brand-verification) for the project. Brand verification requires an OAuth consent screen with the **External** audience and the **In production** publishing status, so an **Internal** or **Testing** app can't move past Explorer.
 
 <Steps>
 <Step>
@@ -130,8 +132,8 @@ Go to **APIs & Services** > **OAuth consent screen** (labeled **Google Auth Plat
 </Step>
 <Step>
 Choose the audience:
-- **Internal** limits authorization to accounts in your Google Workspace organization and skips Google's app verification. Use it when every user signs in with a Workspace account.
-- **External** allows any Google account. Use it if users sign in to Google Ads with accounts outside your Workspace.
+- **Internal** limits authorization to accounts in your Google Workspace organization and skips Google's app verification. Use it when every user signs in with a Workspace account and Explorer's daily limit is enough.
+- **External** allows any Google account. Use it if users sign in to Google Ads with accounts outside your Workspace, or if you plan to apply for Basic or Standard access.
 </Step>
 <Step>
 On the **Data Access** page, add the scope `https://www.googleapis.com/auth/adwords`.
@@ -141,7 +143,7 @@ On the **Data Access** page, add the scope `https://www.googleapis.com/auth/adwo
 Users in the audience you chose can now grant the Google Ads scope. The Google Ads API uses this single scope for both reading and writing, and Google doesn't offer a read-only Google Ads scope. To keep a user read-only, give them **Read only** access in Google Ads and approve only the read tools in C1.
 
 <Note>
-An **External** app in **Testing** publishing status has two limits. Only users you add as **test users** on the consent screen can authorize, and everyone else sees a "Google hasn't verified this app" screen. Google also expires each test user's authorization after 7 days, so they must reconnect their Google account every week. To remove both limits, publish the app and complete Google's [OAuth app verification](https://support.google.com/cloud/answer/13461325), which the `adwords` scope requires because Google classifies it as sensitive. **Internal** apps have neither limit.
+An **External** app in **Testing** publishing status has two limits. Only users you add as **test users** on the consent screen can authorize, and everyone else sees a "Google hasn't verified this app" screen. Google also expires each test user's authorization after 7 days, so they must reconnect their Google account every week. To remove both limits, publish the app and complete Google's [OAuth app verification](https://support.google.com/cloud/answer/13461325), which the `adwords` scope requires because Google classifies it as sensitive. **Internal** apps have neither limit, but they can't complete the brand verification that Basic and Standard access require.
 </Note>
 
 ### Create the OAuth client
@@ -219,7 +221,10 @@ In Google Ads, go to **Admin** > **Access and security**.
 Select the **+** (plus) button.
 </Step>
 <Step>
-Enter the user's email address and choose an access level:
+Enter the user's email address.
+</Step>
+<Step>
+Choose an access level:
 - **Read only** for users who only need reporting and list tools.
 - **Standard** or **Admin** for users who need to create, update, or remove campaigns, ad groups, ads, keywords, or budgets.
 
@@ -330,5 +335,5 @@ Most setup problems show up as an error on a user's first tool call.
 | `redirect_uri_mismatch` during authorization | The OAuth client's redirect URI doesn't match your C1 tenant. | Set it to exactly `https://accounts.conductor.one/auth/callback`, or `https://accounts.c1eu.ai/auth/callback` for the EU data residency instance. |
 | "Google hasn't verified this app" blocks sign-in | The consent screen is **External**, unverified, and the user isn't a test user. | Add the user as a **test user**, or complete Google's app verification. |
 | Users must reconnect their Google account every 7 days | The consent screen is **External** and its publishing status is **Testing**. | Publish the app and complete Google's [OAuth app verification](https://support.google.com/cloud/answer/13461325), or switch the audience to **Internal** if every user has a Workspace account. |
-| `AUTHORIZATION_ERROR` on production accounts after you upgraded the project's access level | A known Google issue affects some projects that had Test access and API activity before September 9, 2026 and were upgraded afterward. Calls to test accounts still succeed. | Apply for Explorer access from a new Google Cloud project. See Google's [developer token sunset](https://developers.google.com/google-ads/api/docs/get-started/dev-token) notice for the current status. |
+| `AUTHORIZATION_ERROR` on production accounts after you upgraded the project's access level | A known Google issue affects some projects that had Test access and API activity before September 9, 2026 and were upgraded afterward. Calls to test accounts still succeed. Google is rolling out a fix. | Until the fix reaches your project, apply for Explorer access from a new Google Cloud project. See Google's [developer token sunset](https://developers.google.com/google-ads/api/docs/get-started/dev-token) notice for the current status. |
 | Calls fail after many requests in a day | The project reached its daily operation limit. Explorer allows 2,880 operations per day against production accounts. | Apply for the next access level on the [Google Ads API Overview](https://console.cloud.google.com/google/ads-apis/overview) page. |
