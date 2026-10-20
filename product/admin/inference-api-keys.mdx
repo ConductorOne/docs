@@ -1,0 +1,246 @@
+---
+title: Use inference API keys with Edge Gateway
+description: Create a scoped C1 inference API key and use it to list models and run inference through your organization's Edge Gateway from any tool or script, including Claude Code and OpenAI SDKs.
+og:title: Use inference API keys with Edge Gateway - C1 docs
+og:description: Create a scoped C1 inference API key and use it to list models and run inference through your organization's Edge Gateway from any tool or script, including Claude Code and OpenAI SDKs.
+sidebarTitle: Inference API keys
+---
+
+{/* Editor Refresh: 2026-10-20 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Create an inference API key in C1 when a tool, script, or server needs to call models through your organization's Edge Gateway and can't use C1 Multipass. The key is a bearer token tied to you and to one model endpoint. Edge Gateway checks it with C1 on every request, so revoking the key or removing your access takes effect within seconds.
+
+## When to use an inference API key
+
+Edge Gateway offers three ways to authenticate inference. Choose based on where the tool runs:
+
+| Option | Best for | Credential |
+| :--- | :--- | :--- |
+| Inference API key (this page) | Scripts, CI jobs, servers, and devices without C1 Multipass | A long-lived key you create and store |
+| [C1 Multipass local endpoints](/product/admin/connect-edge-gateway-multipass) | Interactive tools on a device with C1 Multipass, including egress | A local key that never leaves the device |
+| [Claude Code with C1 Multipass](/product/admin/claude-code-edge-gateway-multipass) | Claude Code on a device with C1 Multipass | Tokens that expire within five minutes |
+
+An inference API key is the simplest to set up and works anywhere, but it's a long-lived secret. Prefer the C1 Multipass options on devices that have it.
+
+An inference API key only works for inference: listing models and running them. It doesn't work for egress, MCP servers, or the C1 API.
+
+## Before you begin with inference API keys
+
+Confirm the following before you start:
+
+| Requirement | Who provides it |
+| :--- | :--- |
+| **AI & API** in your C1 profile menu | Your C1 admin enables AI access management for your tenant |
+| At least one model endpoint listed under **Inference API keys**, with the scopes you need | Your C1 admin grants access to an Edge Gateway that accepts inference API keys |
+| Your Edge Gateway's inference URL, for example `https://<your-org>-inference.edge.<your-zone>` | Your C1 admin |
+
+## Create an inference API key
+
+Create a key for one model endpoint, with only the scopes your tool needs.
+
+<Steps>
+<Step>
+In C1, click your profile menu and click **AI & API**.
+</Step>
+<Step>
+Click **Inference API keys**.
+</Step>
+<Step>
+Click **Create inference API key**.
+</Step>
+<Step>
+Enter a **Name** that identifies where you'll use the key, such as the tool or host name.
+</Step>
+<Step>
+Select the **Model endpoint**.
+</Step>
+<Step>
+Under **Granted scopes**, select the scopes the tool needs:
+
+- **Browse models** (`inference.models.read`) lists the models available through the endpoint.
+- **Run models** (`inference.invoke`) sends inference requests.
+</Step>
+<Step>
+Choose an **Expiration**. Pick the shortest period that works for the tool.
+</Step>
+<Step>
+Click **Create**, and copy the key.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/inference-api-key-create.png" alt="The Create inference API key dialog, with fields for Name, Model endpoint, Granted scopes (Browse models and Run models), and Expiration."/>
+</Frame>
+
+The key appears in your **Inference API keys** list. Keys start with `c1llm_`. Store the key in a secrets manager or your tool's secret storage; don't commit it to source control or paste it into chat.
+
+## Test your inference API key
+
+Run these commands in a terminal to confirm the key works before configuring a tool. First, load the key into your shell without printing it or saving it to your shell history:
+
+<Tabs>
+<Tab title="zsh (macOS default)">
+
+```bash
+read -rs "C1LLM_KEY?Paste inference API key: " && echo
+```
+
+</Tab>
+<Tab title="bash">
+
+```bash
+read -rsp "Paste inference API key: " C1LLM_KEY && echo
+```
+
+</Tab>
+</Tabs>
+
+Then set your Edge Gateway inference URL:
+
+```bash
+EDGE_INFERENCE_URL=https://<your edge gateway inference host>
+```
+
+### List the models available to your key
+
+This request needs the **Browse models** scope:
+
+```bash
+curl -s "$EDGE_INFERENCE_URL/v1/models" -H "Authorization: Bearer $C1LLM_KEY"
+```
+
+The response is an OpenAI-style list. Each entry's `id` is the model name to use in requests, and its `capabilities` show the request formats it accepts.
+
+### Run an inference request
+
+These requests need the **Run models** scope. Use the request format the model accepts.
+
+<Tabs>
+<Tab title="Anthropic Messages">
+
+```bash
+curl -s "$EDGE_INFERENCE_URL/v1/messages" \
+  -H "Authorization: Bearer $C1LLM_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model": "<model id>", "max_tokens": 50, "messages": [{"role": "user", "content": "Say hello"}]}'
+```
+
+</Tab>
+<Tab title="OpenAI Responses">
+
+```bash
+curl -s "$EDGE_INFERENCE_URL/v1/responses" \
+  -H "Authorization: Bearer $C1LLM_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model": "<model id>", "input": "Say hello", "store": false}'
+```
+
+</Tab>
+<Tab title="OpenAI Chat Completions">
+
+```bash
+curl -s "$EDGE_INFERENCE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $C1LLM_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model": "<model id>", "messages": [{"role": "user", "content": "Say hello"}]}'
+```
+
+</Tab>
+</Tabs>
+
+A model's reply confirms the key, scopes, and model endpoint are working. An `invalid_request_error` with `"class":"compatibility"` means the model doesn't accept that request format; use a format listed in the model's `capabilities`.
+
+## Use an inference API key in your tools
+
+Send the key as a bearer token (`Authorization: Bearer`) to your Edge Gateway inference URL. Configure each tool with the variables it reads.
+
+### Use an inference API key with Claude Code
+
+Set `ANTHROPIC_AUTH_TOKEN`, which Claude Code sends as a bearer token. Don't use `ANTHROPIC_API_KEY`, which Claude Code sends in a different header. Set `ANTHROPIC_BASE_URL` to the inference URL without a `/v1` suffix.
+
+```bash
+env -u ANTHROPIC_API_KEY \
+  ANTHROPIC_BASE_URL="$EDGE_INFERENCE_URL" \
+  ANTHROPIC_AUTH_TOKEN="$C1LLM_KEY" \
+  claude --model <claude model id> -p "Reply with exactly: claude key ok"
+```
+
+The command prints `claude key ok`. To use the key in every session, set the same two variables in your shell profile or in the `env` block of `~/.claude/settings.json`, reading the key from your secret storage.
+
+### Use an inference API key with OpenAI SDKs and tools
+
+Set `OPENAI_BASE_URL` to the inference URL with a `/v1` suffix, and `OPENAI_API_KEY` to the key:
+
+```bash
+export OPENAI_BASE_URL="$EDGE_INFERENCE_URL/v1"
+export OPENAI_API_KEY="$C1LLM_KEY"
+```
+
+OpenAI SDKs and tools that read these variables then send requests through Edge Gateway without code changes:
+
+```python
+from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
+response = client.responses.create(model="<model id>", input="Say hello", store=False)
+print(response.output_text)
+```
+
+### Use an inference API key with the Anthropic SDK
+
+Pass the key as an auth token, so the SDK sends it as a bearer token:
+
+```python
+import os
+from anthropic import Anthropic
+
+client = Anthropic(
+    base_url="https://<your edge gateway inference host>",
+    auth_token=os.environ["C1LLM_KEY"],  # export C1LLM_KEY first
+)
+message = client.messages.create(model="<model id>", max_tokens=50, messages=[{"role": "user", "content": "Say hello"}])
+print(message.content[0].text)
+```
+
+## Revoke or rotate an inference API key
+
+Revoke a key as soon as you no longer need it or suspect it leaked. Revoke it in **AI & API** > **Inference API keys**. Edge Gateway rejects the key within about 30 seconds.
+
+To rotate a key, create a new key, update your tools to use it, confirm they work, then revoke the old key.
+
+## Troubleshoot inference API keys
+
+Edge Gateway's HTTP status code identifies most problems:
+
+| Response | Cause | What to do |
+| :--- | :--- | :--- |
+| `401` | The key is invalid, expired, or revoked, or it belongs to a different model endpoint than the URL you called. | Check that you copied the whole key and that the URL matches the key's model endpoint. Create a new key if it expired or was revoked. |
+| `403` | The key is valid but lacks the scope for this request, or the Edge Gateway doesn't accept inference API keys. | Create a key with **Browse models** for listing and **Run models** for inference. If the scopes are correct, ask your C1 admin to check the Edge Gateway's settings. |
+| `400` with `"class":"compatibility"` | The model doesn't accept the request format. | Use a request format listed in the model's `capabilities`. |
+| `503` | Edge Gateway couldn't reach C1 to validate the key. | Retry after a short wait. |
+| Claude Code reports an authentication error | Claude Code sent the key in the wrong header, or another credential overrode it. | Use `ANTHROPIC_AUTH_TOKEN`, not `ANTHROPIC_API_KEY`, and remove other Anthropic credentials from the environment. |
+
+## Frequently asked questions about inference API keys
+
+<AccordionGroup>
+  <Accordion title="Whose access does an inference API key use?">
+    Yours. Edge Gateway attributes each request to the key's owner and records the key's ID in audit events. If your access to the model endpoint is removed, the key stops working even before it expires.
+  </Accordion>
+
+  <Accordion title="Can I use one key for several model endpoints?">
+    No. Each key is bound to the model endpoint you selected when you created it. Create a separate key for each endpoint.
+  </Accordion>
+
+  <Accordion title="Can I use an inference API key for egress or MCP servers?">
+    No. Inference API keys only work for listing models and running inference. Use [C1 Multipass](/product/admin/connect-edge-gateway-multipass) for egress.
+  </Accordion>
+
+  <Accordion title="How quickly does revoking a key take effect?">
+    Within about 30 seconds. Edge Gateway caches a successful validation for at most 30 seconds, and never longer than the key's expiry.
+  </Accordion>
+</AccordionGroup>
