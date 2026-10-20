@@ -27,6 +27,16 @@ Both endpoints require a local key, because any process on the device can reach 
 
 Your C1 admin decides which models and destinations you can reach. Edge Gateway enforces that policy on every request.
 
+## Edge Gateway setup at a glance
+
+Setup takes five tasks, each covered in its own section below:
+
+1. [Turn on Edge Gateway routing](#turn-on-edge-gateway-routing), which starts serving both local endpoints.
+2. Install the C1 Multipass command line tool, part of the same section.
+3. [Load the endpoint credentials into your shell](#load-the-endpoint-credentials-into-your-shell): the endpoint addresses and the local key.
+4. [List models and run inference](#list-models-and-run-inference) through the inference endpoint.
+5. [Send outbound HTTPS traffic through Edge Gateway](#send-outbound-https-traffic-through-edge-gateway) after your tools trust the Edge Gateway CA.
+
 ## Supported platforms for Edge Gateway routing
 
 How you turn on routing depends on the platform:
@@ -89,6 +99,10 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
 The status line reads **Running at http://127.0.0.1:18080/v1**, and the **Edge** row shows the Edge Gateway in use.
 
+<Frame>
+  <img src="/images/product/assets/multipass-edge-gateway-settings.png" alt="C1 Multipass Settings > General, showing the Command line tool row with an Install button, and Route AI traffic through Edge turned on with the status Running at http://127.0.0.1:18080/v1 and the selected Edge Gateway."/>
+</Frame>
+
 </Tab>
 <Tab title="Linux service">
 
@@ -143,9 +157,9 @@ c1-multipass headless edge status
 
 The output shows `"running": true` and `"ready": true`, with the inference and egress addresses.
 
-## Connect a terminal to Edge Gateway
+## Load the endpoint credentials into your shell
 
-Load the endpoint settings into your current shell. Use `eval` so the local key goes straight into the environment instead of your screen or shell history.
+Your tools need two things to use Edge Gateway: the endpoint addresses and the local key. The command line tool prints both as shell `export` lines, and only to the user who runs it. Use `eval` so the local key goes straight into the environment instead of your screen or shell history.
 
 ```bash
 eval "$(c1-multipass headless edge env)"
@@ -170,21 +184,67 @@ curl -s http://127.0.0.1:18081/_c1/health
 
 Each returns `{"ok":true}` when ready. A `{"ok":false,"reason":"..."}` response names the problem; see [Troubleshoot Edge Gateway routing](#troubleshoot-edge-gateway-routing).
 
-## Send inference requests through Edge Gateway
+## List models and run inference
 
-The inference endpoint accepts OpenAI-style requests, so any tool or SDK that reads `OPENAI_BASE_URL` and `OPENAI_API_KEY` works without code changes. List the models your Edge Gateway allows:
+The inference endpoint accepts OpenAI-style requests, so any tool or SDK that reads `OPENAI_BASE_URL` and `OPENAI_API_KEY` works without code changes. Run these commands in a shell where you loaded the endpoint credentials.
+
+### List the models available to you
+
+Your C1 admin decides which models your Edge Gateway exposes. List them:
 
 ```bash
 curl -s "$OPENAI_BASE_URL/models" -H "Authorization: Bearer $OPENAI_API_KEY"
 ```
 
-Then call a model from the list:
+The response is an OpenAI-style list. Each entry's `id` is the model name to use in requests, and its `capabilities` show the request formats and features it supports:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "<model id>",
+      "object": "model",
+      "capabilities": { "input_formats": ["openai_responses"], "streaming": true }
+    }
+  ]
+}
+```
+
+To print only the model names:
+
+```bash
+curl -s "$OPENAI_BASE_URL/models" -H "Authorization: Bearer $OPENAI_API_KEY" | jq -r '.data[].id'
+```
+
+### Run an inference request
+
+Send a request to a model from the list. This example uses the Responses API format:
 
 ```bash
 curl -s "$OPENAI_BASE_URL/responses" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "<model id>", "input": "Say hello", "store": false}'
+```
+
+For a model that lists the chat completions format, use `/chat/completions` instead:
+
+```bash
+curl -s "$OPENAI_BASE_URL/chat/completions" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "<model id>", "messages": [{"role": "user", "content": "Say hello"}]}'
+```
+
+OpenAI SDKs pick up the same variables, so existing code runs through Edge Gateway unchanged:
+
+```python
+from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
+response = client.responses.create(model="<model id>", input="Say hello", store=False)
+print(response.output_text)
 ```
 
 Requests must use `Content-Type: application/json` and name exactly one model. The endpoint rejects request URLs that carry a query string. Each model's entry in the model list describes the request formats and options it supports.
