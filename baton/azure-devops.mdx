@@ -6,8 +6,6 @@ og:description: "C1 provides identity governance and just-in-time provisioning f
 sidebarTitle: "Microsoft Azure DevOps"
 ---
 
-The Azure DevOps connector supports the [Cloud Infrastructure Access](/product/admin/cloud-infrastructure-access) data model as an opt-in option, which stores access as role-scope bindings and computes effective access on demand. This enables access requests with resource hierarchy navigation, access reviews scoped by inheritance, entitlement configuration rules based on role and scope, and lifecycle automation across your Azure DevOps projects. See [Project RBAC](#project-rbac-opt-in) below.
-
 ## Capabilities
 
 | Resource | Sync | Provision |
@@ -88,8 +86,8 @@ Administrators who have access only because they are Project Administrators or P
 To read team administrators, the connector needs access to the team's security settings:
 
 - **Client secret:** no extra setup. The service principal is a Project Collection Administrator.
-- **OAuth:** add the `vso.security_manage` and `vso.identity` permissions.
-- **Personal access token:** add the **Security: Manage** and **Identity: Read** scopes.
+- **OAuth:** add the `vso.identity` permission.
+- **Personal access token:** add the **Identity: Read** scope.
 
 If the connector can't read the team's security settings, the sync still completes. In that case, only team administrators who are also team members are shown.
 
@@ -117,10 +115,7 @@ You can authenticate the Azure DevOps connector in three ways: OAuth (interactiv
   Give the new app a name and select the **Accounts in any organizational directory** option.
   </Step>
   <Step>
-  Enter whichever redirect URI matches your C1 tenant's domain as a **Web** redirect URI:
-
-  - Default instance: `https://accounts.conductor.one/oauth/callback`
-  - EU data residency instance: `https://accounts.c1eu.ai/oauth/callback`
+  Enter `https://accounts.conductor.one/oauth/callback` as a **Web** redirect URI.
   </Step>
   <Step>
   Click **Register**.
@@ -147,7 +142,6 @@ You can authenticate the Azure DevOps connector in three ways: OAuth (interactiv
     - vso.tokenadministration (required to sync personal access tokens)
     - vso.auditlog (required if you enable incremental sync)
     - vso.identity (optional — required when **Legacy group identity resolution** is enabled, or to sync all team administrators)
-    - vso.security\_manage (optional — required to sync all team administrators)
 
     **For full provisioning (read/write) access:**
     - user\_impersonation (required - Azure DevOps only allows delegated permissions)
@@ -157,7 +151,6 @@ You can authenticate the Azure DevOps connector in three ways: OAuth (interactiv
     - vso.tokenadministration (required to sync personal access tokens)
     - vso.auditlog (required if you enable incremental sync)
     - vso.identity (optional — required when **Legacy group identity resolution** is enabled, or to sync all team administrators)
-    - vso.security\_manage (optional — required to sync all team administrators)
   </Step>
   <Step>
   Click **Add permissions**.
@@ -270,7 +263,6 @@ Azure DevOps groups, configure the connector with OAuth
     - **Audit Log: Read** - Required if you want to enable the incremental sync feature, which syncs only changes since the last sync (`vso.auditlog`)
     - **Identity: Read** - Required only if you also enable **Legacy group identity resolution** to resolve legacy group descriptors via the Identities API (`vso.identity`). This setting defaults to off and is separate from Graph: Read.
     To sync all team administrators, including those who aren't team members (optional):
-    - **Security: Manage** - Required to read the team's administrators (`vso.security_manage`)
     - **Identity: Read** - Required to identify each team administrator (`vso.identity`)
   </Step>
   <Step>
@@ -307,7 +299,7 @@ To complete this task, you'll need:
   <Step>
   Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-     If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+  If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
   </Step>
   <Step>
   Set the connector's **Name** and, optionally, a **Description**.
@@ -329,7 +321,7 @@ To complete this task, you'll need:
     3. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
     4. **Optional.** Check **Enable legacy group identity resolution** to process legacy group audit events. This setting defaults to off and requires `vso.identity`.
     5. **Optional.** Check **Enable Entra group membership provisioning** to grant and revoke memberships on Entra-sourced groups via Microsoft Graph. Requires the `GroupMember.ReadWrite.All` Microsoft Graph application permission with admin consent. Per Microsoft, changes may take up to 1 hour to appear in the Azure DevOps Members view.
-    6. **Optional.** Check **Use project RBAC roles** to enable the Cloud Infrastructure Access model for project access. Project-scoped groups are also synced as structured Project Role Assignment resources, with role and project context visible on each entitlement. See [Project RBAC](#project-rbac) for details.
+    6. **Optional.** Check **Use project RBAC roles** to enable the Sparse ACL model for project access. Project-scoped groups are also synced as structured Project Role Assignment resources, with role and project context visible on each entitlement. See [Project RBAC](#project-rbac) for details.
     7. Click **Save**.
     8. Click **Login with OAuth**.
     9. Log in and authorize C1 with your Azure DevOps instance.
@@ -340,7 +332,7 @@ To complete this task, you'll need:
     3. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission on the service principal.
     4. **Optional.** Check **Enable legacy group identity resolution** to process legacy group audit events. This setting defaults to off and requires `vso.identity`.
     5. **Optional.** Check **Enable Entra group membership provisioning** to grant and revoke memberships on Entra-sourced groups via Microsoft Graph. The same client ID and secret are used. Requires the `GroupMember.ReadWrite.All` Microsoft Graph application permission with admin consent. Per Microsoft, changes may take up to 1 hour to appear in the Azure DevOps Members view.
-    6. **Optional.** Check **Use project RBAC roles** to enable the Cloud Infrastructure Access model for project access. See [Project RBAC](#project-rbac) for details.
+    6. **Optional.** Check **Use project RBAC roles** to enable the Sparse ACL model for project access. See [Project RBAC](#project-rbac) for details.
     7. Click **Save**.
     If you chose **Personal access token**:
     1. Paste your Azure DevOps organization URL in the format `https://dev.azure.com/{Your_Organization}` into the **Organization URL** field.
@@ -348,7 +340,7 @@ To complete this task, you'll need:
     3. **Optional.** Check the boxes if you want to **Sync teams** or **Sync organizations**.
     4. **Optional.** Check **Enable incremental sync** to allow the connector to read audit logs and capture updates between full syncs. Requires the **Audit Log: Read** permission.
     5. **Optional.** Check **Enable legacy group identity resolution** to process legacy group audit events. This setting defaults to off and requires **Identity: Read** (`vso.identity`).
-    6. **Optional.** Check **Use project RBAC roles** to enable the Cloud Infrastructure Access model for project access. See [Project RBAC](#project-rbac) for details.
+    6. **Optional.** Check **Use project RBAC roles** to enable the Sparse ACL model for project access. See [Project RBAC](#project-rbac) for details.
     7. Click **Save**.
   </Step>
   <Step>
@@ -373,7 +365,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
   <Step>
-  In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+  In C1, navigate to **Apps** > **Connectors** > **Add connector**.
   </Step>
   <Step>
   Search for **Baton** and click **Add**.
@@ -381,7 +373,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
   <Step>
   Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-     If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+  If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
   </Step>
   <Step>
   Set the connector's **Name** and, optionally, a **Description**.
@@ -419,30 +411,18 @@ metadata:
   name: baton-azure-devops-secrets
 type: Opaque
 stringData:
-  # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-
-  # Azure DevOps credentials
   BATON_AUTH_METHOD: azure-devops-group-pat
-  BATON_ORGANIZATION_URL: <Your Azure DevOps organization URL, formed like https://dev.azure.com/{Your_Organization}>
+  BATON_ORGANIZATION_URL: <https://dev.azure.com/{Your_Organization}>
   BATON_PERSONAL_ACCESS_TOKEN: <Azure DevOps personal access token>
-
-  # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: "true"
-
-  # Optional: include if you want to sync teams or organization (license) data
   BATON_SYNC_ORGANIZATION: "true"
-
-  # Optional: include to read audit logs and capture updates between full syncs (requires Audit Log: Read permission)
   BATON_ENABLE_INCREMENTAL_SYNC: "true"
-
-  # Optional, defaults to false; requires Identity: Read (vso.identity)
+  # Optional, defaults to false; requires vso.identity
   # BATON_ENABLE_LEGACY_GROUP_IDENTITY_RESOLUTION: "true"
-
-  # Optional: enable the Cloud Infrastructure Access model for project access (see Project RBAC above).
-  # Cannot be combined with BATON_ENABLE_INCREMENTAL_SYNC (mutually exclusive).
-  # BATON_USE_PROJECT_RBAC: "true"
+  # Optional: enable the Sparse ACL model for project access
+  BATON_USE_PROJECT_RBAC: "true"
 ```
 
 **Option B — Service principal (client secret):**
@@ -455,37 +435,22 @@ metadata:
   name: baton-azure-devops-secrets
 type: Opaque
 stringData:
-  # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-
-  # Azure DevOps credentials
   BATON_AUTH_METHOD: azure-devops-group-client-secret
-  BATON_ORGANIZATION_URL: <Your Azure DevOps organization URL, formed like https://dev.azure.com/{Your_Organization}>
-  BATON_AZURE_DEVOPS_TENANT_ID: <Entra tenant ID>
+  BATON_ORGANIZATION_URL: <https://dev.azure.com/{Your_Organization}>
+  BATON_CLIENT_SECRET_TENANT_ID: <Entra tenant ID>
   BATON_CLIENT_SECRET_CLIENT_ID: <App registration client ID>
   BATON_CLIENT_SECRET_CLIENT_SECRET: <App registration client secret>
-
-  # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: "true"
-
-  # Optional: include if you want to sync teams or organization (license) data
   BATON_SYNC_ORGANIZATION: "true"
-
-  # Optional: include to read audit logs and capture updates between full syncs (requires Audit Log: Read permission)
   BATON_ENABLE_INCREMENTAL_SYNC: "true"
-
-  # Optional, defaults to false; requires Identity: Read (vso.identity)
+  # Optional, defaults to false; requires vso.identity
   # BATON_ENABLE_LEGACY_GROUP_IDENTITY_RESOLUTION: "true"
-
-  # Optional: include to provision membership on Entra-sourced groups via Microsoft Graph.
-  # Requires the GroupMember.ReadWrite.All Microsoft Graph application permission
-  # with admin consent on the Entra app registration. See the OAuth setup section above.
+  # Optional: requires GroupMember.ReadWrite.All Graph permission with admin consent
   BATON_ENABLE_ENTRA_GROUP_PROVISIONING: "true"
-
-  # Optional: enable the Cloud Infrastructure Access model for project access (see Project RBAC above).
-  # Cannot be combined with BATON_ENABLE_INCREMENTAL_SYNC (mutually exclusive).
-  # BATON_USE_PROJECT_RBAC: "true"
+  # Optional: enable the Sparse ACL model for project access
+  BATON_USE_PROJECT_RBAC: "true"
 ```
 
 **Option C — OAuth:**
@@ -498,39 +463,24 @@ metadata:
   name: baton-azure-devops-secrets
 type: Opaque
 stringData:
-  # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-
-  # Azure DevOps credentials
   BATON_AUTH_METHOD: azure-devops-group-oauth
-  BATON_ORGANIZATION_URL: <Your Azure DevOps organization URL, formed like https://dev.azure.com/{Your_Organization}>
+  BATON_ORGANIZATION_URL: <https://dev.azure.com/{Your_Organization}>
   BATON_AZURE_DEVOPS_TENANT_ID: <Entra tenant ID>
   BATON_OAUTH2_CLIENT_CRED_GRANT_CLIENT_ID: <OAuth app client ID>
   BATON_OAUTH2_CLIENT_CRED_GRANT_CLIENT_SECRET: <OAuth app client secret>
-
-  # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: "true"
-
-  # Optional: include if you want to sync teams or organization (license) data
   BATON_SYNC_ORGANIZATION: "true"
-
-  # Optional: include to read audit logs and capture updates between full syncs (requires Audit Log: Read permission)
   BATON_ENABLE_INCREMENTAL_SYNC: "true"
-
-  # Optional, defaults to false; requires Identity: Read (vso.identity)
+  # Optional, defaults to false; requires vso.identity
   # BATON_ENABLE_LEGACY_GROUP_IDENTITY_RESOLUTION: "true"
-
-  # Optional: include to provision membership on Entra-sourced groups via Microsoft Graph.
-  # Requires the GroupMember.ReadWrite.All Microsoft Graph application permission
-  # with admin consent on the Entra app registration. See the OAuth setup section above.
+  # Optional: requires GroupMember.ReadWrite.All Graph permission with admin consent
   BATON_ENABLE_ENTRA_GROUP_PROVISIONING: "true"
   BATON_ENTRA_CLIENT_ID: <Graph app client ID>
   BATON_ENTRA_CLIENT_SECRET: <Graph app client secret>
-
-  # Optional: enable the Cloud Infrastructure Access model for project access (see Project RBAC above).
-  # Cannot be combined with BATON_ENABLE_INCREMENTAL_SYNC (mutually exclusive).
-  # BATON_USE_PROJECT_RBAC: "true"
+  # Optional: enable the Sparse ACL model for project access
+  BATON_USE_PROJECT_RBAC: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -553,7 +503,7 @@ spec:
     metadata:
       labels:
         app: baton-azure-devops
-        baton: "true"
+        baton: true
         baton-app: azure-devops
     spec:
       containers:
