@@ -10,7 +10,7 @@ sidebarTitle: "Atlassian Bitbucket Data Center"
 
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
+| Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Projects | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Repositories | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
@@ -36,6 +36,13 @@ Configuring the connector requires you to pass in credentials generated in Bitbu
     In the **Permissions** section of the page, select these permissions:
 	- Project: Admin
 	- Repository: Admin
+
+    This token is enough to sync data and provision group/project/repo access, but **not** to
+    create or delete Bitbucket user accounts.
+
+    <Note>
+    Account provisioning (creating and deleting users) is not supported when the connector is configured with an HTTP access token. To provision accounts, configure the connector with a username and password for a user with the global **Administrator** (`ADMIN`) or **System Administrator** (`SYS_ADMIN`) permission. You can't configure both a token and a username/password.
+    </Note>
     </Step>
     <Step>
     Click **Create**.
@@ -46,6 +53,18 @@ Configuring the connector requires you to pass in credentials generated in Bitbu
 </Steps>
 
 **Done.** Next, move on to the connector configuration instructions.
+
+### (Optional) Credentials for account provisioning
+
+Account provisioning (creating and deleting Bitbucket users) requires a username and password
+for a user with the global **Administrator** (`ADMIN`) or **System Administrator**
+(`SYS_ADMIN`) permission - an HTTP access token can't be used for this. A token and a
+username/password are mutually exclusive; the connector rejects configuring both at once.
+Token users still need `BATON_PROVISIONING` enabled to provision group/project/repo access.
+
+When creating an account, you can optionally set **Add to default group**, which adds
+the new user to Bitbucket's default group. The default group controls the user's
+initial permissions and ability to log in; it defaults to off.
 
 ## Configure the Bitbucket Data Center connector
 
@@ -75,7 +94,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 <Steps>
     <Step>
-    In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+    In C1, navigate to **Apps** > **Connectors** > **Add connector**.
     </Step>
     <Step>
     Search for **Baton** and click **Add**.
@@ -83,7 +102,7 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
     <Step>
     Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-       If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+    If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
     </Step>
     <Step>
     Set the connector's **Name** and, optionally, a **Description**.
@@ -120,15 +139,47 @@ stringData:
   # C1 credentials
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
-  
+
   # Bitbucket Data Center credentials
   BATON_BITBUCKETDC_BASEURL: <Full URL of your Bitbucket Data Center Server (such as http://localhost:7990)>
   BATON_BITBUCKETDC_TOKEN: <Bitbucket HTTP access token>
-  BATON_USERNAME: <Username of Bitbucket administrator>
 
-  # Optional: include if you want C1 to provision access using this connector
+  # Optional: include if you want C1 to provision group/project/repo access
   BATON_PROVISIONING: true
 ```
+
+If you also want C1 to provision (create and delete) Bitbucket user accounts through this
+connector, HTTP access tokens cannot be used for that - replace `BATON_BITBUCKETDC_TOKEN` with
+basic auth credentials for a Bitbucket user with global `ADMIN` or `SYS_ADMIN` permission
+instead (the connector rejects configuring a token and username/password at the same time):
+
+```yaml expandable
+  # Bitbucket Data Center credentials (provisioning: basic auth instead of a token)
+  BATON_BITBUCKETDC_BASEURL: <Full URL of your Bitbucket Data Center Server (such as http://localhost:7990)>
+  BATON_BITBUCKETDC_USERNAME: <Username of a Bitbucket user with global ADMIN or SYS_ADMIN permission>
+  BATON_BITBUCKETDC_PASSWORD: <That user's password>
+
+  # Required to enable provisioning
+  BATON_PROVISIONING: true
+```
+
+When creating a new Bitbucket account, the connector generates a random password
+(RANDOM_PASSWORD) and returns it to C1 as the account's credential. Note that a working password
+alone may not be enough for the new user to log in - enable the account creation form's "Add to
+default group" option, or separately grant the user permissions, to give it initial access.
+
+If a create is treated as already existing (a 409 for the same username and email), no
+credential is returned, since the existing account's password was never touched. If the
+original password was never delivered to anyone, an administrator must set a new password for
+the account (**Administration** > **Users** > the user > **Change password**) or delete and
+re-create the account.
+
+<Warning>
+The initial password is sent on the request URL, so anything that logs full request URLs in front
+of Bitbucket (access logs, reverse proxies, load balancers) can record it. Ask the new user to
+change their password after first login, or change it as an administrator. Restrict access to
+those logs, and terminate TLS as close to Bitbucket as possible.
+</Warning>
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
 
@@ -179,5 +230,3 @@ spec:
 **Done.** Your Bitbucket Data Center connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
