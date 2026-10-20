@@ -19,9 +19,9 @@ sidebarTitle: "Alibaba Cloud"
 ## Gather Alibaba Cloud credentials
 
 <Warning>
-The current Alibaba Cloud connector is read-only partial access sync. It syncs
-identity inventory and group membership grants, but does not yet sync policy
-attachment or role assumption grants.
+The Alibaba Cloud connector is read-only. It syncs users, groups, roles and
+policies, along with group memberships, who can assume each role, and who
+each policy is attached to. It cannot change access in Alibaba Cloud.
 </Warning>
 
 <Steps>
@@ -33,8 +33,8 @@ attachment or role assumption grants.
   <Step>
     Attach the Alibaba-managed `AliyunRAMReadOnlyAccess` policy, or attach a
     custom read-only policy that allows `ram:GetAccountAlias`, `ram:ListUsers`,
-    `ram:ListGroups`, `ram:ListUsersForGroup`, `ram:ListRoles`, and
-    `ram:ListPolicies`.
+    `ram:GetUser`, `ram:ListGroups`, `ram:ListUsersForGroup`, `ram:ListRoles`,
+    `ram:GetRole`, `ram:ListPolicies`, and `ram:ListEntitiesForPolicy`.
   </Step>
 
   <Step>
@@ -63,20 +63,45 @@ attachment or role assumption grants.
 - **Users**: active and frozen users from IMS `ListUsers`.
 - **Groups**: groups from IMS `ListGroups`.
 - **Group membership grants**: group members from IMS `ListUsersForGroup`.
-- **Roles**: roles from RAM `ListRoles`.
+- **Roles**: roles from RAM `ListRoles`, with each role's trust policy document
+  from RAM `GetRole` in the role profile.
+- **Role trust grants**: the users, roles, and account allowed to assume each
+  role by its trust policy, from RAM `GetRole`.
 - **Policies**: system and custom policies from RAM `ListPolicies`.
+- **Policy attachment grants**: the users, groups, and roles each policy is
+  attached to, from RAM `ListEntitiesForPolicy`.
 
 ## Special notes
 
 - Authentication uses Alibaba Cloud ACS3-HMAC-SHA256 request signing.
 - Use one connector instance per Alibaba Cloud account.
-- Group membership is the only access this connector syncs. The account, user,
-  role and policy resource types carry no entitlements or grants, and now
-  declare that in their capability metadata, so C1 does not enumerate
-  entitlements or grants for them.
-- Policy attachment grants are not emitted in the current build.
-- Role assumption grants and role attached-policy grants are not emitted in
-  the current build.
+- Group membership, role trust and policy attachment are the access this
+  connector syncs. Accounts and users carry no entitlements of their own.
+- Each role has a **trusted** entitlement, granted to the RAM users and roles
+  in the same account that its trust policy allows to assume it. A trust policy
+  that allows the whole account (`acs:ram::<account-id>:root`) is granted to
+  the Account resource. Principals from other accounts, cloud services, and
+  identity providers are not synced as grants.
+- The trusted entitlement reflects the role's trust policy only. To actually
+  assume a role, the RAM user or role also needs `sts:AssumeRole` permission,
+  for example through the `AliyunSTSAssumeRoleAccess` policy. Trust policy
+  conditions are not evaluated.
+- Each policy that is attached to at least one user, group, or role has an
+  **attached** entitlement. Policies that are not attached to anything do not
+  show an entitlement, so if a policy is detached from everyone, its
+  entitlement disappears from C1 on the next sync and returns once the policy
+  is attached again.
+- When a policy is attached to a group, every member of that group is shown as
+  having the policy. When it is attached to a role, only the role is shown as
+  having the policy. Users and roles that can assume the role are not shown as
+  having it, because the connector does not check their `sts:AssumeRole`
+  permission. See the role's trusted entitlement for who its trust policy
+  allows.
+- Only policies attached at the account level are synced. Policies attached
+  to a specific resource group are not shown.
+- If the connector's credential is missing `ram:ListEntitiesForPolicy`, the
+  sync still succeeds, but no policy shows who it is attached to. Add the
+  permission, or use `AliyunRAMReadOnlyAccess`, to sync policy attachments.
 - The connector keeps Alibaba RAM and IMS metadata snapshots in the repo for
   local validation.
 
