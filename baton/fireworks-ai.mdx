@@ -14,19 +14,19 @@ members, machine identities, role assignments, and API key metadata.
 |Resource|Sync|Provision|
 |-|-|-|
 |Accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
-|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create; issue API keys|
-|Service accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Create; issue API keys|
-|Roles and assignments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Assign|
-|API keys|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|Delete|
+|Users|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+|Service accounts|<Icon icon="square-check" iconType="solid" color="#c937ae"/>||
+|Roles and assignments|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
+|API keys|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|<Icon icon="square-check" iconType="solid" color="#c937ae"/>|
 
 ## Gather Fireworks AI credentials
 
 <Warning>
 The API key must belong to a Fireworks AI account administrator. Other roles
-can view users and service accounts, but only administrators can manage users,
-access, and other users' API keys.
-Credential issuance requires permission to list, create, and delete API keys
-for the target user or service account.
+can view users and service accounts, but only administrators can manage users
+and access, and list and delete other users' API keys. Credential issuance
+requires permission to list, create, and delete API keys for the target
+service account.
 </Warning>
 
 <Steps>
@@ -54,7 +54,7 @@ for the target user or service account.
 
     <Steps>
       <Step>
-        In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
       </Step>
 
       <Step>
@@ -99,20 +99,37 @@ for the target user or service account.
 
 ## Provisioning behavior
 
-- Creating a user requires an email address. You can optionally provide
-  `profile.role`; Fireworks uses the `user` role by default. A `custom` role
-  also requires `profile.permission_preset`.
-- Creating a service account requires `login` or `profile.user_id`. You can
-  optionally provide `profile.role` and `profile.display_name`. A `custom`
-  role also requires `profile.permission_preset`.
+When you set up account provisioning for users in C1, map values to these fields:
+
+|Field|Required|Description|
+|---|---|---|
+|`email`|No|The user's email address. Fireworks derives the user ID from it. Defaults to the provisioned user's primary email.|
+|`display_name`|No|The Fireworks display name. Defaults to the account login.|
+|`role`|No|One of `admin`, `user`, `contributor`, `inference-user`, or `custom` (case-insensitive). Defaults to `user`.|
+|`permission_preset`|Only when `role` is `custom`|The Fireworks permission preset for the custom role.|
+
+We recommend leaving `email` unmapped. The connector then uses the provisioned
+user's primary email, then their first email, then the login if it is an email
+address. If none of these is available, account creation fails before any
+Fireworks call. A mapped, non-empty `email` takes precedence over all of them.
+
+The connector uses this email to check whether the user already exists in
+Fireworks. If you map `email` to anything other than the user's own email
+address, a user who already exists in Fireworks gets a second user.
+
+C1 does not create service accounts. Create them in Fireworks; C1 syncs them,
+and you can grant them roles and issue them API keys.
+
 - Assigning a standard role replaces the principal's current Fireworks role.
   Custom role assignments are sync-only because the public API does not expose
   the permission presets required to configure them. Fireworks requires every
   user and service account to have exactly one role, so the connector does not
   offer a role-only revoke operation.
 - Deleting an API key removes the key permanently.
-- Issue an API key for an existing user or service account, optionally with an
-  expiry time. The connector returns the one-time key value encrypted for the
+- Issue an API key for an existing service account, optionally with an
+  expiry time. API key issuance is not available for human users, because
+  Fireworks does not allow an administrator's API key to create keys for other
+  human users. The connector returns the one-time key value encrypted for the
   requester and syncs only key metadata. Issued keys can be deleted by their
   Fireworks key ID. Before every issuance, the connector lists all pages of the
   owner's API keys. This adds listing requests and confirms list access, which
