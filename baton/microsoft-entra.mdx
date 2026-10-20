@@ -69,7 +69,8 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | set_manager | `user_id` (string, required)<br/>`manager_identifier` (string, optional) | Sets or updates a user's manager relationship. Accepts manager ID, UPN, or Employee ID. Leave manager_identifier empty to remove the current manager. |
 | check_upn | `proposed_upn` (string, required) | Checks if a User Principal Name (UPN) is available. If taken, finds an available UPN by appending incrementing numbers. |
 | update_profile | `user_id` (string, required)<br/>Plus optional profile fields | Updates user profile attributes including mail, displayName, jobTitle, employeeId, department, companyName, country, and extensionAttribute1 through extensionAttribute15. |
-| create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner; must be a user resource<br/>`userMembers` (resource ID list, optional): initial group members; must be user resources, at most 500 distinct users. Microsoft Graph's create limit of 20 relationships covers the create request; any remaining members are added in batches once the group exists. Every selected member is looked up before the group is created, so an unknown or malformed resource ID fails the action with `InvalidArgument` and no group is created. Returns `unadded_members`: selected users not confirmed as added (for example when Graph rejected a member addition, such as for a missing permission or a member deleted after validation, throttled batches past the retry budget or attempt limit, or the action's 3 minute 30 second time limit was reached). A rejected member does not end the batch work — later members are still added; only a lost permission (401/403) stops the remaining batches. Add unadded users through the group's members entitlement. | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership; `microsoft_365` is unavailable when `security-groups-only` is enabled. Microsoft Graph caps a create at 20 relationships, so up to 20 owner and member bindings ride along in the create request and any remaining selected members are added in batches once the group exists; if a principal is not a user, a resource ID is not a directory object GUID, or a selected member does not exist, the action fails without creating anything. Returns `success` (true only when the group was created with every selected member added), `resource` (the new group), `entitlements` (its `owner` and `member` entitlements), grants for every confirmed membership (create-time bindings and batch-added members alike) except on-premises-synced members when `skip-ad-groups` is enabled without `include-on-prem-group-members`, and `unadded_members` (selected users left unconfirmed, for example when Graph rejected a member addition, such as for a missing permission or a member deleted after validation, throttled batches past the retry budget or attempt limit, or the time limit below was reached; a rejected member does not end the batch work — later members are still added, and only a lost permission (401/403) stops the remaining batches) to add through the group's members entitlement; `success` is false while any selected member is unadded. All Microsoft Graph work for one create is limited to 3 minutes 30 seconds, including a reserved 30-second confirmation window. Validation, creation and member additions stop after at most 3 minutes, leaving confirmation and result delivery ahead of ConductorOne's hosted invocation window. When Graph answers a batch with a `Retry-After` hint, that window is honoured by the remaining batches of the same phase as well — including batches not yet attempted — so the action stops earlier and reports those members in `unadded_members` instead of sending them into a window Graph said is closed. If the limit is reached after the group is created, the action returns the group with `success` false and the members not yet added in `unadded_members`; add them through the group's members entitlement rather than re-running the action. If the limit is reached before the create request is sent, the action fails with `DeadlineExceeded` and no group is created. DNS and connection-establishment failures are reported as requests that were not sent, with no group created. If the create response is lost, Graph accepts the create but its response cannot be read, or Graph answers it with a gateway timeout or another 5xx that does not establish whether the group was created, the action attempts confirmation before deciding what to report: it retries fresh default-query reads within the reserved window, without using the SDK HTTP cache, looking for a group carrying the requested `mailNickname` **and** this request's `displayName`, `description`, `mailEnabled`, `securityEnabled`, `isAssignableToRole` and `groupTypes`, created at or after the moment the action started less a one-minute clock-skew allowance. A paginated result or multiple matching candidates cannot establish a unique group, so recovery is refused. A single matching candidate is returned as the `resource` with `success` false, no confirmed grants, and every selected user in `unadded_members` (nothing the unanswered create would have bound can be confirmed, the owner included; add them through the members and owners entitlements, which is idempotent). If confirmation remains inconclusive — including when an older or differently-described group already holds the nickname — the action fails with `FailedPrecondition` because the group may still exist: check Microsoft Entra before retrying. Raising the connector's Lambda timeout does not extend this limit. Requires the `Group.Create` permission. |
+| create_group | `displayName` (string, required)<br/>`group_type` (string, required): `security` or `microsoft_365`<br/>`mailNickname` (string, optional): auto-generated from display name if omitted<br/>`description` (string, optional)<br/>`isAssignableToRole` (bool, optional): security groups only<br/>`owner` (resource ID, optional): initial group owner; must be a user resource<br/>`userMembers` (resource ID list, optional): initial group members; must be user resources, at most 500 distinct users. Microsoft Graph's create limit of 20 relationships covers the create request; any remaining members are added in batches once the group exists. Every selected member is looked up before the group is created, so an unknown or malformed resource ID fails the action with `InvalidArgument` and no group is created. Returns `unadded_members`: selected users not confirmed as added (for example when Graph rejected a member addition, such as for a missing permission or a member deleted after validation, throttled batches past the retry budget or attempt limit, or the action's 3 minute 30 second time limit was reached). A rejected member does not end the batch work — later members are still added; only a lost permission (401/403) stops the remaining batches. Add unadded users through the group's members entitlement. | Creates a new Entra ID group. Supports security and Microsoft 365 (unified) group types with assigned membership; `microsoft_365` is unavailable when `security-groups-only` is enabled. Microsoft Graph caps a create at 20 relationships, so up to 20 owner and member bindings ride along in the create request and any remaining selected members are added in batches once the group exists; if a principal is not a user, a resource ID is not a directory object GUID, or a selected member does not exist, the action fails without creating anything. Returns `success` (true only when the group was created with every selected member added), `resource` (the new group), `entitlements` (its `owner` and `member` entitlements), grants for every confirmed membership (create-time bindings and batch-added members alike) except on-premises-synced members when `skip-ad-groups` is enabled without `include-on-prem-group-members`, and `unadded_members` (selected users left unconfirmed, for example when Graph rejected a member addition, such as for a missing permission or a member deleted after validation, throttled batches past the retry budget or attempt limit, or the time limit below was reached; a rejected member does not end the batch work — later members are still added, and only a lost permission (401/403) stops the remaining batches) to add through the group's members entitlement; `success` is false while any selected member is unadded. All Microsoft Graph work for one create is limited to 3 minutes 30 seconds, including a reserved 30-second confirmation window. Validation, creation and member additions stop after at most 3 minutes, leaving confirmation and result delivery ahead of ConductorOne's hosted invocation window. When Graph answers a batch with a `Retry-After` hint, that window is honoured by the remaining batches of the same phase as well — including batches not yet attempted — so the action stops earlier and reports those members in `unadded_members` instead of sending them into a window Graph said is closed. If the limit is reached after the group is created, the action returns the group with `success` false and the members not yet added in `unadded_members`; add them through the group's members entitlement rather than re-running the action. If the limit is reached before the create request is sent, the action fails with `DeadlineExceeded` and no group is created. DNS and connection-establishment failures are reported as requests that were not sent, with no group created. If the create response is lost, Graph accepts the create but its response cannot be read, or Graph answers it with a gateway timeout or another 5xx that does not establish whether the group was created, the action attempts confirmation before deciding what to report: it retries fresh default-query reads within the reserved window, without using the SDK HTTP cache, looking for a group carrying the requested `mailNickname` **and** this request's `displayName`, `description`, `mailEnabled`, `securityEnabled`, `isAssignableToRole` and `groupTypes`, created at or after the moment the action started less a one-minute clock-skew allowance. A paginated result or multiple matching candidates cannot establish a unique group, so recovery is refused. A single matching candidate is returned as the `resource` with `success` false, no confirmed grants, and every selected user in `unadded_members` (nothing the unanswered create would have bound can be confirmed, the owner included; add them through the members and owners entitlements, which is idempotent). If confirmation remains inconclusive — including when an older or differently-described group already holds the nickname — the action fails with `FailedPrecondition` because the group may still exist: check Microsoft Entra before retrying. Raising the connector's Lambda timeout does not extend this limit. Requires the `Group.Create` permission to create the group and the `GroupMember.ReadWrite.All` permission to add members beyond the create request. |
+| modify_group | `group_id` (string, required)<br/>`displayName` (string, optional)<br/>`description` (string, optional) | Updates a group's display name or description. Supply at least one of `displayName` or `description`. Returns `success`, true when the group was updated or already matched the requested values, and `resource`, the updated group. |
 | revoke_sessions | `user_id` (string, required) | Revokes all active sign-in sessions for a user by invalidating their refresh tokens, forcing re-authentication (`POST /users/{id}/revokeSignInSessions`). Refresh tokens are invalidated immediately, but existing access tokens can remain valid for up to ~1 hour unless Continuous Access Evaluation (CAE) is enabled. Requires the `User.RevokeSessions.All` permission. |
 | revoke_mfa | `user_id` (string, required) | Deletes a user's registered MFA (authentication) methods, forcing re-registration at next sign-in. Lists the user's methods and deletes each deletable one; password methods are skipped. Graph refuses to delete the user's default method while other methods remain (HTTP 400), so MFA may not be fully revocable in one invocation — per-method failures are reported and do not abort the action. Returns `success` (true only if every deletable method was deleted), `deleted_count`, `failed_count`, `skipped_count`, and per-method `results`. Requires the `UserAuthenticationMethod.ReadWrite.All` permission. |
 
@@ -181,13 +182,11 @@ Click **Application permissions**. Select each permission in the relevant set be
    To deprovision users who have a privileged role assigned to them, the app requires, in addition to the stated permissions, a privileged role such as Global Administrator or Privileged Authentication Administrator.
 
    <Info>
-   **Optional:** To enable group management (creating groups via connector actions), add the following permission in addition to the provisioning permissions above:
+   **Optional:** To use the group connector actions (`create_group` and `modify_group`), add the following permission in addition to the provisioning permissions above:
 
    ```bash
    Group.Create
    ```
-
-   This permission is only required if group management is enabled on the connector.
    </Info>
 
    <Info>
@@ -315,19 +314,25 @@ Select **Client secret**.
 Paste the tenant ID into the **Entra tenant ID** field.
 </Step>
 <Step>
-Paste the client ID into the **Entra client ID** field.
+Paste the client ID into the **Client ID** field.
 </Step>
 <Step>
-Paste the client secret into the **Entra client secret** field.
+Paste the client secret into the **Client Secret** field.
 </Step>
 <Step>
-**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
+**Optional.** Check the box if you want to **Skip Active Directory groups and members**.
 </Step>
 <Step>
-**Optional.** If you enabled **Skip syncing Active Directory Server groups** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip syncing Active Directory Server groups** is disabled.
+**Optional.** If you enabled **Skip Active Directory groups and members** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip Active Directory groups and members** is disabled.
 </Step>
 <Step>
-**Optional** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
+**Optional.** Click to enable **Sync only security groups** to limit the sync to security groups and mail-enabled security groups. The sync excludes Microsoft 365 groups.
+</Step>
+<Step>
+**Optional.** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Entra Graph domain** field.
+</Step>
+<Step>
+**Optional.** Select the Microsoft sovereign cloud your tenant lives in from the **Azure cloud** field. The options are `public` (the default) and `china`; use `china` for tenants operated by 21Vianet. This selects the Entra ID login authority, the Microsoft Graph domain, the Exchange Online host and the portal used for profile links. OAuth is not supported outside the public cloud; use client secret or certificate credentials instead.
 </Step>
 <Step>
 **Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**.
@@ -338,7 +343,7 @@ Paste the client secret into the **Entra client secret** field.
 **Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in C1.
 </Step>
 <Step>
-**Optional.** Click to **Disable resource changed event feed**. These logs are enabled by default.
+**Optional.** Click to **Disable resource changed events feed**. These logs are enabled by default.
 
    Make sure to disable this feed if the `List directoryAudits` API endpoint is [not supported in your location](https://learn.microsoft.com/en-us/graph/api/directoryaudit-list?view=graph-rest-1.0&tabs=http).
 </Step>
@@ -354,6 +359,9 @@ Paste the client secret into the **Entra client secret** field.
 **Optional.** Click to enable **Sync application permissions of enterprise applications** to sync app roles granted to applications, such as Microsoft Graph application permissions. Requires the Directory.Read.All permission. Applications excluded by **Skip enterprise applications without assignments** won't show their permissions. The permissions appear on each application's **Access** tab, as entitlements of the API that grants them (for example, Microsoft Graph).
 
    <Warning>Toggling this setting on an existing connection will cause C1 to add or remove these entitlements and grants on the next sync.</Warning>
+</Step>
+<Step>
+**Optional.** Click to enable **Sync PIM Eligible Roles** to sync Privileged Identity Management role eligibility alongside active role assignments. Each directory role gains a second `eligible` entitlement. This requires Entra ID P2 or Entra ID Governance licensing.
 </Step>
 <Step>
 Click **Save**.
@@ -409,13 +417,16 @@ Upload your PEM-encoded certificate file (.pem, .crt, or .cer) in the **Client C
 Upload your PEM-encoded private key file (.pem or .key) in the **Client Certificate Private Key** field.
 </Step>
 <Step>
-**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
+**Optional.** Check the box if you want to **Skip Active Directory groups and members**.
 </Step>
 <Step>
-**Optional.** If you enabled **Skip syncing Active Directory Server groups** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip syncing Active Directory Server groups** is disabled.
+**Optional.** Click to enable **Sync only security groups** to limit the sync to security groups and mail-enabled security groups. The sync excludes Microsoft 365 groups.
 </Step>
 <Step>
-**Optional.** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
+**Optional.** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Entra Graph domain** field.
+</Step>
+<Step>
+**Optional.** Select the Microsoft sovereign cloud your tenant lives in from the **Azure cloud** field. The options are `public` (the default) and `china`; use `china` for tenants operated by 21Vianet. This selects the Entra ID login authority, the Microsoft Graph domain, the Exchange Online host and the portal used for profile links. OAuth is not supported outside the public cloud; use client secret or certificate credentials instead.
 </Step>
 <Step>
 **Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**.
@@ -426,7 +437,7 @@ Upload your PEM-encoded private key file (.pem or .key) in the **Client Certific
 **Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in C1.
 </Step>
 <Step>
-**Optional.** Click to **Disable resource changed event feed**. These logs are enabled by default.
+**Optional.** Click to **Disable resource changed events feed**. These logs are enabled by default.
 
    Make sure to disable this feed if the `List directoryAudits` API endpoint is [not supported in your location](https://learn.microsoft.com/en-us/graph/api/directoryaudit-list?view=graph-rest-1.0&tabs=http).
 </Step>
@@ -442,6 +453,9 @@ Upload your PEM-encoded private key file (.pem or .key) in the **Client Certific
 **Optional.** Click to enable **Sync application permissions of enterprise applications** to sync app roles granted to applications, such as Microsoft Graph application permissions. Requires the Directory.Read.All permission. Applications excluded by **Skip enterprise applications without assignments** won't show their permissions. The permissions appear on each application's **Access** tab, as entitlements of the API that grants them (for example, Microsoft Graph).
 
    <Warning>Toggling this setting on an existing connection will cause C1 to add or remove these entitlements and grants on the next sync.</Warning>
+</Step>
+<Step>
+**Optional.** Click to enable **Sync PIM Eligible Roles** to sync Privileged Identity Management role eligibility alongside active role assignments. Each directory role gains a second `eligible` entitlement. This requires Entra ID P2 or Entra ID Governance licensing.
 </Step>
 <Step>
 Click **Save**.
@@ -488,13 +502,16 @@ Select **OAuth**.
 Specify the ID of the Entra tenant you're integrating in the **Entra tenant ID** field. 
 </Step>
 <Step>
-**Optional.** Check the box if you want to **Skip syncing Active Directory Server groups**.
+**Optional.** Check the box if you want to **Skip Active Directory groups and members**.
 </Step>
 <Step>
-**Optional.** If you enabled **Skip syncing Active Directory Server groups** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip syncing Active Directory Server groups** is disabled.
+**Optional.** If you enabled **Skip Active Directory groups and members** in the previous step, you can also enable **Include on-premises users in cloud group memberships**. This keeps on-premises synced users as members of cloud-native Entra groups. See [Hybrid AD configuration](#hybrid-ad-configuration) below for details. This setting has no effect if **Skip Active Directory groups and members** is disabled.
 </Step>
 <Step>
-**Optional** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Microsoft Graph domain** field.
+**Optional.** Click to enable **Sync only security groups** to limit the sync to security groups and mail-enabled security groups. The sync excludes Microsoft 365 groups.
+</Step>
+<Step>
+**Optional.** If you connect to a Microsoft Graph API domain other than graph.microsoft.com, specify your domain in the **Entra Graph domain** field.
 </Step>
 <Step>
 **Optional.** To capture Entra usage data, click to enable **Fetch user sign-in activity**.
@@ -505,7 +522,7 @@ Specify the ID of the Entra tenant you're integrating in the **Entra tenant ID**
 **Optional.** Click to opt into **Schedule SCIM provisioning**, which forces an Entra SCIM sync when a new entitlement is provisioned for a user in C1.
 </Step>
 <Step>
-**Optional.** Click to **Disable resource changed event feed**. These logs are enabled by default.
+**Optional.** Click to **Disable resource changed events feed**. These logs are enabled by default.
 
    Make sure to disable this feed if the `List directoryAudits` API endpoint is [not supported in your location](https://learn.microsoft.com/en-us/graph/api/directoryaudit-list?view=graph-rest-1.0&tabs=http).
 </Step>
@@ -521,6 +538,9 @@ Specify the ID of the Entra tenant you're integrating in the **Entra tenant ID**
 **Optional.** Click to enable **Sync application permissions of enterprise applications** to sync app roles granted to applications, such as Microsoft Graph application permissions. Requires the Directory.Read.All permission. Applications excluded by **Skip enterprise applications without assignments** won't show their permissions. The permissions appear on each application's **Access** tab, as entitlements of the API that grants them (for example, Microsoft Graph).
 
    <Warning>Toggling this setting on an existing connection will cause C1 to add or remove these entitlements and grants on the next sync.</Warning>
+</Step>
+<Step>
+**Optional.** Click to enable **Sync PIM Eligible Roles** to sync Privileged Identity Management role eligibility alongside active role assignments. Each directory role gains a second `eligible` entitlement. This requires Entra ID P2 or Entra ID Governance licensing.
 </Step>
 <Step>
 Click **Login with OAuth**. 
@@ -634,7 +654,7 @@ stringData:
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
 
-  # Optional: include if you want to skip syncing Active Directory Server groups
+  # Optional: include if you want to skip syncing Windows Server Active Directory groups
   # BATON_SKIP_AD_GROUPS: "true"
 
   # Optional: include if you want on-premises synced users to appear as members of
@@ -666,6 +686,12 @@ stringData:
 
   # Optional: include to sync application permissions (app roles granted to applications); requires Directory.Read.All
   # BATON_SYNC_APPLICATION_PERMISSIONS: "true"
+
+  # Optional: include to limit the sync to security groups and mail-enabled security groups
+  # BATON_SECURITY_GROUPS_ONLY: "true"
+
+  # Optional: include to sync PIM role eligibility; requires Entra ID P2 or Entra ID Governance
+  # BATON_SYNC_ELIGIBLE_ROLES: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -720,7 +746,7 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 
 Organizations that use Microsoft Entra Connect to sync on-premises Active Directory with Entra ID have a mix of cloud-native and on-premises synced objects. The connector provides two settings to control how these are handled:
 
-### Skip Active Directory Server groups (`--skip-ad-groups` / `BATON_SKIP_AD_GROUPS`)
+### Skip Active Directory groups and members (`--skip-ad-groups` / `BATON_SKIP_AD_GROUPS`)
 
 When enabled, the connector excludes groups that originate from on-premises Active Directory (where `onPremisesSyncEnabled` is `true`). Only cloud-native Entra groups are synced.
 
@@ -730,7 +756,7 @@ All users (both cloud-native and on-premises synced) are always synced to C1 reg
 
 ### Include on-premises users in cloud group memberships (`--include-on-prem-group-members` / `BATON_INCLUDE_ON_PREM_GROUP_MEMBERS`)
 
-This setting modifies the behavior of **Skip Active Directory Server groups**. When both settings are enabled:
+This setting modifies the behavior of **Skip Active Directory groups and members**. When both settings are enabled:
 
 - On-premises AD **groups** are still skipped (not synced)
 - On-premises synced **users** who are members of cloud groups are included in those groups' membership grants
@@ -738,7 +764,7 @@ This setting modifies the behavior of **Skip Active Directory Server groups**. W
 This is useful in hybrid environments where cloud-native Entra groups contain a mix of cloud and on-premises synced users, and you want full visibility into who has access to what through those cloud groups.
 
 <Warning>
-This setting has no effect unless **Skip Active Directory Server groups** is also enabled. When **Skip Active Directory Server groups** is disabled, all groups and all their members are synced regardless of this setting.
+This setting has no effect unless **Skip Active Directory groups and members** is also enabled. When **Skip Active Directory groups and members** is disabled, all groups and all their members are synced regardless of this setting.
 </Warning>
 
 ### What's next?
