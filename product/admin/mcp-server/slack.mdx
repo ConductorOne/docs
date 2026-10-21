@@ -48,7 +48,7 @@ Before configuring authentication, register a Slack app and turn on its MCP supp
 Sign in at [api.slack.com/apps](https://api.slack.com/apps) and select **Create New App** > **From an app manifest**. Choose the workspace to develop in, then select **Next**.
 </Step>
 <Step>
-Paste the manifest below and select **Next**, then **Create**. It turns on MCP support and sets the redirect URL and C1's default, read-only **User Token Scopes** for you, instead of clicking through Slack's scope picker. Slack ignores YAML comments on import, so the commented-out write scopes stay disabled until you uncomment them and reimport.
+Paste the manifest below and select **Next**, then **Create**. It turns on MCP support and sets the redirect URL and the **User Token Scopes** C1 requests for you, instead of clicking through Slack's scope picker.
 
 The manifest below uses the default instance's redirect URL. If your tenant is on the EU data residency instance, change `redirect_urls` to `https://accounts.c1eu.ai/auth/callback` before you paste it in.
 
@@ -62,7 +62,7 @@ oauth_config:
     - https://accounts.conductor.one/auth/callback
   scopes:
     user:
-      # Default (read-only) — what C1 requests by default.
+      # Every scope C1 requests — all of them must be on the app.
       - search:read.public
       - search:read.private
       - search:read.mpim
@@ -82,15 +82,13 @@ oauth_config:
       - reactions:read
       - emoji:read
       - files:read
-      # Optional (write) — uncomment to enable write tools, then add the
-      # matching scopes in C1's authentication settings too.
-      # - chat:write
-      # - canvases:write
-      # - reactions:write
-      # - channels:write
-      # - groups:write
-      # - im:write
-      # - mpim:write
+      - chat:write
+      - canvases:write
+      - reactions:write
+      - channels:write
+      - groups:write
+      - im:write
+      - mpim:write
 settings:
   # Turns on the Slack MCP Server toggle under Features > Agents.
   is_mcp_enabled: true
@@ -116,20 +114,13 @@ Make the app eligible to use the MCP server: either submit it to the Slack Marke
 
 ## Slack MCP scopes
 
-Slack's hosted MCP server authenticates with a Slack **user token** (`xoxp-`), never a bot token, so every scope below is a **User Token Scope** — the [manifest above](#create-a-slack-app-for-mcp) adds the read scopes for you, and you can add more on the app's **OAuth & Permissions** page. Leave **Bot Token Scopes** empty.
+Slack's hosted MCP server authenticates with a Slack **user token** (`xoxp-`), never a bot token, so every scope below is a **User Token Scope** — the [manifest above](#create-a-slack-app-for-mcp) adds them for you, and you can review them on the app's **OAuth & Permissions** page. Leave **Bot Token Scopes** empty.
 
-**Default scopes** browse channels, messages, users, canvases, and files, and search across them:
+C1 requests all of these scopes automatically, and Slack rejects the authorization if any of them is missing from your app:
 
-`search:read.public`, `search:read.private`, `search:read.mpim`, `search:read.im`, `search:read.files`, `search:read.users`, `channels:read`, `channels:history`, `groups:read`, `groups:history`, `mpim:read`, `mpim:history`, `im:history`, `canvases:read`, `users:read`, `users:read.email`, `reactions:read`, `emoji:read`, `files:read`
+`search:read.public`, `search:read.private`, `search:read.mpim`, `search:read.im`, `search:read.files`, `search:read.users`, `chat:write`, `channels:history`, `groups:history`, `mpim:history`, `im:history`, `canvases:read`, `canvases:write`, `users:read`, `users:read.email`, `reactions:write`, `reactions:read`, `emoji:read`, `files:read`, `channels:write`, `groups:write`, `im:write`, `mpim:write`, `channels:read`, `groups:read`, `mpim:read`
 
-**Optional scopes** enable the write tools — add only what you need:
-
-| Scope(s) | Enables |
-| :--- | :--- |
-| `chat:write` | Send messages |
-| `canvases:write` | Create and edit canvases |
-| `reactions:write` | Add emoji reactions |
-| `channels:write`, `groups:write`, `im:write`, `mpim:write` | Create and manage channels and direct messages |
+They cover browsing and searching channels, messages, users, canvases, and files, plus the write tools: sending messages, editing canvases, adding reactions, and creating and managing channels and direct messages. Each user can use only what their own Slack permissions allow, and you control which tools your users can call with [tool approval and toolsets](/product/admin/tools-and-toolsets).
 
 <Note>
 Scope changes take effect the next time a user connects (or the next call using a static token). If you add a scope after users have already connected, each user must reconnect their Slack account — or you must reissue the static token — to grant it.
@@ -319,9 +310,11 @@ C1 requests the default read scopes automatically. The default is read-only; to 
 | `reminders:read`, `stars:read` | View reminders and saved items |
 | `remote_files:read`, `remote_files:share` | View and share remote files |
 | `users.profile:write`, `users:write` | Edit the authorized user's profile, photo, and presence |
-| `channels:write`, `groups:write`, `im:write`, `mpim:write` (and the `.invites` / `.topic` variants) | Create and manage channels and direct messages, invite people, and set topics |
+| `channels:write`, `groups:write`, `im:write`, `mpim:write` | Create and manage channels and direct messages |
+| `channels:write.invites`, `groups:write.invites` | Invite people to channels |
+| `channels:write.topic`, `groups:write.topic`, `im:write.topic`, `mpim:write.topic` | Set topics and descriptions |
 | `dnd:read`, `calls:read` | View Do Not Disturb settings and calls |
-| `admin.conversations:read` / `:write`, `admin.teams:read` / `:write`, `admin.invites:read`, `admin.users:read` / `:write` | Manage channels, workspace settings, invites, and users org-wide (**Enterprise Grid** only; requires an org-level admin install) |
+| `admin.conversations:read`, `admin.conversations:write`, `admin.teams:read`, `admin.teams:write`, `admin.invites:read`, `admin.users:read`, `admin.users:write` | Manage channels, workspace settings, invites, and users org-wide (**Enterprise Grid** only; requires an org-level admin install) |
 
 <Note>
 Scope changes take effect the next time a user connects. If you add an optional scope after users have already connected, each user must reconnect their Slack account to grant it.

@@ -1,8 +1,8 @@
 ---
 title: Set up the Looker MCP server
-description: Create Looker API credentials, then register the Looker MCP server in C1 and govern the tools it exposes.
+description: Connect Looker to C1 with per-user OAuth or API credentials, then register the Looker MCP server and govern the tools it exposes.
 og:title: Set up the Looker MCP server
-og:description: Create Looker API credentials, then register the Looker MCP server in C1 and govern the tools it exposes.
+og:description: Connect Looker to C1 with per-user OAuth or API credentials, then register the Looker MCP server and govern the tools it exposes.
 sidebarTitle: Looker
 ---
 
@@ -10,7 +10,12 @@ sidebarTitle: Looker
 
 The Looker MCP server lets you govern access to Looker — dashboards, looks, queries, explores, content, and users — as tools your AI clients can call through C1.
 
-Looker authenticates with API credentials: a client ID and client secret that C1 exchanges for a short-lived access token. A single set of credentials authenticates everyone, so all tool calls reach Looker as one shared identity.
+You choose how users connect when you register the server:
+
+- **Per-user OAuth**. Each person authorizes with their own Looker account, so every tool call runs under that user's Looker identity and permissions.
+- **API credentials**. A client ID and client secret that C1 exchanges for a short-lived access token. A single set of credentials authenticates everyone, so all tool calls reach Looker as one shared identity.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
 ## How C1 connects to Looker
 
@@ -21,13 +26,62 @@ The credentials you set up below are what C1 uses to call Looker on your users' 
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
-- A Looker account with API credentials. API credentials inherit the permissions and content access of the user they belong to, so use a user that has the access you want this integration to have.
+- For per-user OAuth, a Looker administrator who can register an OAuth client application through the Looker API.
+- For API credentials, a Looker account with API credentials. API credentials inherit the permissions and content access of the user they belong to, so use a user that has the access you want this integration to have.
 
 <Note>
 If you don't see **Looker** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
-## Create Looker API credentials
+## Option 1: Set up per-user OAuth
+
+With per-user OAuth, you register one OAuth client application in Looker and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Looker.
+
+### Register a Looker OAuth client application
+
+Looker requires an OAuth client application to be registered through its API before users can authenticate. For the full procedure, see Looker's [OAuth client application](https://docs.cloud.google.com/looker/docs/api-cors) documentation.
+
+<Steps>
+<Step>
+In the Looker API Explorer, choose **4.0 - stable** and open **Register OAuth App** under **Auth**.
+</Step>
+<Step>
+Enter a **client_guid** such as `c1`, a **display_name** and **description**, and set the **redirect_uri** exactly to whichever matches your C1 tenant's domain. Looker denies authentication if the values don't match exactly.
+
+- Default instance: `https://accounts.conductor.one/auth/callback`
+- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
+</Step>
+<Step>
+Run the request. The **client_guid** is the client ID you give C1.
+</Step>
+</Steps>
+
+### Looker scopes
+
+C1 requests this scope automatically. It's the scope Looker uses for OAuth access to its API:
+
+`cors_api`
+
+### Register the server with OAuth
+
+With your OAuth client application registered, register the server and provide its client ID to C1.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Looker** from the catalog.
+</Step>
+<Step>
+Enter your Looker instance URL when prompted.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter the application's **client_guid** as the client ID. The scopes field is pre-filled with `cors_api`.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Looker tool from their AI client, they're prompted to connect their Looker account.
+</Step>
+</Steps>
+
+## Option 2: Use API credentials
 
 Create API credentials for the user whose Looker access this integration should carry. For more information, see Looker's [API authentication](https://cloud.google.com/looker/docs/api-auth) documentation.
 
@@ -45,13 +99,7 @@ Copy both the **Client ID** and the **Client Secret**. Looker shows the client s
 
 For a shared production setup, create the credentials under a dedicated service-account user so activity is attributable to C1 rather than a person, and grant that user only the roles and content access you want to govern.
 
-## How Looker credentials are shared
-
-Every user's tool calls use the one set of API credentials you provided, so Looker sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, create the credentials under a dedicated service-account user so activity is attributable to C1 rather than a person.
-
-For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
-
-## Register the Looker MCP server in C1
+### Register the server with API credentials
 
 With your credentials ready, register the server and provide them to C1.
 
@@ -70,6 +118,15 @@ Save your changes. C1 starts a sync that discovers the tools the Looker server e
 </Step>
 </Steps>
 
+## How Looker credentials are shared
+
+How Looker sees your users' activity depends on the method you chose:
+
+- **Per-user OAuth.** Each user authorizes with their own Looker account, so tool calls run under that user's Looker identity and inherit only the access they already have. Looker attributes each action to the individual user.
+- **API credentials.** Every user's tool calls use the one set of API credentials you provided, so Looker sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared setup, create the credentials under a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
 ## Discover and govern tools
 
 After you register the server, C1 runs tool discovery against Looker. Discovered tools appear on the server's **Tools** tab.
@@ -84,5 +141,6 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 ## Manage your Looker credentials
 
+- **Re-register the OAuth client application** in the Looker API Explorer if you need to change its redirect URI or details, then update the client ID in C1 if it changed.
 - **Rotate the API credentials** by generating a new key for the user in Looker, updating the client ID and client secret in C1, then deleting the old key.
 - **Adjust access** by editing the roles and content access of the user the credentials belong to in Looker.
