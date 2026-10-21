@@ -1,8 +1,8 @@
 ---
 title: Set up the HubSpot MCP server
-description: Connect HubSpot to C1 with per-user OAuth or a private app token, then register the HubSpot MCP server and govern its tools.
+description: Create a HubSpot private app token and register the HubSpot MCP server in C1 so AI clients can call governed HubSpot tools.
 og:title: Set up the HubSpot MCP server
-og:description: Connect HubSpot to C1 with per-user OAuth or a private app token, then register the HubSpot MCP server and govern its tools.
+og:description: Create a HubSpot private app token and register the HubSpot MCP server in C1 so AI clients can call governed HubSpot tools.
 sidebarTitle: HubSpot
 ---
 
@@ -10,12 +10,7 @@ sidebarTitle: HubSpot
 
 The HubSpot MCP server lets you govern access to HubSpot — contacts, companies, deals, and other CRM records — as tools your AI clients can call through C1.
 
-You choose how users connect when you register the server:
-
-- **Per-user OAuth** (recommended). Each person authorizes with their own HubSpot account, so every tool call runs under that user's HubSpot identity and permissions.
-- **Private app token**. A single token authenticates everyone, so all tool calls reach HubSpot as one shared identity. Create the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
-
-For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+HubSpot authenticates with a private app access token. A single token authenticates everyone, so all tool calls reach HubSpot as one shared identity. Create the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
 
 ## How C1 connects to HubSpot
 
@@ -26,79 +21,13 @@ The credentials you set up below are what C1 uses to call HubSpot on your users'
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
-- For per-user OAuth, a HubSpot developer account that can create an app. See HubSpot's [working with OAuth](https://developers.hubspot.com/docs/apps/legacy-apps/authentication/working-with-oauth) guide.
-- For a private app token, a HubSpot account with permission to create and manage private apps, which requires super admin access.
+- A HubSpot account with permission to create and manage private apps, which requires super admin access.
 
 <Note>
 If you don't see **HubSpot** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
-## Option 1: Set up per-user OAuth
-
-With per-user OAuth, you register one HubSpot app and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in HubSpot.
-
-### Create a HubSpot app
-
-Create an app in HubSpot and select its scopes before you configure authentication in C1.
-
-<Steps>
-<Step>
-In your HubSpot developer account, create an app and give it a recognizable name such as `C1`. See HubSpot's [working with OAuth](https://developers.hubspot.com/docs/apps/legacy-apps/authentication/working-with-oauth) guide.
-</Step>
-<Step>
-On the app's **Auth** tab, set the **redirect URL** exactly to whichever matches your C1 tenant's domain:
-
-- Default instance: `https://accounts.conductor.one/auth/callback`
-- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
-</Step>
-<Step>
-On the same tab, add the scopes from [HubSpot scopes](#hubspot-scopes) below — the default read scopes, plus any optional scopes you need.
-</Step>
-<Step>
-Copy the app's **Client ID** and **Client secret**.
-</Step>
-</Steps>
-
-### HubSpot scopes
-
-HubSpot treats every scope selected on the app's **Auth** tab as required, so the scopes on the app and the scopes C1 requests must match. If they don't, HubSpot shows an error on the authorization page.
-
-**Default scopes** are read-only. C1 requests them automatically:
-
-`crm.objects.contacts.read`, `crm.objects.companies.read`, `crm.objects.deals.read`, `crm.objects.tickets.read`, `crm.schemas.contacts.read`, `crm.schemas.companies.read`, `crm.schemas.deals.read`, `crm.schemas.tickets.read`
-
-**Optional scopes** enable the write tools and owner lookups. To use one, select it on the HubSpot app **and** add it to the scopes field when you configure authentication in C1. Grant only what you need:
-
-`crm.objects.contacts.write`, `crm.objects.companies.write`, `crm.objects.deals.write`, `crm.objects.tickets.write`, `crm.objects.owners.read`
-
-<Note>
-Scope changes take effect the next time a user connects. If you add a scope after users have already connected, each user must reconnect their HubSpot account to grant it.
-</Note>
-
-### Register the server with OAuth
-
-With your HubSpot app ready, register the server and provide its credentials.
-
-<Steps>
-<Step>
-Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **HubSpot** from the catalog.
-</Step>
-<Step>
-When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your app's **client ID** and **client secret**.
-</Step>
-<Step>
-**Optional.** Add any optional scopes to the scopes field. The field is editable and is pre-filled with the default scopes.
-</Step>
-<Step>
-Save your changes. The first time a user calls a HubSpot tool from their AI client, they're prompted to connect their HubSpot account.
-</Step>
-</Steps>
-
-## Option 2: Use a private app token
-
-A private app token authenticates every user as one shared HubSpot identity. Use this when per-user attribution in HubSpot isn't required.
-
-### Create a HubSpot private app token
+## Create a HubSpot private app token
 
 Create a private app in HubSpot to generate the access token C1 uses to call HubSpot.
 
@@ -110,14 +39,20 @@ In HubSpot, create a private app and select **Create a private app**. See HubSpo
 On the **Basic info** tab, give the app a recognizable name such as `C1`.
 </Step>
 <Step>
-On the **Scopes** tab, grant only the scopes you need, such as the default read scopes listed under [HubSpot scopes](#hubspot-scopes).
+On the **Scopes** tab, grant only the scopes you need, such as read access to the CRM objects you plan to govern: `crm.objects.contacts.read`, `crm.objects.companies.read`, `crm.objects.deals.read`, `crm.objects.tickets.read`, and the matching `crm.schemas.contacts.read`, `crm.schemas.companies.read`, and `crm.schemas.deals.read`. Add write scopes, such as `crm.objects.contacts.write`, only for the write tools you plan to enable.
 </Step>
 <Step>
 Select **Create app**, then copy the **access token**. Treat the token like a password.
 </Step>
 </Steps>
 
-### Register the server with a token
+## How HubSpot credentials are shared
+
+Every user's tool calls use the one private app token you provided, so HubSpot sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared production setup, create the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Register the HubSpot MCP server in C1
 
 With your token ready, register the server and provide your credentials.
 
@@ -133,15 +68,6 @@ Save your changes. C1 starts a sync that discovers the tools the HubSpot server 
 </Step>
 </Steps>
 
-## How HubSpot credentials are shared
-
-How HubSpot sees your users' activity depends on the method you chose:
-
-- **Per-user OAuth.** Each user authorizes with their own HubSpot account, so tool calls run under that user's HubSpot identity and inherit only the access they already have. HubSpot attributes each action to the individual user.
-- **Private app token.** Every user's tool calls use the one token you provided, so HubSpot sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared production setup, create the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
-
-For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
-
 ## Discover and govern tools
 
 After you register the server, C1 runs tool discovery against HubSpot. Discovered tools appear on the server's **Tools** tab.
@@ -156,6 +82,5 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 ## Manage your HubSpot credentials
 
-- **Rotate the OAuth client secret** in your HubSpot app's **Auth** tab, then update the secret on the server's authentication settings in C1.
 - **Rotate the access token** by rotating it in the private app's settings in HubSpot, then update the token on the server's authentication settings in C1.
-- **Adjust access** by editing the app's scopes in HubSpot and, for per-user OAuth, the scopes field in C1.
+- **Adjust access** by editing the private app's scopes in HubSpot.
