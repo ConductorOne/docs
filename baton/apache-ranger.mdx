@@ -26,13 +26,44 @@ and access grants managed by Ranger Admin.
 
 The connector reads users, groups, roles, system access roles, admin module
 permissions, security zones, tags, and policies from the Ranger Admin REST API.
-Each policy is synced with one entitlement per access type it grants (for
-example `select` or `read`), covering allow, deny, allow/deny exception, data
-mask, and row filter items, plus a `delegate-admin` entitlement. Grants resolve
-the users, groups, and roles referenced in those policy items.
+Each access policy is synced with one entitlement per access type its allow
+items grant (for example `select` or `read`), plus a `delegate-admin`
+entitlement when an allow item delegates admin. Grants resolve the users,
+groups, and roles referenced in those allow items.
 
-This connector targets **Apache Ranger 2.x**. It is read-only and does not
+Only allow items on access policies are synced. Deny items, allow and deny
+exceptions, and data mask and row filter policies do not produce entitlements
+or grants.
+
+Two further exclusions apply inside a synced allow item. An access whose
+`isAllowed` is explicitly `false` is skipped, as are principals Ranger resolves
+at evaluation time rather than storing: the implicit `public` pseudo-group, and
+macro tokens such as `{OWNER}` and `{USER}`.
+
+Entitlements and grants are derived from the same policy rows, so an access
+type appears as an entitlement only when at least one syncable principal is
+granted it. Ranger's default per-service policies commonly grant to `public`
+alone; such a policy syncs as a resource with no entitlements and no grants.
+
+A disabled policy, one whose `isEnabled` is `false`, syncs as a resource with
+its entitlements but no grants, because Ranger does not enforce it.
+
+Users are read from Ranger's portal user list, which also contains the built-in
+administrative accounts, such as `keyadmin`, that the extended user list omits.
+A user syncs as enabled only when Ranger reports its account status as active.
+Every other activation status — pending approval, pending activation, rejected,
+deactivated, pre-registration, and no login — syncs as disabled.
+
+This connector supports **Apache Ranger 2.x**. It is read-only and does not
 provision or modify access in Apache Ranger.
+
+Security zone coverage is reduced before **Ranger 2.5**. The `adminRoles` and
+`auditRoles` fields were added to the security zone API in Ranger 2.5.0
+([RANGER-4274](https://issues.apache.org/jira/browse/RANGER-4274)), so on
+Ranger 2.4 and earlier the role principals on a security zone are not synced.
+Users and groups on security zones sync normally on every 2.x release. Ranger
+2.4 accepts both fields when a zone is created and then silently discards them,
+so the omission is not reported as an error.
 
 ## Gather Apache Ranger credentials
 
@@ -41,6 +72,11 @@ You need an Apache Ranger account with administrator access to the Ranger Admin
 service so the connector can read users, groups, roles, policies, and security
 zones. An account without admin access may return only a partial view of your
 directory.
+
+The connector authenticates with HTTP basic authentication. Kerberos and
+SPNEGO authentication to the Ranger Admin REST API are not supported, so a
+Kerberized cluster needs a Ranger Admin account that accepts basic
+authentication.
 </Warning>
 
 <Steps>
@@ -81,7 +117,7 @@ directory.
       <Step>
         Choose where to add the connector: **Create a new app**, or **Add to an existing app** (then select the app).
 
-           If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
+        If you're creating a new app, choose whether to link it to an application discovered from your identity provider: select **Yes** and pick the IdP application, or **No** to continue with just the connector.
       </Step>
 
       <Step>

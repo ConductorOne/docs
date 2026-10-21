@@ -101,6 +101,13 @@ This uses the **Setup - Bulk Manage Roles** permission already listed in the int
 
 Configuring the connector requires you to pass in credentials generated in NetSuite. Gather these credentials before you move on. 
 
+The connector supports two authentication methods:
+
+- **Token-Based Authentication (TBA)**: a consumer key and secret plus a token key and secret.
+- **OAuth 2.0 client credentials (machine to machine)**: a client ID, a certificate ID, and a private key. Use this method if your organization requires OAuth 2.0.
+
+The account ID, integration, and role steps apply to both methods. Then follow either **Generate a token key and token secret** (TBA) or **Set up OAuth 2.0 client credentials**.
+
 <Warning>
 A user with an **Administrator** role in NetSuite must perform this task.
 </Warning>
@@ -108,7 +115,7 @@ A user with an **Administrator** role in NetSuite must perform this task.
 <Tip>
 **Before you begin:** Make sure you have enabled the following features for your NetSuite instance:
 
-- Token-Based Authentication
+- Token-Based Authentication (TBA) or OAuth 2.0, depending on the authentication method you choose
 - REST Web Services
 - Suite Analytics Workbook
 
@@ -136,17 +143,20 @@ In NetSuite, navigate to **Setup** > **Integrations** > **Manage Integrations**.
 Give the new integration a name, such as "C1".
 </Step>
 <Step>
-Check the box for **TOKEN-BASED AUTHENTICATION**.
+On the **Authentication** tab, select the authentication method:
+
+- For TBA, check the box for **TOKEN-BASED AUTHENTICATION**.
+- For OAuth 2.0 client credentials, check the box for **CLIENT CREDENTIALS (MACHINE TO MACHINE) GRANT** and, under **Scope**, check **REST WEB SERVICES**.
 
 <Tip>
-Make sure **OAuth 2.0 Authorization Code Grant** is unchecked on the Authentication tab. NetSuite may enable this by default, which requires a Redirect URI that is not needed for the C1 connector. The C1 NetSuite connector uses Token-Based Authentication only.
+Make sure **OAuth 2.0 Authorization Code Grant** is unchecked on the Authentication tab. NetSuite may enable this by default, which requires a Redirect URI that is not needed for the C1 connector. The C1 NetSuite connector doesn't use the authorization code grant.
 </Tip>
 </Step>
 <Step>
-Click **Save**. The new integration is created, and its consumer key and consumer secret are shown.
+Click **Save**. The new integration is created, and its credentials are shown: the consumer key and consumer secret for TBA, or the client ID and client secret for OAuth 2.0 client credentials.
 </Step>
 <Step>
-Make a careful note of these credentials (they won't be shown again).
+Make a careful note of these credentials (they won't be shown again). The OAuth 2.0 client credentials method only needs the client ID.
 </Step>
 </Steps> 
 
@@ -163,7 +173,8 @@ Give the new role a name, such as "C1 integration".
 Assign the following permissions to the role:
 
    - Setup - REST Web Services
-   - Setup - Log in using Access Tokens
+   - Setup - Log in using Access Tokens (TBA only)
+   - Setup - Log in using OAuth 2.0 Access Tokens (OAuth 2.0 client credentials only)
    - Setup - Bulk Manage Roles
    - Reports- Suite Analytics Workbook
    - Lists - Employee Record
@@ -213,6 +224,43 @@ Make a careful note of these credentials (they won't be shown again).
 </Step>
 </Steps> 
 
+### Set up OAuth 2.0 client credentials
+
+Skip this section if you're using TBA.
+
+<Steps>
+<Step>
+On your computer, generate a certificate and private key. NetSuite accepts RSA keys of 3072 or 4096 bits, or EC keys on P-256, P-384, or P-521, and certificates valid for up to two years. For example:
+
+```bash
+openssl req -new -x509 -newkey rsa:4096 -keyout private.pem -sigopt rsa_padding_mode:pss -sha256 -sigopt rsa_pss_saltlen:64 -out public.pem -nodes -days 365
+```
+
+Keep `private.pem` secret. You'll paste its full contents into C1.
+</Step>
+<Step>
+In NetSuite, navigate to **Setup** > **Integration** > **Manage Authentication** > **OAuth 2.0 Client Credentials (M2M) Setup**. Click **Create New**. This page requires the **OAuth 2.0 Authorized Applications Management** permission, which the Administrator role has.
+</Step>
+<Step>
+Select the user (entity), the C1 integration role, and the application (integration) you created in the previous steps, and upload `public.pem`.
+
+<Warning>
+**Don't map the certificate to the Administrator role.** NetSuite blocks REST web services over OAuth 2.0 for any role that has the **OAuth 2.0 Authorized Applications Management** permission, so the connector fails to authenticate. Map it to the C1 integration role.
+</Warning>
+</Step>
+<Step>
+Click **Save**. Make a note of the **Certificate ID** shown for the new mapping.
+</Step>
+</Steps>
+
+<Warning>
+**Syncs stop when the certificate expires.** NetSuite rejects the connector once the uploaded certificate expires or is revoked. Before that happens, create a new mapping with a new certificate and update the certificate ID and private key in C1.
+</Warning>
+
+<Note>
+**Sandbox refreshes clear the setup.** NetSuite doesn't copy the OAuth 2.0 client credentials setup to sandbox or Release Preview accounts, and a sandbox refresh removes it. Repeat this section in each account you connect.
+</Note>
+
 **Done.** Next, move on to the connector configuration instructions. 
 
 ## Configure the NetSuite connector
@@ -256,10 +304,10 @@ Find the **Settings** area of the page and click **Edit**.
 In the **Account ID** field, enter the NetSuite domain.
 </Step>
 <Step>
-In the **Consumer key** and **Consumer secret** fields, enter the credentials you generated.
-</Step>
-<Step>
-In the **Token key** and **Token secret** fields, enter the credentials you generated.
+Select the authentication method you set up and enter its credentials:
+
+- **Token-Based Authentication**: enter the **Consumer key**, **Consumer secret**, **Token key**, and **Token secret** you generated.
+- **OAuth 2.0 Client Credentials**: enter the integration's client ID in **OAuth 2.0 Client ID**, the **OAuth 2.0 Certificate ID**, and the full contents of `private.pem` in **OAuth 2.0 Private Key**.
 </Step>
 <Step>
 (Optional) In the **Custom Employee Fields** field, enter a comma-separated list of custom employee field IDs to include in the sync (e.g. `custentity_zone,custentity_cost_center`). See [Custom Fields](#custom-fields) for details.
@@ -341,6 +389,15 @@ stringData:
   BATON_CONSUMER_SECRET: <NetSuite consumer secret>
   BATON_TOKEN_KEY: <NetSuite token key>
   BATON_TOKEN_SECRET: <NetSuite token secret>
+
+  # Or, for OAuth 2.0 client credentials, replace the four TBA values above with:
+  # BATON_AUTH_METHOD: oauth2-client-credentials
+  # BATON_NETSUITE_OAUTH2_CLIENT_ID: <NetSuite integration client ID>
+  # BATON_NETSUITE_OAUTH2_CERTIFICATE_ID: <Certificate ID from the M2M mapping>
+  # BATON_NETSUITE_OAUTH2_PRIVATE_KEY: |
+  #   -----BEGIN PRIVATE KEY-----
+  #   <contents of private.pem>
+  #   -----END PRIVATE KEY-----
 
   # Optional: comma-separated custom employee field IDs
   # BATON_CUSTOM_EMPLOYEE_FIELDS: custentity_zone,custentity_cost_center

@@ -1,0 +1,280 @@
+---
+title: "Set up a Discord connector"
+og:title: "Set up a Discord connector"
+description: "C1 provides identity governance and just-in-time provisioning for Discord. Integrate your Discord instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Discord. Integrate your Discord instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Discord"
+---
+
+## Capabilities
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Servers | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Channels | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+**Notes:**
+
+- Discord accounts belong to the person who created them rather than to a server, so [automatic account provisioning](/product/admin/account-provisioning) is not supported. C1 governs which servers, roles, and channels an existing Discord account can reach.
+- The connector syncs only the servers your Discord bot has been invited to.
+- Granting server access sends the user an invitation rather than adding them directly. See [Understanding access in Discord](#understanding-access-in-discord).
+- Channels cover text, announcement, forum, voice, and stage channels. Categories and threads are not synced, because they do not carry access of their own.
+
+## Understanding access in Discord
+
+Discord grants access at three levels, and C1 models each one separately.
+
+**Servers** are the top-level container. A Discord account either is or is not a member of a server, which the connector represents as a single **Server Access** entitlement.
+
+**Roles** are named sets of permissions inside a server. Members can hold any number of roles, and C1 represents each role as an entitlement that accounts can be granted.
+
+Every server also has a built-in **@everyone** role that all members hold automatically. C1 reports it so that channel permissions attached to it are visible, but it cannot be granted or revoked, because membership in it is automatic.
+
+**Channels** grant access through permission overwrites, which allow or deny individual permissions for a specific role or member. C1 reports only permissions that a channel **explicitly allows**. A member who can reach a channel purely through their server-wide role permissions is not shown as having a direct grant on that channel, because that access comes from the role rather than from the channel.
+
+<Warning>
+Discord does not allow an application to add a user to a server on its own authority. When C1 grants server access, the connector creates a single-use invitation and sends it to the user as a direct message. **The user must accept the invitation before the membership exists**, and it appears in C1 on the next sync. If the user's privacy settings block direct messages from the bot, the grant fails.
+</Warning>
+
+## Gather Discord credentials
+
+Configuring the connector requires a Discord bot token. Gather this credential before you move on.
+
+<Warning>
+To configure the Discord connector, you need permission to create an application in the [Discord Developer Portal](https://discord.com/developers/applications), and the **Manage Server** permission in each Discord server you want to govern.
+</Warning>
+
+<Steps>
+  <Step>
+    Sign in to the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application**.
+  </Step>
+
+  <Step>
+    Enter a name, such as `C1`, accept the developer terms, and click **Create**.
+  </Step>
+
+  <Step>
+    In the left sidebar, click **Bot**.
+  </Step>
+
+  <Step>
+    Under **Privileged Gateway Intents**, turn on **Server Members Intent**.
+
+    <Warning>
+    This intent is required. Without it, Discord does not allow the connector to read the member list of a server, and C1 cannot sync accounts, server memberships, or role assignments.
+    </Warning>
+  </Step>
+
+  <Step>
+    Click **Reset Token**, then copy and save the bot token securely. Discord displays the token only once.
+  </Step>
+
+  <Step>
+    In the left sidebar, click **OAuth2**, then find the **OAuth2 URL Generator** area of the page.
+  </Step>
+
+  <Step>
+    Under **Scopes**, select `bot`. Under **Bot Permissions**, select the permissions you want to grant:
+
+    - **View Channels** - Required to sync channels and their permissions
+    - **Manage Roles** - Used by C1 to grant and revoke roles and channel permissions
+    - **Kick Members** - Used by C1 to remove a member from a server
+    - **Create Instant Invite** - Used by C1 to invite a user to a server
+
+    <Warning>
+    The **Manage Roles**, **Kick Members**, and **Create Instant Invite** permissions are used by C1 when automatically provisioning and deprovisioning access. **If you do not want C1 to perform these tasks, do not grant these permissions.**
+    </Warning>
+  </Step>
+
+  <Step>
+    Copy the generated URL, open it in your browser, and invite the application to each Discord server you want to govern.
+  </Step>
+
+  <Step>
+    In each server, open **Server Settings** > **Roles** and drag the application's role **above** every role you want C1 to manage.
+
+    <Tip>
+    Discord's role hierarchy prevents an application from assigning or removing a role that sits above its own. A role positioned above the application's role syncs normally but cannot be provisioned.
+    </Tip>
+  </Step>
+</Steps>
+
+For more information, see the [Discord developer documentation](https://discord.com/developers/docs/topics/oauth2).
+
+## Configure the Discord connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Discord** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Discord connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+      <Step>
+        Paste the credentials into the relevant fields:
+
+        - **Bot token**: The bot token you copied from the Discord Developer Portal
+      </Step>
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Discord connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Discord](https://github.com/conductorone/baton-discord) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+    ### Step 1: Set up a new Discord connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Discord connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 2.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Discord connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-discord-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-discord-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Discord credentials
+      BATON_TOKEN: <Your Discord bot token>
+
+      # Optional: include if you want C1 to provision access using this connector
+      BATON_PROVISIONING: "true"
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-discord.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-discord
+      labels:
+        app: baton-discord
+    spec:
+      selector:
+        matchLabels:
+          app: baton-discord
+      template:
+        metadata:
+          labels:
+            app: baton-discord
+            baton: true
+            baton-app: discord
+        spec:
+          containers:
+          - name: baton-discord
+            image: public.ecr.aws/conductorone/baton-discord:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-discord
+            envFrom:
+            - secretRef:
+                name: baton-discord-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Discord connector to. Discord data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Discord connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
