@@ -11,17 +11,17 @@ sidebarTitle: Lucid
 C1 can govern Lucid access two ways. Both let your AI clients read from and act on Lucid through governed MCP tools, but they come from different places and appear as two separate entries in your MCP server catalog:
 
 - **Lucid MCP** — listed as plain **Lucid** in your catalog. C1 registers Lucid's own hosted MCP server (`mcp.lucid.app`) as a downstream server C1 governs. Authentication is always per-user OAuth using dynamic client registration (DCR) — Lucid's hosted MCP server doesn't support a bearer token or API key, so there's no application to create in Lucid first. Before anyone can connect, a Lucid account admin must enable MCP access for the account from the Lucid Admin Panel. Tool calls run with the connected user's full Lucid permissions.
-- **Lucid API** — C1 hosts its own MCP server that translates Lucid's REST API into tools. You choose between per-user OAuth or a shared API token, and you scope access with the **scopes** you grant the Lucid OAuth application (or token).
+- **Lucid API** — C1 hosts its own MCP server that translates Lucid's REST API into tools. You choose between per-user OAuth or a shared API token, and you scope access with the scopes C1 requests (OAuth) or the grants you choose on an API key.
 
 | | Lucid MCP | Lucid API |
 | :--- | :--- | :--- |
 | **Who hosts the MCP server** | Lucid | C1 |
 | **Authentication** | Per-user OAuth with dynamic client registration (DCR) only — no bearer token or API key option | Per-user OAuth, or a shared API token |
-| **Access scoping** | The connected user's full Lucid permissions — not independently scoped | The OAuth **scopes** you configure on the application, or the token |
+| **Access scoping** | The connected user's full Lucid permissions — not independently scoped | The OAuth **scopes** C1 requests, or the grants on the API key |
 | **Tool surface** | Lucid's own tool set: document search, content retrieval, diagram creation (including org charts, mind maps, and UML sequence diagrams), image export, and sharing | Documents, folders, teams, and users, mapped to Lucid API endpoints |
 | **Setup effort** | An account admin enables MCP access in Lucid, then register and authorize in C1 — nothing else to create in Lucid first | Create a Lucid OAuth application or API token first, then register it in C1 |
 
-Use the native **Lucid MCP** option (listed as plain **Lucid** in your catalog) if you want Lucid's own broader, agentic tool set and per-user OAuth is acceptable for your tenant. Use **Lucid API** if you need a shared service-account credential (API token), or you want to scope access with OAuth scopes.
+Use the native **Lucid MCP** option (listed as plain **Lucid** in your catalog) if you want Lucid's own broader, agentic tool set and per-user OAuth is acceptable for your tenant. Use **Lucid API** if you need a shared service-account credential (API token), or you want to scope access with OAuth scopes or API key grants.
 
 <Tabs>
 
@@ -89,7 +89,7 @@ Because this option uses per-user OAuth, there's no shared secret in C1 to rotat
 
 <Tab title="Lucid API">
 
-The Lucid MCP server lets you govern access to Lucid — documents, folders, teams, users, and account data — as tools your AI clients can call through C1.
+The **Lucid API** option lets you govern access to Lucid — documents, folders, teams, users, and account data — as tools your AI clients can call through C1.
 
 Lucid supports two ways to authenticate, and you choose one when you register the server:
 
@@ -133,16 +133,16 @@ Set the **redirect URI** exactly to whichever matches your C1 tenant's domain:
 - EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
 </Step>
 <Step>
-Add the **scopes** from [Lucid API scopes](#lucid-api-scopes) below.
+Save the application, then copy the **Client ID** and **Client Secret**. Lucid shows the client secret only once.
 </Step>
 <Step>
-Save the application, then copy the **Client ID** and **Client Secret**. Lucid shows the client secret only once.
+In the application's **Publishing** section, select **Publish** and choose the private option, so users on your Lucid account can authorize the app. Lucid requires a completed **Marketplace listing** first. See Lucid's [publishing](https://developer.lucid.co/docs/publishing) documentation.
 </Step>
 </Steps>
 
 ### Lucid API scopes
 
-C1 requests these scopes automatically for per-user OAuth. Add all of them to your OAuth application, so users aren't asked to authorize a scope the application doesn't have:
+C1 requests these scopes when users authorize, so you don't enter any scopes on the OAuth client:
 
 `lucidchart.document.content`, `lucidchart.document.content:readonly`, `lucidchart.document.app.folder`, `folder`, `folder:readonly`, `teams`, `teams:readonly`, `teams:admin`, `account.user`, `account.user:readonly`, `account.users:admin.readonly`, `account.info`, `account.audit.logs`
 
@@ -178,13 +178,19 @@ Generate an API token in Lucid for C1 to authenticate with. For more information
 
 <Steps>
 <Step>
-In Lucid, go to **Account settings** > **Developer** and create or open an OAuth 2.0 application. 
+In Lucid, go to the **API Keys** section of the developer portal.
 </Step>
 <Step>
-Generate an API token for that application, granting only the **scopes** you need, such as the read-only scopes listed under [Lucid API scopes](#lucid-api-scopes).
+Select **Create API Key** and enter a name.
 </Step>
 <Step>
-Copy the token. Lucid shows the token only once.
+Set the expiration.
+</Step>
+<Step>
+Choose only the grants you need, such as the read-only grants matching the scopes listed under [Lucid API scopes](#lucid-api-scopes). You can't change grants after you create the key.
+</Step>
+<Step>
+Select **Generate API key**, then copy the token. Lucid shows the token only once.
 </Step>
 </Steps>
 
@@ -231,7 +237,7 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 - **Rotate the OAuth client secret** in your Lucid OAuth application under **Account settings** > **Developer**, then update the secret on the server's authentication settings in C1.
 - **Rotate an API token** by generating a new one in Lucid and updating it in C1, then revoking the old token.
-- **Adjust access** by editing the application's scopes in Lucid.
+- **Adjust access** with [tool approval and toolsets](/product/admin/tools-and-toolsets). API key grants can't be changed after creation, so create a new key with different grants.
 
 </Tab>
 
