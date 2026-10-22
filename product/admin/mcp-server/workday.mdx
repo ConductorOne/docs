@@ -145,7 +145,7 @@ These areas cover the core tools: workers, organizations, jobs, skills, check-in
 | Functional area | Tools it enables |
 | :--- | :--- |
 | **Staffing** | Workers, jobs, service dates, direct reports, worker history, and business title changes. |
-| **Organizations and Roles** | Supervisory organizations, their members and org charts, organizations, and the organizations a worker belongs to or manages. |
+| **Organizations and Roles** | Supervisory organizations, their members and org charts, organizations, organization types, and the organizations a worker belongs to or manages. |
 | **Jobs & Positions** | Job profiles and job families. |
 | **Worker Profile and Skills** | Skill items, explicit skills, and adding skills to a worker. |
 | **Performance Enablement** | Reading and creating check-ins. |
@@ -214,11 +214,11 @@ The server exposes read tools across Workday's HCM services and write tools that
 | Tool group | Read tools | Write tools |
 | :--- | :--- | :--- |
 | **Workers and jobs** | `list_workers`, `get_worker`, `list_jobs`, `get_job`, `list_job_profiles`, `get_job_profile`, `list_job_families`, `get_job_family`, `list_service_dates`, `list_direct_reports`, `get_direct_report`, `list_histories`, `get_history`, `list_business_title_changes`, `get_business_title_change` | — |
-| **Organizations** | `list_supervisory_organizations`, `get_supervisory_organization`, `list_members`, `get_member`, `list_org_charts`, `get_org_chart`, `list_organizations`, `get_organization`, `list_worker_organizations`, `get_worker_organization`, `list_supervisory_organizations_manageds`, `get_supervisory_organizations_managed` | — |
+| **Organizations** | `list_supervisory_organizations`, `get_supervisory_organization`, `list_members`, `get_member`, `list_org_charts`, `get_org_chart`, `list_organizations`, `get_organization`, `list_organization_types`, `get_organization_type`, `list_worker_organizations`, `get_worker_organization`, `list_supervisory_organizations_manageds`, `get_supervisory_organizations_managed` | — |
 | **Skills and check-ins** | `list_skill_items`, `get_skill_item`, `list_explicit_skills`, `get_explicit_skill`, `list_check_ins`, `get_check_in` | `add_worker_skills`, `create_check_in` |
 | **Time off and leave** | `list_time_off_entries`, `get_time_off_entry`, `list_time_off_plans`, `get_time_off_plan`, `list_time_off_details`, `get_time_off_detail`, `list_balances`, `list_eligible_absence_types`, `list_valid_time_off_dates`, `list_leaves_of_absences`, `get_leaves_of_absence` | `request_time_off`, `correct_time_off` |
-| **Inbox and business processes** | `list_inbox_tasks`, `get_inbox_task`, `list_events`, `get_event`, `list_event_steps`, `get_event_step`, `list_completed_steps`, `list_in_progress_steps`, `list_remaining_steps` | `approve_event_step`, `deny_event_step`, `send_back_event_step`, `reassign_event_step`, `complete_to_do_step` |
-| **Recruiting** | `list_job_postings`, `get_job_posting`, `list_interviews`, `get_interview`, `list_feedbacks`, `get_feedback`, `get_prospect`, `list_offers`, `get_offer`, `list_employment_agreements`, `get_employment_agreement` | `create_interview_feedback`, `create_prospect` |
+| **Inbox and business processes** | `list_inbox_tasks`, `get_inbox_task`, `list_events`, `get_event`, `list_event_steps`, `get_event_step`, `list_completed_steps`, `list_in_progress_steps`, `list_remaining_steps`, `list_send_back_targets` | `approve_event_step`, `deny_event_step`, `send_back_event_step`, `reassign_event_step`, `complete_to_do_step` |
+| **Recruiting** | `list_job_postings`, `get_job_posting`, `list_recruiting_countries`, `list_interviews`, `get_interview`, `list_feedbacks`, `get_feedback`, `get_prospect`, `list_offers`, `get_offer`, `list_employment_agreements`, `get_employment_agreement` | `create_interview_feedback`, `create_prospect` |
 | **Time tracking** | `list_time_clock_events`, `get_time_clock_event`, `list_worker_time_blocks`, `get_worker_time_block` | `create_time_clock_events`, `create_worker_time_block`, `update_worker_time_block`, `delete_worker_time_block` |
 | **Learning** | `list_contents`, `get_content`, `list_records`, `get_record`, `list_enrollments`, `get_enrollment` | `create_enrollment` |
 | **Talent** | `list_mentorships`, `get_mentorship`, `list_succession_plans`, `get_succession_plan` | `create_mentorship`, `close_mentorship` |
@@ -231,10 +231,15 @@ Write tools start real Workday business processes, which then follow your tenant
 Workday enforces its own business process security and rules on every write, so a write tool approved in C1 can still fail in Workday:
 
 - **Business process security applies to every write.** A user can act only on a step that's awaiting them. For example, `approve_event_step` returns an error for a step assigned to someone else.
-- **Send-back targets aren't listed.** `send_back_event_step` needs the step to send the event back to, and the server doesn't provide a list of valid targets.
+- **Send-back targets come from a list.** `send_back_event_step` needs the step to send the event back to. Call `list_send_back_targets` with the `eventStep` you want to send back, and use a returned ID as the target.
 - **Time tracking needs worker setup.** `create_worker_time_block` works only for workers who have time tracking set up in Workday, including a period schedule and a time entry template.
 - **Mentorship close reasons aren't listed.** `close_mentorship` needs a valid close-reason reference ID from your tenant, and the server doesn't provide a list of reasons.
-- **Some lists need a filter.** `list_events` and `list_balances` return no rows unless you pass `worker`, and `list_organizations` returns no rows unless you pass `organizationType`.
+- **Some lists need a filter.** Workday returns no rows for these lists without one, so the server rejects a call that omits it:
+  - `list_events` needs `worker` or `initiator`.
+  - `list_balances` needs `worker`.
+  - `list_organizations` needs `organizationType`. Use `list_organization_types` to find the type IDs.
+  - `list_valid_time_off_dates` needs both `date` and `timeOff`.
+  - `list_send_back_targets` needs `eventStep`.
 
 ## How Workday credentials are shared
 
@@ -272,7 +277,7 @@ Most setup problems show up during a user's first connection or tool call. Workd
 | Workday rejects the **Redirection URI** when you register the API client | Workday accepts only `https` redirect URIs. | Set **Redirection URI** to exactly `https://accounts.conductor.one/auth/callback`, or `https://accounts.c1eu.ai/auth/callback` for the EU data residency instance. |
 | You can't change **Client Grant Type** on the API client | Workday locks the grant type after registration. | Register a new API client with **Authorization Code Grant**, then update the client ID and secret in C1. |
 | A 401 `Unauthorized` error | The request reached Workday without a valid access token. | Have the user reconnect their Workday account. If every user sees it, confirm the **Token URL**, client ID, and client secret in C1. |
-| `list_events`, `list_balances`, or `list_organizations` returns no rows | These Workday APIs return nothing unless filtered. | Pass `worker` to `list_events` or `list_balances`, or `organizationType` to `list_organizations`. |
+| A list tool returns an error that it needs a non-empty value for one of its filters | Workday returns no rows for these lists without a filter, so the server requires one. | Pass the filter the error names. See [Limits of the Workday tools](#limits-of-the-workday-tools) for each list's filter. |
 | A write returns a 400 error with a code that starts with `A` | Workday applied a business rule. For example, a holiday can't be requested as time off, the tenant requires a full day's quantity, or the step isn't awaiting the user. | Read the error message, which names the rule, and correct the request. |
 | `Invalid id for field` with code `S5` | A reference ID in the request, such as a mentorship close reason, doesn't exist in your tenant. | Look up a valid ID with a read tool, or in Workday, and retry. |
 | `create_worker_time_block` fails for a worker | The worker has no time tracking setup, such as a period schedule or a time entry template. | Set up time tracking for the worker in Workday, then retry. |
