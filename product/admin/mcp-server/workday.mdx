@@ -38,7 +38,7 @@ Each request is limited twice. The API client's **functional areas** decide whic
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
 - A Workday account in a security group with **Modify** permission on these domains, both in the **System** functional area. Workday's **Security Administrator** security group is one example.
   - **Set Up: Tenant Setup - Security**, which secures the **Edit Tenant Setup - Security** task.
-  - **Security Administration**, which secures the **Register API Client** and **Edit API Client** tasks.
+  - **Security Administration**, which secures the **Register API Client** task.
 - Every user who will connect needs a Workday account whose security groups grant access to the domains for the data they'll use. The API client doesn't extend anyone's access.
 
 <Note>
@@ -98,7 +98,10 @@ Select **Non-Expiring Refresh Tokens**, so C1 can keep renewing each user's acce
 Under **Scope (Functional Areas)**, add the functional areas for the tools you want. See [Workday functional areas](#workday-functional-areas) for the recommended set.
 </Step>
 <Step>
-Select **OK**, then copy the **Client ID** and **Client Secret** that Workday shows. Workday doesn't show the client secret again.
+Select **OK**.
+</Step>
+<Step>
+Copy the **Client ID** and **Client Secret** that Workday shows. Workday doesn't show the client secret again.
 </Step>
 </Steps>
 
@@ -162,10 +165,10 @@ Add these areas only if you want the matching tool groups.
 | **Learning Core** | Learning content, records, and enrollments, plus enrolling a worker in content. |
 | **Core Payroll** | Pay slips. |
 
-A tool whose functional area is missing from the API client returns Workday's `permission denied` error, not an empty result. To add an area later, open the **Edit API Client** task, select your API client, and add the area under **Scope (Functional Areas)**.
+A tool whose functional area is missing from the API client returns a Workday permission error, not an empty result. To add an area later, open the **Edit API Client** task, select your API client, and add the area under **Scope (Functional Areas)**.
 
 <Note>
-A functional area lets C1 call an API, but it doesn't grant anyone data access. A user whose security groups lack the domain that secures the data gets the same `permission denied` error, even when the area is on the API client.
+A functional area lets C1 call an API, but it doesn't grant anyone data access. A user whose security groups lack the domain that secures the data gets a `permission denied` error with code `S22`, even when the area is on the API client.
 </Note>
 
 ## Register the Workday MCP server in C1
@@ -186,7 +189,10 @@ Enter the Workday settings from [Collect your Workday endpoint values](#collect-
 | **Sign-in host** | No | Your sign-in host, such as `wd2-impl.workday.com`. Enter it for reference. |
 </Step>
 <Step>
-When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter the API client's **Client ID** and **Client Secret**.
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth.
+</Step>
+<Step>
+Enter the API client's **Client ID** and **Client Secret**.
 </Step>
 <Step>
 Set **Authorization URL** to your **Authorization Endpoint** and **Token URL** to your **Token Endpoint**. If C1 shows either URL with placeholders, replace them with your values.
@@ -218,13 +224,13 @@ The server exposes read tools across Workday's HCM services and write tools that
 | **Talent** | `list_mentorships`, `get_mentorship`, `list_succession_plans`, `get_succession_plan` | `create_mentorship`, `close_mentorship` |
 | **Pay** | `list_pay_slips`, `get_pay_slip` | — |
 
-Write tools start real Workday business processes, which then follow your tenant's approval routing. Review them before you approve them, and `delete_worker_time_block` in particular, which removes a worker's recorded time.
+Write tools start real Workday business processes, which then follow your tenant's approval routing. Review them before you approve them in C1, and `delete_worker_time_block` in particular, which removes a worker's recorded time.
 
 ### Limits of the Workday tools
 
 Workday enforces its own business process security and rules on every write, so a write tool approved in C1 can still fail in Workday:
 
-- **Business process security applies to every write.** A user can act only on a step that's awaiting them. For example, `approve_event_step` returns an error for a step assigned to someone else. A user can also start only the business processes their security groups allow.
+- **Business process security applies to every write.** A user can act only on a step that's awaiting them. For example, `approve_event_step` returns an error for a step assigned to someone else.
 - **Send-back targets aren't listed.** `send_back_event_step` needs the step to send the event back to, and the server doesn't provide a list of valid targets.
 - **Time tracking needs worker setup.** `create_worker_time_block` works only for workers who have time tracking set up in Workday, including a period schedule and a time entry template.
 - **Mentorship close reasons aren't listed.** `close_mentorship` needs a valid close-reason reference ID from your tenant, and the server doesn't provide a list of reasons.
@@ -250,7 +256,7 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 ## Manage your Workday credentials
 
-- **Rotate the client secret** by generating a new client secret for the API client in Workday, then update the secret on the server's authentication settings in C1.
+- **Rotate the client secret** with the API client's **Generate New Client Secret** action in Workday, then update the secret on the server's authentication settings in C1.
 - **Adjust access** by adding or removing functional areas under **Scope (Functional Areas)** in the **Edit API Client** task. See [Workday functional areas](#workday-functional-areas).
 - **Stop all access** by selecting **Disabled** on the API client in the **Edit API Client** task.
 
@@ -260,13 +266,13 @@ Most setup problems show up during a user's first connection or tool call. Workd
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
-| `permission denied` with code `S22` | The API client is missing the tool's functional area, or the user's security groups lack the domain that secures the data. | Add the area in **Edit API Client**. See [Workday functional areas](#workday-functional-areas). If the area is already there, grant the user's security group access to the domain. |
+| A 403 permission error, such as `permission denied` with code `S22` | The API client is missing the tool's functional area, or the user's security groups lack the domain that secures the data. | Add the area in **Edit API Client**. See [Workday functional areas](#workday-functional-areas). If the area is already there, grant the user's security group access to the domain. |
 | `permission denied` (`S22`) for one user while others succeed | That user's security groups don't grant the domain. | Review the user's security groups in Workday. The **Security Analysis for Securable Item and Account** report shows which groups grant a user access to an item. |
 | Workday returns a 404 error when the user tries to connect | The **Authorization URL** uses the services host. Workday serves the authorization endpoint only on the sign-in host. | Set **Authorization URL** to the **Authorization Endpoint** from the **View API Clients** report, such as `https://wd2-impl.workday.com/acme/authorize`. |
 | Workday rejects the **Redirection URI** when you register the API client | Workday accepts only `https` redirect URIs. | Set **Redirection URI** to exactly `https://accounts.conductor.one/auth/callback`, or `https://accounts.c1eu.ai/auth/callback` for the EU data residency instance. |
 | You can't change **Client Grant Type** on the API client | Workday locks the grant type after registration. | Register a new API client with **Authorization Code Grant**, then update the client ID and secret in C1. |
-| `Unauthorized` | The request reached Workday without a valid access token. | Have the user reconnect their Workday account. If every user sees it, confirm the **Token URL**, client ID, and client secret in C1. |
+| A 401 `Unauthorized` error | The request reached Workday without a valid access token. | Have the user reconnect their Workday account. If every user sees it, confirm the **Token URL**, client ID, and client secret in C1. |
 | `list_events`, `list_balances`, or `list_organizations` returns no rows | These Workday APIs return nothing unless filtered. | Pass `worker` to `list_events` or `list_balances`, or `organizationType` to `list_organizations`. |
 | A write returns a 400 error with a code that starts with `A` | Workday applied a business rule. For example, a holiday can't be requested as time off, the tenant requires a full day's quantity, or the step isn't awaiting the user. | Read the error message, which names the rule, and correct the request. |
-| `Invalid id for field` with code `S5` | A reference ID in the request doesn't exist in your tenant. | Look up a valid ID with a read tool, or in Workday, and retry. |
+| `Invalid id for field` with code `S5` | A reference ID in the request, such as a mentorship close reason, doesn't exist in your tenant. | Look up a valid ID with a read tool, or in Workday, and retry. |
 | `create_worker_time_block` fails for a worker | The worker has no time tracking setup, such as a period schedule or a time entry template. | Set up time tracking for the worker in Workday, then retry. |
