@@ -8,7 +8,7 @@ sidebarTitle: Confluence
 
 {/* Editor Refresh: 2026-06-11 */}
 
-The Confluence MCP server lets you govern access to Confluence Cloud — pages, blog posts, spaces, comments, attachments, whiteboards, groups, and users — as tools your AI clients can call through C1.
+The Confluence MCP server lets you govern access to Confluence Cloud — pages, blog posts, spaces, comments, attachments, whiteboards, groups, users, and CQL search — as tools your AI clients can call through C1.
 
 Confluence uses per-user OAuth, which is recommended: each person authorizes with their own Atlassian account, so every tool call runs under that user's identity and permissions.
 
@@ -22,6 +22,7 @@ The credentials you set up below are what C1 uses to call Confluence on your use
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
 - An Atlassian account that can create an OAuth 2.0 integration. See Atlassian's [OAuth 2.0 (3LO) apps guide](https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/).
+- Your Atlassian site's Cloud ID. To find it, open `https://your-site.atlassian.net/_edge/tenant_info` in a browser, replacing `your-site` with your site's name, and copy the `cloudId` value.
 
 <Note>
 If you don't see **Confluence** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
@@ -36,7 +37,7 @@ With per-user OAuth, you register one Atlassian OAuth 2.0 (3LO) integration and 
 Sign in to the Atlassian Developer Console with your Atlassian account. For the full walkthrough, see Atlassian's [OAuth 2.0 (3LO) apps guide](https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/).
 </Step>
 <Step>
-Select **Create** > **OAuth 2.0 integration**, enter a recognizable name such as `C1`, then select **Create**.
+Select **Create** > **OAuth 2.0 integration**, enter a recognizable name such as `C1`, and if prompted for an **Access type**, choose **Resource-level**. Then select **Create**.
 </Step>
 <Step>
 Open the **Permissions** tab. Next to **Confluence API**, select **Add**, then **Configure**, and add the scopes from [Confluence scopes](#confluence-scopes) below — the default read scopes, plus any optional write or delete scopes you need.
@@ -56,17 +57,21 @@ Open the **Settings** tab. Under **Authentication details**, copy the **Client I
 
 ## Confluence scopes
 
-C1 requests the default read scopes automatically. The default is read-only; to enable write or delete tools, add the optional scopes below in the Developer Console (**Permissions** > **Confluence API** > **Configure**) and in C1's scopes field when configuring authentication. Grant only what you need. These are Confluence's **granular** scopes — the connector targets the Confluence v2 API, which the classic scopes (`write:confluence-content`, and so on) do not authorize.
+C1 requests the default read scopes automatically. The default is read-only; to enable write or delete tools, add the optional scopes below in the Developer Console (**Permissions** > **Confluence API** > **Configure**) and in C1's scopes field when configuring authentication. Grant only what you need. These are Confluence's **granular** scopes — the Confluence MCP server targets the Confluence v2 API, which the classic scopes (`write:confluence-content`, and so on) do not authorize.
 
-**Default scopes** read pages, spaces, attachments, comments, and related content (plus `offline_access` for token refresh):
+**Default scopes** (enable all of them) read pages, spaces, attachments, comments, and related content, and let the search tools run CQL queries (`read:content-details:confluence`), plus `offline_access` for token refresh:
 
-`read:attachment:confluence`, `read:comment:confluence`, `read:configuration:confluence`, `read:content.metadata:confluence`, `read:custom-content:confluence`, `read:database:confluence`, `read:embed:confluence`, `read:folder:confluence`, `read:hierarchical-content:confluence`, `read:label:confluence`, `read:page:confluence`, `read:space.permission:confluence`, `read:space:confluence`, `read:task:confluence`, `read:user:confluence`, `read:whiteboard:confluence`, `offline_access`
+`read:app-data:confluence`, `read:attachment:confluence`, `read:comment:confluence`, `read:configuration:confluence`, `read:content-details:confluence`, `read:content.metadata:confluence`, `read:custom-content:confluence`, `read:database:confluence`, `read:embed:confluence`, `read:folder:confluence`, `read:hierarchical-content:confluence`, `read:label:confluence`, `read:page:confluence`, `read:space.permission:confluence`, `read:space:confluence`, `read:task:confluence`, `read:user:confluence`, `read:whiteboard:confluence`, `offline_access`
 
 **Optional scopes** enable the write and delete tools:
 
-*Create and update:* `write:attachment:confluence`, `write:comment:confluence`, `write:configuration:confluence`, `write:custom-content:confluence`, `write:database:confluence`, `write:embed:confluence`, `write:folder:confluence`, `write:page:confluence`, `write:space.permission:confluence`, `write:space:confluence`, `write:task:confluence`, `write:whiteboard:confluence`
+*Create and update:* `write:app-data:confluence`, `write:attachment:confluence`, `write:comment:confluence`, `write:configuration:confluence`, `write:custom-content:confluence`, `write:database:confluence`, `write:embed:confluence`, `write:folder:confluence`, `write:page:confluence`, `write:space.permission:confluence`, `write:space:confluence`, `write:task:confluence`, `write:whiteboard:confluence`
 
 *Delete:* `delete:attachment:confluence`, `delete:comment:confluence`, `delete:custom-content:confluence`, `delete:database:confluence`, `delete:embed:confluence`, `delete:folder:confluence`, `delete:page:confluence`, `delete:whiteboard:confluence`
+
+<Warning>
+Every default scope must be enabled on your integration. If C1 requests a scope the integration doesn't have, authorization fails and Atlassian shows only "Something went wrong."
+</Warning>
 
 <Note>
 Atlassian recommends keeping an app under 50 scopes. Scope changes take effect the next time a user connects — adding an optional scope after users have connected requires each user to reconnect their Atlassian account.
@@ -85,6 +90,9 @@ With your OAuth 2.0 integration ready, register the server and provide its crede
 <Steps>
 <Step>
 Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Confluence** from the catalog.
+</Step>
+<Step>
+Enter your Atlassian site's **Cloud ID**.
 </Step>
 <Step>
 When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth and enter your integration's **client ID** and **client secret**.
@@ -110,3 +118,34 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 - **Rotate the OAuth client secret** in the Atlassian Developer Console under your integration's **Settings** tab, then update the secret on the server's authentication settings in C1.
 - **Adjust access** by editing the integration's Confluence scopes on the **Permissions** tab in the Atlassian Developer Console.
+
+## Troubleshooting Confluence authorization and scopes
+
+Most Confluence tool errors that mention authorization come from a scope that is missing on your OAuth 2.0 integration or in C1.
+
+<AccordionGroup>
+<Accordion title="Search tools fail with 'Unauthorized; scope does not match'">
+
+The search tools need `read:content-details:confluence`. Without it, Confluence returns `401` with `Unauthorized; scope does not match` while the other Confluence tools keep working, so the error can look like an expired login. Retrying doesn't help.
+
+To enable search, add the scope in both places, then reconnect:
+
+<Steps>
+<Step>
+In the Atlassian Developer Console, open your integration's **Permissions** tab, select **Configure** next to **Confluence API**, and add `read:content-details:confluence`.
+</Step>
+<Step>
+In C1, open the Confluence server's authentication settings and add `read:content-details:confluence` to the scopes field if it isn't listed.
+</Step>
+<Step>
+Have each user reconnect their Atlassian account so their new authorization includes the scope.
+</Step>
+</Steps>
+
+</Accordion>
+<Accordion title="Authorization fails with 'Something went wrong'">
+
+C1 requested a scope that isn't enabled on your integration. Compare the scopes in C1's authentication settings with the integration's Confluence scopes on the **Permissions** tab, enable any that are missing, and have the user connect again.
+
+</Accordion>
+</AccordionGroup>
