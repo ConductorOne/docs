@@ -1,0 +1,279 @@
+---
+title: Set up the Workday MCP server
+description: Register a Workday API client, choose the functional areas C1 needs, and register the Workday MCP server so your AI clients read and act on Workday HCM data through governed tools.
+og:title: Set up the Workday MCP server
+og:description: Register a Workday API client, choose the functional areas C1 needs, and register the Workday MCP server so your AI clients read and act on Workday HCM data through governed tools.
+sidebarTitle: Workday
+---
+
+{/* Editor Refresh: 2026-10-22 */}
+
+Set up the Workday MCP server to govern how AI clients read and act on Workday HCM data: workers, supervisory organizations, jobs, inbox tasks and business processes, time off and leave, recruiting, time tracking, learning, talent, and pay slips. You register an API client in Workday, then register the server in C1.
+
+Workday uses **per-user OAuth**. Each person signs in with their own Workday account, so every tool call runs under that user's Workday identity and returns or changes only what their Workday security allows.
+
+<Note>
+This page covers the MCP server, which lets AI clients call Workday tools. To sync Workday accounts and access into C1 for access reviews, see the [Workday connector](/baton/workday) or the [Workday Accounts connector](/baton/workday-wql) instead.
+</Note>
+
+## How C1 connects to Workday
+
+C1 hosts the Workday MCP server, so your users' AI clients only ever see MCP tools. They never call Workday directly. When an AI client calls one of these tools, C1 makes the matching request to your tenant's Workday REST API with the calling user's OAuth token, then returns the result to the AI client.
+
+Your Workday tenant uses two hosts, and the OAuth flow uses both:
+
+| Host | Example | What it serves |
+| :--- | :--- | :--- |
+| **Services host** | `https://wd2-impl-services1.workday.com` | The REST API and the token endpoint. Its name usually contains `-services`. |
+| **Sign-in host** | `wd2-impl.workday.com` | The authorization endpoint, where users sign in and consent. |
+
+Each request is limited twice. The API client's **functional areas** decide which Workday APIs C1 can call at all. The signing-in user's **security groups** decide what data that user can see or change through those APIs.
+
+## Before you begin
+
+- AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- A Workday account in a security group with **Modify** permission on these domains, both in the **System** functional area. Workday's **Security Administrator** security group is one example.
+  - **Set Up: Tenant Setup - Security**, which secures the **Edit Tenant Setup - Security** task.
+  - **Security Administration**, which secures the **Register API Client** task.
+- Every user who will connect needs a Workday account whose security groups grant access to the domains for the data they'll use. The API client doesn't extend anyone's access.
+
+<Note>
+If you don't see **Workday** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Enable OAuth 2.0 clients in your tenant
+
+Workday accepts API clients only after OAuth 2.0 clients are enabled for the tenant. If your tenant already uses OAuth API clients, this box is already selected.
+
+<Steps>
+<Step>
+In the Workday search bar, search for and open the **Edit Tenant Setup - Security** task.
+</Step>
+<Step>
+Under **OAuth 2.0 Settings**, select **OAuth 2.0 Clients Enabled**.
+</Step>
+<Step>
+Select **OK**.
+</Step>
+</Steps>
+
+Your tenant now accepts OAuth 2.0 API clients.
+
+## Register a Workday API client
+
+Register one API client that C1 uses to send each user through Workday's sign-in. For Workday's own walkthrough, see [Connect to Workday Using OAuth](https://doc.workday.com/peakon/en-us/workday-peakon-employee-voice/integrations/workday-integration/nfa1667304944189.html).
+
+<Steps>
+<Step>
+In the Workday search bar, search for and open the **Register API Client** task. Use this task, not **Register API Client for Integrations**.
+</Step>
+<Step>
+Enter a **Client Name** that identifies C1 for your team, such as `C1`.
+</Step>
+<Step>
+Set **Client Grant Type** to **Authorization Code Grant**. You can't change the grant type after you register the client.
+</Step>
+<Step>
+Leave **Access Token Type** set to **Bearer**.
+</Step>
+<Step>
+Set **Redirection URI** to exactly whichever matches your C1 tenant's domain:
+
+- Default instance: `https://accounts.conductor.one/auth/callback`
+- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
+
+The value must match exactly. Workday accepts only `https` redirect URIs.
+</Step>
+<Step>
+Select **Non-Expiring Refresh Tokens**, so C1 can keep renewing each user's access without asking them to sign in again.
+</Step>
+<Step>
+**Optional.** Select **Grant Administrative Consent** to skip the consent screen Workday otherwise shows each user the first time they connect.
+</Step>
+<Step>
+Under **Scope (Functional Areas)**, add the functional areas for the tools you want. See [Workday functional areas](#workday-functional-areas) for the recommended set.
+</Step>
+<Step>
+Select **OK**.
+</Step>
+<Step>
+Copy the **Client ID** and **Client Secret** that Workday shows. Workday doesn't show the client secret again.
+</Step>
+</Steps>
+
+Your API client is ready. Next, collect the endpoint values C1 needs.
+
+## Collect your Workday endpoint values
+
+Workday's **View API Clients** report lists your tenant's endpoints at the top of the page, above the list of API clients.
+
+<Steps>
+<Step>
+In the Workday search bar, search for and open the **View API Clients** report.
+</Step>
+<Step>
+Copy the **Token Endpoint** and **Authorization Endpoint** values shown at the top of the report.
+</Step>
+</Steps>
+
+Use those two values to fill in the fields C1 asks for:
+
+| C1 field | Value | Example |
+| :--- | :--- | :--- |
+| **Instance URL** | The scheme and host of **Token Endpoint**, with no path. | `https://wd2-impl-services1.workday.com` |
+| **Tenant** | The path segment after `/ccx/oauth2/` in **Token Endpoint**. | `acme` |
+| **Sign-in host** | Optional. The host of **Authorization Endpoint**, with no scheme. | `wd2-impl.workday.com` |
+| **Authorization URL** | The full **Authorization Endpoint**, in the form `https://<sign-in host>/<tenant>/authorize`. | `https://wd2-impl.workday.com/acme/authorize` |
+| **Token URL** | The full **Token Endpoint**, in the form `<Instance URL>/ccx/oauth2/<tenant>/token`. | `https://wd2-impl-services1.workday.com/ccx/oauth2/acme/token` |
+
+The report also shows a **Workday REST API Endpoint**. C1 doesn't use it, so don't paste it as the **Instance URL**: it carries a path, and C1 builds each API path itself.
+
+## Workday functional areas
+
+Workday doesn't use OAuth scope strings. Instead, you choose **functional areas** on the API client, and Workday applies them to every token that client issues. C1 sends no scopes when users authorize, so you manage access entirely in **Scope (Functional Areas)** on the API client.
+
+In the functional area picker, the **Workday REST API** group lists only some of these areas. Search the picker by name to find the rest, such as **Recruiting** or **Time Tracking**.
+
+### Recommended functional areas
+
+These areas cover the core tools: workers, organizations, jobs, skills, check-ins, direct reports, time off, inbox tasks, and business processes.
+
+| Functional area | Tools it enables |
+| :--- | :--- |
+| **Staffing** | Workers, jobs, service dates, direct reports, worker history, and business title changes. |
+| **Organizations and Roles** | Supervisory organizations, their members and org charts, organizations, organization types, and the organizations a worker belongs to or manages. |
+| **Jobs & Positions** | Job profiles and job families. |
+| **Worker Profile and Skills** | Skill items, explicit skills, and adding skills to a worker. |
+| **Performance Enablement** | Reading and creating check-ins. |
+| **Time Off and Leave** | Time off plans, entries, details, balances, eligible absence types, valid time off dates, and leaves of absence, plus requesting and correcting time off. |
+| **Tenant Non-Configurable** | Inbox tasks, business process events and steps, recruiting offers and employment agreements, and the step actions: approve, deny, send back, reassign, and complete a To Do. |
+
+### Optional functional areas
+
+Add these areas only if you want the matching tool groups.
+
+| Functional area | Tools it enables |
+| :--- | :--- |
+| **Career and Development Planning** | Reading, creating, and closing mentorships. **Worker Profile and Skills** also covers these tools. |
+| **Recruiting** | Job postings, interviews, interview feedback, and prospects, plus submitting interview feedback and creating prospects. |
+| **Talent Pipeline** | Succession plans. |
+| **Time Tracking** | Time clock events and worker time blocks, plus creating, updating, and deleting them. |
+| **Learning Core** | Learning content, records, and enrollments, plus enrolling a worker in content. |
+| **Core Payroll** | Pay slips. |
+
+A tool whose functional area is missing from the API client returns a Workday permission error, not an empty result. To add an area later, open the **Edit API Client** task, select your API client, and add the area under **Scope (Functional Areas)**.
+
+<Note>
+A functional area lets C1 call an API, but it doesn't grant anyone data access. A user whose security groups lack the domain that secures the data gets a `permission denied` error with code `S22`, even when the area is on the API client.
+</Note>
+
+## Register the Workday MCP server in C1
+
+With your API client and endpoint values ready, register the server and enter its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Workday** from the catalog.
+</Step>
+<Step>
+Enter the Workday settings from [Collect your Workday endpoint values](#collect-your-workday-endpoint-values):
+
+| Field | Required | Value |
+| :--- | :--- | :--- |
+| **Instance URL** | Yes | Your services host, such as `https://wd2-impl-services1.workday.com`. |
+| **Tenant** | Yes | Your tenant name, such as `acme`. |
+| **Sign-in host** | No | Your sign-in host, such as `wd2-impl.workday.com`. Enter it for reference. |
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose per-user OAuth.
+</Step>
+<Step>
+Enter the API client's **Client ID** and **Client Secret**.
+</Step>
+<Step>
+Set **Authorization URL** to your **Authorization Endpoint** and **Token URL** to your **Token Endpoint**. If C1 shows either URL with placeholders, replace them with your values.
+</Step>
+<Step>
+Leave the scopes field empty. Workday applies the functional areas you chose on the API client.
+</Step>
+<Step>
+Save your changes. The first time a user calls a Workday tool from their AI client, C1 prompts them to connect their Workday account.
+</Step>
+</Steps>
+
+C1 now sends each user's Workday tool calls to your tenant under that user's own Workday identity.
+
+## Tools the Workday MCP server provides
+
+The server exposes read tools across Workday's HCM services and write tools that start or act on Workday business processes. Each user's Workday security still limits what their calls can do.
+
+| Tool group | Read tools | Write tools |
+| :--- | :--- | :--- |
+| **Workers and jobs** | `list_workers`, `get_worker`, `list_jobs`, `get_job`, `list_job_profiles`, `get_job_profile`, `list_job_families`, `get_job_family`, `list_service_dates`, `list_direct_reports`, `get_direct_report`, `list_histories`, `get_history`, `list_business_title_changes`, `get_business_title_change` | — |
+| **Organizations** | `list_supervisory_organizations`, `get_supervisory_organization`, `list_members`, `get_member`, `list_org_charts`, `get_org_chart`, `list_organizations`, `get_organization`, `list_organization_types`, `get_organization_type`, `list_worker_organizations`, `get_worker_organization`, `list_supervisory_organizations_manageds`, `get_supervisory_organizations_managed` | — |
+| **Skills and check-ins** | `list_skill_items`, `get_skill_item`, `list_explicit_skills`, `get_explicit_skill`, `list_check_ins`, `get_check_in` | `add_worker_skills`, `create_check_in` |
+| **Time off and leave** | `list_time_off_entries`, `get_time_off_entry`, `list_time_off_plans`, `get_time_off_plan`, `list_time_off_details`, `get_time_off_detail`, `list_balances`, `list_eligible_absence_types`, `list_valid_time_off_dates`, `list_leaves_of_absences`, `get_leaves_of_absence` | `request_time_off`, `correct_time_off` |
+| **Inbox and business processes** | `list_inbox_tasks`, `get_inbox_task`, `list_events`, `get_event`, `list_event_steps`, `get_event_step`, `list_completed_steps`, `list_in_progress_steps`, `list_remaining_steps`, `list_send_back_targets` | `approve_event_step`, `deny_event_step`, `send_back_event_step`, `reassign_event_step`, `complete_to_do_step` |
+| **Recruiting** | `list_job_postings`, `get_job_posting`, `list_recruiting_countries`, `list_interviews`, `get_interview`, `list_feedbacks`, `get_feedback`, `get_prospect`, `list_offers`, `get_offer`, `list_employment_agreements`, `get_employment_agreement` | `create_interview_feedback`, `create_prospect` |
+| **Time tracking** | `list_time_clock_events`, `get_time_clock_event`, `list_worker_time_blocks`, `get_worker_time_block` | `create_time_clock_events`, `create_worker_time_block`, `update_worker_time_block`, `delete_worker_time_block` |
+| **Learning** | `list_contents`, `get_content`, `list_records`, `get_record`, `list_enrollments`, `get_enrollment` | `create_enrollment` |
+| **Talent** | `list_mentorships`, `get_mentorship`, `list_succession_plans`, `get_succession_plan` | `create_mentorship`, `close_mentorship` |
+| **Pay** | `list_pay_slips`, `get_pay_slip` | — |
+
+Write tools start real Workday business processes, which then follow your tenant's approval routing. Review them before you approve them in C1, and `delete_worker_time_block` in particular, which removes a worker's recorded time. `approve_event_step` and `deny_event_step` also need care: once a step is approved or denied, the tools can't undo it.
+
+### Limits of the Workday tools
+
+Workday enforces its own business process security and rules on every write, so a write tool approved in C1 can still fail in Workday:
+
+- **Business process security applies to every write.** A user can act only on a step that's awaiting them. For example, `approve_event_step` returns an error for a step assigned to someone else.
+- **Send-back targets come from a list.** `send_back_event_step` needs the step to send the event back to. Call `list_send_back_targets` with the `eventStep` you want to send back, and use a returned ID as the target.
+- **Time tracking needs worker setup.** `create_worker_time_block` works only for workers who have time tracking set up in Workday, including a period schedule and a time entry template.
+- **Mentorship close reasons aren't listed.** `close_mentorship` needs a valid close-reason reference ID from your tenant, and the server doesn't provide a list of reasons.
+- **Some lists need a filter.** Workday returns no rows for these lists without one, so the server rejects a call that omits it:
+  - `list_events` needs `worker` or `initiator`.
+  - `list_balances` needs `worker`.
+  - `list_organizations` needs `organizationType`. Use `list_organization_types` to find the type IDs.
+  - `list_valid_time_off_dates` needs both `date` and `timeOff`.
+  - `list_send_back_targets` needs `eventStep`.
+
+## How Workday credentials are shared
+
+Each user authorizes with their own Workday account, so tool calls run under that user's Workday identity and security groups. Workday records that user as the initiator of any business process a write tool starts. The client ID, client secret, instance URL, tenant, and endpoint URLs are shared settings on the server, and they apply to every user.
+
+C1 also records each call in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
+## Discover and govern tools
+
+After you register the server, C1 runs tool discovery against Workday. Discovered tools appear on the server's **Tools** tab.
+
+Each tool starts as either **Pending review** or automatically **Approved**, depending on the option chosen when the server was set up or your tenant's default tool settings in **AI** > **MCPs** > **Settings**. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before anyone can call a Workday tool, it must be approved, added to a toolset, and bound to an access profile. Continue to [Govern tools and toolsets](/product/admin/tools-and-toolsets) to set this up.
+
+<Note>
+Tool discovery runs even if your credentials are incorrect, so seeing discovered tools doesn't confirm that authentication is working. You confirm your Workday setup when an approved user successfully calls a Workday tool from their AI client.
+</Note>
+
+## Manage your Workday credentials
+
+- **Rotate the client secret** with the API client's **Generate New Client Secret** action in Workday, then update the secret on the server's authentication settings in C1.
+- **Adjust access** by adding or removing functional areas under **Scope (Functional Areas)** in the **Edit API Client** task. See [Workday functional areas](#workday-functional-areas).
+- **Stop all access** by selecting **Disabled** on the API client in the **Edit API Client** task.
+
+## Troubleshoot Workday MCP server errors
+
+Most setup problems show up during a user's first connection or tool call. Workday returns errors as JSON with an `error` message and a `code`.
+
+| Symptom | Cause | Fix |
+| :--- | :--- | :--- |
+| A 403 permission error, such as `permission denied` with code `S22` | The API client is missing the tool's functional area, or the user's security groups lack the domain that secures the data. | Add the area in **Edit API Client**. See [Workday functional areas](#workday-functional-areas). If the area is already there, grant the user's security group access to the domain. |
+| `permission denied` (`S22`) for one user while others succeed | That user's security groups don't grant the domain. | Review the user's security groups in Workday. The **Security Analysis for Securable Item and Account** report shows which groups grant a user access to an item. |
+| Workday returns a 404 error when the user tries to connect | The **Authorization URL** uses the services host. Workday serves the authorization endpoint only on the sign-in host. | Set **Authorization URL** to the **Authorization Endpoint** from the **View API Clients** report, such as `https://wd2-impl.workday.com/acme/authorize`. |
+| Workday rejects the **Redirection URI** when you register the API client | Workday accepts only `https` redirect URIs. | Set **Redirection URI** to exactly `https://accounts.conductor.one/auth/callback`, or `https://accounts.c1eu.ai/auth/callback` for the EU data residency instance. |
+| You can't change **Client Grant Type** on the API client | Workday locks the grant type after registration. | Register a new API client with **Authorization Code Grant**, then update the client ID and secret in C1. |
+| A 401 `Unauthorized` error | The request reached Workday without a valid access token. | Have the user reconnect their Workday account. If every user sees it, confirm the **Token URL**, client ID, and client secret in C1. |
+| A list tool returns an error that it needs a non-empty value for one of its filters | Workday returns no rows for these lists without a filter, so the server requires one. | Pass the filter the error names. See [Limits of the Workday tools](#limits-of-the-workday-tools) for each list's filter. |
+| A write returns a 400 error with a code that starts with `A` | Workday applied a business rule. For example, a holiday can't be requested as time off, the tenant requires a full day's quantity, or the step isn't awaiting the user. | Read the error message, which names the rule, and correct the request. |
+| `Invalid id for field` with code `S5` | A reference ID in the request, such as a mentorship close reason, doesn't exist in your tenant. | Look up a valid ID with a read tool, or in Workday, and retry. |
+| `create_worker_time_block` fails for a worker | The worker has no time tracking setup, such as a period schedule or a time entry template. | Set up time tracking for the worker in Workday, then retry. |
