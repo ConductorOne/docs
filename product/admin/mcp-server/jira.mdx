@@ -1,8 +1,8 @@
 ---
 title: Set up the Jira MCP server
-description: Connect Jira to C1 with per-user OAuth, then register the Jira MCP server and govern the tools it exposes.
+description: Connect Jira to C1 with per-user OAuth or an Atlassian API token, then register the Jira MCP server and govern the tools it exposes.
 og:title: Set up the Jira MCP server
-og:description: Connect Jira to C1 with per-user OAuth, then register the Jira MCP server and govern the tools it exposes.
+og:description: Connect Jira to C1 with per-user OAuth or an Atlassian API token, then register the Jira MCP server and govern the tools it exposes.
 sidebarTitle: Jira
 ---
 
@@ -10,7 +10,12 @@ sidebarTitle: Jira
 
 The Jira MCP server lets you govern access to Jira Cloud — issues, projects, sprints, workflows, dashboards, filters, fields, and configuration — as tools your AI clients can call through C1.
 
-Jira uses per-user OAuth, which is recommended: each person authorizes with their own Atlassian account, so every tool call runs under that user's identity and permissions.
+Jira supports two ways to authenticate, and you choose one when you register the server:
+
+- **Per-user OAuth** (recommended). Each person authorizes with their own Atlassian account, so every tool call runs under that user's identity and permissions.
+- **Atlassian API token** (scoped). A single API token, created for a person or a service account, authenticates everyone as one shared identity. C1 sends it as a Bearer token.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
 ## How C1 connects to Jira
 
@@ -21,14 +26,15 @@ The credentials you set up below are what C1 uses to call Jira on your users' be
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
-- An Atlassian account that can create an OAuth 2.0 integration. See Atlassian's [OAuth 2.0 (3LO) apps guide](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/).
+- For per-user OAuth, an Atlassian account that can create an OAuth 2.0 integration. See Atlassian's [OAuth 2.0 (3LO) apps guide](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/).
+- For an API token, an Atlassian account or service account that can create API tokens with scopes, with access to Jira.
 - Your Atlassian site's Cloud ID. To find it, open `https://your-site.atlassian.net/_edge/tenant_info` in a browser, replacing `your-site` with your site's name, and copy the `cloudId` value.
 
 <Note>
 If you don't see **Jira** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
-## Create an Atlassian OAuth 2.0 integration
+## Option 1: Create an Atlassian OAuth 2.0 integration
 
 With per-user OAuth, you register one Atlassian OAuth 2.0 (3LO) integration and each user authorizes individually. This keeps every action attributable to the user who took it, with only the access that user already has in Jira.
 
@@ -81,13 +87,7 @@ Every default scope must be enabled on your integration. If C1 requests a scope 
 Atlassian recommends keeping an app under 50 scopes and using classic scopes where available. Scope changes take effect the next time a user connects — adding an optional scope after users have connected requires each user to reconnect their Atlassian account.
 </Note>
 
-## How Jira credentials are shared
-
-With per-user OAuth, each user authorizes with their own Atlassian account, so tool calls run under that user's Jira identity and inherit only the access they already have. Atlassian attributes each action to the individual user.
-
-For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
-
-## Register the Jira MCP server in C1
+## Register the Jira MCP server with OAuth
 
 With your integration ready, register the server and provide your credentials.
 
@@ -106,6 +106,69 @@ Save your changes. The first time a user calls a Jira tool from their AI client,
 </Step>
 </Steps>
 
+## Option 2: Set up an Atlassian API token
+
+An Atlassian API token authenticates every user as one shared identity: the Atlassian account that owns the token. Use it when per-user attribution in Jira isn't required, or when you want a service account to own the connection. C1 sends the token as a Bearer token.
+
+### Create an API token
+
+Create an API token with scopes, either for a person or for a service account, so C1 can authenticate to the Jira API. The token's scopes are fixed when you create it, so select every scope below. To change them later, create a new token.
+
+<Steps>
+<Step>
+Open [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) and select **Create API token with scopes**. For details, see Atlassian's [Manage API tokens for your Atlassian account](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) documentation.
+</Step>
+<Step>
+Enter a name such as `C1`, choose an expiration between 1 and 365 days, then select **Next**.
+</Step>
+<Step>
+Select **Jira** as the app, then select **Next**.
+</Step>
+<Step>
+Select these scopes, then select **Next**:
+
+- `read:jira-user`
+- `read:jira-work`
+- `read:email-address:jira`
+
+To enable write or admin tools, also select the matching optional scopes from [Jira scopes](#jira-scopes).
+</Step>
+<Step>
+Review the token, select **Create**, then copy it. Atlassian shows it only once.
+</Step>
+</Steps>
+
+To own the token with a service account instead of a person, create it from the service account in Atlassian Administration under **Directory** > **Service accounts**, and select the same app and scopes. Give the service account access to Jira and to the projects C1 should read. For the full procedure, see Atlassian's [Manage API tokens for service accounts](https://support.atlassian.com/user-management/docs/manage-api-tokens-for-service-accounts/) documentation. A dedicated service account keeps activity attributable to C1 rather than a person.
+
+The token expires on the date you chose, so rotate it before then.
+
+### Register the Jira MCP server with an API token
+
+With your API token ready, register the server and provide it.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Jira** from the catalog.
+</Step>
+<Step>
+Enter your Atlassian site's **Cloud ID**.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **Bearer token** and paste your API token.
+</Step>
+<Step>
+Save your changes. C1 runs tool discovery against Jira.
+</Step>
+</Steps>
+
+## How Jira credentials are shared
+
+With per-user OAuth, each user authorizes with their own Atlassian account, so tool calls run under that user's Jira identity and inherit only the access they already have. Atlassian attributes each action to the individual user.
+
+With an API token, every user's tool calls use the one credential you provided, so Jira sees a single shared identity: the account that owns the token. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
 ## Discover and govern tools
 
 After you register the server, C1 runs tool discovery against Jira. Discovered tools appear on the server's **Tools** tab.
@@ -121,4 +184,5 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 ## Manage your Jira credentials
 
 - **Rotate the OAuth client secret** in the Atlassian Developer Console under your integration's **Settings** tab, then update the secret on the server's authentication settings in C1.
-- **Adjust access** by editing the integration's Jira scopes on the **Permissions** tab in the Atlassian Developer Console.
+- **Rotate an API token** by creating a new token in Atlassian with the same scopes and updating it in C1, then revoking the old one. Create the new token before the current one expires.
+- **Adjust access** by editing the integration's Jira scopes on the **Permissions** tab in the Atlassian Developer Console. For an API token, create a replacement token with different scopes.
