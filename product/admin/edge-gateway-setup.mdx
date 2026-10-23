@@ -1,0 +1,209 @@
+---
+title: Set up an Edge for inference
+description: Create an Edge Gateway on an application, link its runtime identity, connect a model provider, publish model routes, and turn it on.
+og:title: Set up an Edge for inference - C1 docs
+og:description: Create an Edge Gateway on an application, link its runtime identity, connect a model provider, publish model routes, and turn it on.
+sidebarTitle: Set up an Edge
+---
+
+{/* Editor Refresh: 2026-10-21 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Set up an Edge to serve AI models to your organization: add it to an application, give it a runtime identity, connect a provider with your key, publish the models callers can use, and turn it on. For how the pieces fit together, see the [Edge Gateway overview](/product/admin/edge-gateway-overview).
+
+## Before you begin setting up an Edge
+
+- Edge Gateway is enabled for your tenant.
+- You have a model provider API key, or an AWS account for Bedrock.
+- You know which application should own the Edge. Its List models and Call models entitlements live on that app.
+
+## Add an Edge to an application
+
+Each Edge belongs to one application.
+
+<Steps>
+<Step>
+Go to **Apps** and open the application that should own the Edge.
+</Step>
+<Step>
+In the app's left navigation, under **AI**, click **Edge**.
+</Step>
+<Step>
+Click **Add Edge**.
+</Step>
+<Step>
+Enter a **Name**. You can't rename an Edge after it's created.
+</Step>
+<Step>
+Under **What will this Edge serve?**, keep **Models** selected. Select **Egress** too only if this Edge will also control outbound internet access. You can remove a capability later, but you can't add one.
+</Step>
+<Step>
+Click **Create**.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/edge-add-dialog.png" alt="The Add an Edge dialog, with a Name field and the options Models and Egress under What will this Edge serve?"/>
+</Frame>
+
+C1 opens the new Edge with its **Status** set to **Disabled** and a **Set up this Edge** checklist on the **Overview** tab. The **Turn on** button stays disabled until the required steps are done.
+
+<Frame>
+  <img src="/images/product/assets/edge-setup-checklist.png" alt="A new Edge's Overview tab showing the Set up this Edge checklist: Runtime identity and Models required, Who can call done by default, Grant access recommended, and Connect a coding tool after turn on."/>
+</Frame>
+
+## Link the runtime identity
+
+The runtime identity is the service principal the Edge runs as. It reads provider keys from your vaults. All inference Edges in a tenant share one runtime identity, so you only do this once.
+
+<Steps>
+<Step>
+If you don't have a service principal for this, go to **Identities** > **Service principals**, click **Create service principal**, enter a **Name**, and click **Create**.
+</Step>
+<Step>
+Return to the Edge. On the **Overview** tab, next to **Runtime identity**, click **Link**.
+</Step>
+<Step>
+In **Existing service principal**, choose the service principal.
+</Step>
+<Step>
+Click **Link existing principal**, then **Close**.
+</Step>
+</Steps>
+
+The **Runtime identity** step shows as done. If the service principal doesn't appear in the list yet, click **Refresh linked principals**.
+
+## Connect a provider and add models
+
+Add models from the **Inference** tab. Your provider key is stored in a C1 vault and saved on the routes that use it.
+
+<Steps>
+<Step>
+Click the **Inference** tab, then **Add models**.
+</Step>
+<Step>
+Under **1. Provider**, choose a provider. Each provider shows the request format callers use:
+
+| Provider | Request format |
+| :--- | :--- |
+| Anthropic | Anthropic Messages (`/v1/messages`) |
+| OpenAI | OpenAI Responses (`/v1/responses`) |
+| Gemini Developer API, Together, Fireworks | OpenAI Chat (`/v1/chat/completions`) |
+| AWS Bedrock | Bedrock Converse |
+</Step>
+<Step>
+Under **2. Key**, choose the **Vault** and **Secret** that hold the provider's API key. To store a new key, click **Create vault and secret**:
+- Create the vault. C1 is a member of the vault so the Edge can read its secrets, and C1 grants the Edge access to it.
+- Create the secret with **Secret type** set to **API key**, and paste the key into **Secret value**.
+
+For AWS Bedrock, choose a region instead of a key. Bedrock uses AWS workload identity.
+</Step>
+<Step>
+Under **3. Models**, search for a model or type a model ID, and select it from the list. Add as many models as you need.
+</Step>
+<Step>
+Click **Publish**.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/edge-add-models-key.png" alt="The Add models drawer with Anthropic selected as the provider, a vault and secret chosen under Key, and the Models section ready for a model ID."/>
+</Frame>
+
+Each model becomes a **route** whose ID is the model ID. The **Providers** table shows the provider as **Connected**, and each route shows **Ready**. An Edge can have up to 40 routes.
+
+<Frame>
+  <img src="/images/product/assets/edge-inference-routes.png" alt="The Inference tab after publishing: Anthropic shows Connected · 1 model, the Routes table lists claude-sonnet-4-5 as Ready, and the Inference Bearer tokens switch is off."/>
+</Frame>
+
+<Note>
+The Edge's runtime identity needs permission to read secrets in each key's vault. When you create the vault from **Add models**, C1 grants that access for you. If you pick an existing vault and the route shows **Can't read key**, grant the runtime identity access to that vault.
+</Note>
+
+### Optional: Create a route with your own model name
+
+Create a route when you want callers to use a stable name, such as `coding-default`, instead of a provider's model ID, or when a route should try several models.
+
+<Steps>
+<Step>
+On the **Inference** tab, under **Routes**, click **New route**.
+</Step>
+<Step>
+Enter a **Route ID**: up to 64 lowercase letters, numbers, dots, underscores, and hyphens. Callers send this value as `"model"` in their requests.
+</Step>
+<Step>
+Choose a **Routing** mode:
+- **Direct**: one provider model.
+- **Failover**: try models in order. If one fails, the next is tried.
+- **Smart routing**: start on efficient models and move to capable models when needed, optionally with a judge model that decides.
+</Step>
+<Step>
+Choose the **Provider** and enter the **Upstream model ID**.
+</Step>
+<Step>
+**Optional.** Under **Advanced**, set timeouts, retries, reasoning effort, context length, a circuit breaker, and what to do when the provider rejects the key.
+</Step>
+<Step>
+Click **Create route**.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/edge-new-route.png" alt="The New route drawer with Route ID coding-default, Direct routing, provider Anthropic, and upstream model claude-sonnet-4-5."/>
+</Frame>
+
+The new route appears in the **Routes** table. Callers can now send `"model": "coding-default"`.
+
+## Choose who can call the Edge
+
+By default, an Edge accepts **people who sign in**. To let service principals call the Edge instead, open the **Overview** tab and click **Change** next to **Who can call**. This choice also decides who you can grant access to.
+
+## Optional: Allow inference Bearer tokens
+
+Some callers can't prove possession of a signing key. Inference API keys and the C1 Multipass key helper for Claude Code send plain Bearer tokens, so they only work when the Edge allows them.
+
+<Steps>
+<Step>
+Click the **Inference** tab.
+</Step>
+<Step>
+Turn on **Inference Bearer tokens**. The change saves immediately.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/edge-bearer-tokens.png" alt="The Inference tab with the Inference Bearer tokens switch turned on."/>
+</Frame>
+
+The Edge now accepts inference API keys and the Multipass key helper. Anyone holding one of these tokens can use it until it expires or is revoked, so leave this off if your callers connect only through C1 Multipass local endpoints.
+
+## Turn on the Edge
+
+Turn on the Edge once the **Setup** status reads **Ready to turn on**.
+
+<Steps>
+<Step>
+Click **Turn on**.
+</Step>
+<Step>
+Keep **Enforce** selected. **Enforce** denies connections the Edge's policy doesn't allow. **Observe** logs those connections and lets them through; it's mainly for testing egress rules.
+</Step>
+<Step>
+Review **What turns on**, then click **Turn on**.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/edge-turn-on.png" alt="The Turn on dialog with Observe and Enforce options, Enforce selected, and a What turns on summary listing the routes and the grants."/>
+</Frame>
+
+The Edge's **Status** changes to **Enforce**. No one can call it until you grant access. Next, [grant access to the Edge](/product/admin/edge-gateway-access).
+
+## Change, turn off, or delete an Edge
+
+- To switch between **Observe** and **Enforce**, click **Change mode**.
+- To stop serving requests, turn the Edge off. Its routes, rules, and grants stay as they are.
+- To delete the Edge, click the **...** (more actions) menu and select **Delete Edge**.
