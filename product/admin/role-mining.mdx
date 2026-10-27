@@ -1,90 +1,274 @@
 ---
-title: "Discover access profiles with role mining"
-description: "Role mining analyzes access patterns across your organization to suggest entitlements for access profiles."
-og:title: "Discover access profiles with role mining - C1 docs"
-og:description: "Role mining analyzes access patterns across your organization to suggest entitlements for access profiles."
+title: "Discover roles with role mining"
+description: "Find groups of users who already share access, then turn that shared access into a role."
+og:title: "Discover roles with role mining - C1 docs"
+og:description: "Find groups of users who already share access, then turn that shared access into a role."
 sidebarTitle: "Role mining"
 ---
-{/* Editor Refresh: 2026-06-26 */}
+{/* Editor Refresh: 2026-10-27 */}
 
-## What is role mining?
+{/* DRAFT NOTES
+This page is a full rewrite against the redesigned role mining experience (start panel, two-pane analysis page, Add filter drawer, Create role). It is based on test-instance screenshots and the current product code, not on the previous version of this page.
+Search this file for "QUESTION FOR DEV" to find every open question. Remove all draft comments before merging.
+Screenshots: none added yet. Proposed placements are marked "SCREENSHOT PROPOSAL" and need approval first.
+*/}
 
-Role mining analyzes the access granted to your organization's users and identifies patterns that suggest well-defined access profiles. Instead of building access profiles by hand, you can use role mining to let C1 surface which entitlements are commonly held by similar groups of people, then turn those patterns into ready-to-use profiles.
+{/* QUESTION FOR DEV (wording): The action bar button says "Create role" but the drawer title and default name say "Create access profile". This draft says "role" throughout, based on the button and on the fact that the server creates a Role-type profile when the profile types flag is on. Confirm the intended wording, and whether the drawer will be renamed before ship. */}
+
+{/* QUESTION FOR DEV (availability): Two flags are manually enabled per tenant today: the one behind "Start from a suggestion" and the one behind "Create role" (profile types). Will both be on for all tenants at ship? If not, this page needs conditional wording, and possibly an early access warning. */}
+
+Use role mining to find groups of users who already share access, choose which of that access belongs together, and create a role from it.
 
 ## How role mining works
 
-Role mining answers a specific question: **"What access does this group of people typically need?"** It starts with a defined group — a department, job title, employment status, manager's team, or another cohort — and discovers the entitlements that group commonly holds.
+Role mining starts with a cohort: a group of users defined by filters such as department, job title, or manager. C1 then shows the entitlements that cohort holds in common. You set how common an entitlement must be to qualify, review the result, and create a role that grants that access. For more on roles, see [Access profile types](/product/admin/profiles#access-profile-types).
 
-If you're starting from a specific entitlement and want to know who should have it, role mining isn't the right tool. Use **Governance** > **Access profiles** to build profiles by selecting entitlements directly.
+You can begin an analysis in three ways:
+
+- **Start from a suggestion** — C1 finds groups of users who share a lot of access and pre-fills the analysis for the group you pick.
+- **Resume a previous analysis** — Return to an analysis you ran earlier.
+- **Start fresh** — Define your own cohort and the apps to analyze.
 
 ## Before you begin
 
 - You must have the **Super Admin** role in C1 to use role mining.
-- At least one connector must be configured and have completed a sync. Role mining analyzes existing access grants, so it requires data to work with.
+- At least one connector must be configured and have completed a sync. Role mining analyzes existing access grants, so it needs synced data.
+- Your directory must include the user attributes you want to filter by, such as department or job title.
 
-## Run a role mining analysis
+{/* QUESTION FOR DEV (permissions): The nav item requires the role mining editor or owner role, which only Super Admin holds among built-in roles. Is Super Admin the right thing to state, or should the docs name a more specific permission? */}
+
+## Start an analysis
+
+Go to **Governance** > **Role mining** to open the **Start an analysis** panel. Choose one of the three options, then click **Start**.
+
+{/* SCREENSHOT PROPOSAL (not added): the Start an analysis panel with the three option cards. */}
+
+### Start from a suggestion
+
+C1 analyzes your organization's access to find groups of users who share a lot of access, such as users in the same department who hold many of the same entitlements. Each group is a suggestion. When you pick one, C1 opens a new analysis with the filters that define the group already filled in, and you can adjust them from there.
+
+Each suggestion in the list shows:
+
+- The name of the group.
+- The number of users in the group.
+- The number of shared entitlements, which are the entitlements the group has in common.
+- The average coverage, which is how much of the group's shared access each user holds, on average.
+- A confidence badge, which shows how strong a candidate the group is for a role as a percentage. The badge is green at 80% or higher and yellow from 50% to 79%.
+
+The list shows only suggestions above 50% confidence, with the highest confidence first.
+
+{/* QUESTION FOR DEV (names): The test instance shows suggestion names such as "PROVISIONED access (cluster 2)", and two suggestions had the same name. Is that seed data, or what customers will see? How are real suggestion names generated? */}
+
+{/* QUESTION FOR DEV (avg coverage): Confirm the definition of "avg coverage" so the wording above is accurate. */}
+
+{/* QUESTION FOR DEV (confidence): Confidence appears to combine how similar users' access is with how much of the shared access each user holds. Is it OK to describe it in those terms in the FAQ below, or should the docs stay at "how strong a candidate the group is"? */}
+
+To start from a suggestion:
 
 <Steps>
   <Step>
     Navigate to **Governance** > **Role mining**.
   </Step>
   <Step>
-    In the **Filter** section, click **Add filter**, then select a user attribute — such as Department, Job title, Manager, or Employment status.
+    Click **Start from a suggestion**.
   </Step>
   <Step>
-    Select one or more values for the attribute. Each value shows how many users hold it and what share of your directory that represents. Click **Done** to collapse the value picker — this doesn't change your selections. To reopen the picker and change your selected values, click the down arrow next to the value count in the selection box.
-    {/* Core fit column (on branch gowthami.dommety/role-mining-selection-explorer-ux, not yet merged): for values not yet selected, shows what percentage of that value's members already match the active cohort — a higher number means adding that value would reinforce the current filters rather than dilute them. Shows — until a cohort is defined or no cohort members hold that value. Revisit once this ships. */}
-
-    <Frame>
-    <img src="/images/product/assets/role-mining-filters.png" alt="A screenshot showing the Filter section with multiple filters applied and the Select shared access section below it."/>
-    </Frame>
+    Open the **Choose a suggestion** list and select a suggestion.
   </Step>
   <Step>
-    Add more filters as needed with **Add filter**. C1 updates the results as you build your cohort.
+    Click **Start**.
   </Step>
 </Steps>
 
-## Set the shared-access threshold
+C1 opens the analysis with the group's filters in the **Define cohort** card. The suggestion's entitlements aren't preselected. C1 calculates the access the cohort shares and applies the shared-access threshold, so the number of selected entitlements can differ from the **Shared entitlements** count in the list.
 
-Once your cohort has at least one match, the **Select shared access** control lets you decide how common an entitlement must be in the cohort before it's included in the results. Enter a percentage in the box or drag the slider — the two stay in sync — to set the cutoff (80% by default). The histogram beneath it shows how entitlements are distributed across the cohort, from entitlements everyone holds (100%) to entitlements almost no one holds (0%).
+{/* QUESTION FOR DEV (counts differ): In the test instance, a suggestion showed 14 shared entitlements, and the analysis opened with 10 of 389 entitlements selected at the default 80% threshold. Is the paragraph above the right explanation for why the numbers differ? */}
 
-Four summary cards update as you adjust the cutoff:
+#### Refresh suggestions
 
-- **Selected** — the number of entitlements included at the current cutoff.
-- **Core holders** — how many members of the cohort hold every selected entitlement.
-- **Reach** — the percentage of the cohort covered by the selected entitlements, and how many members are missing at least one.
-- **Makeup** — the number of applications represented in the selected entitlements, and how many are high or medium risk.
+Suggestions are a snapshot from the last time C1 analyzed your organization. To look for new groups, click the refresh icon (**Refresh suggestions**) next to the **Choose a suggestion** list. While the analysis runs, the list shows **Finding suggestions…**. Only one organization-wide analysis runs at a time.
 
-## Review the results
+If the list is empty, it says **No suggestions yet** or **No suggestions above 50% confidence**. Click the refresh icon to run a new analysis.
 
-The results appear in two tabs:
+{/* QUESTION FOR DEV (refresh): (1) Do suggestions ever refresh automatically, for example after a connector sync? The April 2026 early access release note said they would. This draft documents only the manual refresh. (2) How long does a refresh usually take? (3) Can a user dismiss a suggestion? The dismiss control exists only in the legacy Suggestions tab, so this draft doesn't mention it. (4) Does the refresh button require a specific permission? */}
 
-- **Users** — the users who match your current filters, with their status, job title, and entitlement count.
-- **Entitlements** — the entitlements at or above your shared-access cutoff, with a coverage bar (the share of the cohort that holds each one) and a grant count. Check or uncheck individual entitlements to fine-tune the set before taking action. Turn on **Show selected only** to filter the list down to your current selections. An entitlement shows a **Deleted** badge if the underlying resource has been removed from its source system.
+### Resume a previous analysis
 
-## Take action on your results
+Use this option to pick up where you left off, whether the analysis finished, failed, or is still running.
 
-The action bar at the bottom of the page shows a summary of the current cohort (for example, "7 of the 18 users have the 100 entitlements selected") and two actions:
+<Steps>
+  <Step>
+    Click **Resume a previous analysis**.
+  </Step>
+  <Step>
+    Open the **Choose a previous analysis** list and select an analysis. Each entry shows the cohort filters, the analysis ID, and a status such as **Completed** or **Failed**.
+  </Step>
+  <Step>
+    Click **Start**.
+  </Step>
+</Steps>
 
-- **Create access profile** — opens a modal where you name the profile, optionally enable membership automation, and review the selected entitlements. When membership automation is enabled, C1 generates a CEL expression from your filters and automatically enrolls users who match it. Turn on **Create access request tasks for membership changes** to route those automatic enrollments through an access request task for approval, instead of enrolling matching users immediately.
-- **Add to existing profile** — opens a modal to add the cohort's selected entitlements to an access profile you've already created.
+C1 reopens the analysis with its filters and selections.
 
-## Revisit past analyses
+{/* QUESTION FOR DEV (resume list): (1) Does the list show only the current user's analyses, or everyone's? (2) How many appear (the code suggests the five most recent), and are replaced runs hidden? (3) Does reopening restore threshold and manual entitlement selections, or only the filters? */}
 
-Click **History** in the upper right to open the **Recent analyses** drawer. It lists your past filter combinations with timestamps. Click **Run again** next to any entry to rerun that analysis.
+### Start fresh
 
-<Tip>
-Role mining becomes more accurate as your organization's data grows. If you've recently connected new integrations or enrolled more users in access profiles, running a fresh analysis surfaces more relevant suggestions.
-</Tip>
+Use this option to define the cohort and the apps to analyze yourself, starting from an empty analysis.
+
+<Steps>
+  <Step>
+    Click **Start fresh**.
+  </Step>
+  <Step>
+    Click **Start**.
+  </Step>
+</Steps>
+
+C1 opens a **New analysis** page with an empty cohort. Continue with [Define the cohort](#define-the-cohort).
+
+## Define the cohort
+
+The **Cohort** pane on the left holds the filters that decide which users are in the analysis. As you add filters, C1 lists the matching users under **Members** and shows the member count at the top of the pane. A user must match every filter to be in the cohort.
+
+{/* SCREENSHOT PROPOSAL (not added): the analysis page with a filter in the Define cohort card and the Members table below it. */}
+
+### Filter by a user attribute
+
+Use a user attribute filter to group users by a directory attribute such as department, job title, or manager.
+
+<Steps>
+  <Step>
+    In the **Define cohort** card, click **Add filter**.
+  </Step>
+  <Step>
+    Under **Filter type**, select **User attribute**.
+  </Step>
+  <Step>
+    In **Attribute**, search for and select an attribute. The list includes built-in attributes, such as **Department**, **Job title**, and **Manager**, and custom attributes.
+  </Step>
+  <Step>
+    Select one or more values. Each value shows how many users hold it and what share of your directory that represents. Users who match any selected value are included.
+  </Step>
+  <Step>
+    Click **Add**.
+  </Step>
+</Steps>
+
+The filter appears in the **Define cohort** card, and C1 updates the cohort. Each attribute can appear in only one filter. To remove a filter, click the trash icon next to it.
+
+{/* SCREENSHOT PROPOSAL (not added): the Add filter drawer with an attribute and its values selected. */}
+
+{/* QUESTION FOR DEV (edit filter): The code has an "Edit filter" action on each filter row, but the screenshots show only the trash icon. Where does Edit filter appear? */}
+
+### Filter by the access users hold
+
+Use an access filter to find users who hold specific entitlements, such as everyone who has a particular role in an app. In the **Add filter** drawer, select **Access the user has**, then select the entitlements to match. Users must hold at least one of the selected entitlements in each access row. You can add up to 20 access rows and select up to 20 entitlements in each.
+
+{/* QUESTION FOR DEV (access filter): I have no screenshot of the Access the user has form. (1) What does the form look like, and how do you add a second access row? (2) Are multiple access rows combined with AND (a user must match every row), as the help text suggests? (3) The code also has a third filter type, "Apps to analyze", that isn't in the test instance drawer. Is it hidden, and does it duplicate the Access scope control on the right? */}
+
+## Choose the access to include
+
+The **Access** pane on the right lists the entitlements the cohort holds. The pane header shows how many entitlements are selected out of the total and how many apps they come from.
+
+{/* QUESTION FOR DEV (risk badges): The header shows badges such as "2 high risk" and "1 medium risk". What are they counting, apps or entitlements, and where does the risk level come from? */}
+
+### Limit the analysis to specific apps
+
+By default, C1 considers entitlements from every app. To narrow the list, open **Access scope**, click **Select apps**, and choose up to 10 apps. The cohort doesn't change, and the **Entitlements** list shows only entitlements from the selected apps.
+
+### Set the shared-access threshold
+
+The **Select shared access** card controls how common an entitlement must be in the cohort to be selected. Enter a percentage in the box, or drag the slider, to set the cutoff. The default is 80%. The histogram shows how entitlements are distributed across the cohort, from entitlements everyone holds at 100% to entitlements almost no one holds at 0%. The entitlements at or above your cutoff are selected.
+
+### Fine-tune the selection
+
+The **Entitlements** table lists each entitlement with its app and type, the share of the cohort that holds it under **% of cohort w/ access**, and its number of **Grants**.
+
+- Select or clear the checkbox next to an entitlement to include or exclude it. Use the checkbox in the header to select or clear the whole list.
+- Turn on **Show selected only** to filter the list to your current selection.
+- An entitlement shows a **Deleted** badge if the underlying resource has been removed from its source system.
+
+The **Members** table shows each cohort member's status and the share of the selected entitlements they already hold under **Selected access held today**.
+
+{/* QUESTION FOR DEV (download icons): The Members and Entitlements sections each have a download icon with no label. What does each one export, and in what format? */}
+
+{/* QUESTION FOR DEV (Deleted badge): Are deleted entitlements counted in the selection and carried into a created role? The backend excludes deleted apps from analysis, but the test instance shows Deleted badges on selected entitlements. */}
+
+{/* QUESTION FOR DEV (reset): The "no members hold the selected access" warning mentions "reset custom changes". Where is that reset control? */}
+
+The bar at the bottom of the page summarizes the result, for example "86% (6/7) of cohort members have all 10 selected entitlements". If no cohort member holds all the selected entitlements, the bar tells you to raise the cutoff or reset your changes.
+
+{/* SCREENSHOT PROPOSAL (not added): the full analysis page with both panes, the threshold slider, and the bottom bar. */}
+
+## Analysis status
+
+C1 runs each analysis in the background. A status strip at the bottom of the page shows its progress, such as **Starting analysis...** or **Analyzing cohort...**, and the **Entitlements** table fills in when the analysis finishes. You can leave the page and return later with [Resume a previous analysis](#resume-a-previous-analysis).
+
+If an analysis fails, click **Run again**. If a newer analysis replaces the one you're viewing, click **View newer analysis**.
+
+{/* QUESTION FOR DEV (replaced): What causes "Analysis replaced"? For example, does changing filters create a new analysis and replace the old one? */}
+
+## Create a role
+
+When the cohort and the selected entitlements look right, create a role that grants those entitlements. A role is an access profile of the Role type, so it grants its entitlements automatically to users who meet its membership condition.
+
+<Steps>
+  <Step>
+    Click **Create role** in the bar at the bottom of the page.
+  </Step>
+  <Step>
+    In **Name**, enter a name of at least three characters.
+  </Step>
+  <Step>
+    **Optional.** In **Description**, enter a description.
+  </Step>
+  <Step>
+    **Optional.** Clear **Enable membership automation** if you don't want C1 to add members automatically. When it's selected, C1 generates a membership condition from your cohort filters and adds users who match it. The condition is read-only.
+  </Step>
+  <Step>
+    **Optional.** Select **Create access request tasks for membership changes** to create an access request task for each automatic enrollment instead of enrolling matching users immediately.
+  </Step>
+  <Step>
+    Review the entitlements the role will include.
+  </Step>
+  <Step>
+    Click **Create role**.
+  </Step>
+</Steps>
+
+C1 creates the role and opens it on the **Access profiles** page. If you enabled membership automation, users who match the condition are enrolled automatically. If you didn't, the role starts with no members. For more on membership conditions, see [Automate onboarding and offboarding access changes](/product/admin/dynamic-access-control).
+
+{/* SCREENSHOT PROPOSAL (not added): the Create role drawer with membership automation enabled. */}
+
+{/* QUESTION FOR DEV (drawer): (1) The drawer title and default name read "Create access profile" and "New access profile" while the button reads "Create role". See the wording question at the top. (2) Please confirm what "Create access request tasks for membership changes" does so the step above is accurate. (3) Does the cohort carry over as members when automation is off, or does the role start empty? */}
+
+<Note>
+A role can include up to 500 entitlements. If more than 500 are selected, C1 asks you to raise the cutoff or remove entitlements before you create the role. If the generated membership condition is too long, C1 asks you to remove filters or turn off membership automation.
+</Note>
 
 ## Frequently asked questions about role mining
 
 <AccordionGroup>
-  <Accordion title="Why aren't any results showing after I add filters?">
-    Role mining requires users with existing access grants to analyze. If your connectors haven't completed a sync, if the cohort you've defined is too small, or if user attributes aren't mapped in your directory, results may not appear. Try running a connector sync, confirm that user attributes are mapped, and then rerun your analysis.
+  <Accordion title="Why don't I see any suggestions?">
+    C1 lists only suggestions above 50% confidence. A suggestion needs a group of at least five users who share access, and an entitlement counts toward a group only if at least three users hold it. If the list is empty, make sure your connectors have synced and your directory attributes are populated, then click the refresh icon next to the list.
   </Accordion>
 
-  <Accordion title="What happens after I create an access profile from role mining?">
-    C1 creates the access profile with the entitlements from your cohort. If you enabled membership automation, users who match the profile's CEL expression are enrolled automatically and kept in sync as your organization changes — unless you also enabled **Create access request tasks for membership changes**, in which case matching users get an access request task instead of immediate enrollment. If you didn't enable automation, the profile starts with no enrolled members — add members from the profile's **Enrollment** tab.
+  <Accordion title="What does confidence mean?">
+    Confidence shows how strong a candidate a group is for a role. It's higher when the users in the group hold similar access and when each user holds most of the group's shared access. A higher percentage means the group is more likely to make a well-defined role.
+  </Accordion>
+
+  <Accordion title="Why does the Entitlements table say there are no items?">
+    The table is empty while an analysis runs. It also stays empty if the apps in your access scope have no entitlements the cohort shares at your cutoff. Lower the threshold, widen the access scope, or change the cohort filters.
+  </Accordion>
+
+  <Accordion title="Why can't I filter by the attribute I need?">
+    A banner appears on the page when standard directory attributes, such as department, job title, or manager, aren't mapped. Click **Map attributes** to map them, then rerun your analysis.
+  </Accordion>
+
+  <Accordion title="Do roles from role mining update when users change?">
+    If you enabled membership automation, C1 keeps the role's membership in sync with the condition generated from your filters. The role's entitlements don't change after you create it. To change them, edit the role on the **Access profiles** page.
   </Accordion>
 </AccordionGroup>
+
+{/* QUESTION FOR DEV (FAQ accuracy): (1) Where does the Map attributes button take the user? (2) Does the 5-user and 3-user minimum in the first FAQ answer hold for customers to rely on, or is it an internal tuning value that could change? */}
