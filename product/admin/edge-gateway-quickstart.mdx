@@ -1,0 +1,98 @@
+---
+title: Make your first model call through Edge Gateway
+description: Set up one model route, grant a developer access, and check a first Claude Code request through your Edge Gateway.
+og:title: Edge Gateway quickstart - C1 docs
+og:description: Set up one model route, grant a developer access, and check a first Claude Code request through your Edge Gateway.
+sidebarTitle: Quickstart
+---
+
+{/* Editor Refresh: 2026-10-28 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Give one developer access to one Claude model through an Edge Gateway, then check their first request. An admin completes the setup and access steps; the developer configures Claude Code.
+
+## Before you begin the Edge Gateway quickstart
+
+Confirm these prerequisites before starting:
+
+- Edge Gateway is enabled for your organization, and you have an admin role that can manage applications, service principals, and vaults.
+- **Cross-App Access** is on so Multipass can get Edge tokens for people. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable).
+- You have an Anthropic API key and the full provider ID of a Claude model for this walkthrough.
+- The developer has Claude Code on macOS and installs [C1 Multipass](https://dist.conductorone.com/ConductorOne/multipass-desktop), signs in, and registers their device. Install the CLI from **Settings** > **General** > **Command line tool** > **Install**, and keep Multipass unlocked. See [Connect with C1 Multipass](/product/admin/connect-edge-gateway-multipass).
+
+## Set up and check your first model request
+
+Use the same application and Edge throughout these steps. Leave **Allow long-lived API keys** off; the Multipass helper doesn't require it.
+
+<Steps>
+<Step title="Create an Edge">
+Open the application under **Apps**. Under **AI**, select **Edge**, then click **Add Edge**. Enter a name, select **Models**, and click **Create**.
+
+On the Edge's **Overview** tab, click **Link** beside **Runtime identity**. Select a service principal, or use **Create service principal** to create one inline. Click **Link existing principal** to save the binding; creating a principal alone doesn't link it. See [Set up an Edge](/product/admin/edge-gateway-setup).
+</Step>
+
+<Step title="Publish one model">
+Open **Inference** > **Add models** and select **Anthropic**. Choose a vault and API-key secret, or use **Create vault and secret** to store your provider key. Confirm the runtime identity can read the key.
+
+Under **Models**, type the full provider model ID and select the offered option. Suggestions depend on models being registered and made available to your organization's rollout channel; if your model isn't suggested, type its ID. Click **Publish**, then note the **Route ID** in the routes table for the developer's configuration.
+</Step>
+
+<Step title="Grant the developer access">
+On **Overview**, keep **Who can call** set to **People who sign in**. Open **Grants** and grant the developer both **List models** and **Call models**. See [Grant access to an Edge](/product/admin/edge-gateway-access).
+</Step>
+
+<Step title="Turn on the Edge">
+Click **Turn on** and choose **Enforce** for this walkthrough:
+
+- **Enforce** denies connections that the Edge's policy doesn't allow.
+- **Observe** logs connections that policy would deny and allows them through; use it for testing rather than enforcement.
+
+Review **What turns on**, then click **Turn on**.
+</Step>
+
+<Step title="Connect Claude Code">
+On **Overview**, open **Connect your tools** > **Claude Code**. Have the developer merge the generated settings into `~/.claude/settings.json`; don't overwrite existing settings. The configuration has this form:
+
+```json
+{
+  "apiKeyHelper": "c1-multipass inference helper --edge-url https://<your-org>-inference.edge.<your-zone> --inference-resource https://<your-org>-inference.edge.<your-zone>/api/v1/apps/<app-id>/edges/<edge-id> --dial-only",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://<your-org>-inference.edge.<your-zone>",
+    "ANTHROPIC_MODEL": "<route-id>",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "60000"
+  }
+}
+```
+
+Replace the placeholders with the Edge's connection values and published Claude route ID. Remove conflicting `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` values from the environment. See [Use Claude Code](/product/admin/claude-code-edge-gateway-multipass) for helper checks and troubleshooting.
+
+For Codex 0.118 or later, copy the `[profiles.edge]` and provider settings from [Connect your tools](/product/admin/edge-gateway-connect#configure-codex-on-a-desktop), then run `codex --profile edge`.
+</Step>
+
+<Step title="Check the first request">
+Have the developer run a prompt from a terminal:
+
+```bash
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u HTTPS_PROXY \
+  claude -p "Reply with exactly: edge ok"
+```
+
+Check the response, then open the Edge's **Activity** > **Flows** tab and choose a time range that includes the request. If the Edge also serves egress, select **Inference** first. Allow a few minutes for recent activity to appear, then look for the developer's request and check its **Outcome**.
+
+A reply alone doesn't prove successful routing, and a missing event doesn't prove denial. If the check is inconclusive or failed, use the [Claude Code troubleshooting guide](/product/admin/claude-code-edge-gateway-multipass#troubleshoot-claude-code-with-edge-gateway) before continuing.
+</Step>
+</Steps>
+
+## Continue configuring Edge Gateway
+
+Use the detailed guides for additional models, callers, and clients:
+
+- [Set up an Edge](/product/admin/edge-gateway-setup)
+- [Grant access](/product/admin/edge-gateway-access)
+- [Find connection details and configure Codex](/product/admin/edge-gateway-connect)
+- [Connect with C1 Multipass](/product/admin/connect-edge-gateway-multipass)
+- [Use Claude Code with Multipass](/product/admin/claude-code-edge-gateway-multipass)
+- [Use long-lived inference API keys (advanced)](/product/admin/inference-api-keys)
