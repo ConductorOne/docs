@@ -42,11 +42,33 @@ The app ID and Edge ID also appear in the Edge's URL in C1.
 
 ## Connect your own application to the Edge
 
-An application can call the Edge directly by exchanging its signed-in user's C1 identity for an Edge token. See [Enterprise-managed authorization](/product/admin/enterprise-managed-authorization/overview) for how C1 issues these tokens.
+An application exchanges its signed-in user's C1 identity for an **ID-JAG**, then redeems that grant at the Edge for an **inference access token**. The ID-JAG is not an inference bearer token; sending it directly to `/v1/models` or an inference operation returns `401`.
 
-1. Request a token for the **Audience**, with the **Inference resource** as the resource and the scopes the caller needs.
-2. Send the token in the `Authorization: Bearer` header when calling the inference endpoint.
-3. Use `/v1/models` to discover the routes available to the caller, then send model requests in a format supported by the selected route. See [Configure inference routes](/product/admin/edge-gateway-inference-routing) for route IDs and request formats.
+Your application needs an OAuth client that can obtain a C1 ID-JAG and generate DPoP proofs. See [Enterprise-managed authorization](/product/admin/enterprise-managed-authorization/overview) for the identity-exchange flow. DPoP proves that the application holds the private key bound to the grant.
+
+1. Generate a proof key and request an ID-JAG from C1 for the Edge's **Audience**, **Inference resource**, and required scopes. Bind the grant to this key using a DPoP proof in the C1 exchange. Handle any DPoP nonce challenge from C1 with a new proof containing the supplied nonce.
+2. Create a fresh DPoP proof for `POST https://<inference-host>/oauth2/inference/token`, signed with the **same key**. Its public-key thumbprint must match the ID-JAG's `cnf.jkt`. Use the exact inference origin from **Connection details**, without a `/v1` suffix, when constructing the token endpoint URL.
+3. Redeem the ID-JAG at that endpoint using the JWT bearer grant, as shown below. Supply the exact inference resource and a space-separated list of scopes contained in the grant. For discovery and inference, request `inference.models.read inference.invoke`.
+
+The following request illustrates the redemption step. Have your OAuth client supply `EDGE_ID_JAG` and `EDGE_DPOP_PROOF`; they are credentials, not literal placeholder strings. Set `EDGE_INFERENCE_URL` to the inference origin and `EDGE_INFERENCE_RESOURCE` to the complete inference resource from **Connection details**.
+
+```bash
+EDGE_TOKEN_RESPONSE="$(curl --fail-with-body --silent --show-error \
+  "$EDGE_INFERENCE_URL/oauth2/inference/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "DPoP: $EDGE_DPOP_PROOF" \
+  --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
+  --data-urlencode "assertion=$EDGE_ID_JAG" \
+  --data-urlencode "resource=$EDGE_INFERENCE_RESOURCE" \
+  --data-urlencode 'scope=inference.models.read inference.invoke')"
+```
+
+The JSON response contains `access_token`, `token_type` (`Bearer`), `expires_in` (seconds), `scope`, and `resource`. The access token starts with `tb_inf_at_v1.`. Keep the response private; don't print it or save it to logs. In application code, check for a successful HTTP response before reading `access_token`.
+
+4. Extract `access_token` from the response and send it in the `Authorization: Bearer` header when calling the inference endpoint. DPoP is required for the grant exchange; subsequent calls using this inference bearer token don't need a DPoP header.
+5. Use `/v1/models` to discover the routes available to the caller, then send model requests in a format supported by the selected route. See [Configure inference routes](/product/admin/edge-gateway-inference-routing) for route IDs and request formats.
+
+An ID-JAG can be redeemed only once. Generate a new proof for each token request; reusing a redeemed grant or proof is rejected.
 
 Edge Gateway checks the token and the caller's access before forwarding each request with your organization's provider credentials. The application doesn't need the provider key.
 
