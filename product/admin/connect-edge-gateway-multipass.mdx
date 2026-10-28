@@ -1,9 +1,9 @@
 ---
-title: Connect to Edge Gateway with C1 Multipass
+title: Route other tools through C1 Multipass
 description: Send your AI tools' model calls and outbound HTTPS traffic through your organization's Edge Gateway, attributed to you, using the C1 Multipass device session you already have — no separate API keys.
-og:title: Connect to Edge Gateway with C1 Multipass - C1 docs
+og:title: Route other tools through C1 Multipass - C1 docs
 og:description: Send your AI tools' model calls and outbound HTTPS traffic through your organization's Edge Gateway, attributed to you, using the C1 Multipass device session you already have — no separate API keys.
-sidebarTitle: Connect with C1 Multipass
+sidebarTitle: Other tools (local routing)
 ---
 
 {/* Editor Refresh: 2026-10-28 */}
@@ -14,7 +14,7 @@ sidebarTitle: Connect with C1 Multipass
 
 Point compatible tools at C1 Multipass local endpoints to send their configured model calls and HTTPS proxy traffic through your organization's Edge Gateway. Multipass uses your registered device session, so you don't manage provider API keys. Traffic that a tool sends elsewhere doesn't use these endpoints.
 
-For Claude Code and desktop Codex, start with **Connect your tools** on the Edge's **Overview** tab. Those configurations use short-lived key helpers and connect directly to the Edge; they don't need local routing enabled. Enrolled servers use the fleet/local-endpoint path below. See [Find connection settings](/product/admin/edge-gateway-connect).
+For [Claude Code](/product/admin/claude-code-edge-gateway-multipass) and [Codex](/product/admin/edge-gateway-codex), use their dedicated guides. Their desktop configurations use short-lived key helpers and connect directly to the Edge; they don't need local routing enabled. Enrolled servers use the fleet/local-endpoint path below.
 
 ## How C1 Multipass connects to Edge Gateway
 
@@ -31,10 +31,10 @@ Your C1 admin decides which models and destinations you can reach. Edge Gateway 
 
 ## Edge Gateway setup at a glance
 
-Setup takes five tasks, each covered in its own section below:
+Set up Multipass before configuring a client. For tools that need local endpoints, continue with routing:
 
-1. [Turn on Edge Gateway routing](#turn-on-edge-gateway-routing) to start the local endpoints for the Edge's enabled capabilities.
-2. Install the C1 Multipass command line tool, part of the same section.
+1. [Set up Multipass](#set-up-multipass) and its command line tool.
+2. [Turn on Edge Gateway routing](#turn-on-edge-gateway-routing) to start the local endpoints for the Edge's enabled capabilities.
 3. [Load the endpoint credentials into your shell](#load-the-endpoint-credentials-into-your-shell): the endpoint addresses and the local key.
 4. [List models and run inference](#list-models-and-run-inference) through the inference endpoint.
 5. [Send outbound HTTPS traffic through Edge Gateway](#send-outbound-https-traffic-through-edge-gateway) after your tools trust the Edge Gateway CA.
@@ -57,12 +57,36 @@ Confirm the following before you start. Egress is the most common gap: it needs 
 
 | Requirement | Who provides it |
 | :--- | :--- |
-| C1 Multipass installed, connected to your C1 tenant, and the device registered | You, or your IT team for managed Linux hosts |
+| C1 Multipass installed, connected to your C1 tenant, and the device registered. See [Set up Multipass](#set-up-multipass). | You, or your IT team for managed Linux hosts |
 | Access to at least one Edge Gateway. See [Grant access to an Edge](/product/admin/edge-gateway-access). | Your C1 admin |
 | Make sure **Cross-App Access** is on under **Settings** > **Cross-App Access** so Multipass can get Edge tokens for people. The Edge's **Overview** warns if it's off. If the setting isn't available, contact the C1 Support team. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable). | Your C1 admin |
 | For egress: your organization's Edge Gateway CA certificate and its SHA-256 fingerprint | Your C1 admin, or your device management (MDM) profile |
 
-Download the macOS desktop app from [C1 Multipass downloads](https://dist.conductorone.com/ConductorOne/multipass-desktop). Linux service hosts use an enrolled Multipass runtime and `c1-multipass-fleet`, not the desktop app.
+## Set up Multipass
+
+Install and sign in to Multipass before using a desktop key helper or local routing. The public [C1 Multipass downloads](https://dist.conductorone.com/ConductorOne/multipass-desktop) page offers macOS (Apple silicon) and Windows (x64). The inference-helper CLI and the **Command line tool** installation described below require macOS; they aren't available on Windows. Local Edge routing isn't supported on Windows yet.
+
+On macOS, complete these steps:
+
+<Steps>
+<Step>
+Download the desktop app, move it to **/Applications**, and open it from there rather than from the disk image or Downloads folder.
+</Step>
+<Step>
+Sign in to your C1 tenant and complete device registration. Keep the app unlocked while setting up a key helper or starting routing.
+</Step>
+<Step>
+Open **Settings** > **General**. Next to **Command line tool**, click **Install**, then add `~/.local/bin` to your `PATH`. C1 Multipass doesn't edit your shell configuration.
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+```
+</Step>
+</Steps>
+
+The `c1-multipass` command now uses your registered device session. For Claude Code or desktop Codex, return to the client guide; you don't need to turn on local routing.
+
+Linux service hosts use an enrolled Multipass runtime and `c1-multipass-fleet`, not the desktop app. Follow the **Linux service** instructions under [Turn on Edge Gateway routing](#turn-on-edge-gateway-routing).
 
 ## Turn on Edge Gateway routing
 
@@ -92,13 +116,6 @@ If the app shows **Open Login Items**, click it and allow **C1 Multipass** in Sy
 </Step>
 <Step>
 If the status shows **Start**, click it.
-</Step>
-<Step>
-Next to **Command line tool**, click **Install**, then add `~/.local/bin` to your `PATH`. C1 Multipass doesn't edit your shell configuration.
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-```
 </Step>
 </Steps>
 
@@ -257,7 +274,7 @@ print(response.output_text)
 Requests must use `Content-Type: application/json` and name exactly one model. The endpoint rejects request URLs that carry a query string. Each model's entry in the model list describes the request formats and options it supports.
 
 <Note>
-Some clients add query parameters to every request. For example, Claude Code calls `/v1/messages?beta=true`, so don't point `ANTHROPIC_BASE_URL` at the local inference endpoint. To use Claude Code, see [Use Claude Code with Edge Gateway through C1 Multipass](/product/admin/claude-code-edge-gateway-multipass).
+Some clients add query parameters to every request. For example, Claude Code calls `/v1/messages?beta=true`, so don't point `ANTHROPIC_BASE_URL` at the local inference endpoint. To use Claude Code, see [Use Claude Code with Edge Gateway](/product/admin/claude-code-edge-gateway-multipass).
 </Note>
 
 ## Send outbound HTTPS traffic through Edge Gateway

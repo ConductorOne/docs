@@ -1,0 +1,347 @@
+---
+title: Configure inference routes
+description: Choose the model names, provider formats, credentials, and routing behavior your Edge Gateway exposes to clients.
+og:title: Configure inference routes - C1 docs
+og:description: Choose the model names, provider formats, credentials, and routing behavior your Edge Gateway exposes to clients.
+sidebarTitle: Inference routes
+---
+
+{/* Editor Refresh: 2026-10-28 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Publish stable model names for your clients, choose the providers behind them, and decide whether each request uses one model, an ordered backup chain, or smart routing.
+
+Use this reference after [setting up an Edge](/product/admin/edge-gateway-setup). Open **Apps** > *your app* > **Edge** > *your Edge* > **Inference** to manage providers and routes. For endpoints and authentication for a custom client, see [Connect your own application](/product/admin/edge-gateway-connect).
+
+## How routes, models, and formats fit together
+
+A **route** is the model name a client calls. A **target** is a provider model behind that route. One route can contain one target, an ordered list of targets, or groups of targets for smart routing.
+
+The client's model name and the provider's model name have different jobs:
+
+| Setting | What it controls | When to use it |
+| :--- | :--- | :--- |
+| **Route ID** | The value clients send in the request's `model` field. Use 1–64 lowercase letters, numbers, dots, underscores, or hyphens. | Give clients a stable name, such as `coding-default`, while you change the provider model behind it. |
+| **Client format** (native format) | The request and response API clients use. | Match the API your tool sends, not just the provider's name. |
+| **Provider** and provider profile | The upstream API, supported format, and authentication method for a target. Some providers offer more than one API. | Choose a compatible provider API for every target, including backups and judges. |
+| **Upstream model ID** | The model identifier the Edge sends to the provider. | Select a suggestion or enter the exact provider model ID your account can use. |
+| **Vault** and **Secret** | The provider API key the Edge reads, not a credential the caller receives. | Connect an API-key provider. A target can use the provider's saved key or its own key override. |
+| **AWS region** | The region for a Bedrock target that uses AWS workload identity. | Use Bedrock without storing an API key in a vault. |
+
+An Edge holds up to **40 routes**. A route holds up to **16 targets**. Published tier aliases also count toward the route limit.
+
+### Match the client's API format
+
+Choose the format before adding backups. Every target in a route must support the route's native format. A shared provider or model family doesn't make different APIs interchangeable.
+
+| Native format | Caller API | Typical use |
+| :--- | :--- | :--- |
+| **Anthropic Messages** | `POST /v1/messages` | Claude Code and Anthropic Messages clients. |
+| **OpenAI Responses** | `POST /v1/responses` | Codex configured with `wire_api = "responses"` and Responses clients. |
+| **OpenAI Chat** | `POST /v1/chat/completions` | Chat Completions clients using OpenAI, Together, Fireworks, or Gemini Developer API. |
+
+OpenAI offers both Responses and Chat profiles. The Gemini Developer API, Together, and Fireworks examples below use Chat, not Responses. A route that accepts Messages can't use a Chat-only backup. If you change a single-model route's format, update callers to the matching endpoint too.
+
+**Bedrock Converse** is an upstream Bedrock API, not a fourth client format in this editor. With **Bedrock API** set to **Runtime · Converse**, callers use **OpenAI Chat**. Other Bedrock API profiles use Messages, Responses, or Chat; select the profile that matches your client and supply its AWS region.
+
+### Choose a suggested model or type an ID
+
+Use **Add models** to publish individual provider models, or **New route** to set your own Route ID and routing behavior.
+
+Suggestions combine registered models available to your organization's rollout channel, models referenced by saved routes, and provider catalog suggestions. Registering a model doesn't by itself make it available in your channel. Suggestions aren't a live check that your provider account can call a model.
+
+If the picker doesn't list your model, type its full upstream ID and select the offered option. A typed ID still has to satisfy the provider's grammar and be supported by the Edge runtime and your provider account.
+
+| Provider | Upstream model ID rule | Example-only placeholder ID |
+| :--- | :--- | :--- |
+| Anthropic | A bare `claude-` ID using the simple-ID characters below. | `claude-example-model` |
+| OpenAI | A bare simple ID; not a URL or API path. | `gpt-example-model` |
+| Together | Exactly `owner/model`, with a simple ID in each segment. | `example-org/example-chat-model` |
+| Fireworks | The full `accounts/<account>/models/<model>` path. Each variable segment has alphanumeric ends and contains only letters, numbers, dots, underscores, or hyphens. | `accounts/example-account/models/example-chat-model` |
+| Gemini Developer API | A bare `gemini-` simple ID. Don't include `models/`, a URL, a path, or a query string. | `gemini-example-model` |
+
+A simple ID has 1–200 characters, starts and ends with a letter or number, and contains only letters, numbers, dots, underscores, colons, or hyphens internally. Fireworks account and model segments each allow up to 128 characters; the complete upstream ID must fit the 255-character target limit. Together's complete ID must also fit that limit.
+
+## Choose routing behavior
+
+Select **Direct**, **Failover**, or **Smart routing** in a route's **Routing** section. Choose a C1 recommendation instead when you want C1 to manage the model selection over time.
+
+### Direct: choose one provider model
+
+Use **Direct** when you want a predictable provider and model for a workload, or when the client requires a specific model. Set the provider, upstream model ID, and key or AWS region. Callers continue to use the route ID even if you later replace the upstream model.
+
+### Failover: try compatible targets in order
+
+Use **Failover** when you want a backup for transient provider failures or timeouts. Configure **Primary**, then **Backup 1**, **Backup 2**, and any additional backups. Use **Move up** and **Move down** to change the attempt order.
+
+Keep every target on the same native format. A compatible cross-provider chain is Together Chat followed by Fireworks Chat; Anthropic Messages followed by Together Chat is not.
+
+Set **Attempt timeout (ms)** for the chain. **Route deadline (ms)** and **Maximum attempts** bound the overall work. Failover is not a way to bypass a rejected provider key, an authorization denial, or an invalid request.
+
+Targets run one at a time, not in parallel. The shared attempt and deadline budgets can stop a request before every backup is reached. Before response commitment, an attempt timeout, a transport failure, a recognized context-window error, or a transient rate-limit or overload error can advance to a backup. Provider authentication and billing or quota-exhaustion rejections are terminal by default; a `429` isn't automatically retryable.
+
+A whole-route deadline, cancellation, or exhausted attempt budget stops further attempts. Once the Edge commits a streaming response, a later stream failure doesn't restart the request on another target.
+
+### Smart routing: configure efficient and capable stages
+
+Use **Smart routing** (stage routing) when you want one route to select between efficient and capable model groups rather than treating every target as an equivalent backup.
+
+The UI exposes:
+
+| Option | Use it to |
+| :--- | :--- |
+| **Start with** / **Add efficient model** | Configure the efficient-stage target chain. |
+| **Escalate to** / **Add capable model** | Configure the capable-stage target chain. |
+| **Stage picker** | Choose the default stage when routing is undecided: **Efficient first** defaults to efficient; **Capable first** defaults to capable. |
+| **Confidence threshold** and **Recent window** | Tune how conversation and tool signals influence stage selection. |
+| **Use a judge model** | Consult an optional capability judge when signals don't confidently select a stage. The judge votes on routing; it doesn't answer the user. |
+| Tier prompts and escalation/de-escalation notes | Customize the instructions used around stage transitions. |
+| Judge thresholds, window, max output tokens, and prompt | Tune the optional judge separately from the stage picker. |
+
+All stage targets and the judge must match the route's native format. Routing considers conversation and tool signals, then the optional judge, then the picker mode's default stage. Signals or the judge can select the other stage, so **Start with** doesn't guarantee that every request first calls an efficient model.
+
+If the judge fails or returns no usable score, routing falls back to the mode's default stage. This doesn't bypass authorization, attempt budgets, or the route deadline. The editor doesn't expose a switch to make judge failure fail the caller's request; runtime-local routing settings aren't additional options in this UI.
+
+### C1 recommendations: follow a tier or pin its current model
+
+Use a tier when you want C1 to select and update the model rather than maintaining an upstream model ID yourself.
+
+| Recommendation | Stable route ID |
+| :--- | :--- |
+| **C1 Fast** | `c1-fast` |
+| **C1 Balanced** | `c1-balanced` |
+| **C1 Best** | `c1-best` |
+
+In **Add models**, open **C1 recommendations** > **Choose tiers**, select an available tier, and click **Publish**. Add a key for a provider that can serve the tier before publishing. The tier displays its current model and route ID.
+
+- **Following**: C1 manages the targets and moves the tier to newer models over time. Call the stable tier route ID to keep following it.
+- **Pin model**: Keep the tier's current targets and make the routes editable. C1 no longer moves those pinned routes automatically.
+- **Unpin**: Resume following the tier's current recommendation. This can replace the pinned model selection.
+
+C1 also publishes a route named after the tier's current model when that name isn't already in use. That model-name alias can change when the recommendation changes; a tenant-owned route with the same name takes precedence. Use `c1-fast`, `c1-balanced`, or `c1-best` when you want a stable tier name. Removing a followed tier removes its managed tier and model-name routes.
+
+### Optional: tune timeouts, retries, and model settings
+
+Use these settings to bound provider work or satisfy a workload's model requirements. They don't change the client-facing route ID.
+
+| Setting group | When to use it |
+| :--- | :--- |
+| **Timeouts and retries** | Bound a provider attempt, the whole route, and the number of attempts. Turn on **Retry failed attempts** to configure delay, delay cap, same-target retries, and jitter. |
+| Reasoning effort and context length | Override a target's model settings for this workload. Leave reasoning effort unset to use the client's setting. |
+| Circuit breaker | Temporarily avoid a target after repeated qualifying availability or transport failures, using a failure threshold and cooldown. Not every timeout or provider error counts toward opening the circuit. |
+| **When credentials fail** | Control supported handling of unavailable credentials. Rejected provider keys stop the request; terminal targets and judges must stop on credential failures. |
+| A target's own key or AWS region | Use different credentials or a region for that target instead of the provider's shared settings. |
+
+## Worked routing examples
+
+These examples show field relationships, not model-version recommendations. All IDs containing `example` are **illustrative placeholders**, not real models to publish. Replace them with model IDs your provider account can call. A syntactically accepted ID doesn't prove that the model exists or that your account has access.
+
+Create the direct and failover examples from **Inference** > **Routes** > **New route**. Choose the format-compatible provider API, enter the table's fields, and click **Create route**. Use **Add models** for the tier-following example.
+
+For requests, set `EDGE_INFERENCE_URL` to your Edge's inference origin, without a trailing slash, `/v1`, or `/api` path. Set `EDGE_INFERENCE_RESOURCE` to the inference resource from **Connection details**. Get a short-lived token from the Multipass helper:
+
+```bash
+export EDGE_INFERENCE_URL="https://<inference-host>"
+export EDGE_INFERENCE_RESOURCE="${EDGE_INFERENCE_URL}/api/v1/apps/<app-id>/edges/<edge-id>"
+EDGE_TOKEN="$(c1-multipass inference helper \
+  --edge-url "$EDGE_INFERENCE_URL" \
+  --inference-resource "$EDGE_INFERENCE_RESOURCE" \
+  --dial-only)"
+```
+
+Keep `EDGE_TOKEN` private and request a new token when it expires. It is a caller credential, not a provider API key. Follow [Set up Multipass](/product/admin/connect-edge-gateway-multipass#set-up-multipass) for device and CLI setup, or the [Claude Code key-helper guide](/product/admin/claude-code-edge-gateway-multipass) for client configuration. Callers need [List models and Call models access](/product/admin/edge-gateway-access). Long-lived keys are a separate, optional method described in [Use long-lived API keys](/product/admin/inference-api-keys).
+
+### Example 1: Anthropic Messages for Claude Code
+
+Use a stable Messages route for Claude Code while keeping the upstream Claude model under admin control.
+
+| UI field | Example value |
+| :--- | :--- |
+| **Provider** | Anthropic |
+| **Route ID** | `claude-team` |
+| **Routing** | Direct |
+| **Client format** (native format) | Anthropic Messages |
+| **Upstream model ID** | `claude-example-model` — replace with your Claude model ID. |
+| **Key** | Your Anthropic API key secret selected from a vault. |
+
+Send a Messages request to the Edge, using the route ID rather than the upstream model ID:
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/messages" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"claude-team","max_tokens":128,"messages":[{"role":"user","content":"Reply with a short greeting."}]}'
+```
+
+For Claude Code, set `ANTHROPIC_MODEL` to `claude-team` in the generated configuration. C1's generated settings choose a main model from recognized Claude route names when one is available; if your route has a custom name, explicitly select it. See [Configure Claude Code](/product/admin/claude-code-edge-gateway-multipass#configure-claude-code-to-use-edge-gateway).
+
+### Example 2: OpenAI Responses for Codex
+
+Use a Responses route for Codex's Responses wire protocol. A Chat-only route isn't a substitute.
+
+| UI field | Example value |
+| :--- | :--- |
+| **Provider** | OpenAI |
+| **Route ID** | `codex-team` |
+| **Routing** | Direct |
+| **Client format** (native format) | OpenAI Responses |
+| **Upstream model ID** | `gpt-example-model` — replace with your Responses-capable model ID. |
+| **Key** | Your OpenAI API key secret selected from a vault. |
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/responses" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"codex-team","input":"Reply with a short greeting."}'
+```
+
+In Codex, set the profile's `model` to `codex-team`, keep `wire_api = "responses"`, and use the Edge inference origin plus `/v1` as the provider base URL. Copy the rest of the helper configuration from [Use Codex with Edge Gateway](/product/admin/edge-gateway-codex#configure-codex-on-a-desktop).
+
+### Example 3: Together OpenAI Chat
+
+Use Together when your client sends Chat Completions and your provider model ID includes its owner.
+
+| UI field | Example value |
+| :--- | :--- |
+| **Provider** | Together |
+| **Route ID** | `together-chat` |
+| **Routing** | Direct |
+| **Client format** (native format) | OpenAI Chat |
+| **Upstream model ID** | `example-org/example-chat-model` — replace both segments with the provider's ID. |
+| **Key** | Your Together API key secret selected from a vault. |
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"together-chat","messages":[{"role":"user","content":"Reply with a short greeting."}]}'
+```
+
+### Example 4: Fireworks OpenAI Chat
+
+Use the full Fireworks account-scoped upstream ID, while exposing a shorter route ID to clients.
+
+| UI field | Example value |
+| :--- | :--- |
+| **Provider** | Fireworks |
+| **Route ID** | `fireworks-chat` |
+| **Routing** | Direct |
+| **Client format** (native format) | OpenAI Chat |
+| **Upstream model ID** | `accounts/example-account/models/example-chat-model` — replace the account and model segments. |
+| **Key** | Your Fireworks API key secret selected from a vault. |
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"fireworks-chat","messages":[{"role":"user","content":"Reply with a short greeting."}]}'
+```
+
+### Example 5: Gemini Developer API OpenAI Chat
+
+Use Gemini Developer API with a Chat Completions client and an API key. This provider profile uses Google's Generative Language API, not Vertex AI. C1 expects an API key, not an OAuth token or service-account JSON file.
+
+#### Get a Gemini Developer API key
+
+Create or select a Cloud project in Google AI Studio and create a Gemini API key for it. Each key belongs to a Cloud project; it isn't specific to one model. For production quotas, use a billing-enabled project and review Google's [billing and usage tiers](https://ai.google.dev/gemini-api/docs/billing).
+
+Follow Google's [Gemini API key guide](https://ai.google.dev/gemini-api/docs/api-key) for current creation and restriction rules. New AI Studio authorization keys are restricted to the Generative Language API by default. If you use a standard key, explicitly restrict it to that API; Google rejects unrestricted standard keys.
+
+Store the key in a C1 vault as an **API key** secret. Grant the Edge's runtime identity **Open secret** access to that vault. Selecting a key in the picker doesn't itself grant secret access. Follow [Connect a provider and add models](/product/admin/edge-gateway-setup#connect-a-provider-and-add-models) to create the vault and secret and check runtime access.
+
+The Edge calls Google's OpenAI-compatible upstream endpoint at `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`, using the API key as a bearer credential. Your client still calls the Edge's `/v1/chat/completions` endpoint. See Google's [OpenAI compatibility guide](https://ai.google.dev/gemini-api/docs/openai).
+
+| UI field | Example value |
+| :--- | :--- |
+| **Provider** | Gemini Developer API |
+| **Route ID** | `gemini-chat` |
+| **Routing** | Direct |
+| **Client format** (native format) | OpenAI Chat |
+| **Upstream model ID** | `gemini-example-model` — replace with a bare documented `gemini-` ID, without `models/`. |
+| **Key** | Your Gemini Developer API key secret selected from a vault. |
+
+Type the full ID if your model isn't suggested. The picker isn't live Gemini model discovery; publishing a route doesn't check your Google quota or prove model access.
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gemini-chat","messages":[{"role":"user","content":"Reply with a short greeting."}]}'
+```
+
+### Example 6: Together-to-Fireworks failover
+
+Use two Chat-compatible providers to keep the client request format unchanged when a transient failure or timeout moves the request to a backup.
+
+| UI field | Primary | Backup 1 |
+| :--- | :--- | :--- |
+| **Provider** | Together | Fireworks |
+| **Route ID** | `chat-resilient` (shared by the route) | Same route. |
+| **Routing** | Failover | Same route. |
+| **Client format** (native format) | OpenAI Chat | OpenAI Chat |
+| **Upstream model ID** | `example-org/example-chat-model` | `accounts/example-account/models/example-chat-model` |
+| **Key** | Your Together API key secret. | Your Fireworks API key secret. |
+
+Configure an attempt timeout, keep Together first, and click **Create route**. The models need not be identical, so evaluate whether both satisfy your application's behavior and feature requirements. Format compatibility alone doesn't establish equivalent tool support, context size, or output quality.
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"chat-resilient","messages":[{"role":"user","content":"Reply with a short greeting."}]}'
+```
+
+The caller sends one route ID. The Edge selects the target; the client doesn't send the backup's upstream ID.
+
+### Example 7: follow C1 Balanced
+
+Use the stable `c1-balanced` route when you want C1's recommendation to change without editing client model settings.
+
+| UI field | Example value |
+| :--- | :--- |
+| **C1 recommendations** | C1 Balanced selected in **Add models**. |
+| **Provider** | A connected provider that serves the currently displayed tier model; C1 manages the targets. |
+| **Route ID** | `c1-balanced` |
+| **Client format** (native format) | The published route's format. This request example assumes Anthropic Messages. |
+| **Upstream model ID** | Managed by C1 while the route is following the tier. |
+| **Key** | A saved key for an eligible provider, as required by the tier's publishing controls. |
+
+Click **Publish**, then confirm the route shows **Following C1 Balanced**. Check its API format before configuring the client. If it shows Anthropic Messages, a request has this form:
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/messages" \
+  -H "Authorization: Bearer $EDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"c1-balanced","max_tokens":128,"messages":[{"role":"user","content":"Reply with a short greeting."}]}'
+```
+
+If the published format differs, use that format's endpoint and payload instead. To stop automatic model changes, open the route and click **Pin model**. Click **Unpin** later to resume following C1 Balanced.
+
+## Check route readiness and client selection
+
+Check the **Routes** table after saving. These statuses summarize configuration and reported runtime compatibility; **Ready** is not a successful test call to the provider.
+
+| Status | What to do |
+| :--- | :--- |
+| **Ready** | Select the route in a matching client and make a request. |
+| **Needs conversion** | Open the older route and select **Convert to provider targets** before saving changes. Its existing model and vault references carry over. |
+| **Choose a provider** | Select a provider for the route's targets. |
+| **Review compatibility** | Match each target's provider profile to the route's client format. Update callers if you change the format. |
+| **Needs a key** | Select a vault and API key secret, or supply the AWS region for a workload-identity target. |
+| **Incomplete** | Fill in the missing provider profile or upstream model ID. |
+| **Edge can't serve** | Review the provider's reported runtime compatibility. The connected Edge needs support for the selected profile. |
+| **Can't read key** | Link the runtime identity and grant it access to the key's vault. Creating or selecting the secret alone isn't sufficient. |
+
+List the published route IDs available to the caller:
+
+```bash
+curl "$EDGE_INFERENCE_URL/v1/models" \
+  -H "Authorization: Bearer $EDGE_TOKEN"
+```
+
+Use an ID returned by the Edge, not an upstream model ID unless they happen to match. For Claude Code, verify `ANTHROPIC_MODEL` or your explicit model selection. For Codex, verify the profile's `model` and Responses format. Listing routes establishes discovery access; a successful inference request exercises the provider path.
