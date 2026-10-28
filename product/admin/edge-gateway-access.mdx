@@ -12,7 +12,7 @@ sidebarTitle: Grant access
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-Control who can use an Edge Gateway by granting its two entitlements. Until someone holds them, the Edge rejects their requests, and callers see messages such as "You don't have access to an Edge."
+Give people or service principals access to an Edge Gateway from its **Grants** tab. For inference, the tab groups **List models** and **Call models** into one **Inference** capability.
 
 ## Edge Gateway entitlements
 
@@ -23,11 +23,15 @@ Each Edge has two entitlements on its parent application:
 | **List models** | `inference.models.read` | See which models the Edge serves (`GET /v1/models`) |
 | **Call models** | `inference.invoke` | Send requests to the Edge's models |
 
-Grant both to most callers. **Call models** doesn't include **List models**, and many tools list models before calling one. Workload callers need both.
+The scopes are separate: **Call models** doesn't include **List models**, and many tools list models before calling one. Adding a member to the **Inference** capability grants both entitlements together. Workload callers need both.
 
 ## Grant access to people or service principals
 
-Grant access from the Edge's **Grants** tab.
+Add members directly from the Edge's **Grants** tab. You don't need to create an access profile for a direct grant.
+
+<Frame>
+  <img src="/images/product/assets/edge-grants.png" alt="The Grants tab with an Inference capability containing List models and Call models, no access profile yet, and a Members section with an Add member button."/>
+</Frame>
 
 <Steps>
 <Step>
@@ -37,45 +41,51 @@ Open the Edge: **Apps** > *your app* > **Edge** > *your Edge*.
 Click the **Grants** tab.
 </Step>
 <Step>
-Under **List models** or **Call models**, click **Grant access**.
+Under **Members**, select the **Inference** tab. If the Edge also serves egress, make sure you're adding members to the intended capability.
 </Step>
 <Step>
-Choose where to pick from: **All people**, or **User accounts in this app**.
+Click **Add member**. The **Grant access: Inference** dialog opens.
 </Step>
 <Step>
-Select one or more people, or service principals if the Edge accepts them.
+In **Person or service principal**, select the identities to grant access to.
 </Step>
 <Step>
 Click **Grant access**.
 </Step>
-<Step>
-Repeat for the other entitlement.
-</Step>
 </Steps>
 
 <Frame>
-  <img src="/images/product/assets/edge-grant-access.png" alt="The Grant access: Call models dialog with a note that every route accepts people, the All people and User accounts in this app options, and a person picker."/>
+  <img src="/images/product/assets/edge-grant-access.png" alt="The Grant access: Inference dialog with a Person or service principal picker and Cancel and Grant access buttons."/>
 </Frame>
 
-Each grantee appears under the entitlement with a **Manual** chip. They can call the Edge the next time their client requests a token. To revoke access, click **Remove** next to the grantee.
-
-<Frame>
-  <img src="/images/product/assets/edge-grants.png" alt="The Grants tab listing people granted List models and Call models, each with Person and Manual chips and a Remove action."/>
-</Frame>
+The identities appear in **Members**. The **Access via** column shows why they have access, such as **Added by owner**, **Rule**, **Access profile**, or **Request**. Use the filters above the table to inspect each source.
 
 <Note>
-Who you can grant depends on **Who can call** on the Edge's **Overview** tab. When every route accepts people, you can grant people but not service principals. When no route accepts people, you can grant only service principals. Grants go to C1 identities, so app accounts that aren't linked to an identity can't receive them.
+You can add people or service principals, but membership doesn't change the Edge's caller configuration. **People who sign in** accepts authorized human callers; **A workload** requires the configured service principal and workload federation trust. Check **Who can call** in the **Overview** checklist, expanding **Show checklist** if it's collapsed. See [Choose who can call the Edge](/product/admin/edge-gateway-setup#choose-who-can-call-the-edge).
 </Note>
 
-## Optional: Grant access to every account of the app automatically
+## Remove a direct grant
 
-To give everyone with an account in the parent app access, turn on automatic grants for an entitlement: on the **Grants** tab, under **List models** or **Call models**, click **Populate with all accounts of** *app*.
+Remove an owner-added assignment from the **Members** table:
 
-Every account of the app now gets the entitlement, and C1 updates the list after each sync. This includes the app's service accounts, not only people. If you turn automatic grants off, C1 removes the access it granted automatically after the next sync.
+1. Open the member's **...** (more actions) menu.
+2. Select **Remove from capability**.
+3. Review the confirmation and click **Remove**.
 
-<Note>
-Automatic grants aren't available for an Edge on the built-in C1 app. Grant access manually instead, or create the Edge on another application.
-</Note>
+This removes the owner-added assignment from the capability's entitlements. A member with another source of access can retain access through that source. For rule-based access, use **Open in Edit access** to change the rule. For access-profile membership, remove the membership in the access profile. For request-based access, use **Open request** to manage the request. **Remove from capability** is unavailable when there is no owner-added assignment to remove.
+
+## Optional: Configure automatic membership and requests
+
+Use an access profile when you want automatic membership, requestable access, or policies for the **Inference** capability. A direct **Add member** grant doesn't require one.
+
+1. In the capability summary at the top of **Grants**, click **Create access profile** in the **Inference** row if no profile exists. C1 creates a profile containing both inference entitlements.
+2. Click **Edit access** in that row.
+3. Under **Automatic membership**, keep **Nobody** selected for no automatic membership, or select **Users with entitlements** and choose the entitlements that define membership. To follow a group, choose that group's membership entitlement.
+4. Configure **Requestable**, **Request policy**, and **Revoke policy** as needed. Review any warnings about approval and removal behavior, then click **Save**.
+
+The capability summary shows the linked **Access profile**, **Auto membership**, and **Requestable** state. Automatic membership and approval settings determine when matching users receive access and what happens when they stop matching. Other sources of access can keep a member's access active.
+
+If the profile uses a CEL rule, click **Edit rule** to change it in the access profile. Use **Open access profile** for settings outside the **Edit access** drawer. If the summary shows **Bundle off**, configure the access profile so membership grants its bundled Edge entitlements; profile membership alone isn't enough.
 
 ## What callers see after you grant access
 
