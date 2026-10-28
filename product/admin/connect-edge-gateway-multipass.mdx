@@ -6,13 +6,15 @@ og:description: Send your AI tools' model calls and outbound HTTPS traffic throu
 sidebarTitle: Connect with C1 Multipass
 ---
 
-{/* Editor Refresh: 2026-10-20 */}
+{/* Editor Refresh: 2026-10-28 */}
 
 <Warning>
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-Point your AI tools at two local endpoints on your device, and every model call and outbound HTTPS request they make goes through your organization's Edge Gateway as you. C1 Multipass signs each request with the device session it already holds, so you don't manage provider API keys, and your organization's Edge Gateway policy and audit apply to the traffic.
+Point compatible tools at C1 Multipass local endpoints to send their configured model calls and HTTPS proxy traffic through your organization's Edge Gateway. Multipass uses your registered device session, so you don't manage provider API keys. Traffic that a tool sends elsewhere doesn't use these endpoints.
+
+For Claude Code and desktop Codex, start with **Connect your tools** on the Edge's **Overview** tab. Those configurations use short-lived key helpers and connect directly to the Edge; they don't need local routing enabled. Enrolled servers use the fleet/local-endpoint path below. See [Find connection settings](/product/admin/edge-gateway-connect).
 
 ## How C1 Multipass connects to Edge Gateway
 
@@ -31,7 +33,7 @@ Your C1 admin decides which models and destinations you can reach. Edge Gateway 
 
 Setup takes five tasks, each covered in its own section below:
 
-1. [Turn on Edge Gateway routing](#turn-on-edge-gateway-routing), which starts serving both local endpoints.
+1. [Turn on Edge Gateway routing](#turn-on-edge-gateway-routing) to start the local endpoints for the Edge's enabled capabilities.
 2. Install the C1 Multipass command line tool, part of the same section.
 3. [Load the endpoint credentials into your shell](#load-the-endpoint-credentials-into-your-shell): the endpoint addresses and the local key.
 4. [List models and run inference](#list-models-and-run-inference) through the inference endpoint.
@@ -58,6 +60,8 @@ Confirm the following before you start. Egress is the most common gap: it needs 
 | C1 Multipass installed, connected to your C1 tenant, and the device registered | You, or your IT team for managed Linux hosts |
 | Access to at least one Edge Gateway. See [Grant access to an Edge](/product/admin/edge-gateway-access). | Your C1 admin |
 | For egress: your organization's Edge Gateway CA certificate and its SHA-256 fingerprint | Your C1 admin, or your device management (MDM) profile |
+
+Download the macOS desktop app from [C1 Multipass downloads](https://dist.conductorone.com/ConductorOne/multipass-desktop). Linux service hosts use an enrolled Multipass runtime and `c1-multipass-fleet`, not the desktop app.
 
 ## Turn on Edge Gateway routing
 
@@ -155,7 +159,9 @@ Check the routing status from a terminal:
 c1-multipass headless edge status
 ```
 
-The output shows `"running": true` and `"ready": true`, with the inference and egress addresses.
+On an enrolled Linux host, use `c1-multipass-fleet edge status`. Use the same `c1-multipass-fleet edge` prefix for the `env`, `start`, and `stop` commands below instead of `c1-multipass headless edge`.
+
+The `running` field reports a local listener. The `ready` field reports whether every configured capability has unexpired cached grants; an inference-only Edge doesn't need an egress grant. Neither field proves that a model request can reach the provider.
 
 ## Load the endpoint credentials into your shell
 
@@ -175,14 +181,14 @@ This sets three variables in the current shell:
 
 Tools you start from this shell now use Edge Gateway. Run the command again in each new shell. Unless the key is pinned, run it again after the C1 Multipass service restarts, because the key changes on restart.
 
-To confirm each endpoint has a valid Edge Gateway session, call its health route. The health route doesn't need the key.
+Check the health route for each capability you use. The health route doesn't need the local key.
 
 ```bash
 curl -s http://127.0.0.1:18080/_c1/health
 curl -s http://127.0.0.1:18081/_c1/health
 ```
 
-Each returns `{"ok":true}` when ready. A `{"ok":false,"reason":"..."}` response names the problem; see [Troubleshoot Edge Gateway routing](#troubleshoot-edge-gateway-routing).
+Both health routes report the same cached-grant readiness for the configured capabilities. An `{"ok":true}` response doesn't make a fresh remote request. If a route returns `{"ok":false,"reason":"..."}`, record the reason before changing configuration. Also run a model request to check provider credentials, model routing, and inference permission.
 
 ## List models and run inference
 
@@ -309,10 +315,11 @@ Many command line tools and language runtimes don't read the operating system's 
 Then make a request through the proxy:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://api.github.com
+curl -s --proxy "$HTTPS_PROXY" --noproxy '' \
+  -o /dev/null -w '%{http_code}\n' https://api.github.com
 ```
 
-A `200` response confirms the request went through Edge Gateway and your tools trust its CA. A `403` response means your Edge Gateway policy doesn't allow that destination.
+A `200` response confirms this request succeeded through the configured proxy. It doesn't establish whether the destination used inspection or pass-through. A `403` response may indicate a destination policy denial; check the response and Edge activity.
 
 ### Optional: Distribute the Edge Gateway CA to managed devices
 
@@ -364,13 +371,13 @@ The macOS app's status line and the `reason` field from `c1-multipass headless e
 | The Multipass service isn't installed on this device, or isn't responding. | On macOS, click **Open Login Items** and allow C1 Multipass, or restart the app. On Linux, check `systemctl status multipass-runtime`. |
 | The Multipass service isn't signed in yet. (`NO_DEVICE_SESSION`) | On macOS, unlock C1 Multipass. On Linux, confirm the service's device is registered. |
 | The Multipass service has no Edge proxy configured. (`NOT_CONFIGURED`) | On Linux, set `MULTIPASS_EDGE_DISCOVER=1` or a pinned Edge Gateway in the service environment. |
-| You don't have access to an Edge. (`NO_USABLE_EDGE`) | Ask your C1 admin for access to an Edge Gateway. |
+| You don't have access to an Edge. (`NO_USABLE_EDGE`) | Confirm you're signed in to the intended C1 account, then ask your C1 admin to check the Edge's state and your model grants. |
 | Choose which Edge to use. (`EDGE_SELECTION_REQUIRED`) | Pick an Edge Gateway in **Settings** > **General** (macOS), or run `c1-multipass-fleet edge select` (Linux). |
 | Your organization denied Edge access for this device. (`EDGE_GRANT_DENIED`) | Ask your C1 admin to check your Edge Gateway access and this device's registration. |
 | Not available on this platform. (`UNSUPPORTED_PLATFORM`) | Edge Gateway routing isn't supported on Windows yet. |
 | `missing or wrong local key` | Run `eval "$(c1-multipass headless edge env)"` again. The key changed when the service restarted. |
 | `unable to get local issuer certificate` | Your tool doesn't trust the Edge Gateway CA. See [Point your tools at the trust bundle](#point-your-tools-at-the-trust-bundle). |
-| `unsupported inference route` | The client added a query string to the request URL. Use the egress endpoint for that client. |
+| `unsupported inference route` | Check the request path and query string. For Claude Code, use the [key helper](/product/admin/claude-code-edge-gateway-multipass) instead of changing its local endpoint URL. |
 
 ## Frequently asked questions about Edge Gateway routing
 

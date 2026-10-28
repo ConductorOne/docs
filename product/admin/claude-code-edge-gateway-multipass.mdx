@@ -6,7 +6,7 @@ og:description: Run Claude Code against your organization's Edge Gateway with sh
 sidebarTitle: Use Claude Code
 ---
 
-{/* Editor Refresh: 2026-10-20 */}
+{/* Editor Refresh: 2026-10-28 */}
 
 <Warning>
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
@@ -30,13 +30,13 @@ Confirm the following before you start:
 
 | Requirement | Who provides it |
 | :--- | :--- |
-| macOS or Linux, with the C1 Multipass command line tool (`c1-multipass`) installed. Windows isn't supported yet. | You |
+| macOS with the C1 Multipass desktop app and command line tool (`c1-multipass`) installed | You |
 | C1 Multipass connected to your C1 tenant, this device registered, and the app unlocked | You |
-| Access to an Edge Gateway that allows inference Bearer tokens and serves Claude models. See [Set up an Edge for inference](/product/admin/edge-gateway-setup) and [Grant access to an Edge](/product/admin/edge-gateway-access). | Your C1 admin |
+| Access to an Edge Gateway that serves Claude models. The key helper works whether **Allow long-lived API keys** is on or off. See [Set up an Edge for inference](/product/admin/edge-gateway-setup) and [Grant access to an Edge](/product/admin/edge-gateway-access). | Your C1 admin |
 | Your Edge Gateway's inference endpoint, for example `https://<your-org>-inference.edge.<your-zone>`. See [Find your Edge's connection details](/product/admin/edge-gateway-connect). | Your C1 admin |
 | Claude Code installed | You |
 
-On macOS, install the command line tool from **Settings** > **General** > **Command line tool** > **Install** in C1 Multipass.
+Download the desktop app from [C1 Multipass downloads](https://dist.conductorone.com/ConductorOne/multipass-desktop). On macOS, install the command line tool from **Settings** > **General** > **Command line tool** > **Install** in C1 Multipass. For an enrolled Linux host, use the fleet CLI as described in [Connect with C1 Multipass](/product/admin/connect-edge-gateway-multipass).
 
 ## Check that your Edge Gateway issues inference tokens
 
@@ -58,64 +58,45 @@ curl -s --noproxy '*' https://<your edge gateway inference host>/v1/models \
 
 ## Configure Claude Code to use Edge Gateway
 
-Put the Edge Gateway settings in their own file, so your default Claude Code configuration stays unchanged and you choose per session which one to use.
+Copy the settings from **Connect your tools** > **Claude Code** into `~/.claude/settings.json`. Merge them with your existing settings; don't overwrite the file.
 
 <Steps>
 <Step>
-Create the settings file. Replace the inference URL with your own. Use the URL exactly as your admin gave it, without a trailing slash or a `/v1` suffix.
-
-```bash
-mkdir -p ~/.config/c1-edge
-cat > ~/.config/c1-edge/claude-settings.json <<EOF
-{
-  "apiKeyHelper": "$HOME/.local/bin/c1-multipass inference helper --dial-only",
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://<your edge gateway inference host>",
-    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "60000"
-  }
-}
-EOF
-```
-
-`apiKeyHelper` uses the command line tool's full path, so it works even when `~/.local/bin` isn't on Claude Code's `PATH`. Adjust the path if you installed the tool elsewhere. `CLAUDE_CODE_API_KEY_HELPER_TTL_MS` makes Claude Code fetch a new token every 60 seconds, well within the token's lifetime.
+Open `~/.claude/settings.json`, creating the file if it doesn't exist.
 </Step>
 <Step>
-Run a one-time prompt to test the configuration:
-
-```bash
-env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u HTTPS_PROXY \
-  claude --settings ~/.config/c1-edge/claude-settings.json \
-  --model claude-haiku-5-5 -p "Reply with exactly: edge ok"
-```
-
-`env -u` removes other Anthropic credentials and any egress proxy setting from this command, so the test only uses the key helper. If Claude Code asks you to approve the API key helper, approve it.
-</Step>
-<Step>
-**Optional.** Add a shell alias for interactive sessions. Add it to your shell profile, such as `~/.zshrc` or `~/.bashrc`:
-
-```bash
-alias claude-edge='env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u HTTPS_PROXY claude --settings ~/.config/c1-edge/claude-settings.json'
-```
-</Step>
-</Steps>
-
-The test prints `edge ok`. In a new shell, `claude-edge` starts Claude Code through Edge Gateway, and `claude` keeps your default configuration. Choose a model with `--model`, or with `/model` inside a session, from the Claude models your Edge Gateway lists.
-
-<Note>
-To make Edge Gateway your default for Claude Code instead, add the same `apiKeyHelper` and `env` values to `~/.claude/settings.json`, and remove `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from your environment. Conflicting credentials override the key helper.
-</Note>
-
-## Optional: Pin a specific Edge Gateway for Claude Code
-
-By default, the key helper issues tokens for the Edge Gateway C1 Multipass has selected. If you have access to more than one, pass the inference URL and resource to the helper explicitly. Your C1 admin provides the resource URL.
+Merge the following settings. Replace the inference host and the app and Edge IDs with the values from your Edge's **Connection details**. Use the inference origin without a trailing slash or `/v1` suffix for both `--edge-url` and `ANTHROPIC_BASE_URL`. Replace `<claude-route-id>` with a Claude route from your Edge's model list.
 
 ```json
 {
-  "apiKeyHelper": "<path to c1-multipass> inference helper --dial-only --edge-url https://<your edge gateway inference host> --inference-resource https://<your edge gateway inference host>/api/v1/apps/<app-id>/edges/<edge-id>"
+  "apiKeyHelper": "c1-multipass inference helper --edge-url https://<inference-host> --inference-resource https://<inference-host>/api/v1/apps/<app-id>/edges/<edge-id> --dial-only",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://<inference-host>",
+    "ANTHROPIC_MODEL": "<claude-route-id>",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "60000"
+  }
 }
 ```
 
-Use the same inference URL for `--edge-url` and `ANTHROPIC_BASE_URL`.
+The helper command pins the credential to this Edge's inference resource. If `c1-multipass` isn't on Claude Code's `PATH`, replace it with the installed command's full path, such as `/Users/<user>/.local/bin/c1-multipass`. The 60000-millisecond helper TTL makes Claude Code request a fresh credential every 60 seconds.
+</Step>
+<Step>
+Run a one-time prompt with other Anthropic credentials removed:
+
+```bash
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u HTTPS_PROXY \
+  claude -p "Reply with exactly: edge ok"
+```
+
+`env -u` removes conflicting credentials and the egress proxy for this command. If Claude Code asks you to approve the API key helper, approve it.
+</Step>
+</Steps>
+
+A reply of `edge ok` confirms that this prompt completed through the configured Edge. Use the same `env -u` prefix for interactive launches while other Anthropic credentials remain in your shell. Choose a model with `--model` or `/model` from your Edge's Claude routes.
+
+<Note>
+To opt in per session instead of changing your default configuration, save these settings in `~/.config/c1-edge/claude-settings.json`, preserving any existing file. Add `--settings ~/.config/c1-edge/claude-settings.json` to the `claude` command. Keep the same explicit Edge URL and resource in the helper command.
+</Note>
 
 ## Keep the inference token private
 
@@ -135,10 +116,12 @@ c1-multipass inference helper --dial-only | cut -c1-14
 
 | Symptom | What to do |
 | :--- | :--- |
-| `EDGE_SELECTION_REQUIRED` | You have access to more than one Edge Gateway. Select one in C1 Multipass, or [pin it](#optional-pin-a-specific-edge-gateway-for-claude-code). |
+| `EDGE_SELECTION_REQUIRED` | You have access to more than one Edge Gateway. Select one in C1 Multipass, or use the explicit Edge URL and inference resource in [Configure Claude Code](#configure-claude-code-to-use-edge-gateway). |
 | `NO_USABLE_EDGE` | You don't have inference access on any Edge Gateway. Ask your C1 admin for access. |
+| `EDGE_GRANT_DENIED` at **C1 Edge grant** | Ask your C1 admin to check the Edge capability entitlements and the `token_exchange` event in the system log. |
+| `EDGE_GRANT_DENIED` at **Edge inference redemption** | C1 issued the grant, but the Edge refused redemption. Ask your admin to check Edge policy and runtime compatibility. The long-lived API key setting isn't a helper prerequisite. |
 | The helper reports that the C1 Multipass service isn't signed in, isn't running, or refused the connection | Open and unlock C1 Multipass, and confirm this device is registered. On macOS, open C1 Multipass from **/Applications**. |
-| The helper fails, but routing in [Connect with C1 Multipass](/product/admin/connect-edge-gateway-multipass) works | Your Edge Gateway doesn't allow inference tokens. Ask your C1 admin to enable inference tokens on the Edge Gateway. |
+| The helper fails, but local routing works | Confirm that the helper uses the same Edge and inference resource as routing. **Allow long-lived API keys** doesn't control helper tokens. Share the helper's error with your C1 admin. |
 | Claude Code reports an authentication error | Run the test in [Configure Claude Code to use Edge Gateway](#configure-claude-code-to-use-edge-gateway) with `env -u`. If it succeeds there, another credential in your environment or `~/.claude/settings.json` is overriding the key helper. |
 | Claude Code reports that a model isn't available | Pick a model from your Edge Gateway's model list. |
 

@@ -6,25 +6,25 @@ og:description: Create a scoped C1 inference API key and use it to list models a
 sidebarTitle: Inference API keys
 ---
 
-{/* Editor Refresh: 2026-10-20 */}
+{/* Editor Refresh: 2026-10-28 */}
 
 <Warning>
 **Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
 </Warning>
 
-Create an inference API key in C1 when a tool, script, or server needs to call models through your organization's Edge Gateway and can't use C1 Multipass. The key is a bearer token tied to you and to one model endpoint. Edge Gateway checks it with C1 on every request, so revoking the key or removing your access takes effect within seconds.
+Create an inference API key in C1 when a tool, script, or server needs to call models through your organization's Edge Gateway and can't use C1 Multipass. The key is a bearer token tied to you and to one model endpoint. Edge Gateway validates the key and your access before forwarding requests.
 
 ## When to use an inference API key
 
-Edge Gateway offers three ways to authenticate inference. Choose based on where the tool runs:
+Use a long-lived inference API key only when the client can't use C1 Multipass. Choose the short-lived option for supported tools and enrolled hosts:
 
 | Option | Best for | Credential |
 | :--- | :--- | :--- |
-| Inference API key (this page) | Scripts, CI jobs, servers, and devices without C1 Multipass | A long-lived key you create and store |
-| [C1 Multipass local endpoints](/product/admin/connect-edge-gateway-multipass) | Interactive tools on a device with C1 Multipass, including egress | A local key that never leaves the device |
-| [Claude Code with C1 Multipass](/product/admin/claude-code-edge-gateway-multipass) | Claude Code on a device with C1 Multipass | Tokens that expire within five minutes |
+| [C1 Multipass key helper](/product/admin/edge-gateway-connect) | Claude Code and Codex on a device with C1 Multipass | Automatically renewed, short-lived tokens |
+| [C1 Multipass local endpoints](/product/admin/connect-edge-gateway-multipass) | Other tools, SDKs, and enrolled service hosts | A local key that protects the device's loopback endpoints |
+| Long-lived inference API key (this page) | Clients that can't use C1 Multipass | A key you create, store, and rotate |
 
-An inference API key is the simplest to set up and works anywhere, but it's a long-lived secret. Prefer the C1 Multipass options on devices that have it.
+Turning off **Allow long-lived API keys** blocks `c1llm_` keys. It doesn't disable the Multipass key helper.
 
 An inference API key only works for inference: listing models and running them. It doesn't work for egress, MCP servers, or the C1 API.
 
@@ -35,7 +35,7 @@ Confirm the following before you start:
 | Requirement | Who provides it |
 | :--- | :--- |
 | **AI & API** in your C1 profile menu | Your C1 admin enables AI access management for your tenant |
-| At least one model endpoint listed under **Inference API keys**, with the scopes you need. The Edge must allow inference Bearer tokens; see [Set up an Edge for inference](/product/admin/edge-gateway-setup#optional-allow-inference-bearer-tokens). | Your C1 admin grants access to an Edge Gateway that accepts inference API keys |
+| At least one model endpoint listed under **Inference API keys**, with the scopes you need. The Edge must have **Allow long-lived API keys** on; see [Set up an Edge for inference](/product/admin/edge-gateway-setup#optional-allow-long-lived-api-keys). | Your C1 admin grants access to an Edge Gateway that accepts inference API keys |
 | Your Edge Gateway's inference endpoint, for example `https://<your-org>-inference.edge.<your-zone>`. See [Find your Edge's connection details](/product/admin/edge-gateway-connect). | Your C1 admin |
 
 ## Create an inference API key
@@ -170,7 +170,7 @@ env -u ANTHROPIC_API_KEY \
   claude --model <claude model id> -p "Reply with exactly: claude key ok"
 ```
 
-The command prints `claude key ok`. To use the key in every session, set the same two variables in your shell profile or in the `env` block of `~/.claude/settings.json`, reading the key from your secret storage.
+The command prints `claude key ok`. For ongoing use, load the token from your secret storage when you launch the tool. Don't paste it into a shell profile or settings file.
 
 ### Use an inference API key with OpenAI SDKs and tools
 
@@ -209,7 +209,7 @@ print(message.content[0].text)
 
 ## Revoke or rotate an inference API key
 
-Revoke a key as soon as you no longer need it or suspect it leaked. Revoke it in **AI & API** > **Inference API keys**. Edge Gateway rejects the key within about 30 seconds.
+Revoke a key as soon as you no longer need it or suspect it leaked. Revoke it in **AI & API** > **Inference API keys**, then confirm that new requests using the old key are rejected.
 
 To rotate a key, create a new key, update your tools to use it, confirm they work, then revoke the old key.
 
@@ -240,7 +240,7 @@ Edge Gateway's HTTP status code identifies most problems:
     No. Inference API keys only work for listing models and running inference. Use [C1 Multipass](/product/admin/connect-edge-gateway-multipass) for egress.
   </Accordion>
 
-  <Accordion title="How quickly does revoking a key take effect?">
-    Within about 30 seconds. Edge Gateway caches a successful validation for at most 30 seconds, and never longer than the key's expiry.
+  <Accordion title="How do I confirm that a key was revoked?">
+    Send a new request using the old key and confirm that authentication fails. Don't assume that revocation stops an already-running request. Contact the C1 Support team if new requests continue to succeed.
   </Accordion>
 </AccordionGroup>
