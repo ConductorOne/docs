@@ -31,7 +31,7 @@ The client's model name and the provider's model name have different jobs:
 | **Vault** and **Secret** | The provider API key the Edge reads, not a credential the caller receives. | Connect an API-key provider. A target can use the provider's saved key or its own key override. |
 | **AWS region** | The region for a Bedrock target that uses AWS workload identity. | Use Bedrock without storing an API key in a vault. |
 
-An Edge holds up to **40 routes**. A route holds up to **16 targets**. Published tier aliases also count toward the route limit.
+An Edge holds up to **40 routes**. A route holds up to **16 targets**.
 
 ### Match the client's API format
 
@@ -67,7 +67,7 @@ A simple ID has 1–200 characters, starts and ends with a letter or number, and
 
 ## Choose routing behavior
 
-Select **Direct**, **Failover**, or **Smart routing** in a route's **Routing** section. Choose a C1 recommendation instead when you want C1 to manage the model selection over time.
+Select **Direct**, **Failover**, or **Smart routing** in a route's **Routing** section.
 
 ### Direct: choose one provider model
 
@@ -105,24 +105,6 @@ All stage targets and the judge must match the route's native format. Routing co
 
 If the judge fails or returns no usable score, routing falls back to the mode's default stage. This doesn't bypass authorization, attempt budgets, or the route deadline. The editor doesn't expose a switch to make judge failure fail the caller's request; runtime-local routing settings aren't additional options in this UI.
 
-### C1 recommendations: follow a tier or pin its current model
-
-Use a tier when you want C1 to select and update the model rather than maintaining an upstream model ID yourself.
-
-| Recommendation | Stable route ID |
-| :--- | :--- |
-| **C1 Fast** | `c1-fast` |
-| **C1 Balanced** | `c1-balanced` |
-| **C1 Best** | `c1-best` |
-
-In **Add models**, open **C1 recommendations** > **Choose tiers**, select an available tier, and click **Publish**. Add a key for a provider that can serve the tier before publishing. The tier displays its current model and route ID.
-
-- **Following**: C1 manages the targets and moves the tier to newer models over time. Call the stable tier route ID to keep following it.
-- **Pin model**: Keep the tier's current targets and make the routes editable. C1 no longer moves those pinned routes automatically.
-- **Unpin**: Resume following the tier's current recommendation. This can replace the pinned model selection.
-
-C1 also publishes a route named after the tier's current model when that name isn't already in use. That model-name alias can change when the recommendation changes; a tenant-owned route with the same name takes precedence. Use `c1-fast`, `c1-balanced`, or `c1-best` when you want a stable tier name. Removing a followed tier removes its managed tier and model-name routes.
-
 ### Optional: tune timeouts, retries, and model settings
 
 Use these settings to bound provider work or satisfy a workload's model requirements. They don't change the client-facing route ID.
@@ -139,7 +121,7 @@ Use these settings to bound provider work or satisfy a workload's model requirem
 
 These examples show field relationships, not model-version recommendations. All IDs containing `example` are **illustrative placeholders**, not real models to publish. Replace them with model IDs your provider account can call. A syntactically accepted ID doesn't prove that the model exists or that your account has access.
 
-Create the direct and failover examples from **Inference** > **Routes** > **New route**. Choose the format-compatible provider API, enter the table's fields, and click **Create route**. Use **Add models** for the tier-following example.
+Create the direct and failover examples from **Inference** > **Routes** > **New route**. Choose the format-compatible provider API, enter the table's fields, and click **Create route**.
 
 For requests, set `EDGE_INFERENCE_URL` to your Edge's inference origin, without a trailing slash, `/v1`, or `/api` path. Set `EDGE_INFERENCE_RESOURCE` to the inference resource from **Connection details**. Get a short-lived token from the Multipass helper:
 
@@ -296,31 +278,6 @@ curl "$EDGE_INFERENCE_URL/v1/chat/completions" \
 ```
 
 The caller sends one route ID. The Edge selects the target; the client doesn't send the backup's upstream ID.
-
-### Example 7: follow C1 Balanced
-
-Use the stable `c1-balanced` route when you want C1's recommendation to change without editing client model settings.
-
-| UI field | Example value |
-| :--- | :--- |
-| **C1 recommendations** | C1 Balanced selected in **Add models**. |
-| **Provider** | A connected provider that serves the currently displayed tier model; C1 manages the targets. |
-| **Route ID** | `c1-balanced` |
-| **Client format** (native format) | The published route's format. This request example assumes Anthropic Messages. |
-| **Upstream model ID** | Managed by C1 while the route is following the tier. |
-| **Key** | A saved key for an eligible provider, as required by the tier's publishing controls. |
-
-Click **Publish**, then confirm the route shows **Following C1 Balanced**. Check its API format before configuring the client. If it shows Anthropic Messages, a request has this form:
-
-```bash
-curl "$EDGE_INFERENCE_URL/v1/messages" \
-  -H "Authorization: Bearer $EDGE_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "anthropic-version: 2023-06-01" \
-  -d '{"model":"c1-balanced","max_tokens":128,"messages":[{"role":"user","content":"Reply with a short greeting."}]}'
-```
-
-If the published format differs, use that format's endpoint and payload instead. To stop automatic model changes, open the route and click **Pin model**. Click **Unpin** later to resume following C1 Balanced.
 
 ## Check route readiness and client selection
 
