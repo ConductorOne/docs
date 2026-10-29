@@ -1,0 +1,235 @@
+---
+title: Set up the Microsoft Work IQ MCP server
+description: Configure Microsoft Entra and Work IQ, connect the hosted MCP server to C1 with per-user OAuth, and govern access to Microsoft 365 tools.
+og:title: Set up the Microsoft Work IQ MCP server
+og:description: Configure Microsoft Entra and Work IQ, connect the hosted MCP server to C1 with per-user OAuth, and govern access to Microsoft 365 tools.
+sidebarTitle: Microsoft Work IQ
+---
+
+{/* Editor Refresh: 2026-10-26 */}
+
+Connect Microsoft Work IQ to C1 so your AI clients can search, read, and act on Microsoft 365 data through governed MCP tools.
+
+Use **per-user OAuth** for a managed connection: each user signs in with their own Microsoft work account, and C1 refreshes their tokens. A manually supplied **delegated access token** is also available, but you must replace it when it expires.
+
+## How C1 connects to Microsoft Work IQ
+
+C1 connects to Microsoft's [hosted Work IQ MCP server](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/overview) at `https://workiq.svc.cloud.microsoft/mcp`. When an AI client calls an approved tool through C1, C1 forwards the call with a Microsoft Entra access token and returns the result. You don't need to install the local Work IQ CLI or create a Microsoft Foundry project for this connection.
+
+Work IQ enforces the signed-in user's Microsoft 365 permissions and tenant policies. Application-only authentication through the OAuth client credentials grant isn't supported. See Microsoft's [Work IQ authentication guidance](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/api-overview#authentication-and-security).
+
+## Before you begin
+
+- Enable AI access management for your C1 tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
+- Have a Microsoft Entra work tenant and permission to register an application in it.
+- Arrange for a **Global Administrator** to complete the one-time Work IQ tenant setup and grant admin consent.
+- Configure Work IQ billing and user access as described below. Microsoft's [Work IQ connection quickstart](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/quickstart/foundry) also lists a Microsoft 365 Copilot license for each calling user; confirm your users meet Microsoft's current licensing requirements.
+
+<Note>
+If you don't see **Microsoft Work IQ** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
+</Note>
+
+## Enable Work IQ in Microsoft 365
+
+Before configuring C1, set up [usage-based billing for Copilot Credits](https://learn.microsoft.com/en-us/microsoft-365/copilot/usage-based-billing-copilot-credits-setup) and include the intended users in the billing policy. Then have a Global Administrator provision the Work IQ service principal, if it doesn't already exist, using either method:
+
+<Steps>
+<Step>
+**Azure CLI:** While signed in to the intended tenant, run:
+
+```bash
+az ad sp create --id fdcc1f02-fc51-4226-8753-f668596af7f7
+```
+
+This is Microsoft's Work IQ resource application ID, not the client ID you'll create for C1.
+</Step>
+<Step>
+**Microsoft Graph:** Follow the Graph Explorer steps in Microsoft's [Enable your tenant for Work IQ](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/enable-work-iq#enable-work-iq-api-in-your-organization).
+</Step>
+</Steps>
+
+The Work IQ resource is now available for your app to request delegated permissions. Work IQ usage consumes [Copilot Credits](https://learn.microsoft.com/en-us/microsoft-365/copilot/usage-based-billing-overview-copilot-credits); review billing and spending limits before giving users access.
+
+## Set up per-user OAuth (recommended)
+
+Use per-user OAuth for most deployments. Each user signs in with their own Microsoft account, so every tool call runs under that user's Microsoft 365 identity and permissions, and C1 refreshes tokens automatically.
+
+Register one confidential web application in Microsoft Entra, then give C1 its client ID and secret. Each user authorizes separately.
+
+### Register a Microsoft Entra application
+
+Follow Microsoft's [app registration guide](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) to create the app in your intended tenant.
+
+<Steps>
+<Step>
+Open the [Microsoft Entra admin center](https://entra.microsoft.com/), then go to **Entra ID** > **App registrations** > **New registration**.
+</Step>
+<Step>
+Enter a recognizable name, such as `C1 Work IQ`.
+</Step>
+<Step>
+Choose the supported account type. Use a multitenant organizational app if you will keep C1's prefilled `organizations` endpoints. For an app restricted to one tenant, choose the single-tenant option and use that tenant's ID in all the OAuth URLs below. See Microsoft's [authority configuration](https://learn.microsoft.com/en-us/entra/identity-platform/msal-client-application-configuration#authority).
+</Step>
+<Step>
+Select **Register**.
+</Step>
+<Step>
+Copy the **Application (client) ID** and **Directory (tenant) ID** from the app overview.
+</Step>
+<Step>
+Under **Authentication** > **Add a platform** > **Web**, add the redirect URI that matches your C1 tenant's domain:
+
+- Default instance: `https://accounts.conductor.one/auth/callback`
+- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
+
+Use the exact URI, including the path and without a trailing slash. See Microsoft's [redirect URI requirements](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
+</Step>
+<Step>
+Under **Certificates & secrets** > **Client secrets** > **New client secret**, create a secret with an expiration that meets your organization's policy. Copy its **Value**, not its secret ID. The value is shown only once. See [Add and manage application credentials](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials).
+</Step>
+</Steps>
+
+You now have the client ID, tenant ID, and secret value needed for C1.
+
+### Grant the Work IQ delegated permission
+
+Add the permission to the app you just registered. Microsoft's [Work IQ permissions reference](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/permissions) documents the required delegated scope and admin consent.
+
+<Steps>
+<Step>
+Open **API permissions** > **Add a permission** > **APIs my organization uses**, and search for **Work IQ**. If it doesn't appear, confirm that the Work IQ service principal exists in this tenant using the tenant-enablement steps above.
+</Step>
+<Step>
+Select **Delegated permissions**, add **WorkIQAgent.Ask**, and select **Add permissions**.
+</Step>
+<Step>
+Have a Global Administrator select **Grant admin consent** for the tenant and confirm that consent is granted.
+</Step>
+</Steps>
+
+The app can now request Work IQ access on behalf of signed-in users.
+
+#### Which Work IQ permissions to add
+
+The Work IQ API lists several delegated permissions. C1 requests only `WorkIQAgent.Ask`, so add only that one.
+
+| Permission | What it allows | Add for C1? |
+| :--- | :--- | :--- |
+| `WorkIQAgent.Ask` | Calls Work IQ on behalf of the signed-in user, including read and write access to Microsoft 365 resources such as mail, calendar, files, and Teams, within the user's own permissions. | Yes, required |
+| `WorkIQAgent.Ask.Selected` | Calls only selected Work IQ agents. | No |
+| `WorkIQSettings.Read.All` | Reads Work IQ tenant settings. | No. Not used by MCP tools. |
+| `WorkIQSettings.ReadWrite.All` | Reads and changes Work IQ tenant settings. | No. Not used by MCP tools. |
+
+`WorkIQAgent.Ask` is the only permission that grants access to Microsoft 365 data, and it covers both reads and writes. The `WorkIQSettings` permissions manage Work IQ configuration, not user data, so adding them doesn't give users more tool access. Leaving them consented only widens what the app could change in your tenant.
+
+#### Allow Work IQ operations in Microsoft, then govern them in C1
+
+Microsoft blocks create, update, delete, and action requests, such as sending mail, by default. To make the full Work IQ tool set available through C1, have a Microsoft 365 administrator allow those operations in **Agents** > **Tools** > **Work IQ MCP** > **Policy** in the Microsoft 365 admin center. The setting applies to the whole tenant and can take up to 24 hours. See [Policy governance for Work IQ MCP](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/policy-governance-mcp).
+
+With Microsoft open, C1 is where you decide who can use which tools. For example, give most users a read-only toolset (`retrieve`, `ask`, `fetch`, `get_schema`, and similar) and bind the write tools (`create_entity`, `update_entity`, `delete_entity`, `do_action`) only to the users who need them. You can change these assignments in C1 at any time without changing Microsoft tenant settings. See [Discover and govern tools](#discover-and-govern-tools).
+
+Work IQ still enforces each signed-in user's own Microsoft 365 permissions. C1 can't grant access beyond them.
+
+### Register the server in C1
+
+With Microsoft setup complete, register the server and configure its OAuth connection.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Microsoft Work IQ** from the catalog. The Microsoft endpoint is `https://workiq.svc.cloud.microsoft/mcp`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough**. Enter your app's client ID and client secret value.
+</Step>
+<Step>
+Confirm the following OAuth settings. These organizational URLs match the authority advertised by Microsoft's [hosted server metadata](https://workiq.svc.cloud.microsoft/.well-known/oauth-protected-resource/mcp).
+
+| Setting | Value |
+| :--- | :--- |
+| Grant | Authorization code |
+| Issuer URL | `https://login.microsoftonline.com/organizations/v2.0` |
+| Authorization URL | `https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize` |
+| Token URL | `https://login.microsoftonline.com/organizations/oauth2/v2.0/token` |
+| Refresh URL, if requested | Same as the token URL |
+| Scopes | `api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask offline_access` |
+
+For a single-tenant app, replace `organizations` with your **Directory (tenant) ID** in the issuer, authorization, token, and refresh URLs. Keep all URLs on the same authority. In a parent/child multitenant organization, Microsoft requires tokens issued by the user's home tenant; see the [multitenant authentication guidance](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/api-overview#authentication-and-security).
+
+The catalog configuration uses PKCE S256 and sends client credentials in the token request body. Keep those settings if you edit the OAuth configuration. The `offline_access` scope enables refresh tokens; see Microsoft's [offline access scope](https://learn.microsoft.com/en-us/entra/identity-platform/scopes-oidc#the-offline_access-scope).
+</Step>
+<Step>
+Save your changes. Each user sees a Connect prompt when they first call a Work IQ tool and completes Microsoft sign-in before using it.
+</Step>
+</Steps>
+
+C1 now has the app credentials for per-user authorization and token refresh.
+
+## Optional: Use a delegated access token
+
+Use a manually supplied token when you already have a delegated Work IQ access token and can manage its expiry. Obtain it through your registered app's user authorization flow for `api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask`. Use an access token issued for Work IQ, rather than an ID token, Microsoft Graph token, or application-only token.
+
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server), select **Microsoft Work IQ**, and choose **Bearer token** when configuring authentication. Paste the access token without the `Bearer ` prefix. C1 adds the authorization header.
+
+This mode doesn't refresh the supplied token. Replace it before the token response's `expires_in` lifetime elapses. Use per-user OAuth for automatic refresh.
+
+## How Microsoft Work IQ credentials are shared
+
+- **Per-user OAuth:** The app's client ID and secret identify the C1 connection, but every user has their own delegated Microsoft tokens. Work IQ receives calls as that signed-in user.
+- **Bearer token:** Everyone using the server shares the supplied token and its Microsoft identity and permissions. C1 records the calling C1 user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage), while Microsoft receives the token owner's identity.
+
+See [Configure authentication](/product/admin/mcp-servers#configure-authentication) for the differences between shared and per-user credentials.
+
+## Discover and govern tools
+
+After registration, C1 discovers the server's tools and lists them on the **Tools** tab. The catalog includes search and reasoning tools (`retrieve`, `ask`, `list_agents`), reading tools (`fetch`, `fetch_blob`, `call_function`), schema discovery (`get_schema`, `search_paths`), and mutation tools (`create_entity`, `update_entity`, `delete_entity`, `do_action`). See Microsoft's [Work IQ MCP tool reference](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/tool-reference).
+
+Tools start as **Pending review** or automatically **Approved**, depending on the server configuration and your tenant's defaults. See [Require tool approval](/product/admin/enable-ai-access-management#require-tool-approval) and [Default tool classification](/product/admin/enable-ai-access-management#default-tool-classification).
+
+Before users can call a tool, approve it, add it to a toolset, and bind an access profile. Follow [Govern tools and toolsets](/product/admin/tools-and-toolsets).
+
+If write tools return a policy-denied error, confirm that Work IQ MCP policy in Microsoft allows writes. See [Allow Work IQ operations in Microsoft, then govern them in C1](#allow-work-iq-operations-in-microsoft-then-govern-them-in-c1).
+
+<Note>
+Discovered tools don't prove that Microsoft authorization is complete or that every operation is allowed. Verify the connection by having an approved user sign in and call a read tool against Microsoft 365 data they already have access to.
+</Note>
+
+## Manage your Microsoft Work IQ credentials
+
+- **Rotate the app secret:** Create a new client secret in Entra, update the server's authentication settings in C1, and verify a user can connect before removing the old secret. Schedule rotation before its expiration.
+- **Renew a manually supplied token:** Obtain a new delegated Work IQ access token and update the bearer token in C1 before it expires.
+- **Change access:** Review app consent and user access in Entra, Work IQ policy in Microsoft 365, and toolsets and access profiles in C1. Users may need to reconnect after consent or authentication settings change.
+
+## Troubleshoot Microsoft Work IQ setup
+
+Use these checks to distinguish Microsoft tenant setup from C1 tool governance.
+
+| Symptom | What to check |
+| :--- | :--- |
+| Work IQ isn't listed under API permissions | Provision the Work IQ service principal in the same tenant as your app. |
+| Microsoft reports a redirect URI mismatch | Match the Web redirect URI to your C1 hosting region, including `/auth/callback` and no trailing slash. |
+| Microsoft asks for admin approval | Confirm a Global Administrator granted tenant consent for the delegated `WorkIQAgent.Ask` permission. |
+| Sign-in or token exchange fails | Check the client ID, secret value and expiry, supported account type, and matching OAuth authorities. For a single-tenant app, replace `organizations` in every OAuth URL. |
+| Work IQ reports an authentication error in a parent/child tenant setup | Confirm the token was issued by the user's home tenant and follow Microsoft's multitenant guidance above. |
+| A read succeeds but a write is denied | See [Fix denied write operations](#fix-denied-write-operations). |
+| Access stops after initially working | Check bearer-token or client-secret expiry, user consent, licensing, and billing or spending-policy access. |
+
+### Fix denied write operations
+
+Reads such as `fetch` or `retrieve` can work while writes such as `create_entity` or `do_action` fail. A write must be allowed by C1, by Work IQ MCP policy in Microsoft, and by the user's own Microsoft 365 permissions. Check each layer in order.
+
+<Steps>
+<Step>
+**Confirm the write tool is available in C1.** On the server's **Tools** tab, check that the write tool is **Approved**, is in a toolset, and that the toolset is bound to an access profile the user has. If the AI client doesn't list the tool at all, the issue is in C1. See [Govern tools and toolsets](/product/admin/tools-and-toolsets).
+</Step>
+<Step>
+**Confirm Microsoft allows writes.** Microsoft blocks create, update, delete, and action requests by default, so this is the most common cause. If C1 forwards the call and Work IQ returns a policy-denied error, have a Microsoft 365 administrator open **Agents** > **Tools** > **Work IQ MCP** > **Policy** in the Microsoft 365 admin center and allow the operation. Changes can take up to 24 hours to apply, so retry the next day before investigating further. See [Policy governance for Work IQ MCP](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/policy-governance-mcp).
+</Step>
+<Step>
+**Confirm the user can make the change in Microsoft 365.** Work IQ only allows changes the user could make themselves. For example, the user needs edit access to a file, or send-as rights for a shared mailbox. Test the same action directly in Outlook, Teams, or SharePoint as that user. If it fails there, adjust the user's Microsoft 365 permissions.
+</Step>
+<Step>
+**Check which identity made the call.** With a bearer token, every call runs as the token owner, not the calling C1 user. Confirm the token owner has the required Microsoft 365 permissions, or switch to per-user OAuth.
+</Step>
+</Steps>
+
+After each change, retry the write with an approved user and check the result in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage).
