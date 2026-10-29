@@ -1,0 +1,102 @@
+---
+title: "Custom connectors: build a connector with C1AI"
+sidebarTitle: "Custom connectors"
+description: "Describe an application to the C1AI assistant and get a hosted connector that syncs its users, groups, and roles into C1."
+---
+
+{/* Editor Refresh: 2026-10-29 */}
+
+Custom connectors let you bring an application into C1 when there is no pre-built connector for it. You describe the application to the C1AI assistant, the assistant builds and tests a connector against the application's API, and you approve it before it goes live. The connector runs on infrastructure hosted by C1. Nothing to install or operate on your side.
+
+<Note>
+Custom connectors are in early access. If you don't see **Custom connectors** in the Applications navigation, ask your C1 account team to enable it for your organization.
+</Note>
+
+## When to use a custom connector
+
+C1 has several ways to connect an application. Pick the lightest one that fits.
+
+**Start with a pre-built connector** when one exists for your application. Pre-built connectors are maintained by C1, cover provisioning as well as sync, and need only credentials to set up. The C1AI assistant checks the catalog for you before it starts building anything.
+
+**Use a custom connector when:**
+
+- The application has an HTTP API with published documentation or an OpenAPI specification, and no pre-built connector covers it.
+- You need to sync who has access to what: users, groups, roles, and the entitlements and grants between them.
+- You want the integration built, tested, and maintained from inside C1, without running your own connector or writing code.
+
+**Use [HTTP authoring](/developer/http-authoring), [SQL authoring](/baton/baton-sql), or [SCIM authoring](/baton/baton-scim) when** you want to write the configuration yourself, or when you need to run the connector in your own environment, for example to reach a system that is not exposed to the internet.
+
+**Build a connector with the [Baton SDK](/developer/build-connector) when** you need provisioning, custom business logic, or authentication a hosted connector can't do.
+
+## What you need before you start
+
+- **Owner role.** Only organization owners can create, approve, and manage custom connectors.
+- **API documentation.** The assistant works from the application's official OpenAPI specification. It looks the specification up for you when the vendor publishes one. If the vendor doesn't, you can upload the specification or API documentation yourself.
+- **An endpoint that lists users.** The application's API must be able to list users or members. If it can't, the assistant will tell you a connector isn't a good fit rather than build one that can't sync.
+- **Read-only API credentials** for the application, created in the application itself. You enter these in C1, never in the chat.
+
+## Build a connector
+
+Open **Applications** and then **Custom connectors**, and choose **Create with C1AI**. The steps below describe what happens from there.
+
+<Steps>
+  <Step title="Describe the connector">
+    Tell the assistant what you want, for example "Build an Acme connector that syncs users and roles." Name the application and the kinds of access you care about. The assistant confirms there is no pre-built connector for the application, finds its API specification, and asks you about anything it can't determine from the documentation, such as which objects should become groups or roles in C1.
+  </Step>
+  <Step title="Review the access model">
+    The assistant proposes how the application's objects map to C1 resource types, entitlements, and grants, then writes the connector. You can ask for changes at any point, in plain language.
+  </Step>
+  <Step title="Enter credentials">
+    Open the connector's **Details** page and then **Settings**, and enter the application's base URL and credentials. Credentials are stored encrypted in C1 and are never visible to the assistant.
+  </Step>
+  <Step title="Run a test">
+    The assistant runs the connector against the real application using your credentials, on a small sample of data. The test checks that authentication works, that every resource type the connector declares actually returns records, and that paging through results behaves correctly. Data read during the test is counted and then discarded. It is not kept in C1.
+  </Step>
+  <Step title="Review the result">
+    An independent review checks the test evidence before the connector can be approved. If the review finds a problem, the assistant explains what it found and offers to fix it. Common reasons a test doesn't pass are credentials that don't have permission to list a resource, an application with no data in one of the declared resource types, or a paging style the connector got wrong.
+  </Step>
+  <Step title="Approve and activate">
+    When the test passes, approve the connector. Approval is a deliberate step: you confirm it in C1 and the approval is valid for a limited time. The assistant then activates the connector and runs the first sync. After that, the connector syncs on the normal schedule and appears alongside your other connectors under **Connectors**.
+  </Step>
+</Steps>
+
+## How it works
+
+The assistant writes the connector as a small program that describes how to call the application's API and how to turn the responses into C1 resources. That program runs on a connector runtime hosted and maintained by C1, so you get runtime updates and security fixes without doing anything.
+
+Before a connector can go live, it has to pass a test that calls the real API with your credentials. The test is a bounded sample: a few pages of each resource type, not a full sync. It is enough to catch the things that most often go wrong with a new integration, such as a wrong endpoint, a missing permission on the API key, or broken pagination, while keeping the load on the application small. All test calls are read-only. The connector can't make changes to the application during a test.
+
+The test produces an evidence record of the requests made and the responses received. A second AI model, separate from the one that wrote the connector, reviews that evidence against the connector's declared behavior and the API specification. The connector is only eligible for approval if that review accepts the evidence. This separation is what lets you trust a connector you didn't write: the model that built it does not get to grade its own work.
+
+Every build is kept as a version. Activating a connector, updating it, and rolling it back are all explicit owner actions.
+
+## Manage a custom connector
+
+- **Update it.** Ask the assistant to change the connector, for example "Add teams to my Acme connector." The assistant edits the connector, runs a new test, and asks you to approve the new version before it replaces the active one.
+- **Roll it back.** If a new version causes problems, roll back to the previously active version from the connector's **Revisions** tab. Rollback also needs owner approval.
+- **Remove it.** A connector that has not been activated can be removed from its Details page. To stop an active connector from syncing, disable it under **Connectors** the same way you would any other connector.
+
+## Limits and frequently asked questions
+
+**Which applications can it connect to?**
+Any application with an HTTP API reachable over HTTPS on the public internet. Databases, LDAP directories, and systems only reachable inside your network are not supported. Use [SQL authoring](/baton/baton-sql) or a self-hosted connector for those.
+
+**Does it support provisioning?**
+Not today. Custom connectors sync access data into C1 so you can review it, request against it, and automate on it. Granting and revoking access in the application is not yet available for custom connectors. Use a pre-built connector or the Baton SDK if you need provisioning now.
+
+**How does it handle paging?**
+Page-number, offset, cursor, and link-header pagination are all supported. The assistant chooses based on the API specification and the test verifies it.
+
+**What does the assistant need to read from the internet?**
+Only the application's public API documentation, over HTTPS. The assistant cannot send your credentials anywhere and cannot call the application itself. Only the test and the connector do that, from C1's runtime.
+
+**Why did my test fail when the API works?**
+The most common cause is a resource type with no data. Every resource type the connector declares must return at least one record during the test, so an application with users but no groups will fail a connector that declares groups. Ask the assistant to drop the empty resource type, or add data to the application. The next most common cause is an API credential that can read one resource type but not another.
+
+**Is the connector shared with other C1 customers?**
+No. A custom connector belongs to your organization only.
+
+**Who can see the application's data during a build?**
+The assistant works from the API specification and the test's summary results. Your credentials are entered in C1 directly and never pass through the conversation.
+
+For how to work with the assistant in general, see [Use the C1AI assistant](/product/admin/ai-assistant).
