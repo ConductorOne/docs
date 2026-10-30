@@ -8,6 +8,156 @@ sidebarTitle: Release notes
 ---
 {/* Editor Refresh: 2026-10-27 */}
 
+<Update label="October 30, 2026">
+
+## Product digest: October 30, 2026
+
+### Leave entitlements out of an access review
+
+Scoping a review to an app used to be all or nothing: to skip a few entitlements, you had to select everything else by hand, and that list went stale as new entitlements appeared. You can now exclude entitlements from a campaign or campaign template that is scoped by custom selector, entitlements by type, access conflicts, or inheritance. On the campaign's **Scope** tab, use **Excluded entitlements** to pick specific entitlements to leave out, listed one per row so you can remove any one of them, or choose **Custom selector** to leave out everything that matches filters such as app, resource type, risk level, compliance framework, entitlement annotation, or resource attribute. See [Exclude entitlements from a campaign](/product/admin/campaigns#exclude-entitlements-from-a-campaign). {/* PR #28059, #28175, #28085, #28036 */}
+
+In an access conflict campaign, excluding one side of a conflict keeps the other side in the review, so the access that remains still gets certified. See [Exclude entitlements from an access conflict campaign](/product/admin/access-conflicts#exclude-entitlements-from-an-access-conflict-campaign) and [Exclude entitlements from an inheritance campaign](/product/admin/campaign-scope-by-inheritance#exclude-entitlements-from-an-inheritance-campaign). Exclusions carry over when you duplicate a campaign or generate one from a template, and they appear in the validate-scope and campaign reports. {/* PR #28059 */}
+
+{/* TODO: screenshot pr-28059-excluded-entitlements-section.png - the Excluded entitlements section on the Scope tab of a By entitlements campaign using Custom selectors, showing the "(optional)" title, default description, and Narrow selection button. */}
+{/* TODO: screenshot pr-28175-excluded-entitlements-list.png - the saved Excluded entitlements list with one row per entitlement (Application, Entitlement, Description, Grant count columns and the Remove button). */}
+{/* TODO: screenshot pr-28059-excluded-custom-selector.png - the Excluded entitlements panel with Custom selector chosen and a filter or two added under Match all filters. */}
+{/* QUESTION: PR text says "entitlement types"; resolved from code. The Excluded entitlements section renders for By entitlements campaigns only when the scope is Custom selectors or Entitlements by type (EntitlementsCampaignScope.tsx supportsExclusions, RecurringEntitlementsCampaignScope.tsx), and always for access conflicts and inheritance. It does not render for Application access or specific Entitlements. Customer-facing names used here: Custom selectors, Entitlements by type, By access conflicts, By inheritance. Confirm the wording with the developer if "entitlement types" was intentional. */}
+{/* QUESTION: PR 28059 also retires legacy resource-type exclusions; existing rows are no longer applied at prepare, so a campaign or template that still carries one will review grants it used to exclude. Rows only ever applied to by-users campaigns (gated), so footprint is likely negligible. Left out of Breaking changes; see open questions. A short Note on the campaigns page describes the retirement. */}
+{/* The by-users exclusion selector (PR #27968) and the by-users validate-scope custom exclusion rows (PR #28036) belong to the by-users scope, which is gated (CAMPAIGN_USER_FIRST_SCOPE, SKU_MANUAL), and are not described in docs. The cap on excluded entitlements (PR #28036) is documented without a number because it shares the per-campaign entitlement quota. */}
+
+### Build access review scopes with custom selectors
+
+Custom selectors could match entitlements by app, resource type, risk level, and compliance framework, but not by how your own resources and entitlements are tagged, so a scope like "everything on resources owned by one team" meant picking entitlements by hand. Custom selectors now have more filters. Click **Add filter** to combine **App**, **Resource type**, **Risk level**, **Compliance framework**, **Entitlement annotation**, and **Resource attribute** under **Match all filters**. An entitlement must match every filter, and any one value within a filter.
+
+**Entitlement annotation** and **Resource attribute** take key and value pairs, and a resource attribute that holds a list of values matches when the list contains your value. A preview shows what currently matches, the criteria are evaluated each time a campaign is prepared, and the campaign creation assistant can set the filters too. See [Build a custom selector](/product/admin/campaigns#build-a-custom-selector). {/* PR #27091, #27687, #27684, #27797, #28209 */}
+
+{/* TODO: screenshot pr-27687-custom-selector-filters.png - the Custom selectors panel showing Match all filters with an App filter, a Resource attribute filter, and an Entitlement annotation filter, plus the preview. */}
+{/* PR #28367 is a layout fix in the scope tree search next to the resource type filter; not announced. */}
+
+### Access review improvements
+
+- **Review grants that are in active use, not just unused ones.** Filtering grants by usage only offered **Unused in the last**. Under **Grant usage**, you can now also choose **Used in the last** a period, or set both to review grants last used between the two periods. Usage is based on each account's last login to the app, and accounts with no login data are excluded. This works on campaigns and campaign templates. See [Filter grants by usage](/product/admin/campaigns#filter-grants-by-usage). {/* PR #27825 */}
+
+  {/* TODO: screenshot pr-27825-grant-usage-filter.png - the Grant usage section under Select grants by criteria with Unused in the last and Used in the last both checked. */}
+
+- **Access review campaigns can now include C1 group memberships.** Groups you manage in C1 couldn't be reviewed the way other access can. Reviewers can now certify or deny group members in one-time and recurring campaigns, including members of automated groups, and a denied member of an automated group stays out of the group after later automation runs. See [Review group membership in an access review campaign](/product/admin/groups#review-group-membership-in-an-access-review-campaign). {/* PR #25884, #28114 */}
+
+  {/* Verified in code: no feature flag gates the group-review picker or the campaign eligibility rule (builtin_app.IsCampaignEntitlementEligible), and the denied-automated-member exclusion in handleC1AppRevokeGroup is ungated; GRANT_REASONS (DEV_MANUAL) appears only in the test fixture. DYNAMIC_GROUPS and C1_GROUPS are RETIRED and GRANT_REASONS_MANUAL_MEMBERSHIP is SKU_ALL. */}
+  {/* TODO: screenshot pr-25884-group-membership-review.png - a campaign review task listing members of a C1 group with Certify and Deny actions. */}
+  {/* QUESTION: confirm in the live UI how a customer finds the group entitlements in the scope pickers (the built-in app shows as "C1"). */}
+
+- **The CEL editor in campaign scoping no longer shows a static list of variables.** The hardcoded **Available variables** panel under the user and account expression editors had drifted out of date. Use **Browse available variables** in the editor for the current list. {/* PR #28276 */}
+
+  {/* QUESTION: possibly too minor for the digest; candidate for the trimmed-items doc. */}
+
+  {/* QUESTION: PRs 28431, 28433, 28456, 28473, 28522, 28650 change access review report generation (skip duplicate pending reports, per-campaign rate limit of 5 generate-report calls per minute that returns a resource-exhausted error when exceeded, errored status when enqueue fails). Not announced; decide whether the rate limit belongs in Breaking changes or the trimmed-items doc. */}
+
+### Access request improvements
+
+- **Anyone who can request access can now submit a request through the C1AI assistant.** Basic users could ask the assistant for access and fill in the form, but the submit action wasn't available to them, so requests stalled or fell back on slow workarounds. Submitting from the web app, Slack, or Microsoft Teams now creates the request right away, with the same approval routing and request form rules as the web app. {/* PR #27934 */}
+
+  {/* QUESTION: Microsoft Teams integration is SKU_MANUAL, but the October 16 entry already names Teams. Keep the Teams mention? */}
+
+- **Start a request from a panel instead of leaving your page.** The **New request** button in the sidebar now opens a panel on the right where you can request apps, access profiles, or actions without leaving what you were doing. Cmd-click or middle-click still opens the full request page in a new tab, and **New request** is also available from Ctrl+K search. {/* PR #27666 */}
+
+  {/* TODO: screenshot of the New request panel. */}
+
+- **Route approvals by compliance framework or app annotation.** Policy conditions and routing rules couldn't tell which compliance framework an entitlement was tagged for. CEL expressions can now check `entitlement.compliance_frameworks`, such as `"SOX" in entitlement.compliance_frameworks` to send SOX-tagged requests through a dedicated approval step, and both built-in and custom frameworks work. CEL in policies, approver steps, entitlement routing rules, account provisioning, and forms can also read an app's annotations, such as `entitlement.app.annotations["team"] == "platform"`. {/* PR #27760, #28310 */}
+
+  {/* TODO: docs update - CEL reference for entitlement.compliance_frameworks, entitlement.app, and resource.app. */}
+
+### Findings improvements
+
+- **Remediate with AI suggests owners for unowned non-human identities.** Choosing an owner for an unowned non-human identity used to be guesswork. Remediate with AI now presents up to three suggested owners with a confidence level and reasons, and assigns the one you confirm as the primary owner. {/* PR #27472 */}
+
+### Automation improvements
+
+- **Paused unused-access automations now show what's waiting for review.** When an unused-access automation paused because too many users matched, the **Review** list was empty, so there was nothing to resume or cancel. It now lists the paused executions with the affected account for each, so you can resume or cancel them. {/* PR #28328 */}
+
+  {/* QUESTION: PR text says "Review page"; code shows a Review drawer opened from the paused-automation banner. Confirm the UI path. */}
+  {/* QUESTION: automations that tripped before this change keep an empty Review list and stay disabled (PR known gap). Worth a caveat? */}
+
+- **Formatting in Send email steps now reaches the recipient.** Bold, links, and other basic HTML in an automation's **Send email** step body was stripped from the sent email. It now appears as written. {/* PR #27731 */}
+
+### Slack app improvements
+
+- **Slack no longer tells requesters a failed request succeeded.** Requesters could be told their access was granted, revoked, or approved when the request had actually failed or timed out. Slack now reports only real outcomes. {/* PR #28606 */}
+
+  {/* TODO: PR author could not verify the Slack DM copy live (covered by unit tests); confirm the message wording in a real workspace. */}
+
+- **Type `/c1` in Slack to start an access request.** `/c1` now opens the access request form directly, the same as `/c1 request`, so you don't need to remember the subcommand. {/* PR #27382 */}
+
+### AI and MCP improvements
+
+- **AI agents can now see MCP servers you can request, not just ones you already use.** Agents connected through the MCP gateway now list every MCP server you can use or request access to, under its configured display name, with its tool count, your access status, and the toolsets you hold or can request. Servers with no tools available to you yet, such as an external server you haven't connected to, now appear so you can request access and connect. {/* PR #27781 */}
+
+- **Admins can choose which tools users get automatically with an MCP server.** From the server's details, pick a preset such as **Read tools** or **All tools**, or create a named toolset with specific tools. {/* PR #28406 */}
+
+  {/* QUESTION: possibly gated, checked diff and code: no flag gates the card itself. The Automatic access card only renders when the server has automatic access provisioning enabled in its config (the register flow offers it behind JML, SKU_ALL); the metrics section of the create-toolset drawer is behind a DEV_MANUAL preview flag and is hidden. Confirm the UI path (Configuration tab vs Details) and that customers can turn this on. */}
+
+- **Connect external MCP servers when automatic OAuth setup doesn't work.** Choose **Configure manually** beside a source's automatic OAuth setup to enter your own client credentials or configure a public client. Pick **Authorization code** or **Client credentials** with the OAuth2 mode selector, and use the **Public client** toggle for PKCE clients without a secret. Existing provider URLs are kept, and authorization code and per-user connections must reconnect after you save. {/* PR #27523 */}
+
+  {/* QUESTION: pain framing ("automatic setup doesn't work") is inferred from the PR title (manual fallback for DCR and CIMD sources); confirm. */}
+
+- **See which MCP sources have tools waiting for review.** The MCP sources table on the AI overview now shows how many tools each source has awaiting review, along with a **Needs review** count of sources that have any. {/* PR #27898 */}
+
+### App and connector management improvements
+
+- **Entitlement descriptions can come from the source system.** Synced entitlements showed connector-generated text such as "Member of X group" instead of the description in the source, such as a group description in Microsoft Entra. In an app's **Entitlement management** settings, turn on **Use resource descriptions** to have each synced entitlement use its resource's description. This works for any connector that provides resource descriptions and applies to existing entitlements at their next sync. On an entitlement's details page, a **Synced from source** label shows when the description comes from the source. To write a custom description that stays through future syncs, clear **Use description from source** while editing, and select it again to restore the source description. {/* PR #27862 */}
+
+  {/* TODO: docs update - Entitlement management settings page. */}
+  {/* QUESTION: the setting is off by default, and entitlements already marked as manually edited keep their text until reset (PR known limitation). Add a sentence? */}
+
+- **Find unused entitlements on an app's Entitlements tab.** Sort by **Grants** to see the most or least granted entitlements, and use the **Grants** filter to show only entitlements **With grants** or **Without grants**, which helps find unused ones to clean up. A **Slug** filter lists the slugs used in the app, such as `read_only` or `read_write`, with counts, so you can see every entitlement with that slug across resources. An **Entitlement** filter narrows the list to specific entitlements, and the page URL keeps that selection so you can reload and share filtered views. {/* PR #27500, #27616, #27892 */}
+
+### Usability improvements
+
+- **Source-IP allowlists now accept IPv6.** The allowlist field accepted only IPv4 ranges. You can now enter IPv6 addresses and CIDR ranges wherever you set allowed source IPs, such as the tenant IP allowlist settings, personal API keys, service principal credentials, and workload federation trusts. Invalid entries are now kept for correction instead of silently removing a restriction, and you can't save until you fix or remove them. {/* PR #27547, #27554 */}
+
+  {/* QUESTION: surface list is inferred from which screens use the shared CIDR input (admin IP allowlist settings, personal client create, service principal credential drawer, federation wizard and trust drawer); confirm against the live UI. */}
+
+- **The API keys page in Settings shows more about each key.** Admins can see when a key was created, when it expires, and when it was last used without opening it. The owner column is now labeled **Owner**. {/* PR #27418 */}
+
+### API and developer tools
+
+- **MCP gateway errors now say why a request failed.** A 401 from the gateway used to look the same whatever the cause. The `WWW-Authenticate` header now carries an OAuth error code, and a rejected token reports whether it expired, was revoked, or is malformed, so an agent can decide whether to refresh its token or reauthorize. When a server's credential is no longer usable, MCP clients receive JSON-RPC error `-32010` instead of code 0, so treat `-32010` as a prompt to reauthorize that server. Hosted servers that don't issue refresh tokens, such as Okta, also no longer lose their credential before the access token expires. {/* PR #27707, #27710 */}
+
+  {/* QUESTION: Okta only issues a refresh token when offline_access is requested, so already registered Okta MCP servers still need reauthorization after the access token expires until that scope is added (from PR 27710). Include as a caveat? */}
+
+- **The service principal API reports roles and honors paging.** `roleIds` is now filled in on get, list, create, and update responses, where a newly created service principal with a read-only role used to show an empty list. `GET /api/v1/service_principals` and its credentials endpoint now honor `page_size` and `page_token`. {/* PR #27697, #28601 */}
+
+### Breaking changes
+
+- **Failed client credentials token requests now return one generic error.** `POST /auth/v1/token` with `grant_type=client_credentials` used to reveal whether a client ID existed or a secret was wrong. Every failure now returns `invalid_client` with the description "client authentication failed", and the specific reason stays in the system log. Clients that authenticate with HTTP Basic now get 401 with a `WWW-Authenticate: Basic realm="token"` header instead of 400, and clients that send credentials in the form body still get 400. If you match on `invalid_grant` or the old error text to detect a deleted, disabled, or expired credential, update your handling to match `invalid_client`. {/* PR #27649 */}
+
+  {/* QUESTION: the PR test asserts the response body description reads "client authentication failed (16)" (gRPC code suffix), not the bare string in the PR's release note. Verify against a live response before publishing. */}
+
+- **A deleted service principal now returns "not found".** Getting, updating, or creating a credential for a service principal after it is deleted used to succeed, and the principal still appeared enabled. If your scripts or Terraform treat a successful read after a delete as normal, update them to expect "not found". The credential expiry digest also no longer includes deleted service principals. {/* PR #27700 */}
+
+- **Personal API key updates reject fields that can't be changed, and creating a key checks your roles.** Updating a personal API key with an update mask that includes fields such as `scoped_roles` or `allow_source_cidr` now returns 400 instead of silently ignoring them. Only Super Administrators and Read-Only Super Administrators can create a personal API key with a role they don't hold, and everyone else can assign only roles they have. {/* PR #27730 */}
+
+  {/* QUESTION: confirm whether non-admins could previously create keys with roles they didn't hold (the PR adds a delegation check on create); if the old behavior was only a UI gap, soften "checks your roles". */}
+
+- **Failed token requests and denied MCP tool calls are recorded differently in the system log.** A failed client credentials request now records its real failure reason instead of `TOKEN_EXCHANGE_FAILED`, along with the presented client ID and the owning service principal. A failed workload federation exchange now records the trust, provider, and client ID, where the actor was empty before. An audience mismatch now reports `jwt_audience_mismatch` instead of `jwt_verification_failed`. MCP tool calls refused by authorization inside the tool are now recorded as `MCP_TOOL_CALL_RESULT_STATUS_DENIED` with response code 403, where they were recorded as a generic failure with code 500. If your SIEM or alerting rules match on the old status details, or on FAILURE with code 500 to catch permission denials, update them. {/* PR #27701, #27704 */}
+
+- **App population reports are now limited to the apps an administrator manages.** Basic Users can no longer list or download them. Application Administrators can list, generate, and download reports only for apps they manage, and Read-Only Administrators keep tenant-wide report reads but can't generate reports. Existing signed report URLs are checked against the requester's current app permissions when used. The **Reports** tab on an app's details page shows only to people who can use it. {/* PR #28020 */}
+
+- **Email provider settings and email activity are limited to Super Administrators and Read-Only Administrators.** Basic User, Application Administrator, Campaign Administrator, Integration Administrator, AI Governance Administrator, Access Request Administrator, and Access Request Helpdesk can no longer read the tenant's email provider configuration or its email audit events. Read-Only Administrators keep read access only. Workflow builders without admin roles can still see whether external email is available. The gRPC method that returned email capabilities on the provider service is removed, so clients calling it must move to the new capabilities service, and `GET /api/v1/settings/email-capabilities` is unchanged. {/* PR #28012 */}
+
+- **Changing entitlement owners, automations, and manual membership now requires permission to manage the app or entitlement.** Application Administrators who don't own an app can no longer perform these writes unless they also hold System Owner, and Access Request Administrators can still make delegated writes for C1 catalog entitlements but not for other unowned entitlements. {/* PR #27978 */}
+
+  {/* QUESTION: PR text limits the Application Administrator change to "the legacy flag-off path" without naming the flag. Identify which tenants hit that path before publishing, and confirm the "System Owner" role name shown in the UI. */}
+
+- **Policies now have a limit on conditional rules.** The policy editor and the API enforce a default limit of 16 conditional rules per policy, not counting the baseline rule. Existing policies above the limit stay editable and can be reduced but can't grow. Contact support to adjust your limit. {/* PR #28013 */}
+
+  {/* QUESTION: PR 28027 deprecates the two scope_by_excluded_resource_type routes (sunset 2026-11-06) and rejects non-empty excluded_resource_types with FAILED_PRECONDITION. Not drafted as a bullet: the routes were exposed publicly on 2026-10-21 (PR 27571), the PR's Datadog check found no customer usage (46 prod calls in one internal burst on 2026-10-12, all INVALID_ARGUMENT), and the exclusions only applied to by-users campaigns (gated, CAMPAIGN_USER_FIRST_SCOPE SKU_MANUAL). Treated as a negligible-footprint retirement. Add as a Breaking changes bullet if you want it announced. */}
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
+
 <Update label="Role mining suggestions">
 
 ### Start role mining from a suggestion
