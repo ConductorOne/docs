@@ -1,0 +1,117 @@
+---
+title: Make your first model call through Edge Gateway
+description: Set up one model route, grant a developer access, and check a first Claude Code request through your Edge Gateway.
+og:title: Edge Gateway quickstart - C1 docs
+og:description: Set up one model route, grant a developer access, and check a first Claude Code request through your Edge Gateway.
+sidebarTitle: Quickstart
+---
+
+{/* Editor Refresh: 2026-10-28 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Give one developer access to one model through an Edge Gateway, then check their first request. An admin completes the setup and access steps; the developer configures a compatible client. This walkthrough uses Anthropic and Claude Code as the example.
+
+## Before you begin the Edge Gateway quickstart
+
+Confirm these prerequisites before starting:
+
+- Edge Gateway is enabled for your organization, and you have an admin role that can manage applications, service principals, and vaults.
+- Make sure **Cross-App Access** is on under **AI** > **Cross-App Access** so Multipass can get Edge tokens for people. The Edge's **Overview** warns if it's off. If the setting isn't available, contact the C1 Support team. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable).
+- You have an API key for a supported inference provider and the full model ID you want to serve.
+- For the example below, the developer has Claude Code and C1 Multipass on macOS, with the command line tool installed, signed in, the device registered, and the app unlocked. See [Set up Multipass](/product/admin/connect-edge-gateway-multipass#set-up-multipass).
+
+The Edge setup and access steps also apply to other providers. Choose a client that matches your route's native API format; the Claude Code configuration below requires a Messages-compatible route. For other provider fields and calls, see:
+
+- **OpenAI** — [Responses routes for Codex](/product/admin/edge-gateway-inference-routing#example-2-openai-responses-for-codex).
+- **Gemini Developer API** — [Chat routes with a key from Google AI Studio](/product/admin/edge-gateway-inference-routing#example-5-gemini-developer-api-openai-chat).
+- **Together** — [Chat routes for open-weight models](/product/admin/edge-gateway-inference-routing#example-3-together-openai-chat).
+- **Fireworks** — [Chat routes](/product/admin/edge-gateway-inference-routing#example-4-fireworks-openai-chat) with full `accounts/<account>/models/<model>` IDs.
+
+<Note>
+This helper-based walkthrough requires macOS; the inference-helper CLI isn't available on Windows. For platform details and installation, see [Set up Multipass](/product/admin/connect-edge-gateway-multipass#set-up-multipass). For Linux servers, use the [Multipass fleet setup](/product/admin/connect-edge-gateway-multipass#turn-on-edge-gateway-routing).
+</Note>
+
+## Set up and check your first model request
+
+Use the same application and Edge throughout these steps. Leave **Allow long-lived API keys** off; the Multipass helper doesn't require it.
+
+<Steps>
+<Step title="Create an Edge">
+Under **Apps**, open the application that will own your Edge. If you don't have one yet, click **New application** and [create an application](/product/admin/applications#create-a-new-application), then return here.
+
+Under **AI**, select **Edge**, then click **Add Edge**. Enter a name, keep **Inference** selected, and click **Create**.
+
+On the Edge's **Overview** tab, click **Link** beside **Runtime identity**. Select a service principal, or use **Create service principal** to create one inline. Click **Link existing principal** to save the binding; creating a principal alone doesn't link it. See [Set up an Edge](/product/admin/edge-gateway-setup).
+</Step>
+
+<Step title="Publish one model">
+Open **Inference** > **Add models** and select your provider: **Anthropic** in this example. Choose a vault and API-key secret, or use **Create vault and secret** to store your provider key. Confirm the runtime identity can read the key.
+
+Under **Models**, enter the full Anthropic API model ID—for example, `claude-sonnet-5-5`—and select the offered option. Use a model your Anthropic API key can access; the example is illustrative. Use the complete ID from [Anthropic's model reference](https://platform.claude.com/docs/en/models/overview), including the `claude-` prefix.
+
+Registered-model suggestions depend on your organization's rollout channel; provider catalog suggestions can also appear. If your model isn't suggested, type its exact ID. Suggestions don't establish that your provider account can call the model. Click **Publish**, then note the **Route ID** in the routes table for the developer's configuration. If the published Route ID is `claude-sonnet-5-5`, use that value for `<route-id>` in the configuration below.
+</Step>
+
+<Step title="Grant the developer access">
+On **Overview**, keep **Who can call** set to **People who sign in**. Expand **Show checklist** if that setting is hidden. Open **Grants**, select **Inference** under **Members**, and click **Add member**. Select the developer, then click **Grant access**. This grants both **List models** and **Call models**; an access profile isn't required for this direct grant. See [Grant access to an Edge](/product/admin/edge-gateway-access).
+</Step>
+
+<Step title="Turn on the Edge">
+Click **Turn on** and choose **Enforce** for this walkthrough:
+
+- **Enforce** denies connections that the Edge's policy doesn't allow.
+- **Observe** logs connections that policy would deny and allows them through; use it for testing rather than enforcement.
+
+Review **What turns on**, then click **Turn on**.
+</Step>
+
+<Step title="Connect Claude Code">
+For this Anthropic example, open **Connect your tools** > **Claude Code** on **Overview**. Have the developer merge the generated settings into `~/.claude/settings.json`; don't overwrite existing settings. The configuration has this form:
+
+```json
+{
+  "apiKeyHelper": "c1-multipass inference helper --edge-url https://<your-org>-inference.edge.<your-zone> --inference-resource https://<your-org>-inference.edge.<your-zone>/api/v1/apps/<app-id>/edges/<edge-id> --dial-only",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://<your-org>-inference.edge.<your-zone>",
+    "ANTHROPIC_MODEL": "<route-id>",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "60000"
+  }
+}
+```
+
+Replace the placeholders with the Edge's connection values and published Claude route ID. Remove conflicting `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` values from the environment. See [Use Claude Code with Edge Gateway](/product/admin/claude-code-edge-gateway-multipass) for helper checks and troubleshooting.
+
+For Codex 0.118 or later, follow [Use Codex with Edge Gateway](/product/admin/edge-gateway-codex) to configure a Responses-native route and the `edge` profile.
+</Step>
+
+<Step title="Check the first request">
+Have the developer run a prompt from a terminal:
+
+```bash
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u HTTPS_PROXY \
+  claude -p "Reply with exactly: edge ok"
+```
+
+For this direct Edge check, the command removes the uppercase `HTTPS_PROXY` variable set by Multipass local routing and the two named Anthropic credentials that could override the helper. It doesn't remove other proxy variables or system proxy settings; check those separately if the request still uses a proxy.
+
+Check the response, then open the Edge's **Activity** > **Flows** tab and choose a time range that includes the request. If the Edge also serves egress, select **Inference** first. Allow a few minutes for recent activity to appear, then look for the developer's request and check its **Outcome**.
+
+If the request doesn't appear in **Flows** after a few minutes, or Claude Code returns an error, see [Troubleshoot Claude Code](/product/admin/claude-code-edge-gateway-multipass#troubleshoot-claude-code-with-edge-gateway).
+</Step>
+</Steps>
+
+## Continue configuring Edge Gateway
+
+Use the detailed guides for additional models, callers, and clients:
+
+- [Set up an Edge](/product/admin/edge-gateway-setup)
+- [Configure inference routes and failover](/product/admin/edge-gateway-inference-routing)
+- [Grant access](/product/admin/edge-gateway-access)
+- [Use Claude Code with Edge Gateway](/product/admin/claude-code-edge-gateway-multipass)
+- [Use Codex with Edge Gateway](/product/admin/edge-gateway-codex)
+- [Route other tools through C1 Multipass](/product/admin/connect-edge-gateway-multipass)
+- [Connect your own application](/product/admin/edge-gateway-connect)
+- [Use long-lived API keys (advanced)](/product/admin/inference-api-keys)

@@ -1,0 +1,97 @@
+---
+title: Connect your own application
+description: Connect your application to Edge Gateway using its inference endpoint, audience, resource, and scopes to request short-lived tokens and call models.
+og:title: Connect your own application - C1 docs
+og:description: Connect your application to Edge Gateway using its inference endpoint, audience, resource, and scopes to request short-lived tokens and call models.
+sidebarTitle: Your own application
+---
+
+{/* Editor Refresh: 2026-10-28 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Connect your application to an Edge Gateway by exchanging the caller's C1 identity for a short-lived inference token. Use the Edge's connection values to request the token, then send model requests to its inference endpoint.
+
+## Find the Edge's connection details
+
+The **Connection details** card fills in once the Edge is turned on.
+
+<Steps>
+<Step>
+Open the Edge: **Apps** > *your app* > **Edge** > *your Edge*.
+</Step>
+<Step>
+On the **Overview** tab, scroll to **Connection details**.
+</Step>
+</Steps>
+
+<Frame>
+  <img src="/images/product/assets/edge-connection-details.png" alt="The Connection details card showing the Audience, the Inference resource, and the inference.models.read and inference.invoke scopes."/>
+</Frame>
+
+| Value | Format | Used for |
+| :--- | :--- | :--- |
+| **Audience** | `https://<your-org>.edge.<your-zone>` | The token audience. All Edges in your tenant share it. |
+| **Inference resource** | `https://<your-org>-inference.edge.<your-zone>/api/v1/apps/<app-id>/edges/<edge-id>` | Identifies this Edge when a caller requests a token |
+| **Inference endpoint** | The inference resource up to, but not including, `/api` | The base URL callers send model requests to |
+| **Scopes** | `inference.models.read`, `inference.invoke` | The access a token carries; matches the Edge's entitlements |
+
+The app ID and Edge ID also appear in the Edge's URL in C1.
+
+## Before you connect your application
+
+For a browser application that signs users in through C1 and exchanges their OIDC ID tokens for Edge grants, confirm these prerequisites:
+
+- **C1 SSO is enabled and configured for your application.** Configure the application's OIDC client and redirect URI so users can sign in and your application can obtain a C1-issued ID token. Contact the C1 Support team if C1 SSO isn't available for your tenant.
+- **Cross-App Access is enabled.** Open **AI** > **Cross-App Access** and make sure the setting is turned on so C1 can issue ID-JAGs. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable).
+
+The C1 SSO prerequisite applies to the application's OIDC sign-in flow. Multipass device-session and workload-federation exchanges use their own authentication methods. Redeeming an ID-JAG at the Edge doesn't perform a separate C1 SSO sign-in.
+
+## Connect your own application to the Edge
+
+An application exchanges its signed-in user's C1 identity for an **ID-JAG**, then redeems that grant at the Edge for an **inference access token**. The ID-JAG is not an inference bearer token; sending it directly to `/v1/models` or an inference operation returns `401`.
+
+Your application needs an OAuth client that can obtain a C1 ID-JAG and generate DPoP proofs. See [Enterprise-managed authorization](/product/admin/enterprise-managed-authorization/overview) for the identity-exchange flow. DPoP proves that the application holds the private key bound to the grant.
+
+1. Generate a proof key and request an ID-JAG from C1 for the Edge's **Audience**, **Inference resource**, and required scopes. Bind the grant to this key using a DPoP proof in the C1 exchange. Handle any DPoP nonce challenge from C1 with a new proof containing the supplied nonce.
+2. Create a fresh DPoP proof for `POST https://<inference-host>/oauth2/inference/token`, signed with the **same key**. Its public-key thumbprint must match the ID-JAG's `cnf.jkt`. Use the exact inference origin from **Connection details**, without a `/v1` suffix, when constructing the token endpoint URL.
+3. Redeem the ID-JAG at that endpoint using the JWT bearer grant, as shown below. Supply the exact inference resource and a space-separated list of scopes contained in the grant. For discovery and inference, request `inference.models.read inference.invoke`.
+
+The following request illustrates the redemption step. Have your OAuth client supply `EDGE_ID_JAG` and `EDGE_DPOP_PROOF`; they are credentials, not literal placeholder strings. Set `EDGE_INFERENCE_URL` to the inference origin and `EDGE_INFERENCE_RESOURCE` to the complete inference resource from **Connection details**.
+
+```bash
+EDGE_TOKEN_RESPONSE="$(curl --fail-with-body --silent --show-error \
+  "$EDGE_INFERENCE_URL/oauth2/inference/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "DPoP: $EDGE_DPOP_PROOF" \
+  --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
+  --data-urlencode "assertion=$EDGE_ID_JAG" \
+  --data-urlencode "resource=$EDGE_INFERENCE_RESOURCE" \
+  --data-urlencode 'scope=inference.models.read inference.invoke')"
+```
+
+The JSON response contains `access_token`, `token_type` (`Bearer`), `expires_in` (seconds), `scope`, and `resource`. The access token starts with `tb_inf_at_v1.`. Keep the response private; don't print it or save it to logs. In application code, check for a successful HTTP response before reading `access_token`.
+
+4. Extract `access_token` from the response and send it in the `Authorization: Bearer` header when calling the inference endpoint. DPoP is required for the grant exchange; subsequent calls using this inference bearer token don't need a DPoP header.
+5. Use `/v1/models` to discover the routes available to the caller, then send model requests in a format supported by the selected route. See [Configure inference routes](/product/admin/edge-gateway-inference-routing) for route IDs and request formats.
+
+An ID-JAG can be redeemed only once. Generate a new proof for each token request; reusing a redeemed grant or proof is rejected.
+
+Edge Gateway checks the token and the caller's access before forwarding each request with your organization's provider credentials. The application doesn't need the provider key.
+
+For applications that can't use short-lived tokens or C1 Multipass, see [Use long-lived API keys](/product/admin/inference-api-keys). An admin must turn on **Allow long-lived API keys** before those clients can use a `c1llm_` key.
+
+## Renew inference access
+
+Your application must renew inference access frequently. While the user's C1 ID token remains valid, it can obtain and redeem new ID-JAGs without asking the user to sign in again. When that ID token expires, repeat the C1 sign-in flow; the user may need to sign in interactively. The SSO configuration's **Assertion lifetime** controls how long the ID token remains valid.
+
+## Troubleshoot Edge connection details
+
+| Symptom | What to do |
+| :--- | :--- |
+| **Inference resource** and **Scopes** show "—" | Turn on the Edge. These values appear once it's on. |
+| A long-lived inference API key is rejected | Check **Allow long-lived API keys** on the **Inference** tab. This setting doesn't control the Multipass key helper. |
+| Callers see "You don't have access to an Edge" | Grant them **List models** and **Call models**. See [Grant access to an Edge](/product/admin/edge-gateway-access). |
+| Callers can list models but requests fail with `403` | Grant **Call models** as well as **List models**. |

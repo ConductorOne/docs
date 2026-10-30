@@ -1,0 +1,131 @@
+---
+title: Use Codex with Edge Gateway
+description: Configure Codex to call your organization's Edge Gateway with short-lived C1 Multipass credentials on a desktop or an enrolled Linux server.
+og:title: Use Codex with Edge Gateway - C1 docs
+og:description: Configure Codex to call your organization's Edge Gateway with short-lived C1 Multipass credentials on a desktop or an enrolled Linux server.
+sidebarTitle: Codex
+---
+
+{/* Editor Refresh: 2026-10-28 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Run Codex through your organization's Edge Gateway without a provider API key. On a desktop, Codex uses C1 Multipass command-based authentication to renew short-lived tokens and calls the Edge directly over HTTPS. On an enrolled Linux server, Codex uses the Multipass fleet CLI's local routing endpoints.
+
+## Before you begin with Codex and Edge Gateway
+
+Confirm these prerequisites before configuring Codex:
+
+- Codex 0.118 or later is installed.
+- On macOS, C1 Multipass and its command line tool are installed, signed in to your tenant, the device registered, and the app unlocked. Follow [Set up Multipass](/product/admin/connect-edge-gateway-multipass#set-up-multipass). The inference-helper CLI isn't available on Windows.
+- On Linux servers, an enrolled Multipass runtime and `c1-multipass-fleet` are available. Follow the [Linux service routing setup](/product/admin/connect-edge-gateway-multipass#turn-on-edge-gateway-routing).
+- Your C1 admin has granted you **List models** and **Call models** on an Edge with a route whose native format is **OpenAI Responses** and whose model supports your Codex workload. Set Codex's model to that route's **Route ID**. OpenAI Chat and Anthropic Messages routes aren't interchangeable with a Responses route. For an OpenAI model, select the **Responses** variant, not **Chat**. See [Configure inference routes](/product/admin/edge-gateway-inference-routing) and [Grant access to an Edge](/product/admin/edge-gateway-access).
+- Make sure **Cross-App Access** is on under **AI** > **Cross-App Access** so Multipass can get Edge tokens for people. The Edge's **Overview** warns if it's off. If the setting isn't available, contact the C1 Support team. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable).
+
+The Multipass helper renews short-lived tokens automatically. It doesn't require **Allow long-lived API keys**. Use the desktop configuration or the enrolled-server configuration below, not both for the same Codex session.
+
+## Configure Codex on a desktop
+
+Use Codex 0.118 or later for command-based provider authentication. On the Edge's **Overview** tab, open **Connect your tools** > **Codex** and select **Desktop**. Copy the configuration into `~/.codex/config.toml`, preserving your existing configuration. You don't need to turn on local routing or load its environment for this path.
+
+<Frame>
+  <img src="/images/product/assets/edge-how-to-connect-codex.png" alt="The Codex tab with Desktop selected and the start of config.toml, showing the edge profile, Edge model provider, and a generated example model."/>
+</Frame>
+
+The screenshot's model is a generated example. Replace it with a Responses-native route published on your Edge.
+
+The configuration has this form; replace the inference host, app ID, Edge ID, and model route ID with your Edge's values. See [Find the Edge's connection values](/product/admin/edge-gateway-connect#find-the-edges-connection-details).
+
+```toml
+[profiles.edge]
+model_provider = "edge"
+model = "<responses-route-id>"
+
+[model_providers.edge]
+name = "Edge"
+base_url = "https://<inference-host>/v1"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+
+[model_providers.edge.auth]
+command = "c1-multipass"
+args = ["inference", "helper", "--edge-url", "https://<inference-host>", "--inference-resource", "https://<inference-host>/api/v1/apps/<app-id>/edges/<edge-id>", "--dial-only"]
+timeout_ms = 10000
+refresh_interval_ms = 180000
+```
+
+The helper uses the inference origin, while the provider base URL adds `/v1`. If `c1-multipass` isn't on Codex's `PATH`, use the command's full path. Merge these tables rather than defining an existing table twice.
+
+Start Codex with the generated profile:
+
+```bash
+codex --profile edge
+```
+
+Codex now uses the Edge profile and its short-lived credentials. Use a route whose native format is OpenAI Responses. Don't substitute a provider model name unless it is also the route ID.
+
+If you previously loaded a local routing environment, remove its uppercase `HTTPS_PROXY` setting for this direct connection:
+
+```bash
+env -u HTTPS_PROXY codex --profile edge
+```
+
+This removes only the uppercase `HTTPS_PROXY` variable for this command, not other proxy variables or system proxy settings.
+
+## Configure Codex on an enrolled server
+
+On an enrolled Linux host, configure Codex to use the Multipass fleet CLI's local inference endpoint. This path uses local routing rather than the desktop inference helper.
+
+Add the following provider to `~/.codex/config.toml`, preserving your existing configuration. If `c1edge` is already defined, merge the settings or choose a different provider name and use it in the launch command below.
+
+```toml
+[model_providers.c1edge]
+name = "C1 Edge through Multipass"
+base_url = "http://127.0.0.1:18080/v1"
+wire_api = "responses"
+env_key = "OPENAI_API_KEY"
+requires_openai_auth = false
+supports_websockets = false
+```
+
+The base URL above uses Multipass's default inference port. If your host uses a different address or port, set `base_url` to the `OPENAI_BASE_URL` value reported by the routing environment below. Enter the URL itself in TOML, not the environment variable name.
+
+Select the Edge, start local routing, and load its environment into the current shell:
+
+```bash
+c1-multipass-fleet edge select <app-id>/<edge-id>
+c1-multipass-fleet edge start
+eval "$(c1-multipass-fleet edge env)"
+```
+
+The `eval` command executes the shell exports printed by Multipass, including `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and `HTTPS_PROXY`. The API key is a local routing credential, not an upstream provider key. Avoid running `edge env` by itself, because its output includes the credential.
+
+Start Codex from that same shell, explicitly selecting the configured provider and a Responses-native route ID:
+
+```bash
+codex -c 'model_provider="c1edge"' -m <responses-route-id>
+```
+
+Codex reads the endpoint from the provider's `base_url` and the local credential from `OPENAI_API_KEY`. Setting `OPENAI_BASE_URL` alone doesn't select this provider. Run the environment-loading command in each new shell and again if the local key changes after a Multipass service restart.
+
+See [Route other tools through C1 Multipass](/product/admin/connect-edge-gateway-multipass) for the local endpoints, Linux service configuration, and trust bundle for outbound HTTPS traffic.
+
+## Troubleshoot Codex with Edge Gateway
+
+Use the symptom to check the client configuration or ask your C1 admin to check the route:
+
+| Symptom | What to do |
+| :--- | :--- |
+| Codex doesn't recognize command-based authentication | Use Codex 0.118 or later. |
+| Codex can't find `c1-multipass` | Use the installed command's full path in `[model_providers.edge.auth]`. See [Set up Multipass](/product/admin/connect-edge-gateway-multipass#set-up-multipass). |
+| The helper reports a missing session or refuses the connection | Open and unlock Multipass, and confirm the device is registered. Ask your admin to check Cross-App Access and your **List models** and **Call models** grants. |
+| The route or model isn't found | Use the Edge's exact **Route ID**, not the provider model name. Confirm the route is published and the Edge is on. |
+| A request fails with a format or compatibility error | Select a route whose native format is OpenAI Responses and a model that supports the requested Codex features. Chat and Messages routes don't accept Responses requests. |
+| Desktop Codex still uses local routing | Check for `HTTPS_PROXY` from a previous routing session. Use the direct-launch command above and check other proxy settings separately. |
+| Server Codex doesn't use the selected Edge | Load the environment with `eval "$(c1-multipass-fleet edge env)"`, then launch with `-c 'model_provider="c1edge"'` from the same shell. Check that `[model_providers.c1edge].base_url` matches the local inference URL, including any custom port. See [Troubleshoot Edge Gateway routing](/product/admin/connect-edge-gateway-multipass#troubleshoot-edge-gateway-routing). |
+| Server Codex reports a missing `OPENAI_API_KEY` | Load the fleet routing environment in the shell that launches Codex. Reload it after a Multipass service restart if the local key changes. |
+
+For clients that can't use Multipass, see [Use long-lived API keys](/product/admin/inference-api-keys). An admin must turn on **Allow long-lived API keys** before those clients can use a `c1llm_` key.
