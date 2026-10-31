@@ -6,7 +6,7 @@ description: Scoped roles, IP allowlists, credential expiration, DPoP, CEL expre
 sidebarTitle: Security controls
 ---
 
-{/* Editor Refresh: 2026-02-14 */}
+{/* Editor Refresh: 2026-10-31 */}
 
 Service principals and workload federation include several security controls to limit access and maintain auditability.
 
@@ -41,6 +41,10 @@ Both credentials and federation trusts support IP address restrictions. When con
 - Add up to 32 IP address ranges per credential or trust
 - Leave empty to allow all IPs
 - Supports both IPv4 and IPv6 (enter ranges like `192.168.1.0/24` or `2001:db8::/32`)
+
+<Note>
+IPv6 addresses and CIDR ranges are accepted everywhere you set allowed source IPs: the tenant IP allowlist settings, personal API keys, service principal credentials, and workload federation trusts. If an entry is invalid, such as an IPv4-mapped IPv6 address like `::ffff:192.0.2.1`, C1 keeps it in the field so you can correct it, and you can't save until you fix or remove it. Enter IPv4 addresses in IPv4 notation instead.
+</Note>
 
 <Note>
 IP allowlists work best with self-hosted runners or fixed egress IPs. GitHub-hosted runners use thousands of IP ranges that change frequently, making IP restrictions impractical for them.
@@ -129,6 +133,16 @@ Each authentication event includes:
 - **Status detail**: Specific failure reason (for example `trust_not_found`, `issuer_mismatch`, `invalid_jwt_format`, `cel_condition_not_met`, `token_too_old`, `sp_disabled`)
 - **Client IP**: Source IP address of the request
 - **Client ID**: The credential or trust client ID used
+
+<Note>
+Failed token requests identify who made them:
+
+- A failed client credentials request records its real failure reason in the status detail, instead of a generic `TOKEN_EXCHANGE_FAILED`. The event also records the presented client ID and the owning service principal.
+- A failed workload federation exchange records the trust, its provider, and the client ID that was presented. The actor was empty on these events before.
+- A token whose audience doesn't match is recorded as `jwt_audience_mismatch` instead of `jwt_verification_failed`.
+
+If your SIEM or alerting rules match on `TOKEN_EXCHANGE_FAILED` for client credentials failures, update them to match the specific failure reasons. Successful token events are unchanged.
+</Note>
 
 ### API activity events
 
