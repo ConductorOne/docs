@@ -4,7 +4,7 @@ og:title: CEL expressions reference - C1 docs
 og:description: Complete reference for CEL expression objects, functions, and usage contexts in C1.
 description: Complete reference for CEL expression objects, functions, and usage contexts in C1.
 ---
-{/* Editor Refresh: 2026-10-05 */}
+{/* Editor Refresh: 2026-10-31 */}
 
 ## Type definitions
 
@@ -201,7 +201,13 @@ Analysis data attached to a task, including access conflict information. See [Ta
 
 The entitlement (permission/role) being requested. See [Entitlement object](#entitlement-object) for all fields.
 
-**Available as:** `entitlement` (in policy expressions and [entitlement configuration rules](/product/admin/entitlement-config-rules); in configuration rules for cloud infrastructure apps, `entitlement.role` and `entitlement.scope` are also populated)
+**Available as:** `entitlement` (in policy conditions, policy approver expressions, [entitlement configuration rules](/product/admin/entitlement-config-rules), and account provisioning; in configuration rules for cloud infrastructure apps, `entitlement.role` and `entitlement.scope` are also populated)
+
+#### App
+
+The app that owns an entitlement or resource. See [App object](#app-object) for all fields.
+
+**Available as:** `entitlement.app` (wherever `entitlement` is available, except automation triggers)
 
 #### IP
 
@@ -230,7 +236,7 @@ These variables are automatically available in specific contexts.
 | `subject` | User | Policies, Groups, Automations, Campaigns, Account provisioning | The current user being evaluated |
 | `account` | AppUser | Policies only | The application user (account) associated with the access request |
 | `task` | Task | Policies only | The current access request |
-| `entitlement` | Entitlement | Policies only | The entitlement being requested |
+| `entitlement` | Entitlement | Policies, entitlement configuration rules, Account provisioning | The entitlement being requested or evaluated |
 | `appOwners` | list&lt;User&gt; | Policy step approvers only | Owners of the application |
 | `ctx` | Context | Automations only | Workflow context and trigger data |
 | `ip` | IP | Policies, Automations | Requestor's IP address (when available) |
@@ -538,13 +544,37 @@ The task analysis object provides information about potential access conflicts a
 
 ### Entitlement object
 
-The `entitlement` object can only be used in CEL expressions in policies. It does not work when writing CEL expressions to form C1 groups.
+The `entitlement` object is available in policy conditions, policy approver expressions, entitlement configuration rules, and account provisioning expressions. It does not work when writing CEL expressions to form C1 groups.
 
 | Field | Data type | Description | Example usage | Common use cases |
 | :--- | :--- | :--- | :--- | :--- |
 | `entitlement.id` | string | Entitlement identifier | `entitlement.id == "entitlement123"` | Specific entitlement reference |
 | `entitlement.appId` | string | Application identifier | `entitlement.appId == "app123"` | Application-specific logic |
 | `entitlement.risk_level_value_id` | string | Risk level attribute value ID | `entitlement.risk_level_value_id == "high"` | Risk-based approval workflows |
+| `entitlement.complianceFrameworks` | list of strings | Names of the compliance frameworks tagged on the entitlement. Includes built-in frameworks (`SOC2`, `PCI`, `HIPAA`, `SOX`, `NYDFS`) and any custom frameworks you've created. Empty list when none are tagged. Case-sensitive. `entitlement.compliance_frameworks` also works. | `"SOX" in entitlement.complianceFrameworks` | Route requests for in-scope entitlements to a dedicated approval step |
+| `entitlement.app` | App | The app that owns the entitlement. See [App object](#app-object). | `entitlement.app.displayName == "Salesforce"` | App-specific logic |
+| `entitlement.annotations` | map of string to string | [Annotations](/product/admin/object-annotations) set on the entitlement | `"team" in entitlement.annotations` | Metadata-driven routing |
+
+For examples, see [Route requests by compliance framework](/product/admin/expressions-examples#route-requests-by-compliance-framework) and [Route requests by app annotation](/product/admin/expressions-examples#route-requests-by-app-annotation).
+
+### App object
+
+The `app` object describes the app that owns an entitlement. Read it as `entitlement.app`. The same object is available as `.app` on a resource object, such as the resource a form's resource picker field returns.
+
+| Field | Data type | Description | Example usage |
+| :--- | :--- | :--- | :--- |
+| `entitlement.app.id` | string | App identifier | `entitlement.app.id == "app123"` |
+| `entitlement.app.displayName` | string | App display name | `entitlement.app.displayName == "Salesforce"` |
+| `entitlement.app.description` | string | App description | `entitlement.app.description.contains("production")` |
+| `entitlement.app.annotations` | map of string to string | [Annotations](/product/admin/object-annotations) set on the app. Empty map when the app has none. | `entitlement.app.annotations["team"] == "platform"` |
+
+Reading a key that isn't set on an annotations map returns a runtime error. Check for the key with `in` before you read it:
+
+```go
+"team" in entitlement.app.annotations && entitlement.app.annotations["team"] == "platform"
+```
+
+If the app can't be found, for example because it was deleted, `entitlement.app` is empty rather than an error. Automation triggers (`ctx.trigger.entitlement`) can't resolve `entitlement.app`, and expressions that read it there fail.
 
 ### IP address object
 
@@ -584,7 +614,7 @@ Understanding where each object can be used helps you write effective CEL expres
 | user | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>* | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
 | task | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
 | task.analysis | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
-| entitlement | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
+| entitlement | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | ctx | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
 | ip | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
 | ip CIDR | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ | <Icon icon="circle-minus" iconType="solid"  color="red"/>️ |
@@ -712,9 +742,9 @@ task.analysis.hasConflictViolations
 ```
 
 ### Entitlement object
-**Available in:** <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Account provisioning  
+**Available in:** <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Policies <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Groups <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Automations <Icon icon="circle-minus" iconType="solid"  color="red"/>️ Campaigns <Icon icon="square-check" iconType="solid"  color="#c937ae"/> Account provisioning  
 **Description:** References the entitlement being requested  
-**Usage:** Only available in policy expressions where there's an active entitlement request
+**Usage:** Available in policy expressions where there's an active entitlement request, in entitlement configuration rules, and in account provisioning expressions that run for an entitlement
 
 **Context-specific examples:**
 
@@ -725,6 +755,12 @@ entitlement.id == "entitlement123"
 
 // Policy conditional - require extra approval for high-risk entitlements
 entitlement.risk_level_value_id == "high"
+
+// Policy conditional - match entitlements tagged with a compliance framework
+"SOX" in entitlement.complianceFrameworks
+
+// Policy conditional - match apps by annotation
+"team" in entitlement.app.annotations && entitlement.app.annotations["team"] == "platform"
 
 // Policy expression - assign to users with same entitlement
 c1.directory.apps.v1.GetEntitlementMembers(entitlement.appId, entitlement.id)
