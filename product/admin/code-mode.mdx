@@ -136,6 +136,20 @@ A well-behaved program checks `result?.status === 'request_created' || result?.s
 `request_created` and `denied` look alike to an agent but mean different things. `request_created` is a pending approval with a link to follow; `denied` means no access path exists for that caller.
 </Note>
 
+### Reauthorization errors
+
+When an MCP server's credential can no longer be used, MCP clients receive JSON-RPC error `-32010` instead of code 0. Treat `-32010` as a prompt to reauthorize that server.
+
+When the gateway rejects a request with a 401, the `WWW-Authenticate` header says why, following OAuth conventions, so an agent can decide whether to refresh its token or reauthorize:
+
+| `error` value | When it's returned |
+| :--- | :--- |
+| `invalid_request` | The `Authorization` header has a Bearer or DPoP scheme but no token. |
+| `invalid_token` | The token was rejected. The description says whether it expired, was revoked, is malformed, or is invalid for another reason. |
+| `use_dpop_nonce` or `invalid_dpop_proof` | A DPoP request needs a nonce, or its proof failed validation. |
+
+Requests with no `Authorization` header, or with an unsupported scheme such as Basic, get a challenge with no `error`. So do requests where the gateway couldn't reach a verdict, such as during a temporary outage. The response is always 401 with an empty body.
+
 ### Long-running programs
 
 A program that runs past the synchronous wait window of roughly 25 seconds doesn't fail. `execute` returns `{ "status": "pending", "execution_id": "..." }` and the program keeps running server-side.
