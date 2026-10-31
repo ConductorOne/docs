@@ -5,7 +5,7 @@ og:description: Create custom groups in the C1 app that dynamically adjust their
 description: Create custom groups in the C1 app that dynamically adjust their membership based on adherence to a membership rule. 
 sidebarTitle: Create custom groups
 --- 
-{/* Editor Refresh: 2026-10-30 */}
+{/* Editor Refresh: 2026-10-31 */}
 
 ## What are C1 groups? 
 
@@ -88,6 +88,90 @@ Depending on the number of users in your C1 installation, syncing might take som
 
 
 **Done.** Your C1 group is now ready for use elsewhere in the app. The group will re-sync every hour to check which C1 users match the rule you set, and will add or remove group members accordingly. 
+
+## Create a group from an existing entitlement
+
+If a group already exists in your identity provider or another app, such as an Okta or Microsoft Entra ID group, you can use its membership as the starting point for a C1 group instead of rebuilding it by hand. C1 analyzes who holds the source entitlement and proposes a membership rule that covers as many of those people as it can, plus exact lists of the individual people the rule needs added or removed. You review the proposal and create an ordinary C1 group from it. This is called adoption.
+
+Use this when you want to move a provider group's membership into C1, for example to use the group as an access profile audience or a policy reviewer group without maintaining it in the provider.
+
+### Before you start
+
+- **You must have the System Owner role.** Other roles don't see the adoption options.
+- **Your tenant must support manual membership reasons.** C1 groups created this way hold some members individually, which requires this capability. If it isn't enabled, the **Use an existing entitlement** option is unavailable and C1 tells you why.
+- **The source needs a completed full sync.** For a source backed by a connector, such as an Okta or Entra ID group, the connector's latest sync must be a successful full sync, and C1 must have finished processing it. If a sync is running, partial, or failed, analysis stops and tells you to wait for or run a full sync.
+- **The source must represent membership.** A source can be an app's access entitlement, an entitlement synced from a connector, an entitlement you manage in C1, or a C1 role. An entitlement that combines multiple connectors, or that represents exclusion, owner, or admin access, can't be used.
+- **You must be able to read the source entitlement.**
+
+### Start from the Dynamic groups page
+
+<Steps>
+<Step>
+Navigate to **Identities** > **Dynamic groups** and click **Create group**.
+</Step>
+<Step>
+Under **Creation method**, choose **Use an existing entitlement** and click **Continue**. (**Start from scratch** creates a group as described in [Create a new C1 group](#create-a-new-c1-group).)
+</Step>
+<Step>
+Under **Source**, select the app and then the entitlement to use as the starting point. Click **Analyze**.
+</Step>
+<Step>
+Wait for the analysis to finish. You can close the window while it runs. Analysis continues, and you can reopen it from the **Adoption history** tab.
+</Step>
+<Step>
+Review the results, as described below, then click **Continue**.
+</Step>
+<Step>
+Under **Group details**, enter a name (at least 3 characters) and an optional description. C1 prefills both from the source entitlement. Click **Create group**.
+</Step>
+<Step>
+When C1 shows **Group created**, click **View group** to open the new group.
+</Step>
+</Steps>
+
+### Start from an entitlement
+
+To start from the entitlement itself, open the entitlement's details page, click the **...** (more actions) menu, and choose **Create group from entitlement**. The **Create group** window opens at the **Source** step with that entitlement already selected. Continue from the **Analyze** step above.
+
+### Review the analysis
+
+The **Review** step shows what C1 found in the source and how it proposes to rebuild that membership.
+
+- **Recommendation.** C1 recommends either **Rule-based membership**, where a rule adds and removes members as user attributes change, or **Individual membership**, where C1 adds the listed users and later changes to the source don't update the group.
+- **Rule expression.** The proposed membership rule, written as a [CEL expression](/product/admin/expressions).
+- **Rule coverage.** How many of the eligible people the rule covers, such as "Rule coverage: 480 of 500 eligible people."
+- **Inclusions.** People the rule doesn't match who still held the source entitlement. C1 adds them to the group individually.
+- **Exclusions.** People the rule would match who didn't hold the source entitlement. C1 adds them to the group's exclusion list so the rule doesn't add them. This tab also lists source members who can't be adopted, with the reason for each.
+
+#### Source members who can't be adopted
+
+C1 doesn't create users or accounts, so a source member can be left out of the new group. Reasons include an account that isn't linked to a C1 user, a linked user who is missing, deleted, disabled, or not a person, an app account whose invitation hasn't been accepted, and a principal type that adoption doesn't support.
+
+When any source members can't be adopted, the **Review** step warns you, and you must select **I understand these source members will not be added to the group.** before you can continue. Open **Exclusions** first to see who is affected and why.
+
+If the source has no eligible users, C1 asks you to choose another entitlement or start from scratch.
+
+### Manage adoption jobs
+
+Each analysis is saved as a job. The **Adoption history** tab on the **Dynamic groups** page lists every job with its source entitlement, app, status, created group, and last update. Select a job to reopen it.
+
+| Status | What it means |
+|---|---|
+| **Analyzing** | C1 is reading the source and building the recommendation. |
+| **Requires review** | The analysis is ready. Reopen the job to review it and create the group. |
+| **Creating group** | C1 is creating and configuring the group. Status updates automatically. |
+| **Completed** | The group exists. Use **View group** to open it. |
+| **Failed** | The job can't continue. |
+
+A failed job can't be resumed. If no group was created, click **Start a new analysis** to analyze the source's current membership. If C1 had already created the group, click **Manage group** and finish setting it up there. If you leave while the group is being created, creation continues. Check **Adoption history** for its status.
+
+If C1 can't confirm that an analysis started, check **Adoption history** before starting another one. Each analysis creates a separate job.
+
+### What adoption does and doesn't do
+
+- **It's a one-time setup.** The new group is an ordinary C1 group. Later changes to the source entitlement, or to who holds it, don't update the group. The rule keeps evaluating user attributes like any other group rule, and you can edit the rule, inclusions, and exclusions afterward.
+- **It never changes the source.** C1 doesn't write to your identity provider or app, and it doesn't change the source entitlement or role assignments.
+- **It doesn't create users or accounts.** Only existing, enabled C1 users become members.
 
 ## Duplicate a C1 group
 
