@@ -4,7 +4,7 @@ og:title: CEL expressions examples - C1 docs
 og:description: Practical examples, common patterns, and real-world use cases for CEL expressions in C1.
 description: Practical examples, common patterns, and real-world use cases for CEL expressions in C1.
 ---
-{/* Editor Refresh: 2026-02-06 */}
+{/* Editor Refresh: 2026-10-31 */}
 
 ## Common patterns and examples
 
@@ -105,6 +105,38 @@ entitlement.risk_level_value_id == "low"
 // Different workflows based on risk level
 entitlement.risk_level_value_id == "high" || entitlement.risk_level_value_id == "critical"
 ```
+
+### Route requests by compliance framework
+
+Use `entitlement.complianceFrameworks` to send requests for in-scope entitlements to a dedicated approval step. The list contains the names of the compliance frameworks tagged on the entitlement, including custom frameworks. Names are case-sensitive.
+
+To route SOX-tagged requests to a compliance review:
+
+1. In your policy, add a rule above the baseline rule.
+2. Set the rule condition to:
+
+   ```go
+   "SOX" in entitlement.complianceFrameworks
+   ```
+
+3. Under **Then perform this action:**, add an **Assign for review** step, and select the group that reviews SOX-scoped access.
+
+To match more than one framework, combine checks:
+
+```go
+"SOX" in entitlement.complianceFrameworks || "PCI" in entitlement.complianceFrameworks
+```
+
+### Route requests by app annotation
+
+Use `entitlement.app.annotations` to match on [annotations](/product/admin/object-annotations) set on the app that owns the entitlement. Reading a key that isn't set returns a runtime error, so check for the key with `in` first.
+
+```go
+// Policy condition - match entitlements in apps owned by the platform team
+"team" in entitlement.app.annotations && entitlement.app.annotations["team"] == "platform"
+```
+
+You can use the same expression in policy approver expressions, entitlement configuration rules, and account provisioning.
 
 ### Time-based access control
 
