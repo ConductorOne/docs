@@ -1,8 +1,8 @@
 ---
 title: Set up the Gong MCP server
-description: Generate Gong API credentials, then register the Gong MCP server in C1 and govern the tools your AI clients can call.
+description: Connect Gong to C1 with an OAuth app or API access keys, then register the Gong MCP server and govern the tools your AI clients can call.
 og:title: Set up the Gong MCP server
-og:description: Generate Gong API credentials, then register the Gong MCP server in C1 and govern the tools your AI clients can call.
+og:description: Connect Gong to C1 with an OAuth app or API access keys, then register the Gong MCP server and govern the tools your AI clients can call.
 sidebarTitle: Gong
 ---
 
@@ -10,7 +10,12 @@ sidebarTitle: Gong
 
 The Gong MCP server lets you govern access to Gong — calls, transcripts, users, scorecards, deals, sequences, and permission profiles — as tools your AI clients can call through C1.
 
-Gong authenticates with a generated Access Key and Access Key Secret pair that C1 sends as HTTP basic auth. A single credential pair authenticates everyone, so all tool calls reach Gong as one shared identity.
+Gong authenticates with a shared credential, so all tool calls reach Gong as one shared identity. You choose the credential type when you register the server:
+
+- **OAuth2 — service mode**. A Gong technical administrator authorizes a Gong OAuth app once for the whole company, and C1 refreshes the token automatically. With an OAuth app, only the read-only tools for calls, transcripts, users, interaction and scorecard stats, scorecard settings, and workspaces work. Use API access keys for the full tool set.
+- **API access keys**. A generated Access Key and Access Key Secret pair that C1 sends as HTTP basic auth. This option reaches the full set of Gong tools.
+
+For a deeper comparison of shared versus per-user credentials, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
 
 ## How C1 connects to Gong
 
@@ -21,13 +26,73 @@ The credentials you set up below are what C1 uses to call Gong on your users' be
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
-- A Gong **Technical Administrator** account. Only a Technical Administrator can generate API credentials. If you don't have that role, find your Gong tech admin in Gong's [Find your Technical or Business Admin](https://help.gong.io/v1/docs/find-your-technical-or-business-admin) help article.
+- A Gong **Technical Administrator** account. Only a Technical Administrator can create an OAuth app or generate API credentials. If you don't have that role, find your Gong tech admin in Gong's [Find your Technical or Business Admin](https://help.gong.io/v1/docs/find-your-technical-or-business-admin) help article.
 
 <Note>
 If you don't see **Gong** in your MCP server catalog, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
-## Generate Gong API credentials
+## Option 1: Set up an OAuth app
+
+With an OAuth app, a Technical Administrator authorizes C1 once and every tool call uses that company-level authorization. For Gong's own walkthrough, see [Create an app for Gong](https://help.gong.io/docs/create-an-app-for-gong).
+
+<Steps>
+<Step>
+Sign in to Gong as a Technical Administrator. In the **Admin center**, open the **Settings** tab and select **API** in the **Ecosystem** card.
+</Step>
+<Step>
+On the **Integrations** tab, select **Create integration**, then enter a recognizable name such as `C1` and the other required details.
+</Step>
+<Step>
+For **Authorization context**, choose **Shared access**. You can't change this after you save the integration.
+</Step>
+<Step>
+Under **Required authorization scopes**, select every scope from [Gong scopes](#gong-scopes) below.
+</Step>
+<Step>
+Set the **Redirect URI** exactly to whichever matches your C1 tenant's domain:
+
+- Default instance: `https://accounts.conductor.one/auth/callback`
+- EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
+</Step>
+<Step>
+Select **Save**, then copy the **Client ID** and **Client Secret** from the integration's row in the list.
+</Step>
+<Step>
+Note your Gong API base URL, such as `https://acme.api.gong.io`.
+</Step>
+</Steps>
+
+### Gong scopes
+
+C1 requests all of these scopes automatically, and they must all be selected on the integration. They're read-only:
+
+`api:calls:read:basic`, `api:calls:read:extensive`, `api:calls:read:transcript`, `api:users:read`, `api:stats:scorecards`, `api:stats:interaction`, `api:settings:scorecards:read`, `api:workspaces:read`
+
+<Note>
+Gong matches the scopes C1 requests against the scopes selected on the integration. Select all of them before you authorize. Scope changes take effect the next time the integration is authorized, so after you edit the scopes, reauthorize the server in C1.
+</Note>
+
+### Register the server with OAuth
+
+With your OAuth app ready, register the server and provide its credentials.
+
+<Steps>
+<Step>
+Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Gong** from the catalog.
+</Step>
+<Step>
+Enter your Gong instance URL, such as `https://acme.api.gong.io`.
+</Step>
+<Step>
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — service mode** and enter your app's **client ID** and **client secret**. The scopes field is pre-filled with the scopes above.
+</Step>
+<Step>
+Save your changes, then sign in to Gong as a Technical Administrator when prompted and approve the connection.
+</Step>
+</Steps>
+
+## Option 2: Use API access keys
 
 Generate an Access Key and Access Key Secret in Gong so C1 can authenticate to the Gong API. For Gong's own walkthrough, see [Receive access to the API](https://help.gong.io/docs/receive-access-to-the-api).
 
@@ -36,28 +101,23 @@ Generate an Access Key and Access Key Secret in Gong so C1 can authenticate to t
 Sign in to Gong as a Technical Administrator.
 </Step>
 <Step>
-Open the Gong admin and go to **Company Settings** > **Ecosystem** > **API**.
+In the **Admin center**, open the **Settings** tab and select **API** under **Ecosystem**.
 </Step>
 <Step>
-Select **Get API Key** (or **Create** if a key already exists).
+Select **+ Get API key**.
 </Step>
 <Step>
-Copy both the **Access Key** and the **Access Key Secret** immediately. Gong shows the Access Key Secret only at creation time and it cannot be recovered later. If you lose it, revoke the pair and generate a new one.
+Enter a **Key name**, such as `C1`.
 </Step>
 <Step>
-Note your Gong API base URL. Gong runs each customer's API on a regional subdomain of `api.gong.io`, such as `https://acme.api.gong.io`. The base URL is shown on the API page in **Company Settings** > **Ecosystem** > **API** alongside your key. For details, see Gong's [Receive access to the API](https://help.gong.io/docs/receive-access-to-the-api) help article.
+Select **Get API key**.
+</Step>
+<Step>
+Copy both the access key and the secret immediately. Gong shows the secret only once. If you lose the secret, delete the key and create a new one.
 </Step>
 </Steps>
 
-For a shared production setup, generate the credentials under a dedicated service-account user so activity is attributable to C1 rather than a person.
-
-## How Gong credentials are shared
-
-Every user's tool calls use the one Access Key and Access Key Secret pair you provided, so Gong sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared production setup, generate the credentials from a dedicated service-account user so Gong activity is attributable to C1 rather than a person.
-
-For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
-
-## Register the Gong MCP server in C1
+### Register the server with API access keys
 
 With your credential pair ready, register the server and provide your credentials.
 
@@ -76,6 +136,12 @@ Save your changes. C1 starts a sync that discovers the tools the Gong server exp
 </Step>
 </Steps>
 
+## How Gong credentials are shared
+
+Every user's tool calls use the one credential you provided (the OAuth app's company-level authorization, or the Access Key and Access Key Secret pair), so Gong sees a single shared identity. C1 still attributes each call to the individual user in the [AI tool usage audit log](/product/admin/audit-ai-tool-usage). For a shared production setup, generate the credentials from a dedicated service-account user so Gong activity is attributable to C1 rather than a person.
+
+For how shared and per-user credentials work across MCP servers, see [Configure authentication](/product/admin/mcp-servers#configure-authentication).
+
 ## Discover and govern tools
 
 After you register the server, C1 runs tool discovery against Gong. Discovered tools appear on the server's **Tools** tab.
@@ -90,5 +156,6 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 ## Manage your Gong credentials
 
-- **Rotate the credential pair** in **Company Settings** > **Ecosystem** > **API**: revoke the existing key, select **Get API Key** to issue a fresh pair, then update the credentials in C1. Gong emails the technical administrator before a key expires so you can rotate proactively.
+- **Rotate the OAuth client secret** in Gong, then update it on the server's authentication settings in C1.
+- **Rotate the credential pair** in the **Admin center** under **Settings** > **API**: create a new key with **+ Get API key**, update the credentials in C1, then delete the old key.
 - **Watch your rate limits.** By default Gong allows 3 requests per second and 10,000 requests per day per company. To request more headroom, contact Gong support.
