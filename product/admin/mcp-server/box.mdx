@@ -10,43 +10,44 @@ sidebarTitle: Box
 
 Govern how your AI clients search, read, and change Box content by connecting Box to C1. Your MCP server catalog has two Box entries. Both expose governed MCP tools, but they come from different places:
 
-- **Box MCP** — listed as plain **Box** in your catalog. C1 registers Box's own hosted MCP server (`mcp.box.com`) as a downstream server C1 governs. Users authorize with OAuth credentials you create in the Box Admin Console.
+- **Box MCP** — listed as plain **Box** in your catalog. C1 registers Box's own hosted MCP server (`mcp.box.com`) as an MCP server C1 governs. Users authorize with OAuth credentials you create in the Box Admin Console.
 - **Box API** — C1 hosts its own MCP server that translates the Box API into tools. Users authorize with an OAuth app you create in the Box Developer Console.
 
 | | Box MCP | Box API |
 | :--- | :--- | :--- |
 | **Who hosts the MCP server** | Box | C1 |
-| **Authentication** | Per-user OAuth with Box MCP integration credentials | Per-user OAuth with a Box Platform app that uses user authentication |
-| **Tool surface** | Box's own tool set: files and folders, search, comments, tasks, collaborations, metadata, Box AI, and Box Hubs | Box API endpoints: files and folders, search, comments, tasks, collaborations, metadata, users and groups, Box AI, Box Sign, and governance data such as retention policies and legal holds |
-| **Where you control tools in Box** | Tool categories in the Box Admin Console | Scopes you enable on the Box app |
-| **Setup in Box** | A Box admin enables the Box MCP server and creates integration credentials | A developer creates a Platform app |
+| **Authentication** | Per-user OAuth with Box MCP integration credentials | Per-user OAuth with a Box Platform app |
+| **Tool surface** | Files and folders, search, collaboration, metadata, Box AI, and Box Hubs | Files and folders, search, collaboration, metadata, users and groups, Box AI, Box Sign, and governance |
+| **Where you control tools in Box** | Tool categories in the Box Admin Console | Scopes on the Box app |
+| **Default access** | Read and write, with some tools off until a Box admin turns them on | Read-only until you add write scopes |
 
-Use **Box MCP** for Box's own tool set, including Box Hubs, with per-category tool controls in the Box Admin Console. Use **Box API** when you need users and groups, Box Sign, or retention and legal hold data, or want to control access through app scopes. You can register both.
+Use **Box MCP** for Box's own tool set, including Box Hubs, with per-category tool controls in the Box Admin Console. Use **Box API** when you need users and groups, Box Sign, or retention and legal hold data, or want to start read-only and add write access through scopes. You can register both.
 
 ## Connect each user with their own Box account
 
-Use per-user OAuth for both entries. Each person authorizes C1 with their own Box account, so every tool call runs under that user's Box identity, reaches only the content that user can already access, and appears in Box as that user's activity.
+Per-user OAuth is the recommended method for both entries. Each person authorizes C1 with their own Box account. Every tool call then runs under that user's Box identity, reaches only the content that user can already access, and appears in Box as that user's activity.
 
-Don't create a Box **Server** app — Box's Client Credentials Grant or JWT server authentication — for C1. A server app acts as a service account rather than the person calling the tool, and C1 doesn't connect to Box with one. When you create a Box app for the **Box API** entry, choose the **User** app type.
+Don't create a Box **Server** app — Box's Client Credentials Grant or JWT server authentication — for C1. A server app acts as a service account rather than the person calling the tool, and C1 doesn't connect to Box with one.
 
 ## Box plans and the tools they support
 
-Some Box products, and the scopes and tools that go with them, depend on your Box plan and on whether your Box admin has turned the product on. Box documents availability as follows ([Free developer plan](https://developer.box.com/guides/getting-started/free-developer-plan/)):
+Some Box products depend on your Box plan and on whether your Box admin has turned the product on. Box documents availability as follows ([Free developer plan](https://developer.box.com/guides/getting-started/free-developer-plan/)):
 
 | Box product | Box plans that include it | Tools that depend on it |
 | :--- | :--- | :--- |
-| Content, search, metadata, and collaboration | All plans | Most tools in both entries |
-| Box AI | Business and above | Box AI tools in both entries |
-| Box Sign | Business and above | Box Sign tools in **Box API** |
-| Box Hubs | Enterprise plans, when Hubs is turned on | Box Hubs tools in **Box MCP** |
-| Box Relay | Enterprise plans, when Relay is turned on | Starting workflows in **Box API** |
-| Box Governance | Add-on for Business Plus and Enterprise plans | Retention policy and legal hold tools in **Box API** |
-| Box Doc Gen | Enterprise Advanced | Doc Gen scope only; neither entry includes Doc Gen tools |
+| Content, search, and collaboration | All plans | Most tools in both entries |
+| Custom metadata templates | Business Plus and above | Creating and updating metadata templates |
+| Box AI | Business and above, and the free developer plan | Box AI tools in both entries |
+| Box Sign | Business and above, and the free developer plan | Box Sign tools in **Box API** |
+| Box Hubs | Enterprise plans when Hubs is turned on, and the free developer plan | Box Hubs tools in **Box MCP** |
+| Box Relay | Enterprise plans when Relay is turned on | Starting workflows in **Box API** |
+| Box Governance | Add-on for Business Plus, Enterprise, and Enterprise Advanced | Retention policy and legal hold tools in **Box API** |
+| Box Doc Gen | Enterprise Advanced | No tools in either entry |
 
 Availability also varies by contract, so your enterprise may not have a product its plan normally includes. Two places in Box show it directly:
 
 - In the Box Developer Console, an app shows the **Manage AI** scope only when Box AI is available to your enterprise.
-- In the Box Admin Console under **Integrations** > **Box MCP Server**, the **Box AI & Agents** and **Box Hubs** tool categories appear only when your enterprise has those products.
+- In the Box Admin Console, on the **Box MCP Server** tab under **Integrations**, the **Box AI & Agents** and **Box Hubs** tool categories appear only when your enterprise has those products.
 
 Tools for a product your enterprise doesn't have return an error from Box. Approve only the tools that match your plan.
 
@@ -63,19 +64,28 @@ C1 registers as a client of Box's hosted MCP server ([Box MCP server](https://de
 ## Before you begin
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
-- A Box **Admin** or **Co-Admin** account to turn on Box MCP tools and create integration credentials in the Box Admin Console.
+- A Box **Admin** or **Co-Admin** account to turn on the Box MCP server, set tool access, and create integration credentials in the Box Admin Console.
 
 <Note>
 In your MCP server catalog, this option is listed as **Box** — distinct from the **Box API** entry, which connects through C1's own MCP server. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
 </Note>
 
-## Turn on Box MCP tools in the Box Admin Console
+## Turn on the Box MCP server and its tools
 
-Box controls which of its MCP tools are available, and some start turned off. Set tool access before you register the server ([Manage Box MCP Server tool access](https://support.box.com/hc/en-us/articles/50837641642643-Manage-Box-MCP-Server-Tool-Access)).
+Box controls whether its MCP server is available and which of its tools are on, and some tools start turned off ([Set up the MCP server](https://developer.box.com/guides/box-mcp/setup/), [Manage Box MCP Server tool access](https://support.box.com/hc/en-us/articles/50837641642643-Manage-Box-MCP-Server-Tool-Access)).
 
 <Steps>
 <Step>
-In the Box Admin Console, go to **Integrations** > **Box MCP Server**.
+In the Box Admin Console, select **Integrations**.
+</Step>
+<Step>
+Search for **Box MCP server**.
+</Step>
+<Step>
+Next to **Box MCP server**, open its status menu and choose the option that makes it available to users.
+</Step>
+<Step>
+Open the **Box MCP Server** tab.
 </Step>
 <Step>
 For each tool category your users need — **Authentication & Users**, **Search**, **Files & Folders**, **Collaboration**, and, when your plan includes them, **Box AI & Agents** and **Box Hubs** — choose **Enable read-only tools**, **Enable read & write tools**, or **Custom configuration**.
@@ -105,7 +115,7 @@ Box's MCP server doesn't support dynamic client registration, so create a client
 
 <Steps>
 <Step>
-In the Box Admin Console, go to **Integrations** and search for **Box MCP server**.
+In the Box Admin Console, select **Integrations** and search for **Box MCP server**.
 </Step>
 <Step>
 Hover over **Box MCP server** and select **Configure**.
@@ -117,16 +127,22 @@ In the **Additional Configuration** section, select **+ Add Integration Credenti
 Enter a name such as `C1` and select **Save**.
 </Step>
 <Step>
-Expand the new entry and copy the **Client ID** and **Client Secret**.
+Expand the new entry.
 </Step>
 <Step>
-Set the **Redirect URI** exactly to whichever matches your C1 tenant's domain:
+Set the **Redirect URI** to the value that matches your C1 tenant's domain:
 
 - Default instance: `https://accounts.conductor.one/auth/callback`
 - EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
 </Step>
 <Step>
 Under **Access Scopes**, select the scopes described in [Box MCP scopes](#box-mcp-scopes).
+</Step>
+<Step>
+Copy the **Client ID**.
+</Step>
+<Step>
+Copy the **Client Secret**.
 </Step>
 </Steps>
 
@@ -140,7 +156,7 @@ Box lists these scopes for its MCP server ([Remote Box MCP server](https://devel
 | :--- | :--- | :--- |
 | `root_readwrite` | Required | Reading and changing files, folders, comments, tasks, collaborations, and metadata |
 | `ai.readwrite` | Optional | Box AI questions and extraction; needs Box AI |
-| `docgen.readwrite` | Optional | Box Doc Gen; needs Box Enterprise Advanced |
+| `docgen.readwrite` | Optional | Box Doc Gen; C1 doesn't list Doc Gen tools, so you don't need it |
 
 Scopes set the most a user's connection can do. Users still reach only the content they can already view or edit in Box, and the tool categories you set in the Box Admin Console still apply.
 
@@ -153,7 +169,10 @@ With your integration credentials ready, register the server.
 Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Box** from the catalog.
 </Step>
 <Step>
-When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enter your **Client ID** and **Client Secret**.
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough**.
+</Step>
+<Step>
+Enter your **Client ID** and **Client Secret**.
 </Step>
 <Step>
 **Optional.** Add `ai.readwrite` to the scopes if your enterprise has Box AI and you selected it on the integration credentials.
@@ -188,7 +207,7 @@ Tool discovery runs even if authentication isn't complete, so seeing discovered 
 ## Manage your Box MCP credentials
 
 - **Rotate the client secret** in the Box Admin Console under **Integrations** > **Box MCP server** > **Configure**, then update the secret on the server's authentication settings in C1.
-- **Change what users can do** by adjusting tool access under **Integrations** > **Box MCP Server**, or the integration's **Access Scopes**. Scope changes apply the next time a user authorizes.
+- **Change what users can do** by adjusting tool access on the **Box MCP Server** tab, or the integration's **Access Scopes**. Scope changes apply the next time a user authorizes.
 
 </Tab>
 
@@ -212,19 +231,22 @@ Create one Box app for C1. Each user later authorizes it with their own Box acco
 
 <Steps>
 <Step>
-In the Box Developer Console, select **Platform Apps**, then **New App**.
+In the Box Developer Console, select **Platform Apps**.
+</Step>
+<Step>
+Select **New App**.
 </Step>
 <Step>
 Enter an app name such as `C1`.
 </Step>
 <Step>
-Under **App Type**, select **User**. Box selects **Server** by default, which creates a server-authentication app C1 can't use.
+Under **App Type**, select **User**. Box selects **Server** by default, and you can't change the type after you create the app.
 </Step>
 <Step>
 Select **Create**.
 </Step>
 <Step>
-On the app's **Configuration** tab, add the **Redirect URI** that matches your C1 tenant's domain:
+On the app's **Configuration** tab, set the **Redirect URI** to the value that matches your C1 tenant's domain:
 
 - Default instance: `https://accounts.conductor.one/auth/callback`
 - EU data residency instance: `https://accounts.c1eu.ai/auth/callback`
@@ -236,43 +258,60 @@ Under **Application Scopes**, select the scopes for the tools you plan to govern
 Select **Save**.
 </Step>
 <Step>
-Copy the **Client ID** and **Client Secret** from the **App Details** panel.
+Copy the **Client ID** from the **App Details** panel.
+</Step>
+<Step>
+Copy the **Client Secret**.
 </Step>
 </Steps>
 
-The app is ready to register in C1. If your enterprise requires admin approval for new apps, a Box admin enables the app in the Box Admin Console before users can connect.
+The app is ready to register in C1. If your enterprise doesn't enable new apps automatically, a Box admin enables the app in the Box Admin Console under **Integrations** > **Platform Apps Manager** before users can connect.
 
 ## Box API scopes
 
 C1 requests the required scope automatically. To use the tools behind an optional scope, select it on the Box app first, then add it to the scopes in C1. Box's scope descriptions are in [Scopes](https://developer.box.com/guides/api-calls/permissions-and-errors/scopes/).
 
-| Scope | Box app setting | Tier | What it enables |
-| :--- | :--- | :--- | :--- |
-| `root_readonly` | Read all files and folders stored in Box | Required | Reading files, folders, comments, tasks, collaborations, metadata, search results, and events |
-| `root_readwrite` | Write all files and folders stored in Box | Optional | Creating, moving, copying, and updating files and folders, plus comments, tasks, collaborations, and shared links |
-| `ai.readwrite` | Manage AI | Optional | Box AI questions, extraction, and text generation; needs Box AI |
-| `sign_requests.readwrite` | Manage signature requests | Optional | Creating, canceling, and resending Box Sign requests; needs `root_readwrite` and Box Sign |
-| `manage_triggers` | Manage Box Relay | Optional | Starting Box Relay workflows; needs `root_readwrite` and Box Relay |
-| `manage_groups` | Manage groups | Optional | Creating and managing groups and memberships |
-| `manage_managed_users` | Manage users | Optional | Managing your enterprise's users |
-| `manage_app_users` | Manage users | Optional | Managing app users |
-| `manage_enterprise_properties` | Manage enterprise properties | Optional | Enterprise settings and the enterprise event stream |
-| `manage_data_retention` | Manage retention policies | Optional | Retention policies; needs Box Governance, and Box support enables the scope on request |
-| `manage_legal_holds` | Manage legal holds | Optional | Legal holds; needs Box Governance, and Box support enables the scope on request |
-| `manage_webhook` | Manage webhooks | Optional | Webhook management |
+### Required scope for Box API
+
+| Scope | Box app setting | What it enables |
+| :--- | :--- | :--- |
+| `root_readonly` | Read all files and folders stored in Box | Reading files, folders, comments, tasks, collaborations, metadata, search results, and events |
+
+With only the required scope, the **Box API** entry is read-only.
+
+### Optional scopes for Box API
+
+Most deployments add `root_readwrite` so users can create, move, and update content. Add the others only for the tools you plan to govern.
+
+| Scope | Box app setting | What it enables |
+| :--- | :--- | :--- |
+| `root_readwrite` | Write all files and folders stored in Box | Creating, moving, copying, and updating files and folders, plus comments, tasks, collaborations, and shared links |
+| `ai.readwrite` | Manage AI | Box AI questions, extraction, and text generation; needs Box AI |
+| `sign_requests.readwrite` | Manage signature requests | Box Sign requests; needs `root_readwrite` and Box Sign |
+| `manage_triggers` | Manage Box Relay | Starting Box Relay workflows; needs `root_readwrite` and Box Relay |
+| `manage_groups` | Manage groups | Managing groups and memberships |
+| `manage_managed_users` | Manage users | Managing your enterprise's users |
+| `manage_app_users` | Manage users | App users, which only server-authentication apps use; leave it off |
+| `manage_enterprise_properties` | Manage enterprise properties | Enterprise settings and the enterprise event stream |
+| `manage_data_retention` | Manage retention policies | Retention policies; needs Box Governance, enabled by Box support on request |
+| `manage_legal_holds` | Manage legal holds | Legal holds; needs Box Governance, enabled by Box support on request |
+| `manage_webhook` | Manage webhooks | Webhook management |
 
 The user, group, and enterprise management scopes take effect only when the person who authorizes C1 is a Box **Admin** or **Co-Admin**. Tools that need a scope the connection doesn't have return a permission error from Box.
 
 ## Option 1: Set up per-user OAuth
 
-Per-user OAuth keeps every action attributable to the user who took it, with only the access that user already has in Box. Use it for every Box API connection unless you have a specific reason to share one identity.
+Per-user OAuth keeps every action attributable to the user who took it, with only the access that user already has in Box.
 
 <Steps>
 <Step>
 Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Box API** from the catalog.
 </Step>
 <Step>
-When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough** and enter your app's **Client ID** and **Client Secret**.
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — per-user passthrough**.
+</Step>
+<Step>
+Enter your app's **Client ID** and **Client Secret**.
 </Step>
 <Step>
 **Optional.** Add the optional scopes you selected on the Box app.
@@ -293,14 +332,17 @@ A shared OAuth connection uses the same Box app, but one Box account authorizes 
 Follow [Register an MCP server](/product/admin/mcp-servers#register-an-mcp-server) and select **Box API** from the catalog.
 </Step>
 <Step>
-When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — service mode** and enter your app's **Client ID** and **Client Secret**.
+When you [configure authentication](/product/admin/mcp-servers#configure-authentication), choose **OAuth2 — service mode**.
+</Step>
+<Step>
+Enter your app's **Client ID** and **Client Secret**.
 </Step>
 <Step>
 Save your changes.
 </Step>
 </Steps>
 
-C1 starts a sync that discovers the tools the server exposes.
+The Box account that completes the authorization is the identity every tool call uses, so authorize with the dedicated account. C1 then discovers the tools the server exposes.
 
 ## How Box API credentials are shared
 
@@ -333,23 +375,31 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 
 </Tabs>
 
-## Frequently asked questions about the Box MCP server
+## Frequently asked questions about connecting Box to C1
 
 <AccordionGroup>
   <Accordion title="Which Box entry should I choose?">
-    Choose **Box MCP** for Box's own tool set, including Box Hubs, with tool access controlled per category in the Box Admin Console. Choose **Box API** when you need users and groups, Box Sign, or retention and legal hold data. You can register both.
+    Choose **Box MCP** for Box's own tool set, including Box Hubs, controlled per category in the Box Admin Console. Choose **Box API** when you need users and groups, Box Sign, or retention and legal hold data, or want to start read-only. You can register both; each is governed separately in C1.
   </Accordion>
 
   <Accordion title="Why can't my users connect to Box?">
-    The most common cause is a scope added in C1 that isn't enabled on the Box app or integration credentials. Box then rejects the sign-in with an `invalid_scope` error. Remove the scope in C1, or enable it in Box first.
+    The most common cause is a scope added in C1 that isn't enabled on the Box app or integration credentials, which makes Box reject the sign-in with an `invalid_scope` error. Remove the scope in C1, or enable it in Box first. A redirect URI that doesn't exactly match the C1 value for your tenant also blocks sign-in.
   </Accordion>
 
   <Accordion title="Why does a Box AI or Box Hubs tool return an error?">
     Your Box plan or admin settings don't include that product, or the connection doesn't have the scope it needs. Check [Box plans and the tools they support](#box-plans-and-the-tools-they-support), then confirm Box AI or Box Hubs is available to your enterprise and the scope is granted.
   </Accordion>
 
+  <Accordion title="Why do user or group tools return a permission error?">
+    Box grants the user, group, and enterprise management scopes only when the person who authorized C1 is a Box **Admin** or **Co-Admin**. Have an admin connect, or leave those tools unapproved.
+  </Accordion>
+
   <Accordion title="Why does a move or shared-link tool fail on the Box MCP entry?">
-    Box turns those tools off by default. Turn them on under **Integrations** > **Box MCP Server** in the Box Admin Console.
+    Box turns those tools off by default. Turn them on in the Box Admin Console, on the **Box MCP Server** tab under **Integrations**.
+  </Accordion>
+
+  <Accordion title="We use Box Verified Enterprise. Can we connect?">
+    Box Verified Enterprise can require a different Box sign-in address than the standard one ([OAuth 2.0 without SDKs](https://developer.box.com/guides/authentication/oauth2/without-sdk/)). If sign-in fails for your enterprise, [contact the C1 support team](mailto:support@c1.ai).
   </Accordion>
 
   <Accordion title="Can I connect with a Box server-authentication app?">
