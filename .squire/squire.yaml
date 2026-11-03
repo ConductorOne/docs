@@ -1,0 +1,37 @@
+version: "1"
+
+repo:
+  url: "https://github.com/ConductorOne/docs"
+  branch: "main"
+
+env:
+  name: "docs"
+  description: "ConductorOne docs site with a local Mintlify preview server"
+
+services:
+  # Mintlify ships only as an npm package, so it is installed into this
+  # service's data dir (not the repo) and pinned by version. The guard keeps
+  # boots after the first one offline.
+  mintlify:
+    setup_cmd: >-
+      test -x $SQUIRE_DATA_DIR/mint/node_modules/.bin/mint ||
+      npm install --prefix $SQUIRE_DATA_DIR/mint --no-audit --no-fund --no-save mint@4.2.1196
+    # --host binds 0.0.0.0; the default bind is [::1]-only, which the health
+    # probe and the gateway proxy cannot reach.
+    run_cmd: >-
+      $SQUIRE_DATA_DIR/mint/node_modules/.bin/mint dev
+      --host --port 3000 --no-open
+    health_cmd: "curl -sf http://localhost:3000/"
+    health_timeout: "3m"
+    # The preview is the point of this env, but an npm install on a cold data
+    # dir must not hold the whole env's readiness.
+    required: false
+    port: 3000
+
+expose:
+  - name: docs
+    label: "Docs preview"
+    primary: true
+    ingress:
+      - port: 3000
+        type: http
