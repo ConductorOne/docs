@@ -49,7 +49,7 @@ A Jamf Pro user with the **Administrator** privilege set must perform this task.
 
 ### (Optional) Create a service account
 
-The C1 Jamf Pro connector requires a username and password. If desired, you can set up a service account to be used for the connector.
+The C1 Jamf Pro connector authenticates with either a username and password or a Jamf Pro API client (see below). If desired, you can set up a service account to be used for the connector.
 
 <Steps>
 <Step>
@@ -57,6 +57,25 @@ Follow the instructions in the Jamf documentation for [Creating a Jamf Pro User 
 </Step>
 <Step>
 Give the user you create full access to the Jamf Pro instance and the Administrator privilege set.
+</Step>
+</Steps>
+
+### (Optional) Create an API client
+
+Instead of a user account, the connector can authenticate with a Jamf Pro API client. See [API Roles and Clients](https://learn.jamf.com/bundle/jamf-pro-documentation-current/page/API_Roles_and_Clients.html) in the Jamf documentation.
+
+<Steps>
+<Step>
+In Jamf Pro, go to **Settings** > **System** > **API roles and clients**.
+</Step>
+<Step>
+On the **API Roles** tab, create a role with the privileges listed in [Jamf account privileges](#jamf-account-privileges) for the capabilities you plan to use.
+</Step>
+<Step>
+On the **API Clients** tab, create a client, assign it the role, and enable it.
+</Step>
+<Step>
+Click **Generate client secret**, then copy the client ID and the client secret. Jamf shows the secret only once.
 </Step>
 </Steps>
 
@@ -68,7 +87,7 @@ The **Administrator** privilege set covers everything. For least privilege, gran
 
 | Task | Privilege |
 |---|---|
-| Startup, config validation, token refresh | None — any enabled local Jamf Pro account (every `Custom` set also keeps `Read License Information`) |
+| Startup, config validation, token refresh | None — any enabled local Jamf Pro account or API client (every `Custom` set also keeps `Read License Information`) |
 | Sync users | `Read User` |
 | Sync user accounts and groups | `Read Accounts` |
 | Sync user groups | `Read Static User Groups`, `Read Smart User Groups` (Smart is only needed when smart groups exist — it's checked per group) |
@@ -85,7 +104,7 @@ The **Administrator** privilege set covers everything. For least privilege, gran
 
 `Read Accounts`/`Create Accounts`/`Update Accounts`/`Delete Accounts` cover both admin user accounts and admin groups — Jamf has no separate privilege for account groups. Every write path reads the object first, so each `Update` privilege above needs its `Read` counterpart too.
 
-Jamf reports a denied write differently depending on which API it uses. The Classic API (`/JSSResource` — Users, Accounts, Static User Groups) answers a missing privilege with HTTP 401, indistinguishable from an invalid or expired token. The Jamf Pro API (`/api/v1`, `/api/v2`, `/api/v4` — the roles catalog, Computers, Mobile Devices) answers with HTTP 403, reported as a permission error.
+Jamf reports a missing privilege differently depending on which API it uses: the Classic API (`/JSSResource` — Users, Accounts, Static User Groups) answers with HTTP 401, and the Jamf Pro API (`/api/v1`, `/api/v2`, `/api/v4` — the roles catalog, Computers, Mobile Devices) with HTTP 403. The connector reports both as a permission error.
 
 ## Configure the Jamf connector
 
@@ -129,11 +148,18 @@ Find the **Settings** area of the page and click **Edit**.
      Generated from config_schema.json. Do not edit manually. */}
 
 <Step>
-Enter the required configuration:
+Choose an authentication method and enter its fields:
+
+- **Username and password** (default):
+  - **Username**: The username of the service account you created (or the username of a Jamf Pro user with Administrator permissions).
+  - **Password**: The password associated with the username.
+- **API client**:
+  - **API Client ID**: The client ID of the API client you created.
+  - **API Client Secret**: The client secret of that API client.
+
+Both methods also take:
 
 - **Instance URL**: The base URL of your Jamf Pro instance, including `https://` (for example `https://yourcompany.jamfcloud.com`).
-- **Username**: The username of the service account you created (or the username of a Jamf Pro user with Administrator permissions).
-- **Password**: The password associated with the username.
 - **Account Provisioning Target** (optional): Which Jamf account type ConductorOne should create when provisioning accounts — **user** (default) creates directory users, **userAccount** creates Jamf Pro console admin accounts. Only one type can be created at a time per connector instance.
 </Step>
 
@@ -215,6 +241,11 @@ stringData:
   BATON_INSTANCE_URL: <URL of your Jamf Pro instance>
   BATON_PASSWORD: <Password to the Jamf Pro account>
   BATON_USERNAME: <Username for the Jamf Pro account>
+
+  # Or authenticate with a Jamf Pro API client instead of the username and password:
+  # BATON_AUTH_METHOD: api-client
+  # BATON_JAMF_CLIENT_ID: <API client ID>
+  # BATON_JAMF_CLIENT_SECRET: <API client secret>
 
   # Optional: only needed if provisioning accounts. Defaults to "user".
   # BATON_CREATE_ACCOUNT_RESOURCE_TYPE: <"user" or "userAccount">
