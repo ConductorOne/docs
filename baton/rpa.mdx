@@ -51,7 +51,127 @@ Extraction uses one of three strategies, chosen per resource type:
 | DOM scraping | The application is a server-rendered admin panel with no usable endpoints. | The entire sync |
 | JavaScript extraction | The application holds its data in client-side state with no REST API. | Page load and script execution |
 
-Playbook authoring is covered in the connector repository: see [Building a Connector](https://github.com/conductorone/baton-rpa/blob/main/docs/building-a-connector.md) and the [Playbook Reference](https://github.com/conductorone/baton-rpa/blob/main/docs/playbook-reference.md).
+For the complete YAML syntax, see the [Playbook Reference](https://github.com/conductorone/baton-rpa/blob/main/docs/playbook-reference.md).
+
+## Build a Baton RPA connector
+
+Building a connector for a new application means writing its playbook, testing it against the live application, and then shipping it. You can ship it as the standalone `baton-rpa` binary plus a playbook file, or as a dedicated connector that embeds the playbook.
+
+### Step 1: Build the tools
+
+<Steps>
+  <Step>
+    Install Chrome or Chromium on the machine you author from. Local runs launch it to drive the application:
+
+    ```bash
+    # macOS
+    brew install --cask chromium
+    # Debian/Ubuntu
+    apt-get install -y chromium
+    ```
+  </Step>
+
+  <Step>
+    Clone [baton-rpa](https://github.com/conductorone/baton-rpa) and build the connector binary and the authoring MCP server:
+
+    ```bash
+    make build       # dist/<os>_<arch>/baton-rpa
+    make build-mcp   # dist/<os>_<arch>/baton-rpa-mcp
+    ```
+  </Step>
+
+  <Step>
+    Install the [baton CLI](https://github.com/conductorone/baton) so you can inspect sync output:
+
+    ```bash
+    go install github.com/conductorone/baton/cmd/baton@latest
+    ```
+  </Step>
+</Steps>
+
+### Step 2: Write the playbook
+
+You can write the playbook by hand, but the fastest way is to have an AI agent draft it with the baton-rpa MCP server.
+
+<Steps>
+  <Step>
+    Register the MCP server with your agent. For Claude Code:
+
+    ```bash
+    claude mcp add --transport stdio baton-rpa -- /path/to/baton-rpa-mcp
+    ```
+  </Step>
+
+  <Step>
+    Ask the agent to build a playbook for the application. Name the application's URL and the data you want synced, for example:
+
+    ```text
+    Use the baton-rpa MCP tools to build a playbook for https://admin.example.com.
+    Sync users (with email and status), groups, and roles, plus group memberships
+    and role assignments as grants. Open a browser so I can sign in. Validate the
+    playbook, run a test sync, and save it as example-playbook.yaml.
+    ```
+
+    The agent opens a browser window with `open_browser_session`, and you sign in there yourself, including any SSO or MFA. The agent never asks for your password. It reuses that session for the rest of the run.
+  </Step>
+
+  <Step>
+    The agent explores the signed-in application to find where the identity data lives:
+
+    - `find_data_pages` ranks navigation links that likely lead to users, groups, and roles.
+    - `inspect_page` analyzes those pages.
+    - `discover_endpoints` captures the API calls the pages make, which decides whether the playbook can use the recommended browser auth plus HTTP strategy.
+  </Step>
+
+  <Step>
+    The agent then generates the playbook: `record_auth` for the `connect.auth` login steps, `generate_http_config` or `generate_dom_config` for each resource type's extraction, and `suggest_mappings` for the CEL resource mappings.
+  </Step>
+
+  <Step>
+    Reference every credential the login flow needs as a variable, such as `${APP_USERNAME}`, instead of writing the value into the playbook. At runtime the standalone binary resolves `${APP_USERNAME}` from the `BATON_APP_USERNAME` environment variable.
+  </Step>
+</Steps>
+
+<Tip>
+Point every list and grant step at the real page its data comes from, and follow it with a `wait_for` on an element that only appears when signed in. If the session expires, the sync then fails loudly. Otherwise it reports zero resources, and C1 reads that as every account being deleted.
+</Tip>
+
+### Step 3: Test the playbook
+
+<Steps>
+  <Step>
+    Check the playbook for config errors with the `validate_playbook` MCP tool. Use `test_extraction` to inspect raw extracted data, and `preview_resources` to check mappings without running a full sync.
+  </Step>
+
+  <Step>
+    Run a full sync locally. Set `BATON_RPA_HEADLESS=false` to watch the browser, or `BATON_RPA_DEBUG=true` to save a screenshot at every step:
+
+    ```bash
+    BATON_APP_USERNAME=<username> BATON_APP_PASSWORD=<password> \
+      ./dist/<os>_<arch>/baton-rpa --config-path playbook.yaml
+    ```
+  </Step>
+
+  <Step>
+    Inspect the output and confirm that the expected accounts, entitlements, and grants are present:
+
+    ```bash
+    baton resources -f sync.c1z
+    baton entitlements -f sync.c1z
+    baton grants -f sync.c1z
+    baton stats -f sync.c1z
+    ```
+  </Step>
+</Steps>
+
+### Step 4: Package the connector
+
+You can ship the connector in one of two ways:
+
+- **Standalone binary:** Run `baton-rpa` with `--config-path` pointing at the playbook, as shown in [Configure the Baton RPA connector](#configure-the-baton-rpa-connector). No code is required.
+- **Dedicated connector:** Create a thin Go module (for example, `baton-<app>`) that embeds the playbook with `//go:embed` and declares its credentials as `field.SchemaField` entries, so C1 renders them as form fields. In its `main.go`, `connector.Parse()` expands the playbook's `${VAR}` references from those fields, and `connector.NewWithConfig()` builds the connector. All browser automation, extraction, and mapping come from baton-rpa. To run against the AWS Bedrock AgentCore remote browser instead of a local Chromium, pass `true` as the final argument to `NewWithConfig()`.
+
+For the full dedicated-connector layout and a sample `main.go`, see [Building a Connector](https://github.com/conductorone/baton-rpa/blob/main/docs/building-a-connector.md).
 
 ## Gather application credentials
 
