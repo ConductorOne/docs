@@ -79,6 +79,51 @@ connect:
 IBM DB2 requires a separate binary bundled with IBM's client driver and isn't available from the standard download center. [Contact C1's support team](mailto:support@conductorone.com) to request a DB2-enabled binary. Customers connecting to DB2 are responsible for providing their own IBM Db2 Connect license where required.
 </Note>
 
+### Kerberos authentication for SQL Server
+
+If your SQL Server accepts only Active Directory logins, authenticate with a Kerberos keytab instead of a SQL username and password. Set `authenticator=krb5` and point the connector at a keytab and a `krb5.conf`:
+
+```yaml
+connect:
+  dsn: "sqlserver://svc_baton@sql1.corp.example.com:1433?database=identity&authenticator=krb5&krb5-realm=CORP.EXAMPLE.COM&krb5-keytabfile=/etc/baton/svc_baton.keytab&krb5-configfile=/etc/baton/krb5.conf"
+```
+
+The DSN carries a username and no password. The same connection in structured form:
+
+```yaml
+connect:
+  dsn: "sqlserver://sql1.corp.example.com:1433?database=identity"
+  user: "svc_baton"
+  password: ""
+  params:
+    authenticator: "krb5"
+    krb5-realm: "CORP.EXAMPLE.COM"
+    krb5-keytabfile: "/etc/baton/svc_baton.keytab"
+    krb5-configfile: "/etc/baton/krb5.conf"
+```
+
+Keep the database name in the query string. `connect.database` becomes the URL path, which SQL Server reads as an instance name: the connector then requests the service principal `MSSQLSvc/<host>:<database>` and the login fails.
+
+The connector reads the keytab and `krb5.conf` from its own filesystem, so both files must exist wherever the connector runs. Mount them into the container when you run it in Kubernetes.
+
+Supplying a password alongside the keytab selects password authentication and leaves the keytab unused. To use an existing credential cache instead of a keytab, set `krb5-credcachefile`.
+
+#### Servers whose SPN doesn't match the DSN host
+
+The connector requests `MSSQLSvc/<host>:<port>`, built from the DSN. When the service principal is registered under a different name — an alias, an availability group listener, a cluster VIP — set `serverspn` to the registered principal:
+
+```yaml
+connect:
+  params:
+    serverspn: "MSSQLSvc/sql1.corp.example.com:1433"
+```
+
+Without it the KDC returns `KDC_ERR_S_PRINCIPAL_UNKNOWN`, naming the principal the connector asked for rather than the one that exists.
+
+<Note>
+Kerberos authentication requires baton-sql v0.6.5 or later.
+</Note>
+
 ## Listing resources
 
 The `list` section defines how to query resources from your database:
