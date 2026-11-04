@@ -40,9 +40,9 @@ collaborators and teams. The token is sent on every request as
   </Step>
 
   <Step>
-    Find your organization id in Bugsnag under **Settings**, or read it from the
-    organization API responses. Build the base URL as
-    `https://api.bugsnag.com/organizations/<organization_id>`.
+    Find your organization ID in Bugsnag under **Settings** > **Organization
+    settings** (it appears in the settings page URL), or as the `id` of your
+    organization returned by `GET https://api.bugsnag.com/user/organizations`.
   </Step>
 </Steps>
 
@@ -50,24 +50,30 @@ collaborators and teams. The token is sent on every request as
 
 |Field|Required|Description|
 |-|-|-|
-|`base-url`|Yes|Your Bugsnag organization API base URL, ending in your organization id: `https://api.bugsnag.com/organizations/<organization_id>`.|
+|`base-url`|No|Bugsnag Data Access API host. Keep the default (`https://api.bugsnag.com`) if you sign in at app.bugsnag.com. If your organization uses a SmartBear-hosted or on-premise Bugsnag, enter that deployment's API host.|
+|`organization-id`|Yes|The ID of the Bugsnag organization to sync.|
 |`api-token`|Yes|A Bugsnag personal auth token with read access to the organization's collaborators and teams.|
 
 ## Synced resource types
 
-- **Users**: Bugsnag collaborators in the organization, from `/collaborators`.
-- **Teams**: Bugsnag teams in the organization, from `/teams`.
+- **Users**: Bugsnag collaborators in the organization, from
+  `/organizations/{organization_id}/collaborators`.
+- **Teams**: Bugsnag teams in the organization, from
+  `/organizations/{organization_id}/teams`.
 - **Team membership**: each team exposes a `member` entitlement, with grants
-  read from `/teams/{team_id}/collaborators`.
+  read from `/organizations/{organization_id}/teams/{team_id}/collaborators`.
 
 ## Special notes
 
 - The connector is read-only. It does not invite collaborators or change team
   membership.
-- One connector instance covers exactly one Bugsnag organization. The
-  organization id is part of the base URL.
+- One connector instance covers exactly one Bugsnag organization, set by
+  `organization-id`.
 - A personal auth token may span multiple organizations. The connector reads
-  only the organization named in the base URL.
+  only the organization named in `organization-id`.
+- If you configured an earlier version of this connector with the organization
+  in the base URL, set `base-url` to `https://api.bugsnag.com` and move the
+  organization ID into `organization-id`.
 
 ## Configure the Bugsnag connector
 
@@ -106,7 +112,8 @@ collaborators and teams. The token is sent on every request as
       <Step>
         Enter the Bugsnag credentials:
 
-        - **Organization API base URL**: `https://api.bugsnag.com/organizations/<organization_id>`.
+        - **Bugsnag API base URL**: `https://api.bugsnag.com` (the default). For a SmartBear-hosted or on-premise Bugsnag, enter that deployment's API host.
+        - **Organization ID**: Your Bugsnag organization ID.
         - **Personal auth token**: The token you created in Bugsnag.
       </Step>
 
@@ -135,7 +142,8 @@ collaborators and teams. The token is sent on every request as
         Configure the connector environment variables:
 
         ```bash
-        BATON_BASE_URL=https://api.bugsnag.com/organizations/<organization_id>
+        BATON_BASE_URL=https://api.bugsnag.com
+        BATON_ORGANIZATION_ID=<Bugsnag organization ID>
         BATON_API_TOKEN=<Bugsnag personal auth token>
         ```
       </Step>

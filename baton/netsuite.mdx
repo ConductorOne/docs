@@ -40,6 +40,35 @@ The NetSuite connector supports creating new employee accounts directly from C1.
 | `roleID` | Internal ID of the NetSuite role to assign to the employee at creation time. | Employee Center |
 | `giveAccess` | Whether the employee should have login access to NetSuite (`true` or `false`). | `true` |
 | `skipDefaultRole` | When `true`, skips assigning the default Employee Center role if no `roleID` is provided. Use this when the role will be assigned separately via a grant step. | `false` |
+| `title` | The employee's job title. | None |
+| `department` | Name or internal ID of the department to assign to the employee. Use the department's own name (for example, `Engineering`), not its full hierarchical name. The value is matched as a name first and used as an internal ID only if no department has that name. If more than one active department has the name, account creation fails; use the internal ID instead. Required if your NetSuite account makes Department mandatory on employees, for example when **Make Departments Mandatory** is enabled under **Setup > Accounting > Accounting Preferences**. | None |
+| `supervisor` | Email address or internal ID of the employee's supervisor (manager). | None |
+| `releaseDate` | The employee's release (termination) date, formatted as `YYYY-MM-DD`. | None |
+| `customFields` | A JSON object mapping custom employee field script IDs (`custentity...`) to values. See [Custom fields in account creation](#custom-fields-in-account-creation). | None |
+
+### Custom fields in account creation
+
+Use `customFields` to set custom employee fields (fields whose script ID starts with `custentity`) when the employee is created. The value is a JSON object keyed by the field's script ID, which you can find under **Customization > Lists, Records, & Fields > Entity Fields** in NetSuite:
+
+```json
+{
+  "custentity_payroll_id": "12345",
+  "custentity_termination_date": "2027-01-31",
+  "custentity_cost_center": {"id": "9"}
+}
+```
+
+Use a string for free-form text and date fields (dates as `YYYY-MM-DD`), `true` or `false` for checkbox fields, and `{"id": "<internal ID>"}` for list or record fields. Empty values are skipped. Multi-select fields aren't supported yet.
+
+Any mapping whose name is itself a custom field script ID (for example, a mapping named `custentity_payroll_id`) is also sent as a custom field. Script IDs are matched case-insensitively. If the same field is set both ways, the individual mapping takes precedence, unless its value is empty, in which case the `customFields` value is used.
+
+<Note>
+The connector tells NetSuite to warn about unknown field names instead of rejecting them, so those fields are silently not set. Badly formatted values, such as the wrong type or format for a custom field or date, cause account creation to fail with NetSuite's error, and references to internal IDs that don't exist are rejected. If a custom field isn't populated on the new employee, check that the script ID is spelled correctly, that the field is applied to employee records, that the value uses the right type, and that the connector's role has **Edit** access to the field (see [Permissions for custom fields](#permissions-for-custom-fields)).
+</Note>
+
+<Note>
+Setting `department` requires the connector's role to have the **Lists - Departments** (View) permission, even when you provide an internal ID, because the value is always looked up by name first. Department names and supervisor emails only match active records. Supervisor internal IDs are used directly, without a lookup.
+</Note>
 
 ### Role assignment and login access
 
@@ -54,7 +83,7 @@ The NetSuite connector supports creating new employee accounts directly from C1.
 **If `roleID` is not provided and `giveAccess` is `false`**, no role is included in the create request regardless of `skipDefaultRole`.
 
 <Note>
-To add `giveAccess` or `skipDefaultRole` to your mapping, click **Add mapping** in the **Optional mappings** section of the provisioning policy configuration.
+To add `giveAccess`, `skipDefaultRole`, or any of the other optional fields to your mapping, click **Add mapping** in the **Optional mappings** section of the provisioning policy configuration.
 </Note>
 
 <Warning>
@@ -68,6 +97,10 @@ The connector surfaces whether an employee can sign in to NetSuite as a dedicate
 <Note>
 Login Access only controls whether an employee can sign in. It does not assign or remove roles. Use role grants to control what an employee can do once they can log in.
 </Note>
+
+<Warning>
+**Granting a role also turns on login access and emails the employee.** When C1 grants a NetSuite role, the connector sets **Login Access** (`giveAccess`) to `true` on the employee and asks NetSuite to send the employee a notification email (`sendEmail`). An employee who had no login access can sign in to NetSuite after any role grant. To remove sign-in, revoke the **Login Access** entitlement separately.
+</Warning>
 
 ### Revoking the last role
 
@@ -179,6 +212,7 @@ Assign the following permissions to the role:
    - Reports- Suite Analytics Workbook
    - Lists - Employee Record
    - Lists - Employees
+   - Lists - Departments (only if you use the `department` account creation field)
 
    <Tip>
    **Why are these permissions needed?** The integration uses these permissions to read and query SuiteQL tables containing information on roles and employees.
@@ -301,7 +335,7 @@ Click **Add**. The connector is created and its configuration page opens.
 Find the **Settings** area of the page and click **Edit**.
 </Step>
 <Step>
-In the **Account ID** field, enter the NetSuite domain.
+In the **Account ID** field, enter your NetSuite account ID as shown under **Setup** > **Company** > **Company Information** (for example, `1234567`, or `1234567_SB1` for a sandbox). Don't enter the domain (`1234567-sb1.suitetalk.api.netsuite.com`): the connector rejects account IDs that contain dashes.
 </Step>
 <Step>
 Select the authentication method you set up and enter its credentials:
@@ -476,7 +510,7 @@ Field access is configured per-field in NetSuite:
 1. Navigate to **Customization** > **Lists, Records, & Fields** > **Entity Fields**.
 2. Click on the custom field.
 3. Go to the **Access** subtab.
-4. Ensure the connector's role has **View**, **Run**, or **Edit** access.
+4. Ensure the connector's role has **View**, **Run**, or **Edit** access. To set the field when creating accounts (see [Custom fields in account creation](#custom-fields-in-account-creation)), the role needs **Edit** access.
 
 <Tip>
 The connector validates access to each custom field at startup. If a field is not accessible, the connector will report a clear error message indicating which field could not be accessed.

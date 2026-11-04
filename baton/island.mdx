@@ -63,7 +63,7 @@ The US and EU URLs are verified against public Island documentation. The UK, CA,
 
 ## Synced resource types
 
-- **Users**: Island users from `GET /api/external/v1/users`. PII surface includes `user_source`, `email_verified`, `expiration_date`, `last_seen`, `connection_name`, `invitation_date`, and `allowed_tenants_ids`.
+- **Users**: Island users from `GET /api/external/v1/users`. This is the connector's only identity source, and it returns every user the tenant has — browser-enrolled and IdP/SCIM-provisioned alike. `user_source`, `connection_name`, and `scim_id` distinguish how each user was created. PII surface includes `user_source`, `email_verified`, `expiration_date`, `last_seen`, `connection_name`, `invitation_date`, and `allowed_tenants_ids`.
 - **Groups**: derived from distinct `user.groups[]` values across the Users walker. Island does not expose a public `/groups` list endpoint; the connector materializes the Group resource set in-walker.
 - **Memberships**: emitted as user → group grants, one row per `(user.id, groups[i])` pair.
 
@@ -74,6 +74,7 @@ The US and EU URLs are verified against public Island documentation. The UK, CA,
 - **Empty `groups[]` degrades silently.** `null`, missing, or `[]` produces zero memberships and contributes zero entries to the derived Group set, with no warning or error logged. This is the normal state for SCIM-provisioned users with no group assignments.
 - **Group names are not normalized.** Stable ids are the literal byte-for-byte string from `user.groups[]`. The connector does not apply `.toLowerCase()`, `.trim()`, or Unicode NFC.
 - **Rate limits are undocumented.** The connector honors HTTP 429 responses with exponential backoff (1s → 30s, jittered) and honors `Retry-After` when present.
+- **Who appears in a sync.** A person shows up in `/users` only once **enrolled in the Island browser** or **provisioned via SCIM/IdP**. IdP/directory users require SCIM provisioning to be wired on the tenant — once it is, they sync like any other user, tagged by `user_source`/`connection_name`/`scim_id`. An empty sync (`{ "users": [] }`) means nobody is enrolled and no SCIM/IdP provisioning is wired — not a connector fault. Island's external API exposes no separate IdP/directory or console-admin roster endpoint; console admins who never enroll are not browser users and do not appear here.
 
 ## Configure the Island connector
 

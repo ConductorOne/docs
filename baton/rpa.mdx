@@ -1,0 +1,369 @@
+---
+title: "Set up a Baton RPA connector"
+og:title: "Set up a Baton RPA connector"
+description: "C1 provides identity governance for web applications that have no identity API. Baton RPA drives the application's own web UI from a declarative playbook, giving C1 unified visibility and governance over user access."
+og:description: "C1 provides identity governance for web applications that have no identity API. Baton RPA drives the application's own web UI from a declarative playbook, giving C1 unified visibility and governance over user access."
+sidebarTitle: "Baton RPA"
+---
+
+<Note>
+**Baton RPA is a connector framework, not a connector for a single application.** It syncs identity and access data from web applications that expose no IAM API — the data is read from the application's web UI, driven by a declarative YAML playbook. Each application gets its own playbook, and production connectors typically embed Baton RPA as a library rather than running this binary directly.
+
+If you are setting up a specific application, use that application's connector page. This page documents the framework itself.
+</Note>
+
+## Capabilities
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+Baton RPA declares no compiled-in resource types. The resource types it syncs are defined by the playbook passed to the connector, so its capabilities are determined per playbook rather than per build.
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+A playbook can map extracted data to any of the following resource types:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Apps | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+**Notes:**
+
+- Baton RPA is sync-only. It does not provision or deprovision access, and it does not support account provisioning.
+- Which of the resource types above appear in a given sync depends entirely on the playbook. A playbook that only lists users produces accounts and nothing else.
+- Entitlements and grants are produced from the playbook's grant extraction and CEL mappings.
+
+## Understanding playbooks
+
+A playbook is a YAML file that tells the connector how to authenticate to the application and how to extract each resource type. It has two parts:
+
+- **`connect`**: the login flow (password, SSO, TOTP) and browser settings. Baton RPA signs in once, then reuses the session.
+- **`resource_types`**: for each resource type, how to reach the data and how to map it to C1 resources using [CEL](https://github.com/google/cel-spec) expressions.
+
+Extraction uses one of three strategies, chosen per resource type:
+
+| Strategy | When to use | Browser exposure |
+| :--- | :--- | :--- |
+| Browser auth plus HTTP | The application is a single-page app with discoverable API endpoints. This is the recommended strategy. | Login only |
+| DOM scraping | The application is a server-rendered admin panel with no usable endpoints. | The entire sync |
+| JavaScript extraction | The application holds its data in client-side state with no REST API. | Page load and script execution |
+
+For the complete YAML syntax, see the [Playbook Reference](https://github.com/conductorone/baton-rpa/blob/main/docs/playbook-reference.md).
+
+## Build a Baton RPA connector
+
+Building a connector for a new application means writing its playbook, testing it against the live application, and then shipping it. You can ship it as the standalone `baton-rpa` binary plus a playbook file, or as a dedicated connector that embeds the playbook.
+
+### Step 1: Build the tools
+
+<Steps>
+  <Step>
+    Install Chrome or Chromium on the machine you author from. Local runs launch it to drive the application:
+
+    ```bash
+    # macOS
+    brew install --cask chromium
+    # Debian/Ubuntu
+    apt-get install -y chromium
+    ```
+  </Step>
+
+  <Step>
+    Clone [baton-rpa](https://github.com/conductorone/baton-rpa) and build the connector binary and the authoring MCP server:
+
+    ```bash
+    make build       # dist/<os>_<arch>/baton-rpa
+    make build-mcp   # dist/<os>_<arch>/baton-rpa-mcp
+    ```
+  </Step>
+
+  <Step>
+    Install the [baton CLI](https://github.com/conductorone/baton) so you can inspect sync output:
+
+    ```bash
+    go install github.com/conductorone/baton/cmd/baton@latest
+    ```
+  </Step>
+</Steps>
+
+### Step 2: Write the playbook
+
+You can write the playbook by hand, but the fastest way is to have an AI agent draft it with the baton-rpa MCP server.
+
+<Steps>
+  <Step>
+    Register the MCP server with your agent. For Claude Code:
+
+    ```bash
+    claude mcp add --transport stdio baton-rpa -- /path/to/baton-rpa-mcp
+    ```
+  </Step>
+
+  <Step>
+    Ask the agent to build a playbook for the application. Name the application's URL and the data you want synced, for example:
+
+    ```text
+    Use the baton-rpa MCP tools to build a playbook for https://admin.example.com.
+    Sync users (with email and status), groups, and roles, plus group memberships
+    and role assignments as grants. Open a browser so I can sign in. Validate the
+    playbook, run a test sync, and save it as example-playbook.yaml.
+    ```
+
+    The agent opens a browser window with `open_browser_session`, and you sign in there yourself, including any SSO or MFA. The agent never asks for your password. It reuses that session for the rest of the run.
+  </Step>
+
+  <Step>
+    The agent explores the signed-in application to find where the identity data lives:
+
+    - `find_data_pages` ranks navigation links that likely lead to users, groups, and roles.
+    - `inspect_page` analyzes those pages.
+    - `discover_endpoints` captures the API calls the pages make, which decides whether the playbook can use the recommended browser auth plus HTTP strategy.
+  </Step>
+
+  <Step>
+    The agent then generates the playbook: `record_auth` for the `connect.auth` login steps, `generate_http_config` or `generate_dom_config` for each resource type's extraction, and `suggest_mappings` for the CEL resource mappings.
+  </Step>
+
+  <Step>
+    Reference every credential the login flow needs as a variable, such as `${APP_USERNAME}`, instead of writing the value into the playbook. At runtime the standalone binary resolves `${APP_USERNAME}` from the `BATON_APP_USERNAME` environment variable.
+  </Step>
+</Steps>
+
+<Tip>
+Point every list and grant step at the real page its data comes from, and follow it with a `wait_for` on an element that only appears when signed in. If the session expires, the sync then fails loudly. Otherwise it reports zero resources, and C1 reads that as every account being deleted.
+</Tip>
+
+### Step 3: Test the playbook
+
+<Steps>
+  <Step>
+    Check the playbook for config errors with the `validate_playbook` MCP tool. Use `test_extraction` to inspect raw extracted data, and `preview_resources` to check mappings without running a full sync.
+  </Step>
+
+  <Step>
+    Run a full sync locally. Set `BATON_RPA_HEADLESS=false` to watch the browser, or `BATON_RPA_DEBUG=true` to save a screenshot at every step:
+
+    ```bash
+    BATON_APP_USERNAME=<username> BATON_APP_PASSWORD=<password> \
+      ./dist/<os>_<arch>/baton-rpa --config-path playbook.yaml
+    ```
+  </Step>
+
+  <Step>
+    Inspect the output and confirm that the expected accounts, entitlements, and grants are present:
+
+    ```bash
+    baton resources -f sync.c1z
+    baton entitlements -f sync.c1z
+    baton grants -f sync.c1z
+    baton stats -f sync.c1z
+    ```
+  </Step>
+</Steps>
+
+### Step 4: Package the connector
+
+You can ship the connector in one of two ways:
+
+- **Standalone binary:** Run `baton-rpa` with `--config-path` pointing at the playbook, as shown in [Configure the Baton RPA connector](#configure-the-baton-rpa-connector). No code is required.
+- **Dedicated connector:** Create a thin Go module (for example, `baton-<app>`) that embeds the playbook with `//go:embed` and declares its credentials as `field.SchemaField` entries, so C1 renders them as form fields. In its `main.go`, `connector.Parse()` expands the playbook's `${VAR}` references from those fields, and `connector.NewWithConfig()` builds the connector. All browser automation, extraction, and mapping come from baton-rpa. To run against the AWS Bedrock AgentCore remote browser instead of a local Chromium, pass `true` as the final argument to `NewWithConfig()`.
+
+For the full dedicated-connector layout and a sample `main.go`, see [Building a Connector](https://github.com/conductorone/baton-rpa/blob/main/docs/building-a-connector.md).
+
+## Gather application credentials
+
+<Warning>
+The credentials Baton RPA needs are the credentials of a user who can sign in to the target application's web UI and see its administrative pages. Grant that account the least privilege that still lets it view the user, group, and role lists you want to sync.
+</Warning>
+
+<Steps>
+  <Step>
+    Create or identify a dedicated service account in the target application.
+
+    Use a dedicated account rather than a person's account. The connector signs in as this account on every sync, and a person's account can be disabled, rotated, or challenged by step-up authentication without warning.
+  </Step>
+
+  <Step>
+    Grant the account read access to the administrative pages that list the data you want to sync — typically the users, groups, and roles pages.
+  </Step>
+
+  <Step>
+    Record the sign-in credentials the playbook's login flow needs. This varies by application, but is usually a username and password, plus a TOTP secret if the application enforces multi-factor authentication.
+  </Step>
+
+  <Step>
+    Store each credential as an environment variable with a `BATON_` prefix. The playbook references them by name, and the connector refuses to start if a referenced variable is unset.
+  </Step>
+</Steps>
+
+## Configure the Baton RPA connector
+
+<Note>
+Baton RPA is not available as a cloud-hosted connector. Browser automation needs more memory and a longer runtime than C1's cloud connector runtime provides, so it runs self-hosted.
+</Note>
+
+<Tabs>
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Baton RPA](https://github.com/conductorone/baton-rpa) connector, hosted and run in your own environment.
+
+    When running in service mode, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+    ### Step 1: Set up a new connector in C1
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new connector:
+
+        - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+        - Add the connector to a managed app (select from the list of existing managed apps)
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+        If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials. We'll use them in Step 3.
+      </Step>
+    </Steps>
+
+    ### Step 2: Write the playbook
+
+    <Steps>
+      <Step>
+        Write a YAML playbook for the target application and make it available to the connector — mounted from a config map, baked into your image, or written to disk by your deployment.
+      </Step>
+
+      <Step>
+        Validate the playbook before deploying it:
+
+        ```bash
+        baton-rpa --config-path playbook.yaml
+        baton resources -f sync.c1z
+        baton grants -f sync.c1z
+        ```
+      </Step>
+    </Steps>
+
+    ### Step 3: Configure the connector
+
+    {/* AUTO-GENERATED:START - config-params
+         Generated from config_schema.json. Do not edit manually. */}
+
+    <Steps>
+      <Step>
+        Enter the required configuration:
+
+        - **config-path** (required): Path to the Baton RPA YAML playbook configuration file. Environment variable: `BATON_CONFIG_PATH`.
+        - **enable-agent-core**: Run the playbook against the AWS Bedrock AgentCore remote browser instead of launching Chromium locally. Environment variable: `BATON_ENABLE_AGENT_CORE`.
+      </Step>
+    </Steps>
+
+    {/* AUTO-GENERATED:END - config-params */}
+
+    Any variables the playbook references are supplied as additional `BATON_`-prefixed environment variables.
+
+    ### Step 4: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Baton RPA connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-rpa-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-rpa-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Playbook location
+      BATON_CONFIG_PATH: /etc/baton-rpa/playbook.yaml
+
+      # Credentials referenced by the playbook
+      BATON_APP_USERNAME: <Service account username>
+      BATON_APP_PASSWORD: <Service account password>
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-rpa.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-rpa
+      labels:
+        app: baton-rpa
+    spec:
+      selector:
+        matchLabels:
+          app: baton-rpa
+      template:
+        metadata:
+          labels:
+            app: baton-rpa
+            baton: true
+            baton-app: rpa
+        spec:
+          containers:
+          - name: baton-rpa
+            image: public.ecr.aws/conductorone/baton-rpa:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-rpa
+            envFrom:
+            - secretRef:
+                name: baton-rpa-secrets
+    ```
+
+    <Warning>
+    Browser automation is resource-hungry. Size the pod for Chromium — at least 2 GB of memory — and expect syncs to take minutes rather than seconds.
+    </Warning>
+
+    ### Step 5: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Baton RPA connector to. The application's data should be found on the **Entitlements** and **Accounts** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Baton RPA connector is now pulling access data into C1.
+  </Tab>
+</Tabs>

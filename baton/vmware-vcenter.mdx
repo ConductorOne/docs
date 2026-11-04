@@ -1,0 +1,187 @@
+---
+title: "Set up a VMware vCenter connector"
+og:title: "Set up a VMware vCenter connector"
+description: "C1 provides identity governance for vCenter. Integrate your vCenter instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance for vCenter. Integrate your vCenter instance with C1 for unified visibility and governance over user access."
+sidebarTitle: "VMware vCenter"
+---
+
+<Note>
+The VMware vCenter connector is available as a self-hosted connector only. You run it in your own environment, where it can reach your vCenter Server.
+</Note>
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The VMware vCenter connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+**Notes:**
+- Accounts and groups are the users and groups in your vCenter Single Sign-On domain.
+- Roles include both system-defined and custom vCenter roles. Each role's privileges appear as entitlements on the role, and users and groups that hold the role through a vCenter permission are synced as role grants.
+
+## Gather VMware vCenter credentials
+
+<Warning>
+To configure the VMware vCenter connector, you need administrator access to your vCenter Server to create a dedicated account and assign it a role.
+</Warning>
+
+### Create a vCenter account for C1
+
+<Steps>
+  <Step>
+    Sign in to the vSphere Client as an administrator.
+  </Step>
+
+  <Step>
+    Navigate to **Administration** > **Single Sign-On** > **Users and Groups**.
+  </Step>
+
+  <Step>
+    On the **Users** tab, select your Single Sign-On domain (for example, `vsphere.local`) and click **Add**.
+  </Step>
+
+  <Step>
+    Enter a username (for example, `c1-connector`) and a password, then click **Add**.
+  </Step>
+
+  <Step>
+    Navigate to **Inventory** and select your vCenter Server at the top of the inventory tree.
+  </Step>
+
+  <Step>
+    Click the **Permissions** tab, then click **Add**.
+  </Step>
+
+  <Step>
+    Select the account you created, choose the **Read-only** role, check **Propagate to children**, and click **OK**.
+  </Step>
+
+  <Step>
+    Build the vCenter Server URL the connector uses. The URL includes the account's credentials and points at the vCenter SDK endpoint:
+
+    ```
+    https://<username>:<password>@<vcenter-host>/sdk
+    ```
+
+    URL-encode special characters in the username and password. For example, the `@` in `c1-connector@vsphere.local` becomes `%40`: `https://c1-connector%40vsphere.local:<password>@vcenter.example.com/sdk`.
+
+    <Tip>
+    If your vCenter Server uses a self-signed certificate, also set the connector's **insecure** option to skip TLS certificate verification.
+    </Tip>
+  </Step>
+</Steps>
+
+That's it! Next, configure the connector.
+
+## Configure the VMware vCenter connector
+
+<Warning>
+To complete this task, you need:
+- The **Connector Administrator** or **Super Administrator** role in C1
+- The vCenter Server URL you built in the previous section
+</Warning>
+
+Follow these instructions to use the [VMware vCenter](https://github.com/conductorone/baton-vmware-vcenter) connector, hosted and run in your own environment.
+
+When running in service mode, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals. This data is immediately available in the C1 UI for access reviews and access requests.
+
+### Resources
+
+- [Download center](https://dist.conductorone.com/ConductorOne/baton-vmware-vcenter)
+- [GitHub repository](https://github.com/conductorone/baton-vmware-vcenter)
+
+### Step 1: Set up a new VMware vCenter connector
+
+<Steps>
+  <Step>
+    In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+  </Step>
+
+  <Step>
+    Search for **Baton** and click **Add**.
+  </Step>
+
+  <Step>
+    Choose how to set up the new VMware vCenter connector:
+
+    - Add the connector to a currently unmanaged app (select from the list of apps that were discovered in your identity, SSO, or federation provider that aren't yet managed with C1)
+    - Add the connector to a managed app (select from the list of existing managed apps)
+    - Create a new managed app
+  </Step>
+
+  <Step>
+    Set the owner for this connector. You can manage the connector yourself, or choose someone else from the list of C1 users. Setting multiple owners is allowed.
+
+    If you choose someone else, C1 will notify the new connector owner by email that their help is needed to complete the setup process.
+  </Step>
+
+  <Step>
+    Click **Next**.
+  </Step>
+
+  <Step>
+    In the **Settings** area of the page, click **Edit**.
+  </Step>
+
+  <Step>
+    Click **Rotate** to generate a new Client ID and Secret.
+
+    Carefully copy and save these credentials. You use them in Step 2.
+  </Step>
+</Steps>
+
+### Step 2: Run the connector
+
+<Steps>
+  <Step>
+    Download the latest `baton-vmware-vcenter` release for your platform from the [download center](https://dist.conductorone.com/ConductorOne/baton-vmware-vcenter) onto a host that can reach your vCenter Server.
+  </Step>
+
+  <Step>
+    Set the connector's configuration as environment variables:
+
+    ```bash
+    # C1 credentials
+    export BATON_CLIENT_ID="<C1 client ID>"
+    export BATON_CLIENT_SECRET="<C1 client secret>"
+
+    # VMware vCenter configuration
+    export BATON_VCENTER_SERVER_URL="https://<username>:<password>@<vcenter-host>/sdk"
+
+    # Optional: skip TLS certificate verification for a self-signed certificate
+    export BATON_INSECURE="true"
+    ```
+
+    Run `baton-vmware-vcenter --help` to see all available configuration flags and environment variables.
+  </Step>
+
+  <Step>
+    Start the connector:
+
+    ```bash
+    baton-vmware-vcenter
+    ```
+
+    With the C1 client ID and secret set, the connector runs in service mode and keeps syncing with C1.
+  </Step>
+
+  <Step>
+    Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the VMware vCenter connector to. VMware vCenter data should be found on the **Entitlements** and **Accounts** tabs.
+  </Step>
+</Steps>
+
+**Done.** Your VMware vCenter connector is now pulling access data into C1.
+
+<Tip>
+Download the latest release of the connector from the [download center](https://dist.conductorone.com/ConductorOne/baton-vmware-vcenter).
+</Tip>
