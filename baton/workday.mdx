@@ -18,11 +18,13 @@ C1 offers two Workday connectors: Workday and Workday Accounts (WQL). How you wa
 | :--- | :--- | :--- |
 | Accounts                                          | Sync                | Sync                             |
 | Roles                                             | Sync                |                                  |
-| Security groups                                   | Sync                | Sync                             |
+| Security groups                                   | Sync, Provision\*\* | Sync                             |
 | Account type (Implementers and Integration Users) |                     | Sync                             |
 | Service centers                                   |                     | Sync                             |
 
 *If the Workday connector is configured using a custom report (see below), it can also pull in information on the account owner’s organization, title, and manager.
+
+**Provisioning applies to user-based security groups, and needs a JSON custom report.
 
 ## Capabilities
 
@@ -32,7 +34,10 @@ C1 offers two Workday connectors: Workday and Workday Accounts (WQL). How you wa
 | :--- | :--- | :--- |
 | Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
 | Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
-| Security groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+| Security groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| AI agents\*\* | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+
+The Workday connector supports provisioning membership in **user-based security groups** when it's configured with a JSON custom report. See [Security group provisioning](#security-group-provisioning) for the setup it needs.
 
 ### Custom report (CSV)
 
@@ -41,6 +46,7 @@ C1 offers two Workday connectors: Workday and Workday Accounts (WQL). How you wa
 | Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
 | Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
 | Security groups |  |  |
+| AI agents\*\* | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
 
 ### API client
 
@@ -49,6 +55,13 @@ C1 offers two Workday connectors: Workday and Workday Accounts (WQL). How you wa
 | Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
 | Roles |  |  |
 | Security groups |  |  |
+| AI agents | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
+
+\*\*AI agents sync only when the custom report is configured with an API Client. With Basic Auth, turning on AI agents fails the sync.
+
+<Note>
+**AI agents are opt-in.** The connector syncs the agents registered in Workday's Agent System of Record (ASOR), including each agent's provider, platform, version, and skills. Enable the AI agents resource type in C1 after the API client's security group has the ASOR domain access described below. If the API client lacks that access, a sync that includes AI agents fails with an error naming the missing scope. Agents are synced as standalone resources and are not yet linked to the Agent System User accounts they run as.
+</Note>
 
 ## Gather Workday credentials 
 
@@ -116,6 +129,18 @@ Notes:
 - The `Column Heading Override XML Alias` value MUST match `Column Heading Override`.
 - You may substitute the suggested Workday object fields with alternatives as long as they provide equivalent data.
 
+### Security group provisioning
+
+When the JSON report includes the `security_groups` column, C1 can add users to and remove them from **user-based security groups**. Other group types, such as role-based security groups, sync as usual but can't be provisioned, because Workday derives their membership from role and organization assignments.
+
+To provision security groups:
+
+- The report's `user_id` column must hold the worker's **Employee ID** or **Contingent Worker ID**, so the connector can find the worker's Workday account.
+- The Workday account whose credentials the connector uses (the report owner) must be in a security group with these domain permissions, both in the **System** functional area:
+  - **User-Based Security Group Administration**: Get and Put (granting the parent **Security Administration** domain also covers it)
+  - **Workday Accounts**: Get
+- If you authenticate with a custom report and API client (Option 2 below), also add the **System** scope to the API client.
+
 <Note>
    Duplicate `user_id` rows are reduced to a single record: the active record wins, and the record that loses is discarded whole, taking its roles and security groups with it. This applies to the JSON report only — the CSV report described below is unaffected.
 </Note>
@@ -182,7 +207,7 @@ In Workday, use the search bar to look up "Register API Client for Integrations"
 Give the new API client a name, such as "C1 integration (report OAuth)".
 </Step>
 <Step>
-In the **Scopes** box, select **Tenant Non-Configurable**. Also search for "Staffing" and select **Staffing** and **Organizations and Roles**, then click **OK**.
+In the **Scopes** box, select **Tenant Non-Configurable**. Also search for "Staffing" and select **Staffing** and **Organizations and Roles**. (Optional) To provision security groups, also select **System**. To sync AI agents, also select **Agent System of Record**, and make sure the report owner has View access to the **Setup: Agents** domain. Click **OK**.
 
 <Warning>
 The **Tenant Non-Configurable** scope is required for custom report OAuth authentication. Without it, OAuth token requests will be rejected.
@@ -273,7 +298,7 @@ Create a new security group. Give it a name, such as "C1 integration security gr
 On the new group's **Domain Security Policy Permissions** tab, leave the **Select All** box checked.
 </Step>
 <Step>
-Click the **+** icon to create six (or seven, see below) new rows, and fill them out as follows:
+Click the **+** icon to create six (or more, see below) new rows, and fill them out as follows:
 
     Row 1:
 
@@ -309,6 +334,11 @@ Click the **+** icon to create six (or seven, see below) new rows, and fill them
 
     * View/Modify Access: **View Only**
     * Domain Security Policy: **Worker Data: Staffing Business Title**
+
+    Row 8 (needed only to sync AI agents):
+
+    * View/Modify Access: **View Only**
+    * Domain Security Policy: **Setup: Agents**
 </Step>
 <Step>
 Click **OK**.
@@ -355,7 +385,7 @@ Give the new API client a name, such as "C1 integration".
 In the **Integration System User** field, select the ISU you created earlier. This is crucial for associating the API client with the correct permissions.
 </Step>
 <Step>
-In the **Scopes** box, search for "Staffing". Select **Staffing** and **Organizations and Roles** and click **OK**.
+In the **Scopes** box, search for "Staffing". Select **Staffing** and **Organizations and Roles** and click **OK**. To sync AI agents, also select **Agent System of Record**.
 </Step>
 <Step>
 The newly created client's client ID and client secret are shown. Carefully copy and save these credentials.
