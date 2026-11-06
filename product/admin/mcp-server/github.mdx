@@ -18,7 +18,7 @@ Both options support per-user OAuth through a GitHub OAuth app that you register
 | | GitHub (GitHub MCP) | GitHub API |
 | :--- | :--- | :--- |
 | **Who hosts the MCP server** | GitHub | C1 |
-| **Tool set** | GitHub's own tools: repositories, issues, pull requests, Actions, discussions, security alerts, projects, gists, notifications, and more | About 350 tools for developer workflows: code, pull request review, CI, deployments, issues, security alert triage, organization and team reads, projects, gists, and notifications |
+| **Tool set** | GitHub's own tools: repositories, issues, pull requests, Actions, discussions, security alerts, projects, gists, notifications, and more | About 350 tools, about 45 of them hidden by default, for developer workflows: code, pull request review, CI, deployments, issues, security alert triage, organization and team reads, projects, gists, and notifications |
 | **Authentication** | Per-user OAuth through a GitHub OAuth app, or a personal access token | Per-user OAuth through a GitHub OAuth app, or a personal access token |
 | **Scopes C1 requests** | `repo`, `read:org`, `read:user`, `user:email`, `read:packages`, `write:packages`, `read:project`, `project`, `gist`, `notifications`, `offline_access` | `repo`, `user`, `read:org`, `project`, `gist` |
 | **Approval defaults** | Your tenant's default tool settings | High-risk actions such as merges, pushes, and workflow dispatch require approval by default |
@@ -27,7 +27,7 @@ Both options support per-user OAuth through a GitHub OAuth app that you register
 
 Choose **GitHub** if you want the tool set GitHub itself publishes, including discussions, Copilot features, and package-related scopes, and you want new GitHub tools to appear as GitHub releases them.
 
-Choose **GitHub API** if you want a developer-workflow tool set with C1's default approval levels already applied to risky actions. It also includes tools that GitHub's hosted server doesn't offer, such as reviewing pending deployments for a workflow run and listing a pull request's requested reviewers.
+Choose **GitHub API** if you want a developer-workflow tool set with C1's default approval levels already applied to risky actions. It also includes tools that GitHub's hosted server doesn't offer as separate tools, such as reviewing pending deployments for a workflow run and listing a pull request's requested reviewers separately for users and teams.
 
 <Tabs>
 
@@ -39,7 +39,7 @@ C1 registers as a client of [GitHub's hosted MCP server](https://github.com/gith
 
 - AI access management must be enabled for your tenant. See [Enable AI access management](/product/admin/enable-ai-access-management).
 - GitHub doesn't support dynamic client registration for this server, so for per-user OAuth you first register a GitHub OAuth app and give C1 its client ID and client secret. If you'd rather not, use a personal access token.
-- If your GitHub organization or enterprise is on a Copilot Business or Copilot Enterprise plan, the **MCP servers in Copilot** policy must be enabled. Organization policies can also limit which OAuth apps and scopes are allowed. See GitHub's [guide to setting up the GitHub MCP server](https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server).
+- If your GitHub organization or enterprise is on a Copilot Business or Copilot Enterprise plan, GitHub's **MCP servers in Copilot** policy may need to be enabled for users to reach the hosted server. Organization policies can also limit which OAuth apps and scopes are allowed. See GitHub's [guide to setting up the GitHub MCP server](https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server).
 
 <Note>
 In your MCP server catalog, this option is listed as **GitHub**, distinct from the **GitHub API** entry. If you don't see either, [contact the C1 support team](mailto:support@c1.ai) to enable it for your tenant.
@@ -88,7 +88,7 @@ The first time a user calls a GitHub tool from their AI client, C1 redirects the
 
 ### GitHub OAuth endpoints and scopes
 
-C1 uses GitHub's standard OAuth web application flow with PKCE (S256):
+Users authorize through GitHub's standard OAuth web application flow with PKCE (S256). These are GitHub's OAuth endpoints for your OAuth app, and you don't enter them in C1:
 
 - **Authorization URL:** `https://github.com/login/oauth/authorize`
 - **Token URL:** `https://github.com/login/oauth/access_token`
@@ -109,6 +109,8 @@ GitHub OAuth apps don't have scopes configured in advance. C1 requests these sco
 
 Tool calls run with the connected user's own GitHub permissions, so a user who can't publish a package in GitHub can't do it through a tool either. Scope changes take effect the next time a user authorizes.
 
+If your organization enforces SAML single sign-on, each user needs an active SAML session for the organization when they authorize the app. If the app can't reach the organization afterward, the user revokes the app in GitHub, signs in to the organization, and authorizes again ([authorizing OAuth apps](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/authorizing-oauth-apps)).
+
 ## Use a personal access token instead
 
 GitHub's hosted MCP server also accepts a personal access token, either fine-grained or classic, as a shared bearer credential. Every user then acts as one GitHub identity. Generate the token first.
@@ -125,7 +127,7 @@ Copy the token. GitHub shows it only once.
 </Step>
 </Steps>
 
-If your organization uses SAML single sign-on, authorize the token for it. Enterprise Managed Users can't use personal access tokens unless an enterprise administrator enables them. Then register the server in C1 with the token.
+If your organization uses SAML single sign-on, authorize the token for it after you create it. If the organization requires approval of fine-grained tokens, an organization owner must approve the token before it can reach the organization's resources. For a fine-grained token, the resource owner must be the organization for the token to reach its repositories. Enterprise Managed Users can't use personal access tokens unless an enterprise administrator enables them. Then register the server in C1 with the token.
 
 <Steps>
 <Step>
@@ -163,6 +165,13 @@ Tool discovery runs even if authentication isn't complete yet, so seeing discove
 - **Rotate a personal access token** by generating a new one in GitHub and updating it in C1. Set an expiration on the token so it rotates on a schedule.
 - **An individual user can revoke their own authorization at any time.** In GitHub, go to **Settings** > **Applications** > **Authorized OAuth Apps**, then select **Revoke** next to C1 ([reviewing your authorized OAuth apps](https://docs.github.com/en/apps/oauth-apps/using-oauth-apps/reviewing-your-authorized-oauth-apps)).
 - **An organization owner can restrict or revoke OAuth app access org-wide** if the organization has third-party application access restrictions enabled ([about OAuth app access restrictions](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/about-oauth-app-access-restrictions)).
+
+## Troubleshooting GitHub access errors
+
+If a tool call fails with a 403 error or returns empty results, check these causes:
+
+- **SAML enforcement.** If GitHub reports that the resource is protected by organization SAML enforcement, authorize the personal access token for single sign-on, or have the user sign in to the organization and authorize the OAuth app again.
+- **OAuth app access restrictions.** If the organization restricts third-party OAuth apps, an organization owner must approve the app ([about OAuth app access restrictions](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/about-oauth-app-access-restrictions)).
 
 </Tab>
 
@@ -218,7 +227,7 @@ Copy the **Client ID**, then select **Generate a new client secret** and copy th
 
 ### GitHub endpoints and scopes
 
-C1 uses GitHub's standard OAuth web application flow with PKCE (S256):
+Users authorize through GitHub's standard OAuth web application flow with PKCE (S256). These are GitHub's OAuth endpoints for your OAuth app, and you don't enter them in C1:
 
 - **Authorization URL:** `https://github.com/login/oauth/authorize`
 - **Token URL:** `https://github.com/login/oauth/access_token`
@@ -253,6 +262,8 @@ Save your changes.
 
 The first time a user calls a GitHub tool from their AI client, C1 prompts them to connect their GitHub account.
 
+If your organization enforces SAML single sign-on, each user needs an active SAML session for the organization when they authorize the app. If the app can't reach the organization afterward, the user revokes the app in GitHub, signs in to the organization, and authorizes again ([authorizing OAuth apps](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/authorizing-oauth-apps)).
+
 ## Option 2: Use a personal access token
 
 A personal access token authenticates every user as one shared GitHub identity. Use this when per-user attribution in GitHub isn't required. GitHub offers fine-grained tokens, which are recommended because you can limit them to specific repositories and permissions.
@@ -277,6 +288,8 @@ Select **Generate token** and copy it. GitHub shows the token only once.
 </Steps>
 
 A classic personal access token also works. It can reach every repository its owner can access, so prefer a fine-grained token. Fine-grained tokens can't span multiple organizations, so use a classic token with the `repo`, `user`, `read:org`, `project`, and `gist` scopes if one token has to cover several ([managing personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)). Enterprise Managed Users can't use personal access tokens unless an enterprise administrator enables them.
+
+If your organization uses SAML single sign-on, authorize the token for it after you create it. If the organization requires approval of fine-grained tokens, an organization owner must approve the token before it can reach the organization's resources. For a fine-grained token, the resource owner must be the organization for the token to reach its repositories.
 
 For a shared production setup, create the token from a dedicated service-account user so activity is attributable to C1 rather than a person.
 
@@ -340,7 +353,7 @@ About 45 tools are hidden by default, including downloads of archives and artifa
 - Writes that touch `.github/workflows/` files fail because C1 doesn't request the `workflow` scope.
 - Some organization reads, such as outside collaborators and organization roles, return an error unless the connected user is an organization owner or admin.
 - Each list call returns one page of results. Tools that support paging take a `page` parameter, with up to 100 results per page.
-- Tools that delete an issue assignee, pull request reviewer, or sub-issue, and the tool that deletes a file, aren't available.
+- The tools that remove assignees, requested reviewers, and sub-issues, and the tool that deletes a file, can't currently be enabled.
 
 ## Discover and govern tools
 
@@ -359,6 +372,15 @@ Tool discovery runs even if your credentials are incorrect, so seeing discovered
 - **Rotate the OAuth client secret** in your GitHub OAuth app under **Settings** > **Developer settings** > **OAuth Apps**, then update the secret on the server's authentication settings in C1.
 - **Rotate a personal access token** by generating a new one in GitHub and updating it in C1. Set an expiration on the token so it rotates on a schedule.
 - **Adjust access** by changing the token's repository permissions in GitHub. With OAuth, C1 requests a fixed set of scopes; to change them, [contact the C1 support team](mailto:support@c1.ai).
+
+## Troubleshooting GitHub access errors
+
+If a tool call fails with a 403 error or returns empty results, check these causes:
+
+- **SAML enforcement.** If GitHub reports that the resource is protected by organization SAML enforcement, authorize the personal access token for single sign-on, or have the user sign in to the organization and authorize the OAuth app again.
+- **OAuth app access restrictions.** If the organization restricts third-party OAuth apps, an organization owner must approve the app ([about OAuth app access restrictions](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/about-oauth-app-access-restrictions)).
+- **Workflow files.** Writes to files under `.github/workflows/` fail because C1 doesn't request the `workflow` scope.
+- **Owner-only reads.** Reads such as outside collaborators and organization roles return a 403 or 404 error unless the connected user is an organization owner.
 
 </Tab>
 
