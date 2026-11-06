@@ -6,6 +6,42 @@ og:description: "C1 provides identity governance and just-in-time provisioning f
 sidebarTitle: "GitHub Enterprise Cloud"
 ---
 
+<Note>
+This connector is in **beta**. Use it if you are a GitHub Enterprise Cloud
+customer who can install one GitHub App on the enterprise and on each of its
+organizations, and want every organization in the enterprise synced through one
+connector. If you need personal access token authentication or capabilities
+this connector does not cover (see
+[What this connector covers](#what-this-connector-covers)), see
+[Choose a GitHub connector](/baton/choose-github-connector) to find the GitHub
+connector that offers them.
+</Note>
+
+## What this connector covers
+
+**Unique to this connector:**
+
+- One connector for the whole enterprise, instead of one connector per
+  organization.
+- Enterprise teams: sync and provisioning.
+- Enterprise-level invitations: account provisioning invites users to the
+  enterprise as unaffiliated members.
+
+**Not covered:**
+
+- Personal access token authentication (GitHub App only)
+- Organization roles
+- Licenses
+- Secrets and non-human identities
+- Member last activity
+- Enterprise owner provisioning (enterprise owners are synced but cannot be
+  granted or revoked)
+- Account deletion
+
+Organization provisioning is limited to revoking organization membership and
+demoting organization owners to members. If you need a capability that is not
+covered here, see [Choose a GitHub connector](/baton/choose-github-connector).
+
 ## Capabilities
 
 |Resource|Sync|Provision|
@@ -21,6 +57,23 @@ sidebarTitle: "GitHub Enterprise Cloud"
 The GitHub Enterprise Cloud connector supports account provisioning by inviting
 new users directly to the enterprise as unaffiliated members. The connector
 returns action required until the user accepts the GitHub invitation.
+
+### Account provisioning and Enterprise Managed Users (EMU)
+
+Account provisioning invites users to the enterprise, which is not how
+Enterprise Managed Users (EMU) accounts are created. According to GitHub's
+documentation, EMU accounts are provisioned by your identity provider (IdP)
+through SCIM rather than invited
+([Inviting users to join your organization](https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-membership-in-your-organization/inviting-users-to-join-your-organization):
+"Managed user accounts are provisioned using SCIM, not invited."). If your
+enterprise uses EMU, create accounts through your identity provider's GitHub
+SCIM integration instead of through C1 account provisioning.
+
+On an EMU enterprise, the enterprise invitation is expected to fail with an
+error from GitHub. The connector still syncs existing EMU users and governs
+their access to organizations, enterprise teams, teams, and repositories.
+Memberships that are managed by your identity provider may not be modifiable
+from C1.
 
 ## Gather GitHub Enterprise Cloud credentials
 
@@ -167,6 +220,7 @@ each organization you need (an enterprise install is not enough).
         - **GitHub App ID**: The GitHub App ID.
         - **GitHub App private key**: The private key file for the GitHub App.
         - **GitHub App installation ID**: The enterprise installation ID.
+        - **Skip organizations without the GitHub App** (optional): Turn this on to skip organizations where the GitHub App is not installed or its installation is suspended, instead of failing the sync. See the warning in [Gather GitHub Enterprise Cloud credentials](#gather-github-enterprise-cloud-credentials).
       </Step>
 
       <Step>
@@ -186,6 +240,10 @@ each organization you need (an enterprise install is not enough).
   <Tab title="Self-hosted">
     Follow these instructions to run the GitHub Enterprise Cloud connector in
     your own environment.
+
+    This is a separate connector from the
+    [GitHub Enterprise connector](/baton/github-enterprise). Its container
+    image is `baton-github-enterprise-cloud` on `public.ecr.aws/conductorone`.
 
     <Steps>
       <Step>
