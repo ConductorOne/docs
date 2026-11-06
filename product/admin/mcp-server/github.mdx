@@ -227,7 +227,7 @@ Copy the **Client ID**, then select **Generate a new client secret** and copy th
 
 ### GitHub endpoints and scopes
 
-Users authorize through GitHub's standard OAuth web application flow. These are GitHub's OAuth endpoints for your OAuth app, and you don't enter them in C1:
+Users authorize through GitHub's standard OAuth web application flow with PKCE (S256). These are GitHub's OAuth endpoints for your OAuth app, and you don't enter them in C1:
 
 - **Authorization URL:** `https://github.com/login/oauth/authorize`
 - **Token URL:** `https://github.com/login/oauth/access_token`
@@ -333,6 +333,15 @@ The GitHub API server exposes about 350 tools for developer workflows:
 
 Administration of organizations, enterprises, and repositories (settings, policies, runners, secrets, webhooks, membership changes) and credential management aren't exposed.
 
+### Reviewing pending deployments
+
+The GitHub API server can list the deployments a workflow run is waiting on and approve or reject them with a comment, the same review a person gives in GitHub. GitHub enforces who can do this:
+
+- The run must be waiting on an environment that has required reviewers, and the connected GitHub identity must be one of them. Each pending deployment shows whether the connected user can approve it.
+- If the environment prevents self-review, a user can't approve a run they started.
+- On GitHub Free, Pro, and Team plans, required reviewers are only available for public repositories ([deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
+- With a fine-grained personal access token, grant read access to **Contents** and **Deployments** on the repositories involved.
+
 ### Approval defaults
 
 C1 sets default approval levels for GitHub API tools. Reads run without confirmation. The tools that carry the highest risk require approval by default:
@@ -381,6 +390,8 @@ If a tool call fails with a 403 error or returns empty results, check these caus
 - **OAuth app access restrictions.** If the organization restricts third-party OAuth apps, an organization owner must approve the app ([about OAuth app access restrictions](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/about-oauth-app-access-restrictions)).
 - **Workflow files.** Writes to files under `.github/workflows/` fail because C1 doesn't request the `workflow` scope.
 - **Owner-only reads.** Reads such as outside collaborators and organization roles return a 403 or 404 error unless the connected user is an organization owner.
+- **Missing scopes after a scope change.** If organization, team, project, or gist tools fail for a user who authorized earlier, have the user reconnect their GitHub account so GitHub grants the scopes C1 currently requests.
+- **Review requests.** GitHub rejects a review request for the pull request's own author with a 422 error. Request a different user or a team.
 
 </Tab>
 
