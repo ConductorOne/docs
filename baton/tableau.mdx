@@ -1,8 +1,8 @@
 ---
 title: Set up a Salesforce Tableau connector
 og:title: Set up a Salesforce Tableau connector - C1 docs
-og:description: Integrate your Salesforce Tableau instance with C1 to run user access reviews, enable just-in-time access requests, and easily provision and deprovision access.
-description: C1 provides identity governance for Salesforce Tableau. Integrate your Salesforce Tableau instance with C1 to run user access reviews (UARs) and enable just-in-time access requests.
+og:description: C1 provides identity governance and just-in-time provisioning for Salesforce Tableau. Integrate your Salesforce Tableau instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access.
+description: C1 provides identity governance and just-in-time provisioning for Salesforce Tableau. Integrate your Salesforce Tableau instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access.
 sidebarTitle: Salesforce Tableau
 ---
 
@@ -20,6 +20,12 @@ sidebarTitle: Salesforce Tableau
 
 The Tableau connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
+**Notes:**
+
+- Workbooks in a user's Personal Space don't belong to a project, so C1 doesn't sync them or their views.
+- C1 syncs membership of the built-in **All Users** group but can't change it, because Tableau doesn't allow that group to be modified through the API.
+- C1 doesn't show users with the **Server Administrator** site role as group members.
+
 ## Licenses and seats
 
 In Tableau, licensing is role-based: each user's **site role** determines their license tier. There is no separate license object to assign — granting a license means setting the user's site role. The connector surfaces four tiers:
@@ -33,6 +39,10 @@ In Tableau, licensing is role-based: each user's **site role** determines their 
 When your Tableau site has per-tier seat capacities configured, C1 tracks the purchased and consumed seat counts for each license tier, so you can review license utilization alongside who holds each tier.
 </Note>
 
+<Note>
+Revoking a license fails if the user belongs to a group with a **Grant role on sign in** minimum site role. Tableau returns `Site role of link user that belongs to license upon login cannot be lower than minimum site role of group`. Remove the user from that group first, then revoke the license.
+</Note>
+
 ## Permission inheritance
 
 Tableau uses a permission inheritance model that affects how access is synced and provisioned:
@@ -42,6 +52,16 @@ Tableau uses a permission inheritance model that affects how access is synced an
 - **Workbooks with `showTabs=true`**: Views (dashboards) inside these workbooks inherit their permissions from the workbook. View-level permissions cannot be granted or revoked independently — attempting to do so returns a clear error. Use the workbook entitlement instead.
 
 - **Workbooks with `showTabs=false`**: Views have their own independent permission assignments, which can be granted and revoked directly.
+
+- **Permissions granted to a group**: Every member of the group holds the permission, and C1 shows the group as the source of each member's grant.
+
+<Note>
+If a locked project's name contains a comma (`,`) or an ampersand (`&`), C1 doesn't sync the access its workbooks inherit from that project, because Tableau rejects these characters in the filter the connector uses to find them. Rename those projects without commas or ampersands to sync their inherited access.
+</Note>
+
+<Note>
+Revoking a permission from a user who holds it only through a group doesn't remove their access: the next sync shows it again, granted through the group. Revoke the permission from the group, or remove the user from the group.
+</Note>
 
 ## Gather Tableau credentials 
 
