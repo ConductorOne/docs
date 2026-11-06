@@ -20,7 +20,8 @@ Both options support per-user OAuth through a GitHub OAuth app that you register
 | **Who hosts the MCP server** | GitHub | C1 |
 | **Tool set** | GitHub's own tools: repositories, issues, pull requests, Actions, discussions, security alerts, projects, gists, notifications, and more | About 350 tools, about 45 of them hidden by default, for developer workflows: code, pull request review, CI, deployments, issues, security alert triage, organization and team reads, projects, gists, and notifications |
 | **Authentication** | Per-user OAuth through a GitHub OAuth app, or a personal access token | Per-user OAuth through a GitHub OAuth app, or a personal access token |
-| **Scopes C1 requests** | `repo`, `read:org`, `read:user`, `user:email`, `read:packages`, `write:packages`, `read:project`, `project`, `gist`, `notifications`, `offline_access` | `repo`, `user`, `read:org`, `project`, `gist` |
+| **Default scopes** | `repo`, `read:org`, `read:user`, `user:email`, `read:packages`, `write:packages`, `read:project`, `project`, `gist`, `notifications`, `offline_access` | `repo`, `user`, `read:org`, `project`, `gist` |
+| **Optional scopes** | `workflow`, `admin:org`, `read:enterprise`, `admin:enterprise` | `admin:org`, `workflow` |
 | **Approval defaults** | Your tenant's default tool settings | High-risk actions such as merges, pushes, and workflow dispatch require approval by default |
 
 ### Choose between the two options
@@ -93,7 +94,7 @@ Users authorize through GitHub's standard OAuth web application flow with PKCE (
 - **Authorization URL:** `https://github.com/login/oauth/authorize`
 - **Token URL:** `https://github.com/login/oauth/access_token`
 
-GitHub OAuth apps don't have scopes configured in advance. C1 requests these scopes on GitHub's consent screen ([scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)). All of them are requested by default, and there are no optional scopes to add:
+GitHub OAuth apps don't have scopes configured in advance. C1 requests these default scopes on GitHub's consent screen ([scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)):
 
 - `repo` — full access to public and private repositories, including code, commit statuses, invitations, collaborators, deployment statuses, and webhooks.
 - `read:org` — read-only access to organization membership, organization projects, and team membership.
@@ -107,7 +108,14 @@ GitHub OAuth apps don't have scopes configured in advance. C1 requests these sco
 - `notifications` — read notifications, mark threads as read, and manage watch and thread subscriptions.
 - `offline_access` — lets GitHub issue a refresh token so users stay connected without reauthorizing each time the access token expires.
 
-Tool calls run with the connected user's own GitHub permissions, so a user who can't publish a package in GitHub can't do it through a tool either. Scope changes take effect the next time a user authorizes.
+**Optional scopes** enable a few of GitHub's tools that the defaults don't cover. C1 doesn't request them unless an admin adds them in the scopes field when you [configure authentication](/product/admin/mcp-servers#configure-authentication). Add only what you need:
+
+- `workflow` — add and update GitHub Actions workflow files. Needed when the file-writing tools change files under `.github/workflows/`.
+- `admin:org` — fully manage the organization and its teams, projects, and memberships. Needed to create organization rulesets and write organization custom properties.
+- `read:enterprise` — read enterprise profile data. Needed to read enterprise-level rulesets and custom properties.
+- `admin:enterprise` — fully manage the enterprise. Needed to create enterprise rulesets and write enterprise custom properties.
+
+Tool calls run with the connected user's own GitHub permissions, so a user who can't publish a package in GitHub can't do it through a tool either. Scope changes take effect the next time a user authorizes. If you add an optional scope after users have connected, each user must reconnect their GitHub account to grant it.
 
 If your organization enforces SAML single sign-on, each user needs an active SAML session for the organization when they authorize the app. If the app can't reach the organization afterward, the user revokes the app in GitHub, signs in to the organization, and authorizes again ([authorizing OAuth apps](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/authorizing-oauth-apps)).
 
@@ -232,7 +240,7 @@ Users authorize through GitHub's standard OAuth web application flow with PKCE (
 - **Authorization URL:** `https://github.com/login/oauth/authorize`
 - **Token URL:** `https://github.com/login/oauth/access_token`
 
-GitHub OAuth apps don't have scopes configured in advance. C1 requests these scopes on GitHub's consent screen when a user authorizes ([scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)). All of them are requested by default, and there are no optional scopes to add:
+GitHub OAuth apps don't have scopes configured in advance. C1 requests these default scopes on GitHub's consent screen when a user authorizes ([scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)):
 
 - `repo` — full access to public and private repositories, including code, commit statuses, invitations, collaborators, deployment statuses, and webhooks. Needed for repository, pull request, issue, Actions, and deployment tools.
 - `user` — read and write access to profile information, including email addresses and follow relationships. Needed for user identity reads.
@@ -242,7 +250,10 @@ GitHub OAuth apps don't have scopes configured in advance. C1 requests these sco
 
 Tool calls run with the connected user's own GitHub permissions. If your organization restricts third-party OAuth app access, an organization owner must approve the app before users can reach that organization's resources. Scope changes take effect the next time a user authorizes.
 
-The `workflow` scope isn't requested, so writes that touch `.github/workflows/` files fail with a 403 error.
+**Optional scopes** enable tools the defaults don't cover. C1 doesn't request them unless an admin adds them in the scopes field when registering the server. If you add one after users have connected, each user must reconnect their GitHub account to grant it:
+
+- `admin:org` — fully manage the organization and its teams, projects, and memberships. Needed to list the users and teams assigned to an organization role.
+- `workflow` — add and update GitHub Actions workflow files. Without it, writes that touch `.github/workflows/` files fail with a 403 error.
 
 ### Register the server with OAuth
 
@@ -287,7 +298,7 @@ Select **Generate token** and copy it. GitHub shows the token only once.
 </Step>
 </Steps>
 
-A classic personal access token also works. It can reach every repository its owner can access, so prefer a fine-grained token. Fine-grained tokens can't span multiple organizations, so use a classic token with the `repo`, `user`, `read:org`, `project`, and `gist` scopes if one token has to cover several ([managing personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)). Enterprise Managed Users can't use personal access tokens unless an enterprise administrator enables them.
+A classic personal access token also works. It can reach every repository its owner can access, so prefer a fine-grained token. Fine-grained tokens can't span multiple organizations, so use a classic token with the `repo`, `user`, `read:org`, `project`, and `gist` scopes (plus `admin:org` or `workflow` if you need the tools those cover) if one token has to cover several ([managing personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)). Enterprise Managed Users can't use personal access tokens unless an enterprise administrator enables them.
 
 If your organization uses SAML single sign-on, authorize the token for it after you create it. If the organization requires approval of fine-grained tokens, an organization owner must approve the token before it can reach the organization's resources. For a fine-grained token, the resource owner must be the organization for the token to reach its repositories.
 
@@ -359,8 +370,8 @@ About 45 tools are hidden by default, including downloads of archives and artifa
 
 ### Known limits
 
-- Writes that touch `.github/workflows/` files fail because C1 doesn't request the `workflow` scope.
-- Some organization reads, such as outside collaborators and organization roles, return an error unless the connected user is an organization owner or admin.
+- Writes that touch `.github/workflows/` files fail unless an admin adds the optional `workflow` scope.
+- Some organization reads, such as outside collaborators and organization roles, return an error unless the connected user is an organization owner or admin. Listing an organization role's users and teams also needs the optional `admin:org` scope.
 - Each list call returns one page of results. Tools that support paging take a `page` parameter, with up to 100 results per page.
 - The tools that remove assignees, requested reviewers, and sub-issues, and the tool that deletes a file, can't currently be enabled.
 
@@ -388,7 +399,7 @@ If a tool call fails with a 403 error or returns empty results, check these caus
 
 - **SAML enforcement.** If GitHub reports that the resource is protected by organization SAML enforcement, authorize the personal access token for single sign-on, or have the user sign in to the organization and authorize the OAuth app again.
 - **OAuth app access restrictions.** If the organization restricts third-party OAuth apps, an organization owner must approve the app ([about OAuth app access restrictions](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/about-oauth-app-access-restrictions)).
-- **Workflow files.** Writes to files under `.github/workflows/` fail because C1 doesn't request the `workflow` scope.
+- **Workflow files.** Writes to files under `.github/workflows/` fail unless an admin adds the optional `workflow` scope and users reconnect.
 - **Owner-only reads.** Reads such as outside collaborators and organization roles return a 403 or 404 error unless the connected user is an organization owner.
 - **Missing scopes after a scope change.** If organization, team, project, or gist tools fail for a user who authorized earlier, have the user reconnect their GitHub account so GitHub grants the scopes C1 currently requests.
 - **Review requests.** GitHub rejects a review request for the pull request's own author with a 422 error. Request a different user or a team.
