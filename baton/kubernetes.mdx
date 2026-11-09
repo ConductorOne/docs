@@ -140,7 +140,7 @@ on objects** (`--include-system-object-permissions`) if you want them back on th
 
 <Warning>
 Object-level permissions scale with the number of objects. Because each type declares a fixed set,
-every object carries it whether or not anyone holds it — a pod declares 25 permissions, a secret or
+every object carries it whether or not anyone holds it — a pod declares 28 permissions, a secret or
 config map 5 — so consider what selecting Pods means on a cluster running thousands of them. Pods
 are marked as a resource type whose count may legitimately fall between syncs, so a rollout
 replacing every pod is not reported as missing data.
@@ -225,10 +225,10 @@ The connector resolves its target cluster in this order:
 2. **`--server`** — with no `--kubeconfig`, the connector connects to this URL directly. Supply credentials separately with `--token`, or with `--client-certificate` and `--client-key`, or rely on an in-cluster service account.
 3. **The environment** — with neither flag set, the connector requires one of the following to be present, and the standard Kubernetes client loading rules then decide which one applies:
    - the `KUBECONFIG` environment variable, a `:`-separated list of paths whose first existing file wins
-   - the default kubeconfig at `$HOME/.kube/config`
+   - the default kubeconfig at `$HOME/.kube/config`, used only when `KUBECONFIG` is not set
    - an in-cluster service account token, mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token`
 
-   When none of the three exists, the connector exits with `no kubeconfig available: <path> does not exist and no in-cluster service account found`.
+   When none of the three exists, the connector exits with `no kubeconfig available: none of [<paths>] exist and no in-cluster service account found`.
 
 <Warning>
 Name the target cluster explicitly when you run the connector outside a cluster. With neither `--kubeconfig` nor `--server` set, the connector follows the current context of your default kubeconfig, which may point at a different cluster than the one you intend to sync. Confirm the context with `kubectl config current-context` before the first sync.
@@ -312,7 +312,7 @@ every cluster binds `system:discovery` to `system:authenticated` by default. If 
 removed that binding, grant `get` on the non-resource URLs `/api`, `/api/*`, `/apis` and
 `/apis/*`. Without discovery the connector still syncs permissions; it just cannot tell that a
 rule naming a cluster-scoped resource inside a namespace is inert, so such rules are reported
-rather than dropped.
+rather than dropped, and it logs a warning that starts with `API discovery unavailable`.
 </Note>
 
 ## Configure the Kubernetes connector
