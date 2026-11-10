@@ -19,6 +19,15 @@ sidebarTitle: "LastPass"
 
 The LastPass connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning). New accounts are created with an email invitation to activate LastPass. Deprovisioning permanently deletes the LastPass account and its vault data; to block access while keeping the vault, use the `disable_user` action instead.
 
+When C1 creates a LastPass account, the connector uses these account fields:
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `email` | Yes | The user's email address. LastPass uses it as the username and sends the activation invitation to it. |
+| `full_name` | No | The user's display name in LastPass. |
+
+No password is set: the user sets their master password when they accept the LastPass invitation. If a LastPass account with the same email already exists, C1 links to that account instead of creating a new one.
+
 Group provisioning adds and removes users from LastPass groups. Only users can be added to groups.
 
 <Note>
@@ -31,12 +40,20 @@ Group provisioning adds and removes users from LastPass groups. Only users can b
 
 ### Connector actions
 
-Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use these actions in the Account lifecycle action and [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation steps.
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
 | enable_user | `user_id` (string, required) | Re-enables a disabled LastPass user so they can log in again. |
 | disable_user | `user_id` (string, required) | Disables a LastPass user. Blocks login but keeps the account and vault data. |
+
+For both actions, `user_id` is the numeric ID that LastPass assigns to the user. The action returns `success: true` when LastPass reports the user in the requested state, including when the user was already enabled or disabled, so running it twice is safe. If the user doesn't exist in LastPass, the action fails with `baton-lastpass: user not found`.
+
+To invoke an action from the command line:
+
+```bash
+baton-lastpass --invoke-action disable_user --invoke-action-args '{"user_id":"<LastPass user ID>"}'
+```
 
 ## Gather LastPass configuration information
 
@@ -48,6 +65,18 @@ Here's the information you'll need:
 - LastPass Provhash
 
 **Permissions for provisioning**: The provisioning hash gives full Enterprise API access, including creating, deleting, enabling, and disabling users and changing group membership. Anyone with the hash can make these changes regardless of their Admin Console role, so store it as a secret.
+
+The connector uses these Enterprise API commands for each capability:
+
+| Capability | Resource | Enterprise API commands |
+| :--- | :--- | :--- |
+| Sync users | Account | `getuserdata` |
+| Sync groups and group membership | Group | `getuserdata` |
+| Sync shared folders and folder permissions | Shared Folder | `getdetailedsfdata`, `getuserdata` |
+| Create account | Account | `getuserdata`, `batchadd` |
+| Delete account | Account | `getuserdata`, `deluser` |
+| Add or remove group members | Group | `getuserdata`, `batchchangegrp` |
+| `enable_user` / `disable_user` actions | Account | `getuserdata`, `enableuser` / `disableuser` |
 
 See the LastPass docs for information on how to acquire credentials: [View the documentation](https://support.lastpass.com/s/document-item?language=en_US&bundleId=lastpass&topicId=LastPass/t_cid_and_hash_locate.html&_LANG=enus)
 
@@ -217,5 +246,3 @@ Check that the connector data uploaded correctly. In C1, click **Apps**. On the 
 **Done.** Your LastPass connector is now pulling access data into C1.
 </Tab>
 </Tabs>
-
-
