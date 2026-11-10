@@ -31,7 +31,14 @@ The connector also emits login activity from Oracle's 120-day User Login Report 
 - **Role assignments are provisioned for users only.** C1 can grant and revoke roles for user accounts. Roles held by a group are synced so they appear in access reviews, but the connector does not provision them — manage those assignments in Oracle. Oracle does expose an endpoint for assigning roles to groups, but it replaces a group's entire role set in one call rather than adding or removing a single role, which makes it unsafe to drive from an access request without first confirming the behavior against a live tenant.
 - **Predefined roles cannot be provisioned.** Power User, Service Administrator, User, and Viewer are managed through Oracle IDCS. This applies even when **Sync Predefined Roles** is enabled, which only makes them visible in C1.
 - **Nested group membership is read-only.** A group nested inside another is synced so it appears in access reviews, and C1 expands it so the parent's access reaches the nested group's members. The nesting itself is not provisioned — manage it in Oracle.
-- **A role inherited through an IDCS group is attributed to the user.** When someone holds a role only by belonging to an IDCS group, that group is not synced, so C1 has no group membership to expand and no group to attribute the role to. The grant appears against the user instead, without naming the group it came from, and offers no revoke — the role follows the group membership, which is managed in Oracle IDCS. Roles inherited through an EPM group are unaffected: those are attributed to the group.
+- **A role inherited through an IDCS group is attributed to the user.** When someone holds a role only by belonging to an IDCS group, that group is not synced, so C1 has no group membership to expand and no group to attribute the role to. The grant appears against the user instead, without naming the group it came from, and cannot be revoked from C1 — the role follows the group membership, which is managed in Oracle IDCS. C1 may still show a **Revoke** option on the grant, but revoking it does not remove the access, and the grant reappears after the next sync. To remove the access, remove the user from the IDCS group. Roles inherited through an EPM group are unaffected: those are attributed to the group.
+
+## Known limitations
+
+- **All accounts sync as enabled.** Oracle's user list does not return an account status, so disabled or locked users still appear as enabled in C1. Use the Oracle IDCS connector for account status.
+- **All accounts are classified as human.** Oracle exposes no service-account indicator, so service accounts are not told apart from human users in access reviews.
+- **FCCS Teams are not synced.** Oracle exposes no API to read teams.
+- **No pagination.** Oracle's security endpoints return each list (users, groups, role assignments) in a single response. On very large tenants, a response can exceed the size limit for a single sync call and the sync fails.
 
 ## Gather Oracle FCCS credentials
 
