@@ -32,7 +32,8 @@ The Supabase connector syncs the following resources:
 <Warning>
   To configure the Supabase connector, you need a **Personal Access Token
   (PAT)** for the Supabase Management API. The connector automatically discovers
-  all active projects and fetches each project's `service_role` key.
+  all active projects and fetches each project's `service_role` key at
+  provisioning time — no separate project credentials are required for sync.
 </Warning>
 
 <Steps>
@@ -111,7 +112,7 @@ Generated from config_schema.json. Do not edit manually. */}
       </Step>
     </Steps>
 
-    **Done.** Your Supabase connector is now pulling access data into C1.
+    **That's it!** Your Supabase connector is now pulling access data into C1.
 
   </Tab>
 
@@ -120,11 +121,18 @@ Generated from config_schema.json. Do not edit manually. */}
 
     When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
 
+    
+    ### Resources
+
+    * [Official download center](https://dist.conductorone.com/ConductorOne/baton-supabase): For stable binaries (Windows/Linux/macOS) and container images.
+
+    * [GitHub repository](https://github.com/conductorone/baton-supabase): Access the source code, report issues, or contribute to the project.
+
     ### Step 1: Set up a new Supabase connector
 
     <Steps>
       <Step>
-        In C1, navigate to **Apps** > **Connectors** and click **Add connector**.
+        In C1, navigate to **Apps** > **Connectors** > **Add connector**.
       </Step>
 
       <Step>
@@ -171,7 +179,7 @@ Generated from config_schema.json. Do not edit manually. */}
       BATON_SUPABASE_ACCESS_TOKEN: <Supabase Personal Access Token>
 
       # Optional: include if you want C1 to provision access using this connector
-      BATON_PROVISIONING: true
+      BATON_PROVISIONING: "true"
     ```
 
     #### Deployment configuration
@@ -218,15 +226,84 @@ Generated from config_schema.json. Do not edit manually. */}
       </Step>
     </Steps>
 
-    **Done.** Your Supabase connector is now pulling access data into C1.
+    **That's it!** Your Supabase connector is now pulling access data into C1.
 
   </Tab>
 </Tabs>
+
+## Provision access
+
+The Supabase connector supports provisioning for **Projects** — you can grant and revoke database roles for auth users and organization members.
+
+<Note>
+  Provisioning requires the `--provisioning` flag (`-p`) when running the connector manually, or Accounts Management enabled in C1.
+  The connector automatically fetches each project's `service_role` key from the Management API using the same PAT — no separate project credentials are needed.
+</Note>
+
+### Find a project ID
+
+Project IDs (also called reference IDs) are required to target provisioning commands.
+
+<Steps>
+  <Step>
+    In the Supabase dashboard, select the target project.
+  </Step>
+  <Step>
+    Go to **Project Settings** > **General**.
+  </Step>
+  <Step>
+    Copy the **Reference ID** (labeled "Reference used in APIs and URLs", e.g., `zqzeuactwzbejpvhrkqy`).
+  </Step>
+</Steps>
+
+You can also find resource IDs (UUIDs) for auth users and organization members by running `baton resources --file sync.c1z` after a sync.
+
+### Grant a database role
+
+Grant a database role to an auth user:
+
+```bash
+baton-supabase --supabase-access-token "sbp_..." \
+  --grant-entitlement="project:<project-ref>:<role-slug>" \
+  --grant-principal="<auth-user-uuid>" \
+  --grant-principal-type="auth_user"
+```
+
+Grant a database role to an organization member (cross-type grant — creates the user in the project if they don't exist):
+
+```bash
+baton-supabase --supabase-access-token "sbp_..." \
+  --grant-entitlement="project:<project-ref>:<role-slug>" \
+  --grant-principal="<org-member-uuid>" \
+  --grant-principal-type="org_member"
+```
+
+### Revoke a database role
+
+Revoke a custom role (resets the user's role to `authenticated`, the default PostgreSQL role):
+
+```bash
+baton-supabase --supabase-access-token "sbp_..." \
+  --revoke-grant="project:<project-ref>:<custom-role-slug>:auth_user:<auth-user-uuid>"
+```
+
+Revoke the `authenticated` role (removes the user from the project entirely):
+
+```bash
+baton-supabase --supabase-access-token "sbp_..." \
+  --revoke-grant="project:<project-ref>:authenticated:auth_user:<auth-user-uuid>"
+```
+
+<Warning>
+  Revoking the `authenticated` role permanently deletes the user from the project via the Supabase Auth Admin API. This action cannot be undone through the connector.
+</Warning>
 
 ---
 
 <Tip>
   The connector automatically syncs auth users from all active Supabase projects
   accessible via the PAT. Each auth user is linked to its parent project, so
-  users from different projects are properly distinguished.
+  users from different projects are properly distinguished. Auth users and
+  organization members appear as separate resource types in C1 — both are visible
+  in the **Accounts** tab of the application.
 </Tip>
