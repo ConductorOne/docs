@@ -14,15 +14,11 @@ Retrieval Augmented Prompt (RAP) documentation for AI agents. Each subdirectory 
 
 | Domain | Path | Use for |
 |--------|------|---------|
-| **Connectors** | `connectors/INDEX.md` | Building Baton connectors, sync/provision patterns, SDK interfaces |
 | **Service Principals** | `service-principals/INDEX.md` | API automation, client credentials, workload federation, CI/CD integration |
 | **CEL Expressions** | `cel-expressions/index.md` | Writing CEL in policies, dynamic groups, automations, access reviews |
 | **MCP Gateway** | `mcp-gateway/INDEX.md` | Interacting with C1's MCP gateway and code mode as an AI agent |
 
 ## Quick Routing Guide
-
-**User asks about building integrations:**
-→ `connectors/INDEX.md`
 
 **User asks about API authentication, service accounts, CI/CD:**
 → `service-principals/INDEX.md`
