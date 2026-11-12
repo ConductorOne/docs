@@ -4,103 +4,159 @@ sidebarTitle: "Pagination"
 description: "Handle cursor-based, offset-based, LDAP, and nested pagination in your connector."
 ---
 
-Always paginate. Even if your test environment has 10 users, production might have 10,000. The SDK handles pagination orchestration - use it from day one.
+{/* Editor Refresh: 2026-11-12 */}
+
+Always paginate. Even if your test environment has 10 users, production might have 10,000. The SDK coordinates pagination for you, so use it from the start.
 
 ## Basic pattern
 
-Every `List()`, `Entitlements()`, and `Grants()` method returns a next page token:
+Every `List`, `Entitlements`, and `Grants` method returns one page of results and a token for the next page. The SDK passes the token you returned back to your next call in `opts.PageToken.Token`:
 
 ```go
-// Return next page token, or "" when done
-return resources, nextPageToken, nil, nil
+// Ask for another page by setting a token. Return an empty token when done.
+return resources, &resource.SyncOpResults{NextPageToken: nextPage}, nil
 ```
 
-The SDK calls your method repeatedly until you return an empty token. Your job: fetch and convert one page at a time.
+The SDK calls your method repeatedly until you return an empty token, so your job is to fetch and convert one page at a time. The examples on this page use the V2 method signatures. The V1 interface differs only in how it passes and returns the token. See [V1 syncer differences](/developer/syncing#v1-syncer-differences).
 
 <Tip>
-**Use the API's next token for termination**, not result count. Some APIs return empty pages before the final page, so `len(results) < pageSize` isn't reliable. Return `""` only when the API signals no more pages.
+**Use the API's next token to decide when to stop**, not the result count. Some APIs return empty pages before the final page, so `len(results) < pageSize` isn't reliable. Return an empty token only when the API signals there are no more pages.
 </Tip>
+
+### Page size
+
+The SDK passes the page size it wants in `opts.PageToken.Size`, which is 0 when the SDK doesn't specify one. The SDK asks for at most 250 items per page. Use it when your API takes a page size, and fall back to a default:
+
+```go
+limit := opts.PageToken.Size
+if limit == 0 {
+    limit = 100
+}
+```
 
 ## Pagination strategies
 
-APIs paginate results differently. Your connector adapts the token to whatever the API expects:
+APIs paginate results differently. Your connector converts the token to whatever the API expects:
 
 | Strategy | How it works | Example APIs |
 |----------|--------------|--------------|
-| **Cursor-based** | Opaque token in response | Most modern APIs (Slack, Stripe) |
+| **Cursor-based** | Opaque token in the response | Most modern APIs (Slack, Stripe) |
 | **Offset-based** | `?offset=100&limit=50` | Traditional REST APIs |
 | **Page number** | `?page=3&per_page=50` | Some REST APIs |
-| **Link header** | RFC 5988 Link relations | GitHub API |
+| **Link header** | RFC 5988 link relations | GitHub API |
 | **LDAP paging** | Server-side cookie | Active Directory |
 | **GraphQL cursors** | `after: "cursor"` | GitHub GraphQL, Shopify |
 
-### Cursor-based (most modern APIs)
+### Cursor-based
+
+When the API returns an opaque cursor, pass it straight through as the next page token:
 
 ```go
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    resp, err := u.client.ListUsers(ctx, pToken.Token)
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+    resp, err := u.client.ListUsers(ctx, opts.PageToken.Token)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, user := range resp.Users {
-        r, _ := resource.NewUserResource(user.Name, userType, user.ID)
+        r, err := resource.NewUserResource(user.Name, userResourceType, user.ID, nil)
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
 
-    // API returns opaque cursor for next page
-    return resources, resp.NextCursor, nil, nil
+    // The API returns an opaque cursor for the next page, or "" on the last page.
+    return resources, &resource.SyncOpResults{NextPageToken: resp.NextCursor}, nil
 }
 ```
 
-### Offset-based (traditional REST)
+### Offset-based
+
+Store the next offset as the token:
 
 ```go
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+    limit := opts.PageToken.Size
+    if limit == 0 {
+        limit = 100
+    }
 
-    const limit = 100
     offset := 0
-    if pToken.Token != "" {
-        offset, _ = strconv.Atoi(pToken.Token)
+    if opts.PageToken.Token != "" {
+        var err error
+        offset, err = strconv.Atoi(opts.PageToken.Token)
+        if err != nil {
+            return nil, nil, fmt.Errorf("invalid page token: %w", err)
+        }
     }
 
     resp, err := u.client.ListUsers(ctx, offset, limit)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, user := range resp.Users {
-        r, _ := resource.NewUserResource(user.Name, userType, user.ID)
+        r, err := resource.NewUserResource(user.Name, userResourceType, user.ID, nil)
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
 
-    // Calculate next offset
+    // Use the API's total count to know when to stop.
     nextToken := ""
-    if len(resp.Users) == limit {
-        nextToken = strconv.Itoa(offset + limit)
+    if offset+len(resp.Users) < resp.Total {
+        nextToken = strconv.Itoa(offset + len(resp.Users))
     }
 
-    return resources, nextToken, nil, nil
+    return resources, &resource.SyncOpResults{NextPageToken: nextToken}, nil
 }
 ```
 
-### LDAP paging (Active Directory)
+If the API has no total count, a full page (`len(resp.Users) == limit`) is a fallback signal. That fallback costs one extra request when the last page is exactly full.
+
+### Link header
+
+For APIs that return the next page in an RFC 5988 `Link` header, the `uhttp` package parses the header for you. `uhttp.WithNextLinkPagination` pushes the `rel="next"` URL onto the bag you pass it, so give it a new bag and return that bag as the next token:
 
 ```go
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+next := &pagination.Bag{}
+_, err := client.Do(req,
+    uhttp.WithJSONResponse(&users),
+    uhttp.WithNextLinkPagination(next, nil))
+if err != nil {
+    return nil, nil, err
+}
 
+// Marshal returns "" when the response had no next link.
+nextToken, err := next.Marshal()
+if err != nil {
+    return nil, nil, err
+}
+```
+
+On the next call, read the URL back with `bag.PageToken()` after you unmarshal the token. See [Nested pagination with Bag](#nested-pagination-with-bag).
+
+For APIs that can silently drop their cursor, `uhttp.WithPaginationData` makes the request fail when a successful response has no pagination data. Without it, the sync ends after one page and looks complete.
+
+### LDAP paging
+
+LDAP servers return a paging cookie. Encode it as the token:
+
+```go
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
     const pageSize = 1000
     pagingControl := ldap.NewControlPaging(pageSize)
 
-    // Restore cookie from previous page
-    if pToken.Token != "" {
-        cookie, _ := base64.StdEncoding.DecodeString(pToken.Token)
+    // Restore the cookie from the previous page.
+    if opts.PageToken.Token != "" {
+        cookie, err := base64.StdEncoding.DecodeString(opts.PageToken.Token)
+        if err != nil {
+            return nil, nil, fmt.Errorf("invalid page token: %w", err)
+        }
         pagingControl.SetCookie(cookie)
     }
 
@@ -114,19 +170,23 @@ func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
 
     result, err := u.conn.Search(searchRequest)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, entry := range result.Entries {
-        r, _ := resource.NewUserResource(
+        r, err := resource.NewUserResource(
             entry.GetAttributeValue("sAMAccountName"),
-            userType,
-            entry.GetAttributeValue("distinguishedName"))
+            userResourceType,
+            entry.GetAttributeValue("distinguishedName"),
+            nil)
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
 
-    // Extract cookie for next page
+    // Extract the cookie for the next page.
     nextToken := ""
     if ctrl := ldap.FindControl(result.Controls, ldap.ControlTypePaging); ctrl != nil {
         if pc, ok := ctrl.(*ldap.ControlPaging); ok && len(pc.Cookie) > 0 {
@@ -134,161 +194,167 @@ func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
         }
     }
 
-    return resources, nextToken, nil, nil
+    return resources, &resource.SyncOpResults{NextPageToken: nextToken}, nil
 }
 ```
 
 ## Nested pagination with Bag
 
-When you have hierarchies, you often need to paginate at multiple levels: "page through orgs, and for each org, page through repos." The SDK's `pagination.Bag` handles this.
+When a single call needs to page through more than one thing, one string isn't enough state. For example, "page through the admins of a group, then page through its members" needs to remember which list you're in and where you are in it. The SDK's `pagination.Bag` holds that state as a stack and serializes it into the page token.
 
 ### How Bag works
 
-The `Bag` acts as a stack for managing complex pagination state:
+A `Bag` is a stack of `PageState` values. The top of the stack is the current state:
 
 ```go
-type Bag struct {
-    states       []PageState
-    currentState *PageState
-}
-
 type PageState struct {
-    Token          string `json:"token,omitempty"`
-    ResourceTypeID string `json:"type,omitempty"`
-    ResourceID     string `json:"id,omitempty"`
+    Token          string // Page token for the current list
+    ResourceTypeID string // Free-form label you can use to track which list you're paging
+    ResourceID     string // Free-form label, such as the ID of the parent you're paging
 }
 ```
 
-Key methods:
-- `Push(state PageState)` - Push new pagination state onto stack
-- `Pop() *PageState` - Pop current state, make top of stack current
-- `Next(pageToken string)` - Update current state with new page token
-- `Current() *PageState` - Get current state (may be nil)
-- `Marshal() (string, error)` - Serialize state to opaque token
-- `Unmarshal(token string) error` - Restore state from token
+| Method | What it does |
+|--------|--------------|
+| `Unmarshal(token)` | Restores the bag from the token you returned on the previous call. An empty token gives an empty bag. |
+| `Current()` | Returns a copy of the current state, or nil if the bag is empty. |
+| `PageToken()`, `ResourceTypeID()`, `ResourceID()` | Return the fields of the current state, or `""` if the bag is empty. Use them to avoid nil checks. |
+| `Push(state)` | Pushes a new state, which becomes current. |
+| `Pop()` | Removes the current state, so the one below it becomes current. |
+| `NextToken(nextPage)` | Replaces the current state's token with `nextPage` and returns the serialized bag. If `nextPage` is empty, it pops the current state instead. Returns `""` when no states remain. |
+| `Next(nextPage)`, `Marshal()` | The same two steps as `NextToken`, separately. |
 
-### Example: paginating repos within orgs
+Prefer `NextToken`. It does the advance and the serialization in one call, and its return value is the page token you hand back to the SDK.
+
+<Warning>
+**Push an initial state before you call `NextToken`.** An empty bag has no state to advance, so `NextToken` starts a new state that holds whatever token you pass, even an empty one. Check `bag.Current() == nil` after you unmarshal, and push the starting state if it's nil.
+</Warning>
+
+### Page through one list
+
+The pattern for a single list is: unmarshal, push an initial state if the bag is empty, fetch with the current token, and advance with `NextToken`.
 
 ```go
-func (r *repoBuilder) List(ctx context.Context, parentID *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
+func (r *repoBuilder) List(ctx context.Context, parentID *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
     bag := &pagination.Bag{}
-    if pToken != nil && pToken.Token != "" {
-        // Restore state from previous call
-        if err := bag.Unmarshal(pToken.Token); err != nil {
-            return nil, "", nil, err
-        }
+    if err := bag.Unmarshal(opts.PageToken.Token); err != nil {
+        return nil, nil, err
+    }
+    if bag.Current() == nil {
+        bag.Push(pagination.PageState{})
     }
 
-    // Get current pagination state
-    // IMPORTANT: bag.Current() returns nil on first call before any Push()
-    state := bag.Current()
-    pageToken := ""
-    if state != nil {
-        pageToken = state.Token
-    }
-
-    // Fetch page of repos for this org
-    repos, nextPage, err := r.client.ListRepos(ctx, parentID.Resource, pageToken)
+    repos, nextPage, err := r.client.ListRepos(ctx, parentID.Resource, bag.PageToken())
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
-    // Build resources
     var resources []*v2.Resource
     for _, repo := range repos {
-        res, _ := resource.NewResource(repo.Name, repoType, repo.ID,
+        res, err := resource.NewResource(repo.Name, repoResourceType, repo.ID,
             resource.WithParentResourceID(parentID))
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, res)
     }
 
-    // Update state with next page token
-    if nextPage != "" {
-        bag.Next(nextPage)
-    }
-
-    // Marshal state for next call
-    nextToken, err := bag.Marshal()
+    nextToken, err := bag.NextToken(nextPage)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
-    return resources, nextToken, nil, nil
+    return resources, &resource.SyncOpResults{NextPageToken: nextToken}, nil
 }
 ```
 
-<Warning>
-**Bag.Current() nil safety:** The `Bag` starts empty. `Current()` returns nil until you `Push()` a state. Always check for nil before accessing fields.
-</Warning>
+### Page through several lists
 
-### Multi-level nested pagination
-
-For deeper hierarchies (org -> team -> members), push and pop states:
+To page through two lists in one method, push one state per list. The state you push last is current, so it's processed first. When a list runs out, `NextToken("")` pops its state, and the next call continues with the list below it:
 
 ```go
-func (m *memberBuilder) Grants(ctx context.Context, resource *v2.Resource,
-    pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-
+func (g *groupBuilder) Grants(ctx context.Context, res *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
     bag := &pagination.Bag{}
-    if pToken.Token != "" {
-        bag.Unmarshal(pToken.Token)
+    if err := bag.Unmarshal(opts.PageToken.Token); err != nil {
+        return nil, nil, err
     }
-
-    // First call: initialize state
     if bag.Current() == nil {
-        bag.Push(pagination.PageState{ResourceID: resource.Id.Resource})
+        // First call: page through admins, then members.
+        bag.Push(pagination.PageState{ResourceTypeID: "members"})
+        bag.Push(pagination.PageState{ResourceTypeID: "admins"})
     }
 
-    state := bag.Current()
-    members, nextPage, err := m.client.ListTeamMembers(ctx, state.ResourceID, state.Token)
+    var (
+        slug     string
+        members  []*client.Member
+        nextPage string
+        err      error
+    )
+    switch bag.ResourceTypeID() {
+    case "admins":
+        slug = "admin"
+        members, nextPage, err = g.client.ListGroupAdmins(ctx, res.Id.Resource, bag.PageToken())
+    case "members":
+        slug = "member"
+        members, nextPage, err = g.client.ListGroupMembers(ctx, res.Id.Resource, bag.PageToken())
+    default:
+        return nil, nil, fmt.Errorf("unexpected pagination state %q", bag.ResourceTypeID())
+    }
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var grants []*v2.Grant
-    for _, member := range members {
-        g := grant.NewGrant(resource, "member",
-            &v2.ResourceId{ResourceType: "user", Resource: member.ID})
-        grants = append(grants, g)
+    for _, m := range members {
+        grants = append(grants, grant.NewGrant(res, slug,
+            &v2.ResourceId{ResourceType: userResourceType.Id, Resource: m.ID}))
     }
 
-    if nextPage != "" {
-        bag.Next(nextPage)
-    } else {
-        bag.Pop()  // Done with this resource, pop state
+    nextToken, err := bag.NextToken(nextPage)
+    if err != nil {
+        return nil, nil, err
     }
 
-    nextToken, _ := bag.Marshal()
-    return grants, nextToken, nil, nil
+    return grants, &resource.SyncOpResults{NextPageToken: nextToken}, nil
 }
 ```
 
+If your state needs more than a token and two labels, `pagination.GenBag[T]` holds a stack of your own struct type. Create one with `pagination.GenBagFromToken[T](&opts.PageToken)`.
+
+### Expired page tokens
+
+Some APIs reject a cursor after a period of time. When the API rejects the token the SDK gave you, return a restart error from `List`, `Entitlements`, or `Grants` instead of failing the sync:
+
+```go
+return nil, nil, pagination.NewRestartActionError(restartToken, "cursor expired")
+```
+
+The SDK restarts the call at `restartToken`. An empty `restartToken` restarts from the first page. The restart only works when the error comes straight from one of those list calls, and any other source fails the sync.
+
 ## Modeling hierarchies
 
-Real systems often have deep hierarchies. The Baton model handles these naturally: declare parent-child relationships and the SDK walks the tree for you.
+Real systems often have deep hierarchies. Declare the parent-child relationships, and the SDK walks the tree for you.
 
 ### Two mechanisms connect parent and child
 
-**1. Parent declares child types** via `ChildResourceType` annotation:
+**1. The parent declares its child types** with the `ChildResourceType` annotation:
 
 ```go
-orgResource, _ := resource.NewResource("Acme Corp", orgType, "org-123",
-    resource.WithAnnotation(&v2.ChildResourceType{ResourceTypeId: "repository"}),
-    resource.WithAnnotation(&v2.ChildResourceType{ResourceTypeId: "team"}))
+org, err := resource.NewResource("Acme Corp", orgResourceType, "org-123",
+    resource.WithAnnotation(
+        &v2.ChildResourceType{ResourceTypeId: "repository"},
+        &v2.ChildResourceType{ResourceTypeId: "team"},
+    ))
 ```
 
-**2. Child references parent** via `ParentResourceID`:
+**2. The child references its parent** with `WithParentResourceID`:
 
 ```go
-repoResource, _ := resource.NewResource("api-service", repoType, "repo-456",
-    resource.WithParentResourceID(&v2.ResourceId{
-        ResourceType: "organization",
-        Resource:     "org-123",
-    }))
+repo, err := resource.NewResource("api-service", repoResourceType, "repo-456",
+    resource.WithParentResourceID(org.Id))
 ```
 
-When the SDK calls `List()` for child resources, it passes the parent's `ResourceId` so you can scope your API calls.
+When the SDK calls `List` for a child type, it passes the parent's `ResourceId`, so you can scope your API call to that parent.
 
 ### Example: GitHub hierarchy
 
@@ -306,75 +372,81 @@ flowchart TD
 **Organization builder:**
 
 ```go
-func (o *orgBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    orgs, next, err := o.client.ListOrganizations(ctx, pToken.Token)
+func (o *orgBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+    orgs, next, err := o.client.ListOrganizations(ctx, opts.PageToken.Token)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, org := range orgs {
-        r, _ := resource.NewResource(org.Name, orgType, org.ID,
-            // Declare child types
-            resource.WithAnnotation(&v2.ChildResourceType{ResourceTypeId: "team"}),
-            resource.WithAnnotation(&v2.ChildResourceType{ResourceTypeId: "repository"}))
+        r, err := resource.NewResource(org.Name, orgResourceType, org.ID,
+            // Declare the child types.
+            resource.WithAnnotation(
+                &v2.ChildResourceType{ResourceTypeId: "team"},
+                &v2.ChildResourceType{ResourceTypeId: "repository"},
+            ))
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
-    return resources, next, nil, nil
+
+    return resources, &resource.SyncOpResults{NextPageToken: next}, nil
 }
 ```
 
-**Repository builder - receives parent org in List():**
+**Repository builder, which receives the parent organization in `List`:**
 
 ```go
-func (r *repoBuilder) List(ctx context.Context, parentID *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    // parentID.Resource contains the org ID
-    repos, next, err := r.client.ListOrgRepos(ctx, parentID.Resource, pToken.Token)
+func (r *repoBuilder) List(ctx context.Context, parentID *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+    // parentID.Resource is the organization ID.
+    repos, next, err := r.client.ListOrgRepos(ctx, parentID.Resource, opts.PageToken.Token)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, repo := range repos {
-        res, _ := resource.NewResource(repo.Name, repoType, repo.ID,
-            resource.WithParentResourceID(parentID))  // Link to parent org
+        res, err := resource.NewResource(repo.Name, repoResourceType, repo.ID,
+            resource.WithParentResourceID(parentID)) // Link to the parent organization.
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, res)
     }
-    return resources, next, nil, nil
+
+    return resources, &resource.SyncOpResults{NextPageToken: next}, nil
 }
 ```
 
-### When to use hierarchies vs flat models
+### When to use hierarchies and when to use flat models
 
 | Use hierarchies when... | Use flat models when... |
 |------------------------|------------------------|
 | Resources only exist within a parent (repos in orgs) | Resources are independent (standalone users) |
-| API requires parent context to list children | API lists all resources globally |
+| The API requires parent context to list children | The API lists all resources globally |
 | Access is scoped by parent (org-level vs repo-level) | Access is global |
-| You need to express "admin of org X" vs "admin of repo Y" | All instances have the same entitlement shape |
+| You need to express "admin of org X" and "admin of repo Y" | All instances have the same entitlement shape |
 
 ## Common hierarchy mistakes
 
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
-| Missing `ChildResourceType` annotation | SDK doesn't know to call List() for children | Add annotation to parent |
-| Wrong `ParentResourceID` type | Child appears orphaned | Match exact type ID string |
-| Not using `parentID` in List() | Returns all resources, not just children | Scope API call to parent |
-| Flat model for hierarchical data | Loses context (which org owns this repo?) | Add parent-child links |
+| Missing `ChildResourceType` annotation | The SDK never calls `List` for the children | Add the annotation to the parent |
+| Wrong type in the parent's `ResourceId` | The child appears orphaned | Match the exact resource type ID string |
+| Not using `parentID` in `List` | The call returns all resources, not just the parent's children | Scope the API call to the parent |
+| Flat model for hierarchical data | You lose context, such as which org owns a repo | Add parent-child links |
 | Over-deep hierarchies | Sync takes too long | Flatten where parent context isn't needed |
 
 ## Pagination invariants
 
-The SDK enforces invariants to catch common bugs:
+The SDK checks for common pagination bugs:
 
-- **Token must progress**: Returning the same token you received causes an error. This prevents infinite loops.
-- **Empty token means done**: Return `""` when there are no more pages.
-- **Consistent page sizes**: While not enforced, use consistent page sizes for predictable behavior.
+- **The token must change.** If a page returns the same non-empty token it received, the sync fails with a "next page token unchanged" error. The SDK doesn't detect longer loops, such as a token that alternates between two values.
+- **An empty token means done.** Return `""` when there are no more pages.
+- **Respect the requested page size.** Use `opts.PageToken.Size` when your API takes a page size.
 
 <Tip>
-Test with small page sizes (10-20 items) during development to verify pagination works correctly before testing with production-sized datasets.
+Test with small page sizes (10 to 20 items) during development to verify that pagination works before you test with production-sized datasets.
 </Tip>

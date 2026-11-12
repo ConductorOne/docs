@@ -1,21 +1,19 @@
 ---
 title: "Getting started with Baton connectors"
 sidebarTitle: "Getting started"
-description: "Understand what connectors are, when you need one, and what working looks like end-to-end."
+description: "Understand what connectors are, when you need to build one, and what a working connector looks like."
 ---
 
-What happens when an employee leaves your company but still has access to your production database? Or your billing system? Or your customer data?
+{/* Editor Refresh: 2026-11-12 */}
 
-A **connector** answers the question: *who has access to what?*
+What happens when an employee leaves your company but still has access to your production database, your billing system, or your customer data? To answer that, C1 needs to know **who has access to what** across all your systems. A **connector** provides that answer for one system.
 
-C1 needs to know about users, groups, roles, and permissions across all your systems. But every system stores this information differently. Okta has users and groups. AWS has IAM roles and policies. Salesforce has profiles and permission sets. The Baton connector framework solves this: you write one integration, and C1 handles the rest.
-
-A connector bridges this gap. It translates access data from any system into a common format that C1 understands. Once connected, you get unified visibility across your entire infrastructure.
+Every system stores access data differently. Okta has users and groups. AWS has IAM roles and policies. Salesforce has profiles and permission sets. A connector translates a system's access data into a common format that C1 understands, so you get unified visibility across your infrastructure.
 
 In Baton terms, a connector is a program that can:
-- **List resources** (users, groups, roles, apps, projects, etc.)
+- **List resources** (users, groups, roles, apps, projects, and so on)
 - **Define entitlements** (the permissions you can grant on those resources)
-- **Emit grants** (the facts of who currently has which entitlements)
+- **Emit grants** (the facts of who currently holds which entitlements)
 
 ## Where connectors fit
 
@@ -28,53 +26,52 @@ flowchart LR
         GH[GitHub]
         Custom[Your Custom App]
     end
-    subgraph C1["C1"]
-        UAM[Unified Access<br>Management]
-    end
-    Okta <-->|Connector| UAM
-    AWS <-->|Connector| UAM
-    SF <-->|Connector| UAM
-    GH <-->|Connector| UAM
-    Custom <-->|Connector| UAM
-    UAM -.->|Reconciliation Loop| YourSystems
+    C1[C1]
+    Okta <-->|Connector| C1
+    AWS <-->|Connector| C1
+    SF <-->|Connector| C1
+    GH <-->|Connector| C1
+    Custom <-->|Connector| C1
+    C1 -.->|Reconciliation Loop| YourSystems
 ```
 
-Most people interact with connectors in two ways:
+Most people work with connectors in one of three ways:
 
-- **Deploy an existing connector** (you configure it; you do not write Go)
-- **Build or extend a connector** (you write Go against `baton-sdk`)
+- **Deploy an existing connector.** You configure it and don't write code.
+- **Build a connector without writing Go.** Use [C1AI custom connectors](/developer/custom-connectors) or a [configuration-driven connector](#when-to-build-and-when-to-reuse).
+- **Build or extend a connector in Go.** You write code against `baton-sdk`, which is what the rest of this section covers.
 
 ### Sync and provision
 
 Connectors do two things:
 
-**Sync** (read): Pull access data from your systems into C1
+**Sync** (read) pulls access data from your systems into C1:
 - Who exists? What groups? What roles?
 - What permissions are available?
 - Who has what access right now?
 
-**Provision** (write): Push access changes back to your systems
-- **Grant**: Give someone access they've been approved for
-- **Revoke**: Remove access that's been terminated
-- **Create Account**: JIT (Just-In-Time) provisioning
-- **Delete Resource**: Remove accounts entirely
+**Provision** (write) pushes access changes back to your systems:
+- **Grant:** Give someone access they've been approved for.
+- **Revoke:** Remove access that has been terminated.
+- **Create account:** Provision a new account, for example just in time.
+- **Delete resource:** Remove accounts entirely.
 
-Together, sync and provision create a **reconciliation loop**: C1 sees what access exists (sync), compares it to what access *should* exist (policy), and corrects any drift (provision). Your access controls become self-healing.
+Together, sync and provision create a **reconciliation loop**. C1 sees what access exists (sync), compares it to what access *should* exist (policy), and corrects any drift (provision).
 
 ### The special role of identity providers
 
-Identity Providers (IdPs) like Okta, Azure AD, or Google Workspace have a unique position: they're often the **source of truth** for who your users are.
+Identity providers (IdPs) such as Okta, Azure AD, and Google Workspace are often the **source of truth** for who your users are.
 
-Most connectors sync users *from* the target system. But IdP connectors do more:
-- They define the canonical user identities
-- Other systems' users are correlated back to IdP users
-- User lifecycle (join, move, leave) often originates in the IdP
+Most connectors sync users *from* the target system. IdP connectors do more:
+- They define the canonical user identities.
+- Other systems' users are correlated back to IdP users.
+- User lifecycle events (join, move, leave) often originate in the IdP.
 
-When you connect an IdP, you're establishing the identity foundation that other connectors build upon.
+When you connect an IdP, you establish the identity foundation that other connectors build on.
 
-## Understanding the tools
+## Understand the tools
 
-Before diving into implementation, it helps to understand which tools do what. The C1 ecosystem has several SDKs and CLIs with different purposes.
+The C1 ecosystem has several SDKs and CLIs with different purposes.
 
 ### For connector developers
 
@@ -83,11 +80,11 @@ Before diving into implementation, it helps to understand which tools do what. T
 | **baton-sdk** | Go SDK for building connectors | Building or extending a connector |
 | **baton** | CLI for inspecting sync output | Debugging `.c1z` files locally |
 
-**baton-sdk** is the Go library you import when building a connector. It provides:
-- The `ResourceSyncer` interface you implement
+**baton-sdk** is the Go library you import when you build a connector. It provides:
+- The syncer interfaces you implement
 - Pagination helpers for API calls
-- Resource and grant builders
-- HTTP client utilities with retry logic
+- Resource, entitlement, and grant builders
+- HTTP client utilities
 
 ```go
 import "github.com/conductorone/baton-sdk/pkg/connectorbuilder"
@@ -96,25 +93,35 @@ import "github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 **baton** is a standalone CLI for inspecting `.c1z` files. After your connector runs, use it to verify the output:
 
 ```bash
-baton resources -f sync.c1z    # List synced resources
-baton grants -f sync.c1z       # List grants
-baton entitlements -f sync.c1z # List entitlements
+baton resource-types -f sync.c1z  # List resource types
+baton resources -f sync.c1z       # List synced resources
+baton entitlements -f sync.c1z    # List entitlements
+baton grants -f sync.c1z          # List grants
+baton stats -f sync.c1z           # Show counts by resource type
+```
+
+Use `-o json` for machine-readable output. Install `baton` with Homebrew:
+
+```bash
+brew install conductorone/baton/baton
 ```
 
 ### For C1 users (not connector development)
 
 | Tool | Purpose | When to use |
 |------|---------|-------------|
-| **cone** | CLI for C1 platform | Access requests, approvals, searches |
-| **conductorone-sdk-go** | Go SDK for C1 API | Integrating with C1 platform |
+| **cone** | CLI for the C1 platform | Access requests, approvals, searches |
+| **conductorone-sdk-go** | Go SDK for the C1 API | Integrating with the C1 platform |
 
-**cone** is the C1 CLI for end-users and administrators. It handles access management workflows:
+**cone** is the C1 CLI for end users and administrators. It handles access management workflows:
 
 ```bash
-cone login                     # Authenticate to C1
-cone search users "alice"      # Search for users
-cone task approve <task-id>    # Approve access requests
+cone login <tenant-name>       # Authenticate to your C1 tenant
+cone search --query "admin"    # Search for entitlements
+cone task approve <task-id>    # Approve an access request
 ```
+
+See [Command reference](/product/cli/commands) for the full list of `cone` commands.
 
 ### Which tool do I need?
 
@@ -132,119 +139,108 @@ cone task approve <task-id>    # Approve access requests
 
 ### The connector binary
 
-When you build a connector, you produce a standalone binary (e.g., `baton-okta`, `baton-github`). This binary:
+When you build a connector, you produce a standalone binary, such as `baton-okta` or `baton-github`. This binary:
 
-- **Embeds the SDK** - It's compiled with `baton-sdk`, not dependent on it at runtime
-- **Is self-contained** - No runtime dependencies except the target system's API
-- **Runs independently** - You don't need any other C1 tools installed
-- **Produces standard output** - A `.c1z` file that any C1 environment can consume
+- **Embeds the SDK.** It's compiled with `baton-sdk` and doesn't depend on it at runtime.
+- **Is self-contained.** It has no runtime dependencies except the target system's API.
+- **Runs independently.** You don't need any other C1 tools installed.
+- **Produces a sync file.** The output is a `.c1z` file.
 
 ```bash
-# The connector IS the binary
+# The connector is the binary
 ./baton-okta --domain example.okta.com --api-token $TOKEN
 
 # It produces a .c1z file
 ls -la sync.c1z
 ```
 
-The "connector" is NOT the SDK. It's the compiled program that uses the SDK.
+The connector is not the SDK. It's the compiled program that uses the SDK.
 
 ## The minimum contract
 
-The beauty of the Baton SDK is how little you need to implement. At the SDK level, the primary interface for connector developers is `ResourceSyncer`:
+A connector has two parts. The **connector** itself implements `ConnectorBuilderV2`, which declares its metadata, validates its credentials, and lists its resource builders:
 
-- `ResourceType(ctx)`: define the type (and traits) of a resource (for example "user" with trait `TRAIT_USER`)
-- `List(ctx, parentResourceID, token)`: list instances of that resource type (paged)
-- `Entitlements(ctx, resource, token)`: list entitlements offered by that resource (paged)
-- `Grants(ctx, resource, token)`: list who has those entitlements (paged)
+- `Metadata(ctx)`: the connector's display name and description
+- `Validate(ctx)`: confirms the configured credentials work
+- `ResourceSyncers(ctx)`: returns one resource builder per resource type
 
-Four methods give you a working connector. The SDK handles pagination orchestration, error handling, and output formatting. You focus on translating your target system's API into the common model. Optional extensions add provisioning and lifecycle operations when you need them.
+Each **resource builder** implements `ResourceSyncerV2`:
 
-## When to build vs reuse
+- `ResourceType(ctx)`: defines the type and traits of a resource (for example, "user" with the trait `TRAIT_USER`)
+- `List(ctx, parentResourceID, opts)`: lists instances of that resource type, one page at a time
+- `Entitlements(ctx, resource, opts)`: lists the entitlements a resource offers
+- `Grants(ctx, resource, opts)`: lists who holds those entitlements
 
-- **Use an existing connector** when it exists and your needs are met. The operational cost is configuration and deployment.
-- **Contribute upstream** when the connector exists but is missing a capability you need (for example, adding a resource type or provisioning path). This reduces long-term fork burden and helps the community.
-- **Build a new connector** when the target system is unsupported or proprietary. With the SDK handling the heavy lifting, most connectors can be built in a few days.
+The SDK handles pagination orchestration, retries for transient errors, and output formatting. You translate your target system's API into the common model. Optional interfaces add provisioning and other lifecycle operations when you need them.
 
-One reality to keep in mind: connector capabilities vary across the ecosystem. If you need provisioning, check for it per connector/version.
+See [Building connectors](/developer/syncing) to implement this contract.
 
-**Consider alternatives when:**
-- A pre-built connector exists and meets your needs
-- You need quick integration - use [baton-http](/developer/http-authoring) for REST APIs
-- You need database integration - use [baton-sql](/developer/sql-authoring) for SQL databases
+## When to build and when to reuse
 
-## What "working" looks like
+- **Use an existing connector** when one exists and meets your needs. The cost is configuration and deployment.
+- **Use a C1AI custom connector** when the application has an HTTP API with published documentation and you only need to sync access data. C1 builds, tests, and hosts the connector, and you write no code. Custom connectors are in early access and don't support provisioning or custom actions.
+- **Use a configuration-driven connector** when you want to write configuration instead of Go: [baton-http](/developer/http-authoring) for REST APIs, [baton-sql](/baton/baton-sql) for SQL databases, or [baton-scim](/baton/baton-scim) for SCIM-enabled applications.
+- **Build a connector with the SDK** when you need provisioning, custom actions, custom business logic, or an authentication method the other options don't support.
 
-`baton-demo` is an example connector with hardcoded data that demonstrates a fully runnable sync. No API credentials needed - you can try it right now.
+Connector capabilities vary across the ecosystem. If you need provisioning, check for it per connector and version.
+
+## What a working connector looks like
+
+`baton-demo` is an example connector with sample data that demonstrates a fully runnable sync. It needs no API credentials, so you can try it now.
 
 ```bash
+brew install conductorone/baton/baton conductorone/baton/baton-demo
+
 baton-demo
 baton resources
 ```
 
-Or via docker:
+`baton-demo` writes its sync output to `sync.c1z` in the current directory, and `baton` reads that file by default. You can also run both from Docker:
 
 ```bash
 docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton-demo:latest -f "/out/sync.c1z"
 docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c1z" resources
 ```
 
-Example output:
+`baton resources` prints one row for each resource, with the columns **ID**, **Display Name**, **Resource Type**, and **Parent Resource**. `baton grants` prints one row for each grant, with the columns **ID**, **Resource Type**, **Resource**, **Entitlement**, and **Principal**. Use `baton stats` to see how many resources a sync produced for each resource type.
 
-```bash
-$ baton resources -f sync.c1z
-Resource Type    Count
-user             127
-team             23
-repository       89
+## What "working" doesn't guarantee
 
-$ baton grants -f sync.c1z | head -5
-Principal        Entitlement           Resource
-alice@corp.com   member                engineering-team
-alice@corp.com   admin                 api-repo
-bob@corp.com     member                platform-team
-bob@corp.com     read                  docs-repo
-```
-
-## What "working" does not guarantee
-
-- **"Runs locally" does not mean "safe in production."** You still need to handle pagination, retries, and rate limits (and prove you do).
-- **Provisioning is not implied by syncing.** Many connectors are read-only or partially provisionable; you must check per connector.
-- **Docs-site capability tables are not the API contract.** They are a directory for humans; use the connector's own manifests and the SDK interfaces as ground truth.
+- **Running locally doesn't mean it's safe in production.** You still need to handle pagination, retries, and rate limits, and verify that you do.
+- **Syncing doesn't imply provisioning.** Many connectors are read-only or partially provisionable. Check each connector.
+- **Documentation tables aren't the contract.** Capability tables on the docs site are a directory for people. Use the connector's own capability manifest and the SDK interfaces as ground truth.
 
 <Warning>
-Connectors sync access data, not business data. Users, roles, permissions, API keys - yes. Customer records, issues, messages, logs - no.
+Connectors sync access data, not business data. Users, roles, permissions, and API keys belong in a connector. Customer records, issues, messages, and logs don't.
 </Warning>
 
 ## Prerequisites for building
 
-If you're going to build a connector, you'll need:
+To build a connector in Go, you need:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | See go.mod | Connector runtime |
+| Go | The version in `baton-sdk`'s `go.mod` | Connector runtime |
 | Git | Any | Version control |
 | make | Any | Build automation |
 
-<Note>
-Go version requirements vary by connector and SDK version. Check the `go.mod` file in baton-sdk or your target connector for the current minimum version.
-</Note>
+Go version requirements change with SDK releases. Check the `go` directive in `baton-sdk`'s `go.mod` for the minimum version.
 
-Plus:
+You also need:
 - Access to the system you want to connect to
 - API credentials with read permissions
-- An IDE with Go support (VS Code, GoLand)
+- An IDE with Go support, such as VS Code or GoLand
 
 ## Quick reference
 
 | Term | Meaning |
 |------|---------|
-| Connector | Go binary that syncs and provisions access data |
-| c1z | Compressed sync output file |
-| Resource | User, group, role, or custom entity |
-| Entitlement | Permission that can be granted |
-| Grant | Assignment of entitlement to principal |
-| Baton SDK | Go library that handles sync orchestration |
+| Connector | A Go binary that syncs access data into C1 and can provision access changes |
+| c1z | The compressed sync output file |
+| Resource | A user, group, role, or custom entity |
+| Entitlement | A permission that can be granted |
+| Grant | The assignment of an entitlement to a principal |
+| Baton SDK | The Go library that handles sync orchestration |
 | Sync | Reading access data from a system |
 | Provision | Writing access changes back (grant, revoke, create, delete) |
-| Reconciliation | Comparing actual vs desired access and correcting drift |
+| Reconciliation | Comparing actual access to desired access and correcting drift |
