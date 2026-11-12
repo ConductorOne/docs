@@ -1,19 +1,22 @@
 ---
 title: "Resource modeling recipes"
 sidebarTitle: "Modeling recipes"
-description: "Battle-tested patterns for structuring resources, hierarchies, and display names."
+description: "Patterns for structuring resources, hierarchies, and display names, and for handling errors in your syncers."
 ---
 
-Each recipe includes the problem, solution code, and rationale.
+{/* Editor Refresh: 2026-11-12 */}
+
+Each recipe includes the problem, solution code, and rationale. The examples use the V2 syncer signatures from [Building connectors](/developer/syncing).
 
 ## Parent-child hierarchies
 
-**Problem:** Model resources that exist within other resources (projects in organizations, repos in orgs).
+**Problem:** Model resources that exist within other resources, such as projects in organizations or repositories in orgs.
 
 **Solution:**
 
 ```go
-// Define parent type with child annotation
+// Define the types. A type that declares a trait needs resources built with
+// that trait's constructor, so these resources use NewGroupResource below.
 var orgResourceType = &v2.ResourceType{
     Id:          "organization",
     DisplayName: "Organization",
@@ -26,60 +29,62 @@ var projectResourceType = &v2.ResourceType{
     Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
 }
 
-// In org List(), declare children
-func (o *orgBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
+// In the org builder's List, declare the children.
+func (o *orgBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
     orgs, err := o.client.ListOrgs(ctx)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, org := range orgs {
-        r, _ := resource.NewResource(org.Name, orgResourceType, org.ID,
-            // Declare that this org has project children
+        r, err := resource.NewGroupResource(org.Name, orgResourceType, org.ID, nil,
+            // Declare that this org has project children.
             resource.WithAnnotation(&v2.ChildResourceType{
                 ResourceTypeId: projectResourceType.Id,
             }),
         )
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
 
-    return resources, "", nil, nil
+    return resources, nil, nil
 }
 
-// In project List(), reference parent
-func (p *projectBuilder) List(ctx context.Context, parentID *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    // parentID is the org ID when SDK calls this for each org
+// In the project builder's List, reference the parent.
+func (p *projectBuilder) List(ctx context.Context, parentID *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+    // The SDK calls this once for each org, with the org's ID as parentID.
     if parentID == nil {
-        return nil, "", nil, nil // Projects only exist within orgs
+        return nil, nil, nil // Projects only exist within orgs.
     }
 
     projects, err := p.client.ListProjects(ctx, parentID.Resource)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, proj := range projects {
-        r, _ := resource.NewResource(proj.Name, projectResourceType, proj.ID,
+        r, err := resource.NewGroupResource(proj.Name, projectResourceType, proj.ID, nil,
             resource.WithParentResourceID(parentID),
         )
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
 
-    return resources, "", nil, nil
+    return resources, nil, nil
 }
 ```
 
-**Why:** Parent-child relationships let the SDK scope `List()` calls. The UI can show hierarchical navigation. Entitlements inherit context from their parent.
+**Why:** Parent-child relationships let the SDK scope `List` calls to a parent, and they let C1 show access in context. See [Modeling hierarchies](/developer/pagination#modeling-hierarchies) for paging through children.
 
 ## Display name fallbacks
 
-**Problem:** Ensure resources always have a human-readable name.
+**Problem:** Make sure every resource has a human-readable name.
 
 **Solution:**
 
@@ -94,30 +99,58 @@ func displayNameFor(user User) string {
     if user.Email != "" {
         return user.Email
     }
-    // Last resort - never return empty
+    // Last resort. Never return an empty name.
     return user.ID
 }
 
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    users, _ := u.client.ListUsers(ctx)
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+    users, err := u.client.ListUsers(ctx)
+    if err != nil {
+        return nil, nil, err
+    }
 
     var resources []*v2.Resource
     for _, user := range users {
-        r, _ := resource.NewUserResource(
-            displayNameFor(user),  // Never empty
+        r, err := resource.NewUserResource(
+            displayNameFor(user), // Never empty
             userResourceType,
             user.ID,
+            nil,
         )
+        if err != nil {
+            return nil, nil, err
+        }
         resources = append(resources, r)
     }
 
-    return resources, "", nil, nil
+    return resources, nil, nil
 }
 ```
 
-**Why:** Empty display names break UIs and access reviews. Reviewers can't approve access to "(blank)".
+**Why:** Empty display names break UIs and access reviews. Reviewers can't approve access to a blank name.
+
+## Resource attributes
+
+**Problem:** Record a resource's status, profile, and description.
+
+**Solution:** Set status and profile on the resource, and keep user-specific data in the trait options:
+
+```go
+r, err := resource.NewUserResource(
+    displayNameFor(user),
+    userResourceType,
+    user.ID,
+    []resource.UserTraitOption{
+        resource.WithEmail(user.Email, true),
+        resource.WithUserLogin(user.Login),
+        resource.WithAccountType(v2.UserTrait_ACCOUNT_TYPE_HUMAN),
+    },
+    resource.WithResourceStatus(v2.Status_RESOURCE_STATUS_ENABLED, ""),
+    resource.WithResourceProfile(map[string]interface{}{"department": user.Department}),
+)
+```
+
+**Why:** Status, profile, icon, and created time are attributes of the resource itself. The older trait-level options for them, such as `WithStatus`, are deprecated. Use `WithResourceStatus`, `WithResourceProfile`, `WithResourceIcon`, and `WithResourceCreatedAt` instead. For group and role resources, pass `nil` for the trait options, or the options you need.
 
 ## Error handling
 
@@ -128,61 +161,45 @@ func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
 **Solution:**
 
 ```go
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    users, err := u.client.ListUsers(ctx)
-    if err != nil {
-        // Include connector name and operation
-        return nil, "", nil, fmt.Errorf("baton-example: failed to list users: %w", err)
-    }
-
-    // ...
+users, err := u.client.ListUsers(ctx)
+if err != nil {
+    // Include the connector name and the operation.
+    return nil, nil, fmt.Errorf("baton-example: failed to list users: %w", err)
 }
 ```
 
-**Why:** The connector name prefix makes it clear which connector produced the error. The `%w` verb preserves the error chain for `errors.Is()` and `errors.As()`.
+**Why:** The connector name makes it clear which connector produced the error. The `%w` verb preserves the error chain for `errors.Is` and `errors.As`, and it keeps any gRPC status code on the wrapped error, which the SDK uses to decide whether to retry.
 
-### Distinguish retryable vs fatal errors
+### Let the SDK retry transient errors
 
-**Problem:** Let the SDK know which errors are worth retrying.
+**Problem:** Rate limits and temporary outages shouldn't fail a whole sync.
 
-**Solution:**
+**Solution:** Return an error that carries a gRPC `Unavailable` or `DeadlineExceeded` status. The SDK retries only those two codes. Any other error, including a plain `fmt.Errorf` or a custom error type, has no status code and stops the sync.
+
+If you make API calls with `uhttp`, you get this for free. It maps HTTP statuses to gRPC codes: 429, 502, 503, 504, and most other 5xx responses become `Unavailable`, 408 becomes `DeadlineExceeded`, 401 becomes `Unauthenticated`, 403 becomes `PermissionDenied`, and 404 becomes `NotFound`. Return the error and the SDK does the rest:
 
 ```go
-import "github.com/conductorone/baton-sdk/pkg/connectorbuilder"
-
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    users, err := u.client.ListUsers(ctx)
-    if err != nil {
-        // Check for retryable errors
-        if isRateLimitError(err) || isNetworkError(err) {
-            // SDK will retry automatically
-            return nil, "", nil, err
-        }
-
-        // Fatal errors (bad credentials, permission denied)
-        if isAuthError(err) {
-            return nil, "", nil, fmt.Errorf("baton-example: authentication failed (check credentials): %w", err)
-        }
-
-        return nil, "", nil, err
-    }
-    // ...
-}
-
-func isRateLimitError(err error) bool {
-    var httpErr *HTTPError
-    if errors.As(err, &httpErr) {
-        return httpErr.StatusCode == 429
-    }
-    return false
+users, err := u.client.ListUsers(ctx)
+if err != nil {
+    return nil, nil, fmt.Errorf("baton-example: failed to list users: %w", err)
 }
 ```
 
-**Why:** The SDK handles retries for transient errors. Clear error messages for fatal errors help users fix configuration issues.
+If you use another HTTP client, map transient failures to a status yourself:
+
+```go
+if isRateLimitError(err) || isNetworkError(err) {
+    return nil, nil, status.Error(codes.Unavailable, "baton-example: rate limited or network error")
+}
+```
+
+`uhttp.WrapErrors(codes.Unavailable, message, err)` builds an error with a status code and keeps the original error in the chain.
+
+**Why:** Retrying only on `Unavailable` and `DeadlineExceeded` keeps permanent failures, such as bad credentials, from retrying forever. For fatal errors, return a clear message so users can fix the configuration:
+
+```go
+return nil, nil, status.Errorf(codes.Unauthenticated, "baton-example: authentication failed (check credentials): %v", err)
+```
 
 ### Check context cancellation in loops
 
@@ -191,85 +208,83 @@ func isRateLimitError(err error) bool {
 **Solution:**
 
 ```go
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
+func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
     users, err := u.client.ListUsers(ctx)
     if err != nil {
-        return nil, "", nil, err
+        return nil, nil, err
     }
 
     var resources []*v2.Resource
     for _, user := range users {
-        // Check for cancellation
+        // Stop when the context is cancelled.
         select {
         case <-ctx.Done():
-            return nil, "", nil, ctx.Err()
+            return nil, nil, ctx.Err()
         default:
         }
 
-        r, err := resource.NewUserResource(user.Name, userResourceType, user.ID)
+        r, err := resource.NewUserResource(user.Name, userResourceType, user.ID, nil)
         if err != nil {
-            return nil, "", nil, err
+            return nil, nil, err
         }
         resources = append(resources, r)
     }
 
-    return resources, "", nil, nil
+    return resources, nil, nil
 }
 ```
 
-**Why:** A cancelled context means "stop now." Ignoring it wastes resources and can cause timeouts in subsequent operations.
+**Why:** A cancelled context means "stop now." Ignoring it wastes resources and can cause timeouts in later operations.
 
 ## Anti-patterns
 
 ### Don't buffer entire datasets
 
 ```go
-// WRONG: Loading everything into memory
-allUsers, _ := client.GetAllUsers(ctx)  // Could be millions
+// WRONG: Loads everything into memory.
+allUsers, _ := client.GetAllUsers(ctx) // Could be millions
 
-// CORRECT: Paginate
+// CORRECT: Paginate.
 users, nextCursor, _ := client.ListUsers(ctx, cursor, 100)
 ```
 
 ### Don't swallow errors
 
 ```go
-// WRONG: Ignoring errors
+// WRONG: Ignores the error.
 users, _ := client.ListUsers(ctx)
 
-// CORRECT: Return errors
+// CORRECT: Return it.
 users, err := client.ListUsers(ctx)
 if err != nil {
-    return nil, "", nil, fmt.Errorf("baton-example: failed to list users: %w", err)
+    return nil, nil, fmt.Errorf("baton-example: failed to list users: %w", err)
 }
 ```
 
 ### Don't log sensitive data
 
 ```go
-// WRONG: Logging tokens
+// WRONG: Logs a token.
 l.Info("authenticating", zap.String("token", token))
 
-// CORRECT: Never log credentials
+// CORRECT: Never log credentials.
 l.Info("authenticating", zap.String("user", username))
 ```
 
 ### Don't mix resource types in grants
 
 ```go
-// WRONG: Grant with mismatched types
+// WRONG: The principal type doesn't match the resource you synced.
 grant.NewGrant(
     groupResource,
     "member",
     &v2.ResourceId{
-        ResourceType: "app",  // Wrong!
+        ResourceType: "app", // Wrong
         Resource:     userID,
     },
 )
 
-// CORRECT: Consistent resource types
+// CORRECT: Use the type ID you declared.
 grant.NewGrant(
     groupResource,
     "member",
@@ -279,5 +294,3 @@ grant.NewGrant(
     },
 )
 ```
-
-
