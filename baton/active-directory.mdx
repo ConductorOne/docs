@@ -26,7 +26,8 @@ The Active Directory connector supports [automatic account provisioning and depr
 - Multi-domain and cross-forest sync in a single run via `additional-domains` config — see [Multi-domain and cross-forest sync](#multi-domain-and-cross-forest-sync).
 - gMSA sync is opt-in via `enable-gmsa-sync`; provisioning modifies the `msDS-GroupMSAMembership` security descriptor ACL.
 - Two connection modes: **WinLDAP** (default; uses `wldap32.dll` for Kerberos/GSSAPI) and **LDAP** (go-ldap library, e.g. for Simple Bind).
-- Account provisioning (create/delete) requires LDAPS (`ldaps: true`).
+- Setting a password when C1 creates an account needs an encrypted connection: the default `winldap` mode provides one; in `ldap` mode, enable LDAPS (`ldaps: true`). Account deletion does not require LDAPS.
+- Accounts are deleted through deprovisioning, not through a connector action: with the app's Deprovisioning set to **Connector**, revoking a user's access to the app deletes their AD account. See [Account deletion](#account-deletion).
 - Provisioning is idempotent: re-granting a group membership a user already holds, revoking one they don't have, or creating an account or group that already exists is treated as success rather than an error — so overlapping grants during a role change don't fail. An account that already exists is returned unchanged (its password is not reset).
 
 User profiles include UAC-derived state booleans, FILETIME timestamps, and configurable extension attributes — see [User profile attributes](#user-profile-attributes) under Reference.
@@ -35,7 +36,14 @@ User profiles include UAC-derived state booleans, FILETIME timestamps, and confi
 
 ### Connector actions
 
-Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. The Active Directory connector's actions are reached from **two different automation steps**, and which step offers an action is determined by the action itself — you cannot choose:
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) | `update_user_attrs`, `lookup_user`, `set_manager`, `update_profile`, `move_ou`, `create`, and custom PowerShell actions | Varies by action. `set_manager`, `update_profile`, and `move_ou` use a resource selector on the **User** resource type. `update_user_attrs` takes the resource type and ID as plain text fields, `lookup_user` searches by UPN, SAM Account Name, or Employee ID, and `create` has no target. |
+| Account lifecycle action | `enable_user`, `disable_user`, `lock_account`, `unlock_account` | The step's own **Target account** selector — either the account in context or a specific account. |
+
+`update_profile` is also the action behind the app's **User attribute push** rules, not only an automation step. See [Push attributes](#push-attributes).
 
 **Global actions** (connector-level):
 
@@ -70,6 +78,59 @@ You can define additional actions backed by PowerShell scripts in the config fil
 
 - [C1 download center](https://dist.conductorone.com/ConductorOne/baton-active-directory): For stable release binaries.
 
+### Account deletion
+
+The connector deletes AD user accounts when C1 deprovisions them. To turn this on, open the app in C1 and, in **Accounts management**, set **Deprovisioning** to **Connector** (see [Set how app accounts are deprovisioned](/product/admin/access-requests#set-how-app-accounts-are-deprovisioned)). From then on, revoking a user's access to the app deletes their AD account.
+
+<Warning>
+With Deprovisioning set to **Connector**, **any** revocation of the app's access entitlement deletes the account immediately — a manual revoke, an access review decision, or an automation step that revokes all of a user's access. If you want accounts disabled first and deleted later, exclude this app's access entitlement from those other revocations and use the steps below.
+</Warning>
+
+The service account needs the delete rights described in [Account provisioning permissions](#account-provisioning-permissions).
+
+#### What the connector refuses to delete
+
+In each case below, nothing is deleted:
+
+| Situation | Result |
+| :--- | :--- |
+| The object is not a user account (a group, an OU, or a contact synced as a user via a broadened `user-search-filter`) | Refused: `"<DN>" is not a user account (objectClass …)` |
+| The account is outside the configured OU scope (`base-dn`, `only-ous`, `skip-ous`) | Refused: the account is not found, and it stays in AD |
+| The account no longer exists in AD | Refused: the account is not found |
+| The account is protected from accidental deletion | Refused by AD (insufficient access rights) |
+| The account has child objects, such as Exchange ActiveSync device containers | Refused by AD (`notAllowedOnNonLeaf`). Remove the child objects first |
+| The connector runs with `read-only: true` | Refused. C1 shows `provisioning is not enabled` |
+
+Computer and managed service accounts that you sync as users (by broadening `user-search-filter`) **are** deleted.
+
+#### How a refused delete appears in C1
+
+The deprovisioning task's **Execution plan** shows **Connector action: delete account** as **Errored**, and C1 falls back to manual deprovisioning: a task is assigned to the app owner. The connector's reason (for example, the objectClass refusal or the AD error) is on the task's **Audit log** tab.
+
+#### Disable now, delete later
+
+A common offboarding pattern disables the account right away and deletes it after a retention period:
+
+<Steps>
+  <Step>
+    Set the app's **Deprovisioning** to **Connector**, as above.
+  </Step>
+  <Step>
+    Create an automation triggered by your offboarding event (for example, a user's status changing to disabled).
+  </Step>
+  <Step>
+    Add an **Account lifecycle action** step with **Disable account** for this app.
+  </Step>
+  <Step>
+    Add a **Wait for duration** step with your retention period (for example, 30 days).
+  </Step>
+  <Step>
+    Add a **Revoke entitlements** step. Choose **Specific**, open **Show filters**, set **Apps** to this Active Directory app, and select its **app access** entitlement. Searching the picker by app name does not find it; use the **Apps** filter.
+  </Step>
+</Steps>
+
+To quarantine the account first, add a `move_ou` step before the wait. The target OU must be **inside** the connector's OU scope: `move_ou` refuses an OU outside it, and an account moved outside the scope by other means can no longer be deleted by the connector.
+
 ## Gather Active Directory credentials
 
 <Warning>
@@ -77,7 +138,7 @@ To configure the Active Directory connector, you need an Active Directory servic
 
 - **Sync only**: Read access to AD objects
 - **Entitlement provisioning**: Delegated rights to modify group membership
-- **Account provisioning**: Delegated rights to create, delete, and manage user accounts, plus LDAPS enabled
+- **Account provisioning and deletion**: Delegated rights to create, delete, and manage user accounts. Setting passwords at account creation also needs an encrypted connection (the default `winldap` mode, or LDAPS in `ldap` mode).
 - **gMSA provisioning**: Permission to modify `msDS-GroupMSAMembership` on gMSA objects
 
 The service account also needs **Log on as a service** permission and **Modify** access to `C:\ProgramData\ConductorOne`.
@@ -157,9 +218,9 @@ To manage those protected groups, you must grant explicit **Write Members** perm
 
 ### Account provisioning permissions
 
-<Warning>
-User account provisioning requires `ldaps: true` in your config.
-</Warning>
+<Note>
+Setting a password when C1 creates an account needs an encrypted connection: the default `winldap` mode provides one; in `ldap` mode, set `ldaps: true`.
+</Note>
 
 <Steps>
   <Step>
@@ -456,7 +517,7 @@ If you make changes to the config file, a service restart is required for the ch
 | `sitename` | string | *(any reachable DC)* | AD site name. When set, DC discovery prefers that site. A **write-capable** connection resolves a **writable** DC, skipping RODCs; if the site holds only Read-Only DCs the connector widens the search to the domain and binds the nearest writable DC elsewhere, so provisioning keeps working and only reads leave the site. A **read-only** connection resolves the in-site DC (an RODC is fine), keeping reads local. See [Domain controller selection and RODCs](#domain-controller-selection-and-rodcs) for the full behavior matrix. Example: `US-DC-01` |
 | `read-only` | bool | `false` | Run the connector in sync-only mode. Sync works as normal; provisioning is disabled, the write actions are not offered in ConductorOne, **every configured `powershell-actions` entry is withheld** (whatever the script does), and any additional domain is forced read-only too. DC discovery no longer requires a writable DC, so the connector may bind an RODC. Set this when the connector runs in a site served only by Read-Only DCs. Note that ConductorOne may still *offer* provisioning for this connector — the capability metadata is derived from the connector's interfaces rather than this setting — but every such request is refused and nothing is written. |
 | `mode` | string | `winldap` | Connection mode: `winldap` (default; `wldap32.dll` system calls with GSSAPI) or `ldap` (go-ldap library, e.g. for Simple Bind) |
-| `ldaps` | bool | `false` | Enable LDAPS (TLS). Required for account provisioning. |
+| `ldaps` | bool | `false` | Enable LDAPS (TLS). In `ldap` mode, required for setting passwords at account creation. |
 | `ldaps-port` | int | `636` | LDAPS port. Use `3269` for Global Catalog over LDAPS. |
 | `ldaps-skip-verify` | bool | `true` | Skip LDAPS certificate validation (go-ldap mode only; ignored in WinLDAP). |
 | `sync-scope` | string | `Standalone` | `Standalone` or `GlobalCatalog`. `GlobalCatalog` is sync-only — provisioning is not supported and some profile fields are unavailable. |
@@ -724,6 +785,8 @@ only-ous:
   - "OU=Engineering,DC=example,DC=com"
   - "OU=Sales,DC=example,DC=com"
 ```
+
+The OU scope also bounds provisioning: an account outside it is not synced and cannot be deleted by the connector, and `move_ou` refuses a target OU outside it.
 
 ### Custom user attributes
 
