@@ -1,14 +1,23 @@
 ---
 title: "Authentication recipes"
 sidebarTitle: "Auth recipes"
-description: "Battle-tested patterns for authenticating with target system APIs."
+description: "Patterns for authenticating with target system APIs."
 ---
+
+{/* Editor Refresh: 2026-11-12 */}
 
 Each recipe includes the problem, solution code, and rationale.
 
-## API key authentication
+The recipes that call HTTP APIs use the SDK's `uhttp` package. It works in two layers:
 
-**Problem:** Connect to an API that uses API key in the Authorization header.
+1. **Credentials** build an `*http.Client` that authenticates for you. `uhttp.NewBearerAuth`, `NewBasicAuth`, `NewOAuth2ClientCredentials`, `NewOAuth2JWT`, and `NewOAuth2RefreshToken` each return a value with a `GetClient(ctx)` method.
+2. **`BaseHttpClient`** wraps that client. It builds requests, sends them, and turns HTTP errors into the gRPC status codes that the SDK's retry logic understands.
+
+Declare every credential as a configuration field with `field.WithIsSecret(true)`. See [Configuration schema reference](/developer/config-schema#secret-fields).
+
+## API key or bearer token
+
+**Problem:** Connect to an API that expects a token in the `Authorization: Bearer` header.
 
 **Solution:**
 
@@ -17,44 +26,101 @@ Each recipe includes the problem, solution code, and rationale.
 import "github.com/conductorone/baton-sdk/pkg/uhttp"
 
 func NewClient(ctx context.Context, apiKey string) (*Client, error) {
-    httpClient, err := uhttp.NewBaseHttpClient(ctx,
-        uhttp.WithBearerToken(apiKey))
+    httpClient, err := uhttp.NewBearerAuth(apiKey).GetClient(ctx)
     if err != nil {
         return nil, err
     }
-    return &Client{http: httpClient, baseURL: "https://api.example.com"}, nil
+
+    base, err := uhttp.NewBaseHttpClientWithContext(ctx, httpClient)
+    if err != nil {
+        return nil, err
+    }
+
+    return &Client{http: base, baseURL: "https://api.example.com"}, nil
+}
+
+// Send a request and decode the JSON response.
+func (c *Client) ListUsers(ctx context.Context) (*UsersResponse, error) {
+    u, err := url.Parse(c.baseURL + "/users")
+    if err != nil {
+        return nil, err
+    }
+
+    req, err := c.http.NewRequest(ctx, http.MethodGet, u, uhttp.WithAcceptJSONHeader())
+    if err != nil {
+        return nil, err
+    }
+
+    var users UsersResponse
+    if _, err := c.http.Do(req, uhttp.WithJSONResponse(&users)); err != nil {
+        return nil, err
+    }
+    return &users, nil
 }
 ```
 
-**Why:** The SDK's `uhttp` package handles retries and rate limiting automatically. `WithBearerToken` sets `Authorization: Bearer <token>`.
+**Why:** `NewBearerAuth` adds the token to every request. `Do` reads and closes the response body and decodes JSON for you. When the API returns an error status, `Do` returns an error with the matching gRPC code, such as `Unavailable` for 429 and 5xx responses, so the SDK can retry. `uhttp` doesn't retry requests itself, and it doesn't limit your request rate unless you add `uhttp.WithRateLimiter(rate, per)`.
 
-## OAuth2 client credentials
+## API key in a custom header
 
-**Problem:** Exchange client ID and secret for an access token.
+**Problem:** The API reads its key from a header other than `Authorization`.
+
+**Solution:** Set the header on each request:
+
+```go
+req, err := c.http.NewRequest(ctx, http.MethodGet, u,
+    uhttp.WithAcceptJSONHeader(),
+    uhttp.WithHeader("X-API-Key", apiKey))
+```
+
+Build the client with `uhttp.NewClient(ctx)` instead of an authenticated one, and wrap it with `NewBaseHttpClientWithContext` as in the previous recipe.
+
+**Why:** Headers are a per-request option, so you can vary them by call.
+
+## HTTP basic authentication
+
+**Problem:** The API uses a username and password.
 
 **Solution:**
 
 ```go
-import (
-    "golang.org/x/oauth2/clientcredentials"
-)
+httpClient, err := uhttp.NewBasicAuth(username, password).GetClient(ctx)
+if err != nil {
+    return nil, err
+}
+base, err := uhttp.NewBaseHttpClientWithContext(ctx, httpClient)
+```
 
+## OAuth2 client credentials
+
+**Problem:** Exchange a client ID and secret for an access token.
+
+**Solution:**
+
+```go
 func NewClient(ctx context.Context, clientID, clientSecret, tokenURL string) (*Client, error) {
-    config := &clientcredentials.Config{
-        ClientID:     clientID,
-        ClientSecret: clientSecret,
-        TokenURL:     tokenURL,
-        Scopes:       []string{"read", "write"},
+    tokenEndpoint, err := url.Parse(tokenURL)
+    if err != nil {
+        return nil, err
     }
 
-    // This client automatically refreshes tokens
-    httpClient := config.Client(ctx)
+    creds := uhttp.NewOAuth2ClientCredentials(clientID, clientSecret, tokenEndpoint, []string{"read", "write"})
+    httpClient, err := creds.GetClient(ctx)
+    if err != nil {
+        return nil, err
+    }
 
-    return &Client{http: httpClient}, nil
+    base, err := uhttp.NewBaseHttpClientWithContext(ctx, httpClient)
+    if err != nil {
+        return nil, err
+    }
+    return &Client{http: base}, nil
 }
 ```
 
-**Why:** The `clientcredentials` package handles token refresh automatically. You don't need to manage token expiry.
+**Why:** The client refreshes tokens automatically, so you don't manage expiry. Because it goes through `uhttp`, failures from the token endpoint also map to gRPC codes: authentication failures become `Unauthenticated` or `PermissionDenied`, and outages become `Unavailable`. The plain `clientcredentials` package from `golang.org/x/oauth2` also works, but it bypasses these error codes.
+
+If the API gives you a refresh token and an access token, use `uhttp.NewOAuth2RefreshToken` with the client ID and secret, redirect URI, token URL, tokens, and scopes.
 
 ## JWT service account (Google-style)
 
@@ -64,33 +130,46 @@ func NewClient(ctx context.Context, clientID, clientSecret, tokenURL string) (*C
 
 ```go
 import (
-    "google.golang.org/api/option"
+    "golang.org/x/oauth2/google"
+    "golang.org/x/oauth2/jwt"
     admin "google.golang.org/api/admin/directory/v1"
+    "google.golang.org/api/option"
+
+    "github.com/conductorone/baton-sdk/pkg/uhttp"
 )
 
 func NewGoogleClient(ctx context.Context, credentialsJSON []byte, adminEmail string) (*admin.Service, error) {
-    // Parse the service account key
-    config, err := google.JWTConfigFromJSON(credentialsJSON,
+    scopes := []string{
         admin.AdminDirectoryUserReadonlyScope,
         admin.AdminDirectoryGroupReadonlyScope,
-    )
-    if err != nil {
-        return nil, fmt.Errorf("failed to parse credentials: %w", err)
     }
 
-    // Impersonate a domain admin for domain-wide access
-    config.Subject = adminEmail
+    // The callback builds the JWT config. Setting Subject impersonates a
+    // domain admin, which domain-wide delegation requires.
+    creds := uhttp.NewOAuth2JWT(credentialsJSON, scopes,
+        func(credentials []byte, scopes ...string) (*jwt.Config, error) {
+            config, err := google.JWTConfigFromJSON(credentials, scopes...)
+            if err != nil {
+                return nil, fmt.Errorf("failed to parse credentials: %w", err)
+            }
+            config.Subject = adminEmail
+            return config, nil
+        })
 
-    // Create the service
-    return admin.NewService(ctx, option.WithHTTPClient(config.Client(ctx)))
+    httpClient, err := creds.GetClient(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    return admin.NewService(ctx, option.WithHTTPClient(httpClient))
 }
 ```
 
-**Why:** Domain-wide delegation requires impersonating a domain admin. The `Subject` field specifies which user to impersonate.
+**Why:** Domain-wide delegation requires impersonating a domain admin. The `Subject` field names the user to impersonate.
 
 ## LDAP bind
 
-**Problem:** Connect to Active Directory or LDAP server.
+**Problem:** Connect to Active Directory or an LDAP server.
 
 **Solution:**
 
@@ -103,32 +182,16 @@ func NewLDAPClient(ctx context.Context, serverURL, bindDN, bindPassword string) 
         return nil, fmt.Errorf("failed to connect to LDAP: %w", err)
     }
 
-    // Simple bind with username/password
-    err = conn.Bind(bindDN, bindPassword)
-    if err != nil {
+    // Simple bind with a username and password.
+    if err := conn.Bind(bindDN, bindPassword); err != nil {
         conn.Close()
         return nil, fmt.Errorf("failed to bind: %w", err)
     }
 
     return conn, nil
 }
-
-// For Kerberos/GSSAPI (domain-joined machines)
-func NewLDAPClientKerberos(ctx context.Context, serverURL string) (*ldap.Conn, error) {
-    conn, err := ldap.DialURL(serverURL)
-    if err != nil {
-        return nil, err
-    }
-
-    err = conn.ExternalBind()
-    if err != nil {
-        conn.Close()
-        return nil, err
-    }
-
-    return conn, nil
-}
 ```
 
-**Why:** LDAP requires binding before any queries. Simple bind uses credentials; external bind uses OS-level Kerberos tickets.
+**Why:** LDAP requires a bind before any query. A simple bind uses a distinguished name and password.
 
+To authenticate with a TLS client certificate instead, connect with a client certificate and call `conn.ExternalBind()`, which uses SASL EXTERNAL. It doesn't use Kerberos. Kerberos (GSSAPI) binds need a separate package from the `go-ldap` project.

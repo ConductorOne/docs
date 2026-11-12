@@ -1,46 +1,41 @@
 ---
 title: "Testing recipes"
 sidebarTitle: "Testing recipes"
-description: "Battle-tested patterns for testing connectors without hitting production."
+description: "Patterns for testing connectors without hitting production."
 ---
 
-Each recipe includes the problem, solution code, and rationale.
+{/* Editor Refresh: 2026-11-12 */}
+
+Each recipe includes the problem, solution code, and rationale. For LDAP paging and nested pagination, see [Pagination patterns](/developer/pagination).
 
 ## Configurable base URL for mocks
 
-**Problem:** Test connector against mock server without hitting production.
+**Problem:** Test your connector against a mock server without hitting production.
 
-**Solution:**
+**Solution:** Add a base URL field to your configuration, and give it a default that points at the real API:
 
 ```go
 // pkg/config/config.go
-type Config struct {
-    APIKey  string `mapstructure:"api-key"`
-    BaseURL string `mapstructure:"base-url"` // Required for testability
-}
+var BaseURL = field.StringField(
+    "base-url",
+    field.WithDisplayName("Base URL"),
+    field.WithDescription("Base URL for the API. Use http://localhost:8080 for testing."),
+    field.WithDefaultValue("https://api.example.com"),
+)
 
-// cmd/baton-example/main.go
-func main() {
-    fields := []field.SchemaField{
-        field.StringField("api-key",
-            field.WithRequired(true),
-            field.WithDescription("API key for authentication"),
-        ),
-        field.StringField("base-url",
-            field.WithDefaultValue("https://api.example.com"),
-            field.WithDescription("Base URL (use http://localhost:8080 for testing)"),
-        ),
-    }
-    // ...
-}
+var ConfigurationFields = []field.SchemaField{APIKey, BaseURL}
+```
 
-// pkg/client/client.go
-func New(cfg *Config) *Client {
-    baseURL := cfg.BaseURL
-    if baseURL == "" {
-        baseURL = "https://api.example.com"
+After you run `make generate`, the generated configuration struct has a `BaseUrl` field. Pass it to your client:
+
+```go
+// pkg/connector/connector.go
+func New(ctx context.Context, cc *cfg.Example, _ *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
+    cl, err := client.New(ctx, cc.ApiKey, cc.BaseUrl)
+    if err != nil {
+        return nil, nil, err
     }
-    return &Client{baseURL: baseURL}
+    return &Connector{client: cl}, nil, nil
 }
 ```
 
@@ -54,180 +49,134 @@ func New(cfg *Config) *Client {
 ./baton-example --api-key test --base-url http://localhost:8080
 ```
 
-**Why:** Without configurable base URL, you can't test without hitting production. This breaks CI/CD and risks exposing production data.
+**Why:** Without a configurable base URL, you can't test without hitting production. That breaks CI and risks exposing production data. See [Define your configuration](/developer/config-schema#define-your-configuration) for how fields become flags.
 
 ## Insecure TLS for local testing
 
-**Problem:** Test against mock server with self-signed certificate.
+**Problem:** Test against a mock server that uses a self-signed certificate.
 
-**Solution:**
+**Solution:** Add a bool field, and apply it when you build the HTTP client:
 
 ```go
 // pkg/config/config.go
-type Config struct {
-    APIKey   string `mapstructure:"api-key"`
-    BaseURL  string `mapstructure:"base-url"`
-    Insecure bool   `mapstructure:"insecure"` // Skip TLS verification
-}
+var Insecure = field.BoolField(
+    "insecure",
+    field.WithDescription("Skip TLS certificate verification. For local testing only."),
+)
 
 // pkg/client/client.go
-func New(ctx context.Context, cfg *Config) (*Client, error) {
-    opts := []uhttp.Option{}
-
-    if cfg.Insecure {
-        transport := &http.Transport{
-            TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-        }
-        opts = append(opts, uhttp.WithTransport(transport))
+func New(ctx context.Context, apiKey, baseURL string, insecure bool) (*Client, error) {
+    var opts []uhttp.Option
+    if insecure {
+        // This replaces the default TLS config, so set MinVersion again.
+        opts = append(opts, uhttp.WithTLSClientConfig(&tls.Config{
+            MinVersion:         tls.VersionTLS12,
+            InsecureSkipVerify: true,
+        }))
     }
 
-    httpClient, err := uhttp.NewBaseHttpClient(ctx, opts...)
+    httpClient, err := uhttp.NewClient(ctx, opts...)
     if err != nil {
         return nil, err
     }
 
-    return &Client{http: httpClient, baseURL: cfg.BaseURL}, nil
+    base, err := uhttp.NewBaseHttpClientWithContext(ctx, httpClient)
+    if err != nil {
+        return nil, err
+    }
+
+    return &Client{http: base, baseURL: baseURL}, nil
 }
 ```
 
 **Usage:**
 
 ```bash
-# Testing with self-signed cert
 ./baton-example --api-key test --base-url https://localhost:8443 --insecure
 ```
 
-**Why:** Mock servers often use self-signed certificates. The `--insecure` flag enables testing without installing custom CAs.
+**Why:** Mock servers often use self-signed certificates. An `--insecure` flag lets you test without installing a custom certificate authority.
 
 <Warning>
-Never use `--insecure` in production. This flag is strictly for local testing with mock servers.
+Never use `--insecure` in production. It's strictly for local testing with mock servers.
 </Warning>
 
-## LDAP server-side paging
+## Unit-test a resource builder
 
-**Problem:** Paginate large LDAP result sets.
+**Problem:** Verify that a builder lists the right resources, including across pages, without running a full sync.
 
-**Solution:**
-
-```go
-import (
-    "encoding/base64"
-    "github.com/go-ldap/ldap/v3"
-)
-
-func (u *userBuilder) List(ctx context.Context, _ *v2.ResourceId,
-    pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
-    const pageSize = 1000
-
-    // Create paging control
-    pagingControl := ldap.NewControlPaging(uint32(pageSize))
-
-    // Restore cookie from token if continuing
-    if pToken.Token != "" {
-        cookie, err := base64.StdEncoding.DecodeString(pToken.Token)
-        if err != nil {
-            return nil, "", nil, fmt.Errorf("invalid pagination token: %w", err)
-        }
-        pagingControl.SetCookie(cookie)
-    }
-
-    // Execute search with paging control
-    searchRequest := ldap.NewSearchRequest(
-        "dc=example,dc=com",
-        ldap.ScopeWholeSubtree,
-        ldap.NeverDerefAliases,
-        0, 0, false,
-        "(objectClass=user)",
-        []string{"cn", "mail", "sAMAccountName"},
-        []ldap.Control{pagingControl},
-    )
-
-    result, err := u.conn.Search(searchRequest)
-    if err != nil {
-        return nil, "", nil, err
-    }
-
-    // Convert entries to resources
-    var resources []*v2.Resource
-    for _, entry := range result.Entries {
-        r, _ := resource.NewUserResource(
-            entry.GetAttributeValue("cn"),
-            userResourceType,
-            entry.GetAttributeValue("sAMAccountName"),
-            resource.WithEmail(entry.GetAttributeValue("mail"), true),
-        )
-        resources = append(resources, r)
-    }
-
-    // Extract next page cookie
-    nextToken := ""
-    pagingResult := ldap.FindControl(result.Controls, ldap.ControlTypePaging)
-    if pc, ok := pagingResult.(*ldap.ControlPaging); ok && len(pc.Cookie) > 0 {
-        nextToken = base64.StdEncoding.EncodeToString(pc.Cookie)
-    }
-
-    return resources, nextToken, nil, nil
-}
-```
-
-**Why:** LDAP servers handle pagination server-side with cookies. The cookie must be base64-encoded to fit in the string token.
-
-## Nested pagination with Bag
-
-**Problem:** Paginate children within paginated parents (e.g., members within each group).
-
-**Solution:**
+**Solution:** Call the builder's methods directly with a fake client, and loop until the page token is empty:
 
 ```go
-func (g *groupBuilder) Grants(ctx context.Context, resource *v2.Resource,
-    pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func TestUserBuilderList(t *testing.T) {
+    ctx := context.Background()
+    b := newUserBuilder(newFakeClient())
 
-    bag := &pagination.Bag{}
-    if err := bag.Unmarshal(pToken.Token); err != nil {
-        return nil, "", nil, err
-    }
-
-    // On first call for this resource, push initial state
-    if bag.Current() == nil {
-        bag.Push(pagination.PageState{
-            ResourceID:     resource.Id.Resource,
-            ResourceTypeID: resource.Id.ResourceType,
+    var all []*v2.Resource
+    token := ""
+    for {
+        resources, results, err := b.List(ctx, nil, resource.SyncOpAttrs{
+            PageToken: pagination.Token{Token: token},
         })
+        require.NoError(t, err)
+
+        all = append(all, resources...)
+        if results == nil || results.NextPageToken == "" {
+            break
+        }
+        token = results.NextPageToken
     }
 
-    // Get current page of members
-    members, nextCursor, err := g.client.GetGroupMembers(ctx,
-        bag.Current().ResourceID,
-        bag.PageToken())
-    if err != nil {
-        return nil, "", nil, err
-    }
-
-    // Convert to grants
-    var grants []*v2.Grant
-    for _, member := range members {
-        g := grant.NewGrant(resource, "member",
-            &v2.ResourceId{ResourceType: "user", Resource: member.ID})
-        grants = append(grants, g)
-    }
-
-    // Update bag with next page cursor
-    if nextCursor != "" {
-        bag.Next(nextCursor)
-    } else {
-        bag.Pop() // Done with this resource
-    }
-
-    nextToken, err := bag.Marshal()
-    if err != nil {
-        return nil, "", nil, err
-    }
-
-    return grants, nextToken, nil, nil
+    require.Len(t, all, 3)
+    require.Equal(t, "Alice", all[0].DisplayName)
+    require.Equal(t, "alice-id", all[0].Id.Resource)
 }
 ```
 
-**Why:** The `Bag` type is a stack that manages nested pagination state. Push when entering a nested level, pop when done.
+`require` is `github.com/stretchr/testify/require`. Have the fake client return small pages, so the loop crosses a page boundary. Call `Entitlements` and `Grants` the same way, passing the resource under test.
 
+**Why:** Testing the page loop catches token bugs before they reach a real sync. A V2 builder returns its next token in `results.NextPageToken`, and nil results mean the same as an empty token.
 
+## Use the SDK test helpers
+
+The `pkg/test` package has helpers for common checks:
+
+| Helper | What it does |
+|--------|--------------|
+| `ExhaustResourcePagination`, `ExhaustEntitlementPagination`, `ExhaustGrantPagination` | Page through a syncer until the token is empty, and fail if a page reports being rate limited |
+| `GrantsIntegrationTest` | Grants an entitlement, checks that the grant appears, revokes it, and checks that it's gone. Any connector that provisions should pass it. |
+| `AssertWasRatelimited`, `AssertNoRatelimitAnnotations` | Check a call's annotations for rate limit signals |
+
+<Note>
+These helpers accept the V1 interfaces, `ResourceSyncerLimited` and `ResourceProvisionerLimited`. A V2 builder doesn't satisfy them, so for V2 builders write the page loop yourself, as in the previous recipe.
+</Note>
+
+## Run and inspect with the baton CLI
+
+**Problem:** Check a connector end to end against a real or mock API.
+
+**Solution:** Run the connector to produce a sync file, then inspect it with the `baton` CLI:
+
+```bash
+./dist/*/baton-example --api-key $KEY --base-url http://localhost:8080 \
+  --log-level debug -f sync.c1z
+
+baton resources -f sync.c1z
+baton entitlements -f sync.c1z
+baton grants -f sync.c1z
+baton stats -f sync.c1z
+```
+
+To iterate on one part of a sync, limit it:
+
+```bash
+# Only sync some resource types.
+./dist/*/baton-example --api-key $KEY --sync-resource-types user,group -f sync.c1z
+
+# Skip grants while you work on resources and entitlements.
+./dist/*/baton-example --api-key $KEY --skip-grants -f sync.c1z
+```
+
+To test provisioning against a sync file, see [Test provisioning locally](/developer/provisioning#test-provisioning-locally).
+
+**Why:** The `baton` CLI reads the same file that C1 would receive, so you see what your connector actually produced, including IDs and parent links.
