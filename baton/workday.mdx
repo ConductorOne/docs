@@ -39,15 +39,6 @@ C1 offers two Workday connectors: Workday and Workday Accounts (WQL). How you wa
 
 The Workday connector supports provisioning membership in **user-based security groups** when it's configured with a JSON custom report. See [Security group provisioning](#security-group-provisioning) for the setup it needs.
 
-### Custom report (CSV)
-
-| Resource | Sync | Provision |
-| :--- | :--- | :--- |
-| Accounts | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
-| Roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
-| Security groups |  |  |
-| AI agents\*\* | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
-
 ### API client
 
 | Resource | Sync | Provision |
@@ -63,12 +54,38 @@ The Workday connector supports provisioning membership in **user-based security 
 **AI agents are opt-in.** The connector syncs the agents registered in Workday's Agent System of Record (ASOR), including each agent's provider, platform, version, and skills. Enable the AI agents resource type in C1 after the API client's security group has the ASOR domain access described below. If the API client lacks that access, a sync that includes AI agents fails with an error naming the missing scope. Agents are synced as standalone resources and are not yet linked to the Agent System User accounts they run as.
 </Note>
 
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations. With every authentication method, the Workday connector can write a worker's work email and work phone back to Workday, so you can keep them in sync from C1 with attribute push rules or the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| update_profile | `user_id` (resource ID, required), `email` (string, optional), `phone` (string, optional) | Changes the worker's primary work email and the number of their primary work phone. Set at least one of `email` or `phone`. |
+
+Workday applies the change as a completed Work Contact Change event, skipping its review step.
+
+To use this action:
+
+- The Workday account whose credentials the connector uses (the report owner, or the account the API client's refresh token belongs to) must be in a security group with:
+  - **Get** and **Put** integration permissions on the **Person Data: Work Contact Information** domain (**Contact Information** functional area)
+  - Permission to initiate **Change Work Contact Information (Web Service)** in the **Work Contact Change** business process security policy
+- If you authenticate with an API client (Options 2 and 3 below), also add the **Contact Information** scope to the API client.
+- With a custom report, the report's `user_id` column must hold the worker's **Employee ID** or **Contingent Worker ID**.
+
+<Note>
+**A phone can be updated, not added.** The worker must already have a primary work phone, and the new number keeps that phone's country and device type. Send the number with or without its country code; a number with a different country code is rejected. Clearing the email or phone isn't supported.
+</Note>
+
+<Tip>
+To keep C1 from re-sending a value Workday already has, sync the same attribute back: include the `email` column in a custom report, and add a work phone column with the `phone` XML alias through the report's additional fields.
+</Tip>
+
 ## Gather Workday credentials 
 
 Configuring the connector requires you to pass in credentials generated in Workday. Gather these credentials before you move on. 
 
 <Tip>
-To authenticate with Workday, you can use a Report-as-a-service (RaaS) **custom report** in CSV or JSON format (with either Basic Auth or API Client), or directly an **API Client** with OAuth.
+To authenticate with Workday, you can use a Report-as-a-service (RaaS) **custom report** in JSON format (with either Basic Auth or API Client), or directly an **API Client** with OAuth.
 
 **Which authentication method should I use?** 
 
@@ -101,11 +118,11 @@ When setting data sources, disable the **Optimized for Performance** option and 
 </Step>
 </Steps>
 
-At this point, you can create the custom report in either JSON (recommended) or CSV format by following the relevant directions below. 
+At this point, you can create the custom report by following the directions below.
 
-### Expected custom report contents when using the JSON format
+### Expected custom report contents
 
-When using the JSON format for custom reports, the connector expects a specific structure. Below is a table of the supported fields:
+The connector reads the custom report in JSON format and expects a specific structure. Below is a table of the supported fields:
 
 **Suggested Data Source:** All Active and Terminated Workers
 
@@ -128,10 +145,17 @@ Notes:
 - The order of the fields does not matter.
 - The `Column Heading Override XML Alias` value MUST match `Column Heading Override`.
 - You may substitute the suggested Workday object fields with alternatives as long as they provide equivalent data.
+- To sync extra worker attributes (such as cost center or location), add them as columns and enter their **Column Heading Override XML Alias** values in **Additional report fields** when you configure the connector.
+
+<Warning>
+   **CSV custom reports are deprecated.** Connectors already set up with a CSV report URL keep syncing, but new connectors should use a JSON report. To move a connector from CSV to JSON, create a **new** report with the fields above and switch the connector to its JSON URL in the same change.
+
+   Don't edit the existing CSV report in place. Until the URL changes, the connector reads that report as CSV, by column position, so any sync in between gives every account the wrong ID and C1 deletes and recreates all accounts and their grants. Changing only the URL is not enough either: the sync returns no accounts, because a CSV report's columns don't match the fields above. After the switch, role IDs change, so C1 recreates the roles and their grants, and security groups start syncing.
+</Warning>
 
 ### Security group provisioning
 
-When the JSON report includes the `security_groups` column, C1 can add users to and remove them from **user-based security groups**. Other group types, such as role-based security groups, sync as usual but can't be provisioned, because Workday derives their membership from role and organization assignments.
+When the report includes the `security_groups` column, C1 can add users to and remove them from **user-based security groups**. Other group types, such as role-based security groups, sync as usual but can't be provisioned, because Workday derives their membership from role and organization assignments.
 
 To provision security groups:
 
@@ -142,12 +166,12 @@ To provision security groups:
 - If you authenticate with a custom report and API client (Option 2 below), also add the **System** scope to the API client.
 
 <Note>
-   Duplicate `user_id` rows are reduced to a single record: the active record wins, and the record that loses is discarded whole, taking its roles and security groups with it. This applies to the JSON report only — the CSV report described below is unaffected.
+   Duplicate `user_id` rows in the JSON report are reduced to a single record: the active record wins, and the record that loses is discarded whole, taking its roles and security groups with it.
 </Note>
 
-#### Expected custom report contents when using the CSV format
+#### Legacy CSV report contents (deprecated)
 
-Add the following fields to the custom report **in this order**: 
+Connectors still on a CSV report need these fields **in this order**:
 
    * Active Status
    * User Name
@@ -157,6 +181,8 @@ Add the following fields to the custom report **in this order**:
    * Role Name
    * Organization
    * Organization Type
+
+   These columns are read by position, so their headers don't matter. To sync extra worker attributes (such as cost center or location), add them as columns after **Organization Type** and enter their column headers in **Additional report fields** when you configure the connector. Workday uses each column's **Column Heading Override XML Alias** as its CSV header (for example `Cost_Center`), so enter that value. Values are read from each worker's first row, and blank values are left out of the profile. If a header matches a built-in profile key (`first_name`, `last_name` or `security_group`), the built-in value is kept.
 
 <Tip>
    The fields needed in custom reports can vary depending on how your Workday installation is configured. Contact C1 support if you need help figuring out which fields to include.   
@@ -174,7 +200,7 @@ On the **Report Definition** page, click the **Related Actions** (three dots) bu
 Navigate to **Actions** > **Web Service** > **View URLs**. 
 </Step>
 <Step>
-Right-click on the **JSON** or **CSV** (as relevant) URL, then carefully copy and save it. 
+Right-click on the **JSON** URL, then carefully copy and save it. The URL includes `format=json`.
 </Step>
 </Steps>
 **Done.** Next, move on to the connector configuration instructions.
@@ -458,7 +484,7 @@ If using a custom report with Basic Auth (Option 1), select **Custom Report with
 
    1. Enter the **Report URL**, **Report username**, and **Report user password** in the relevant fields.
 
-   2. **Optional.** To include extra Workday data in the sync, in the **Additional report fields** field, enter any additional field names from the Workday JSON report that you want to include in user profiles. Press **Enter** between each field name.
+   2. **Optional.** To include extra Workday data in the sync, in the **Additional report fields** field, enter any additional field names from the custom report (their XML aliases) that you want to include in user profiles. Press **Enter** between each field name.
 
       Fields that return multiple values (such as `roles` or `security_groups`) are not supported.
 </Step>
@@ -469,7 +495,7 @@ If using a custom report with OAuth (Option 2), select **Custom Report with API 
 
    2. Enter the **Client ID**, **Client secret**, and **Refresh token** from the API client you registered for this report. For **Tenant Name**, enter the tenant segment from your Report URL — it's the value between `/customreport2/` and the next `/` (for example, in `https://wd2-impl-services1.workday.com/ccx/service/customreport2/acme/...`, the tenant is `acme`).
 
-   3. **Optional.** Enter any additional field names from the Workday JSON report in the **Additional report fields** field. Press **Enter** between each field name.
+   3. **Optional.** Enter any additional field names from the custom report (their XML aliases) in the **Additional report fields** field. Press **Enter** between each field name.
 
       Fields that return multiple values (such as `roles` or `security_groups`) are not supported.
 </Step>
@@ -558,7 +584,7 @@ stringData:
   BATON_WORKDAY_REPORT_URL: <Workday custom report URL>
   BATON_WORKDAY_REPORT_USERNAME: <Workday username of the user who created the report>
   BATON_WORKDAY_REPORT_PASSWORD: <Workday password of the user who created the report>
-  BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday JSON report to include in user profiles>
+  BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday custom report (their XML aliases) to include in user profiles>
 
   # Option 2: Custom report with OAuth (refresh token must belong to the report owner)
   BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: true
@@ -567,7 +593,7 @@ stringData:
   BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret>
   BATON_WORKDAY_REFRESH_TOKEN: <Refresh token generated for the report owner>
   BATON_TENANT_NAME: <Workday tenant name>
-  BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday JSON report to include in user profiles>
+  BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday custom report (their XML aliases) to include in user profiles>
 
   # Option 3: API client with OAuth
   BATON_WORKDAY_CLIENT_ID: <Workday API client ID>
