@@ -4,269 +4,293 @@ sidebarTitle: "Error codes"
 description: "Identify and resolve errors from connector output. Each error includes the cause and how to fix it."
 ---
 
-This reference documents common errors from the baton-sdk and connector runtime.
+{/* Editor Refresh: 2026-11-12 */}
+
+This reference documents errors that the baton-sdk and the connector runtime produce. Messages appear here as the SDK prints them, so you can search your logs for the exact text. Most SDK errors also carry a gRPC status code, shown in parentheses.
 
 ## Configuration errors
 
-### Connector does not have account manager configured
+### connector does not have account manager configured
 
-**Cause:** Attempted to create an account but the connector doesn't implement `AccountManager`.
+**Code:** `Unimplemented`
 
-**Solution:** Either:
-- Implement the `AccountManager` interface for account creation
-- Don't call account creation operations on this connector
+**Cause:** C1 asked to create an account, but no resource type in the connector implements account creation.
 
-```go
-// To support account creation, implement:
-type AccountManager interface {
-    CreateAccount(ctx context.Context, accountInfo *v2.AccountInfo,
-        credentialOptions *v2.CredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
-}
-```
+**Solution:** Implement `CreateAccount` and `CreateAccountCapabilityDetails` on a resource builder, or don't request account creation from this connector. See [CreateAccount](/developer/provisioning#createaccount).
 
-### Resource type does not have credential manager configured
+Two related messages:
 
-**Cause:** Attempted credential rotation but the resource type doesn't support it.
+- `connector has multiple account managers configured, but no resource type specified, and no default account manager configured`: the request didn't name a resource type, and the connector has several account managers but none on the `user` resource type. Register one on `user`, or have the request name a resource type.
+- `connector does not have account manager configured for resource type: <type>`: the request named a resource type that has no account manager.
 
-**Solution:** Implement `CredentialManager` for that resource type, or don't attempt rotation.
+### resource type does not have credential manager configured
 
-### Error: old account manager interface implemented
+**Code:** `Unimplemented`
 
-**Cause:** Using deprecated v1 interface instead of v2.
+**Cause:** C1 asked to rotate a credential on a resource type that doesn't support it.
 
-**Solution:** Update to implement `AccountManagerV2`:
+**Solution:** Implement `Rotate` and `RotateCapabilityDetails` on that resource type's builder, or don't request rotation.
 
-```go
-// Old (deprecated):
-type AccountManager interface { ... }
+A sibling message, `resource type does not have credential issuer configured`, means the same for credential issuance.
 
-// New (correct):
-type AccountManagerV2 interface {
-    CreateAccount(ctx context.Context, accountInfo *v2.AccountInfo,
-        credentialOptions *v2.LocalCredentialOptions) (CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
-}
-```
+### error: old account manager interface implemented for `<type>`
 
-### Error: duplicate resource type found for account manager
+**Cause:** The builder's `CreateAccount` method takes the older `*v2.CredentialOptions`. The SDK rejects it when the connector starts. The same error exists for credential managers (`error: old credential manager interface implemented for <type>`).
 
-**Cause:** Registered the same resource type twice with the builder.
-
-**Solution:** Only register each resource type once:
+**Solution:** Change the parameter to `*v2.LocalCredentialOptions`, and add `CreateAccountCapabilityDetails`:
 
 ```go
-// BAD
-b.WithAccountManager(userBuilder)
-b.WithAccountManager(userBuilder)  // Duplicate!
-
-// GOOD
-b.WithAccountManager(userBuilder)
-b.WithAccountManager(groupBuilder)
+CreateAccount(ctx context.Context, accountInfo *v2.AccountInfo,
+    credentialOptions *v2.LocalCredentialOptions) (connectorbuilder.CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error)
+CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error)
 ```
+
+### error: duplicate resource type found for account manager `<type>`
+
+**Cause:** Two resource syncers in your `ResourceSyncers()` result return the same ID from `ResourceType()`. The SDK registers each resource type once. The same check produces `...for credential manager <type>` and `...for credential issuer <type>`.
+
+**Solution:** Give each resource type a unique ID, and return each builder once.
 
 ## Provisioning errors
 
-### Error: provisioner not found for resource type
+### resource type `<type>` does not have provisioner configured
 
-**Cause:** Grant/Revoke called on a resource type that doesn't implement provisioning.
+**Code:** `Unimplemented`
 
-**Solution:** Implement `ResourceProvisionerV2`:
+**Cause:** C1 sent a grant or revoke for a resource type whose builder doesn't implement provisioning.
+
+**Solution:** Implement `Grant` and `Revoke` on the builder:
 
 ```go
-type ResourceProvisionerV2 interface {
-    Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error)
-    Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error)
-}
+Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error)
+Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error)
 ```
 
-### Error: preferred credential creation option is not set
+Also run the connector with `--provisioning`. See [Implementing provisioning](/developer/provisioning).
 
-**Cause:** Account creation request missing required credential option.
+Similar messages exist for resource creation and deletion: `resource type <type> does not have resource Create() configured` and `resource type <type> does not have resource Delete() configured`.
 
-**Solution:** Include credential options in the request, or check connector capabilities first.
+### error: preferred credential creation option is not set
 
-### Error: preferred credential rotation option is not part of the supported options
+**Code:** `InvalidArgument`
 
-**Cause:** Requested credential type not supported by this connector.
+**Cause:** Your `CreateAccountCapabilityDetails` method returned details without a preferred credential option. This error comes from the connector's own capability declaration, not from a request.
 
-**Solution:** Check `GetCapabilities()` for supported credential options before requesting rotation.
+**Solution:** Set `PreferredCredentialOption`, and include the same value in `SupportedCredentialOptions`:
+
+```go
+return &v2.CredentialDetailsAccountProvisioning{
+    SupportedCredentialOptions: []v2.CapabilityDetailCredentialOption{
+        v2.CapabilityDetailCredentialOption_CAPABILITY_DETAIL_CREDENTIAL_OPTION_RANDOM_PASSWORD,
+    },
+    PreferredCredentialOption: v2.CapabilityDetailCredentialOption_CAPABILITY_DETAIL_CREDENTIAL_OPTION_RANDOM_PASSWORD,
+}, nil, nil
+```
+
+### error: preferred credential creation option is not part of the supported options
+
+**Code:** `InvalidArgument`
+
+**Cause:** `PreferredCredentialOption` isn't in `SupportedCredentialOptions`.
+
+**Solution:** Add the preferred option to the supported list, or choose a preferred option that's already in it.
+
+The same two errors exist for rotation, with `rotation` in place of `creation`. Fix them in `RotateCapabilityDetails`.
 
 ## Pagination errors
 
-### Next page token is the same as the current page token
+### next page token unchanged
 
-**Cause:** Your List/Entitlements/Grants method returned the same token it received, creating an infinite loop.
+**Code:** `Internal`
+
+**Messages:**
+
+- `listing resources failed: next page token unchanged (token=<token>, type=<type>, parent=<parent>) - likely a connector bug`
+- `listing entitlements failed: next page token unchanged - likely a connector bug`
+- `listing static entitlements failed: next page token unchanged - likely a connector bug`
+- `listing grants for resource <type>/<id> failed: next page token unchanged - likely a connector bug`
+
+**Cause:** Your `List`, `Entitlements`, or `Grants` method returned the same non-empty token it received. The SDK stops the sync instead of requesting the same page forever. It doesn't detect longer loops, such as a token that alternates between two values.
 
 **Solution:**
 
 ```go
-// BAD - Returns input token
-return resources, pToken.Token, nil, nil
+// BAD: returns the token it was given.
+return resources, &resource.SyncOpResults{NextPageToken: opts.PageToken.Token}, nil
 
-// GOOD - Returns next token from API or empty string
-return resources, nextPageToken, nil, nil
+// GOOD: returns the next token from the API, or an empty token when done.
+return resources, &resource.SyncOpResults{NextPageToken: nextPage}, nil
 ```
 
-See [Troubleshooting - Pagination Loop](/developer/debugging#pagination-loop-detected).
+See [Troubleshooting](/developer/debugging#pagination-loop-detected).
+
+### page token corrupt
+
+**Cause:** `Bag.Unmarshal` couldn't parse the token it was given. This happens when you pass a token that didn't come from `Bag.Marshal` or `Bag.NextToken`, or when a token was altered.
+
+**Solution:** Only unmarshal tokens that your own method returned.
 
 ## C1z file errors
 
-### C1z: invalid file
+### c1z: invalid file
 
-**Cause:** The .c1z file is corrupted or not a valid c1z format.
-
-**Solution:**
-- Re-run the sync to generate a fresh file
-- Check disk space and write permissions
-- Verify the file wasn't truncated
-
-### C1z: max decoded size exceeded
-
-**Cause:** The decompressed c1z file exceeds the default size limit.
-
-**Solution:** Set environment variable to increase limit:
-
-```bash
-export C1Z_DECODER_MAX_DECODED_SIZE=10737418240  # 10GB
-```
-
-### C1z: window size exceeded
-
-**Cause:** Decompression requires more memory than allowed.
-
-**Solution:** Increase decoder memory:
-
-```bash
-export C1Z_DECODER_MAX_MEMORY=4294967296  # 4GB
-```
-
-### C1file: output file path is empty
-
-**Cause:** Connector invoked without specifying output path.
+**Cause:** The `.c1z` file is corrupted or isn't a valid c1z.
 
 **Solution:**
+- Re-run the sync to generate a fresh file.
+- Check disk space and write permissions.
+- Verify that the file wasn't truncated.
+
+### dotc1z: v1 (sqlite) c1z files are not supported
+
+**Cause:** The file uses the older SQLite-based c1z format, which the current SDK can't read.
+
+**Solution:** Convert the file with `baton to-pebble`, or delete it and run a fresh sync.
+
+### c1z: max decoded size exceeded
+
+**Cause:** The decompressed c1z is larger than the decoder's limit, which defaults to 10 GiB.
+
+**Solution:** Raise the limit with an environment variable. The value is in megabytes:
+
+```bash
+export BATON_DECODER_MAX_DECODED_SIZE_MB=20480  # 20 GiB
+```
+
+### c1z: window size exceeded
+
+**Cause:** Decompression needs more memory than the decoder allows, which defaults to 128 MiB.
+
+**Solution:** Raise the limit with an environment variable. The value is in megabytes:
+
+```bash
+export BATON_DECODER_MAX_MEMORY_MB=1024  # 1 GiB
+```
+
+### pebble engine: output file path is empty
+
+**Cause:** The sync had no output path.
+
+**Solution:** Set one with `--file` or `-f`. The default is `sync.c1z`, so this error is rare from the command line.
 
 ```bash
 ./baton-yourservice --file output.c1z
-# or
-./baton-yourservice -f output.c1z
 ```
-
-### C1file: sync is not active
-
-**Cause:** Attempted to write data outside of an active sync operation.
-
-**Solution:** This is usually an SDK internal error. Ensure you're not calling SDK methods outside the sync lifecycle.
 
 ## Action errors
 
-### Error: action manager not implemented
+### action manager does not support encrypted action results
 
-**Cause:** Connector doesn't support custom actions.
+**Code:** `Internal`
 
-**Solution:** Implement `CustomActionManager` if you need actions, or don't call action endpoints.
+**Cause:** An action returned secret values, but the SDK's action manager couldn't encrypt them.
 
-### Action not found
+**Solution:** Register actions that return secrets with `actions.RegisterWithSecrets`, and make sure the registry you register them on supports secret results.
 
-**Error message:** `Action %s not found`
+### action `<name>` not found
 
-**Cause:** Requested an action that doesn't exist.
+**Code:** `NotFound`
 
-**Solution:** List available actions first:
+**Cause:** C1 or a command requested an action that isn't registered. Related messages are `handler for action <name> not found` and `schema for action <name> not found`.
 
-```bash
-./baton-yourservice actions list
-```
+**Solution:** Check the action's name against the schema you registered. To list a connector's actions, run it with the hidden `--list-action-schemas` flag. To run one locally, use `--invoke-action <name> --invoke-action-args '{...}'`. See [Custom actions](/developer/provisioning#custom-actions).
 
-### Action handler timed out
+### action handler timed out
 
-**Cause:** Custom action took too long to complete.
+**Cause:** An action handler ran for longer than one hour. The SDK stops each handler after that, and the limit isn't configurable.
 
-**Solution:** Optimize the action implementation or increase timeout (if configurable).
+**Solution:** Make the action faster, or split the work into smaller actions.
 
 ## Validation errors
 
-### Error: validate provider not implemented
+### error: validate provider not implemented
 
-**Cause:** Connector doesn't implement configuration validation.
+**Code:** `InvalidArgument`
 
-**Solution:** Implement `ValidateProvider` for config validation:
-
-```go
-type ValidateProvider interface {
-    Validate(ctx context.Context) (annotations.Annotations, error)
-}
-```
-
-### Validate failed
-
-**Error message:** `Validate failed: %w`
-
-**Cause:** Connector validation failed (wrapped error contains details).
-
-**Solution:** Check the inner error message for specifics (usually credential or connectivity issues).
-
-## Input errors
-
-### Input cannot be nil
-
-**Cause:** Passed nil to a builder function.
-
-**Solution:** Ensure all required parameters are provided.
-
-### Input is not a connectorserver, connectorbuilder, or connectorbuilderv2
-
-**Cause:** Passed wrong type to connector initialization.
-
-**Solution:** Use the correct builder type:
-
-```go
-builder, err := connectorbuilder.NewConnector(ctx, yourConnector)
-```
-
-## S3/storage errors
-
-### Attempting to save to s3 without a valid client
-
-**Cause:** S3 upload configured but client not initialized.
-
-**Solution:** Ensure AWS credentials and S3 configuration are provided.
-
-### Attempting to save to s3 without a valid file path specified
-
-**Cause:** S3 destination path not configured.
-
-**Solution:** Set the S3 bucket and key path in configuration.
-
-### Accesskeyid and secretaccesskey must be specified
-
-**Cause:** AWS credentials incomplete.
+**Cause:** The connector doesn't implement `Validate`. Every connector builder needs `Validate`, along with `Metadata` (`error: metadata provider not implemented` is the matching message).
 
 **Solution:**
 
-```bash
-export AWS_ACCESS_KEY_ID=your-key
-export AWS_SECRET_ACCESS_KEY=your-secret
+```go
+Validate(ctx context.Context) (annotations.Annotations, error)
+Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 ```
+
+### validate failed
+
+**Message:** `validate failed: <error>`
+
+**Cause:** The connector's `Validate` method returned an error. The wrapped error contains the details.
+
+**Solution:** Read the inner error. It usually points to a credential or connectivity problem. The SDK retries `Validate` up to five times when it fails with an `Unavailable` or `DeadlineExceeded` status.
+
+## Input errors
+
+### input cannot be nil
+
+**Code:** `InvalidArgument`
+
+**Cause:** You passed nil to `connectorbuilder.NewConnector`.
+
+### input is not a ConnectorServer, ConnectorBuilder, or ConnectorBuilderV2
+
+**Code:** `InvalidArgument`
+
+**Cause:** You passed a value of the wrong type to `connectorbuilder.NewConnector`.
+
+**Solution:** Pass a value that implements `ConnectorBuilderV2` (or `ConnectorBuilder`):
+
+```go
+server, err := connectorbuilder.NewConnector(ctx, yourConnector)
+```
+
+If you use `config.RunConnector`, the SDK calls this for you.
 
 ## Encryption errors
 
-### Age: failed to encrypt
+### age: failed to encrypt
 
-**Error message:** `Age: failed to encrypt: %w`
+**Message:** `age: failed to encrypt: <error>`
 
-**Cause:** Encryption failed (age library error).
+**Cause:** Encrypting a credential failed. The wrapped error has the details.
 
-**Solution:** Check the wrapped error for details. Common causes:
-- Invalid recipient public key
-- Memory allocation failure
+**Solution:** The most common cause is an invalid recipient public key. Related messages are `age: failed to write encrypted data`, `age: failed to close`, and `age: failed to decrypt`. The JWK ECDSA provider uses `jwk-ecdsa: failed to encrypt` and `jwk-ecdsa: failed to decrypt`.
 
-### Age: failed to decrypt
+For decryption failures, verify that you're using the private key that matches the public key used to encrypt.
 
-**Error message:** `Age: failed to decrypt: %w`
+## Daemon mode errors
 
-**Cause:** Decryption failed.
+These messages appear when a connector runs with `--client-id`. See [Troubleshooting](/developer/debugging#daemon-mode-issues) for how to diagnose them.
 
-**Solution:** Verify you're using the correct private key that matches the encryption.
+| Message | Cause |
+|---------|-------|
+| `client-id is required in service mode`, `client-secret is required in service mode` | Daemon mode needs both `--client-id` and `--client-secret` |
+| `invalid client id` | The client ID isn't in the form `name@host/...` |
+| `failed to get token: <status>` | C1 rejected the client credentials (`Unauthenticated`) |
+| `c1_api_task_manager: startup Hello failed; will retry` | The first call to C1 failed with a temporary error, and the connector retries |
+| `c1_api_task_manager: startup Hello failed with non-retryable error; giving up` | The first call to C1 failed for a reason retrying can't fix, such as bad credentials |
+| `runner: error getting next task` | Polling C1 for work failed. The connector waits longer between each consecutive failure. |
+| `heartbeat: failed after 10 attempts` | The connector couldn't report progress on a task ten times in a row, so it stopped the task (`task failed heartbeat`) |
+| `task was cancelled` | C1 cancelled the task |
+| `unsupported task type` | C1 sent a task type this SDK version doesn't handle |
+| `ingest invariant violated` | The sync data failed an internal consistency check, and the SDK won't retry it |
+
+## HTTP status to gRPC code
+
+The `uhttp` package turns HTTP error statuses into gRPC codes. The SDK retries a failed call only when the code is `Unavailable` or `DeadlineExceeded`.
+
+| HTTP status | gRPC code | Retried |
+|-------------|-----------|---------|
+| 400 | `InvalidArgument` | No |
+| 401 | `Unauthenticated` | No |
+| 403 | `PermissionDenied` | No |
+| 404 | `NotFound` | No |
+| 408 | `DeadlineExceeded` | Yes |
+| 409 | `AlreadyExists` | No |
+| 429, 502, 503, 504 | `Unavailable` | Yes |
+| 501 | `Unimplemented` | No |
+| Other 5xx | `Unavailable` | Yes |
+| Other 4xx | `InvalidArgument` | No |
 
 ## Quick reference
 
@@ -274,22 +298,25 @@ export AWS_SECRET_ACCESS_KEY=your-secret
 
 | Variable | Purpose |
 |----------|---------|
-| `C1Z_DECODER_MAX_DECODED_SIZE` | Max decompressed c1z size |
-| `C1Z_DECODER_MAX_MEMORY` | Max memory for decompression |
-| `AWS_ACCESS_KEY_ID` | AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
+| `BATON_DECODER_MAX_DECODED_SIZE_MB` | Maximum decompressed c1z size, in megabytes (default 10240) |
+| `BATON_DECODER_MAX_MEMORY_MB` | Maximum memory for decompression, in megabytes (default 128) |
+| `BATON_TMPDIR` | Directory for temporary files |
+| `BATON_DEBUG_PRINT_RESPONSE_BODY` | Set to any non-empty value to print HTTP response bodies |
+| `BATON_DISABLE_HTTP_CACHE` | Set to `true` to turn off the HTTP response cache |
+| `BATON_CONFIG_PATH` | Path to a YAML config file |
+| `BATON_C1_API_HOST` | Override the C1 API host in daemon mode |
+
+Any flag also works as `BATON_<FLAG_NAME>`, in upper case with dashes as underscores. See [Configuration schema reference](/developer/config-schema).
 
 ### Diagnostic commands
 
 ```bash
-# Enable debug logging to see full error context
+# Enable debug logging to see full error context.
 ./baton-yourservice --log-level debug
 
-# Check connector capabilities
+# Check connector capabilities.
 ./baton-yourservice capabilities
 
-# Validate configuration
-./baton-yourservice --validate-only
+# Print the configuration schema.
+./baton-yourservice config
 ```
-
-
