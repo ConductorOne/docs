@@ -4,6 +4,8 @@ sidebarTitle: "Glossary"
 description: "Quick reference for terms used throughout the connector documentation."
 ---
 
+{/* Editor Refresh: 2026-11-12 */}
+
 When in doubt about terminology, check here first.
 
 ## Core terms
@@ -13,8 +15,7 @@ When in doubt about terminology, check here first.
 | **Baton** | The connector framework: Go SDK + individual connectors |
 | **baton-sdk** | Go library that handles sync orchestration, pagination, and connector runtime |
 | **Connector** | A Go binary that syncs access control data from a third-party service into C1 |
-| **c1z** | Compressed sync output file format (gzip SQLite) |
-| **c1in** | C1 Integration Network - the overall connector ecosystem |
+| **c1z** | Compressed sync output file. The current format holds a Pebble checkpoint, and older SQLite-based files must be converted with `baton to-pebble` |
 | **cone** | C1 CLI for access management |
 | **conductorone-sdk-go** | Go SDK for C1 API integration |
 | **Meta-connector** | Configuration-driven connector that maps external systems via YAML instead of Go code |
@@ -28,10 +29,10 @@ When in doubt about terminology, check here first.
 | **Resource** | An entity in the target system: User, Group, Role, App, or custom type |
 | **Resource Type** | Classification of resources (e.g., "user", "group", "role") with associated traits |
 | **Entitlement** | A permission that can be granted (e.g., "Admin on Database X") |
-| **Entitlement Slug** | Stable identifier for an entitlement (e.g., "member", "admin", "read") |
+| **Entitlement Slug** | Short label for an entitlement, unique within its resource (e.g., "member", "admin", "read"). The last segment of the entitlement ID |
 | **Grant** | An assignment of an entitlement to a principal (e.g., "Alice has Admin on Database X") |
 | **Principal** | An entity that receives grants (typically users or service accounts) |
-| **Trait** | Resource type classification: TRAIT_USER, TRAIT_GROUP, TRAIT_ROLE, TRAIT_APP, TRAIT_SECRET |
+| **Trait** | Resource type classification that tells C1 how to interpret a resource, such as TRAIT_USER, TRAIT_GROUP, TRAIT_ROLE, or TRAIT_APP. See [Core concepts](/developer/concepts#resource-types-and-traits) for the full list |
 | **Parent Resource** | Resource that contains child resources in a hierarchy (e.g., Organization containing Repositories) |
 | **Child Resource** | Resource that exists within a parent resource context |
 | **ChildResourceType Annotation** | Marker on parent declaring what child types it contains |
@@ -40,26 +41,28 @@ When in doubt about terminology, check here first.
 
 | Term | Definition |
 |------|------------|
-| **ResourceSyncer** | Interface that defines how to sync a resource type (ResourceType, List, Entitlements, Grants methods) |
-| **Sync lifecycle** | The ordered stages: ResourceType -> List -> Entitlements -> Grants |
-| **Sync stage** | One stage of the sync lifecycle (Stage 1-4: ResourceType, List, Entitlements, Grants) |
+| **ConnectorBuilderV2** | Interface a connector implements: Metadata, Validate, and ResourceSyncers |
+| **ResourceSyncerV2** | Interface that defines how to sync a resource type (ResourceType, List, Entitlements, Grants methods). The older ResourceSyncer interface has the same methods with different signatures |
+| **SyncOpAttrs** | Argument that V2 syncer methods receive, holding the page token and, when enabled, the session store |
+| **Sync lifecycle** | The connector-facing phases: resource types, resources, entitlements, and grants. The SDK also runs phases of its own, such as grant expansion |
+| **Sync stage** | One phase of the sync lifecycle |
 | **Inversion of control** | Pattern where SDK orchestrates when your code is called; you define builders, SDK calls them |
 | **Resource Builder** | Implementation of ResourceSyncer for a specific resource type |
-| **pagination.Token** | SDK type for managing page cursors across List/Entitlements/Grants calls |
-| **pagination.Bag** | SDK type for managing nested pagination state (stack-based) |
+| **pagination.Token** | SDK type that holds the page token and the requested page size for a List, Entitlements, or Grants call |
+| **pagination.Bag** | SDK type for managing nested pagination state (stack-based). `pagination.GenBag[T]` is the variant for your own state type |
 | **PageState** | Single pagination state within a Bag (contains Token, ResourceTypeID, ResourceID) |
-| **uhttp** | SDK package providing HTTP client with automatic retries and rate limiting |
+| **uhttp** | SDK package providing an HTTP client that translates HTTP statuses into the gRPC codes the SDK retries on, with optional rate limit handling |
 | **Annotations** | Metadata attached to resources, entitlements, or grants (e.g., ChildResourceType, RawId) |
-| **RawId** | Annotation carrying the external system's identifier; used for ID correlation during uplift |
+| **RawId** | Annotation that records the identifier the source system uses for a resource |
 
 ## Execution modes
 
 | Term | Definition |
 |------|------------|
-| **One-shot mode** | CLI mode: runs once, produces c1z file, exits (no --client-id) |
+| **One-shot mode** | CLI mode: runs once, produces a c1z file, and exits (no --client-id) |
 | **Daemon mode** | Long-running mode that polls C1 for tasks (requires --client-id and --client-secret) |
 | **Hosted mode** | Connector run by C1 infrastructure on behalf of customers |
-| **Service mode** | Synonym for daemon mode |
+| **Service mode** | The SDK's other name for daemon mode. On Windows, a connector launched as a Windows service always runs in daemon mode |
 | **Client credentials** | OAuth2 client ID and secret for authenticating connector to C1 |
 | **Task polling** | Daemon mode behavior of periodically checking C1 for work |
 
@@ -72,7 +75,7 @@ When in doubt about terminology, check here first.
 | **CreateAccount** | JIT provisioning - create user account in target system |
 | **DeleteResource** | Remove a resource from the target system |
 | **ResourceProvisionerV2** | SDK interface for Grant/Revoke operations (recommended) |
-| **AccountManager** | SDK interface for CreateAccount operations |
+| **AccountManagerV2** | SDK interface for CreateAccount operations (AccountManager is the older form) |
 | **ResourceDeleterV2** | SDK interface for Delete operations |
 | **Capability Manifest** | JSON file (baton_capabilities.json) declaring supported operations |
 
@@ -81,12 +84,8 @@ When in doubt about terminology, check here first.
 | Term | Definition |
 |------|------------|
 | **Sync** | Reading access data from a system into C1; produces .c1z file |
-| **Uplift** | C1 process that transforms raw connector records into domain objects (Apps, Resources, Grants) |
 | **Provision** | Writing access changes back to a system (grant, revoke, create, delete) |
 | **Reconciliation** | Comparing actual access (from sync) to desired access (from policy) and correcting drift |
-| **external_id** | The identifier from an external system, stored with connector records during sync |
-| **source_connector_ids** | Map on domain objects tracking which connector provided which external ID |
-| **ID Correlation** | Matching connector output to existing C1 objects using RawId and external_id |
 | **JIT Provisioning** | Just-In-Time provisioning - creating user account when first needed, not before |
 | **IdP** | Identity Provider - authoritative source of user identities (Okta, Azure AD, Google Workspace) |
 | **Source of Truth** | The system that authoritatively defines an entity (IdPs are typically source of truth for users) |
@@ -102,13 +101,14 @@ When in doubt about terminology, check here first.
 | **Page token** | String passed between calls to continue pagination |
 | **LDAP paging** | Server-side pagination for LDAP using cookies |
 | **Nested pagination** | Paginating children within each paginated parent (managed with Bag) |
+| **Restart action** | Error a connector returns when the API rejects a page token, so the SDK restarts the call at a page token you choose |
 
 ## Authentication
 
 | Term | Definition |
 |------|------------|
 | **API Key** | Simple token-based authentication passed in headers |
-| **Bearer Token** | Token passed in Authorization header as "Bearer {token}" |
+| **Bearer Token** | Token passed in the Authorization header as `Bearer {token}` |
 | **OAuth2 Client Credentials** | Flow exchanging client ID/secret for access token |
 | **JWT Service Account** | Authentication using signed JSON Web Tokens (common for Google APIs) |
 | **LDAP Bind** | Authentication to LDAP server using credentials |
@@ -120,15 +120,12 @@ When in doubt about terminology, check here first.
 |------|------------|
 | **CEL** | Common Expression Language - used for data transformation in meta-connectors |
 | **Environment variable** | Configuration via BATON_* prefixed env vars |
-| **Base URL** | Configurable API endpoint for testing against mocks |
-| **Insecure flag** | Option to skip TLS verification for local testing |
+| **Configuration field** | A setting declared with `field.StringField` and its siblings in `pkg/config`. The SDK turns each field into a flag, an environment variable, and a field on the generated configuration struct |
 
 ## Development
 
 | Term | Definition |
 |------|------------|
 | **golangci-lint** | Standard Go linter used for connector code quality |
-| **Makefile targets** | Standard: build, lint, test, update-deps |
-| **sync.Map** | Go's thread-safe map type used for connector caching |
-| **Hot reload** | Automatic rebuild on code changes during development |
-| **Mock server** | Local server mimicking target API for testing |
+| **Makefile targets** | Typical connector targets: build, generate, test, lint, update-deps |
+| **Baton Starter Pack** | GitHub template repository that creates a new connector project |
