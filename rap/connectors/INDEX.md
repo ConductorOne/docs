@@ -76,13 +76,6 @@ Documentation for building C1 Baton connectors. Request relevant sections based 
 | FAQ | `ref-faq.md` | Common questions |
 | Glossary | `ref-glossary.md` | Term definitions |
 
-### Publishing & Community
-
-| Section | File | Covers |
-|---------|------|--------|
-| Publishing | `publish-submit.md` | Registry, versioning, signing |
-| Community | `community.md` | Getting help, contributing, reporting |
-
 ---
 
 ## Selection Guidelines
@@ -100,8 +93,6 @@ Documentation for building C1 Baton connectors. Request relevant sections based 
 - Cache data -> `recipes-caching.md`
 - Debug a problem -> `debug-workflow.md`, `debug-errors.md`
 - Run in production -> `ops-modes.md`
-- Publish my connector -> `publish-submit.md`
-- Contribute -> `community.md`
 
 **"What is..."**
 - A connector -> `concepts-overview.md`
