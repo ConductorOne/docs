@@ -1,0 +1,133 @@
+---
+title: Connect to C1 MCP as a service principal
+og:title: Connect to C1 MCP as a service principal - C1 docs
+og:description: Give an unattended AI agent its own identity, then connect it to C1 MCP and call tools with a service principal token.
+description: Give an unattended AI agent its own identity, then connect it to C1 MCP and call tools with a service principal token.
+sidebarTitle: Connect as a service principal
+---
+
+{/* Editor Refresh: 2026-11-12 */}
+
+If you're building an agent that runs on its own schedule or on behalf of a team, connect it to C1 MCP as a service principal. The agent gets its own identity, its own roles and tool access, and its own entries in the system log, and it keeps working when the person who built it changes roles or leaves.
+
+For a person using an AI assistant such as Claude Desktop or Cursor, see [Connect to C1 MCP as a user](/product/admin/c1-mcp/connect-as-user) instead. To compare the two, see [Choose an identity for C1 MCP](/product/admin/c1-mcp/choose-identity).
+
+## How a service principal connects to C1 MCP
+
+A service principal connects without a browser and without a person present. The agent requests an access token from the C1 token endpoint and sends it as a bearer token on every request to C1 MCP.
+
+1. The agent sends its credential to `https://<tenant>.conductor.one/auth/v1/token`.
+2. C1 returns a short-lived access token. There's no refresh token.
+3. The agent calls C1 MCP at `https://<tenant>-mcp.conductor.one/v1` with `Authorization: Bearer <token>`.
+4. C1 MCP lists and runs only the tools the service principal is allowed to use.
+5. Before the token expires, the agent requests a new one with the same credential.
+
+The agent gets its token in one of two ways:
+
+| | Client credentials | Workload federation |
+| :--- | :--- | :--- |
+| **What the agent holds** | A client ID and secret created by a C1 admin | Nothing stored. The agent's platform issues it a signed identity token (JWT). |
+| **Grant type** | `client_credentials` | `urn:ietf:params:oauth:grant-type:token-exchange` |
+| **Best for** | Agent platforms that store a client ID and secret | Platforms that issue OIDC tokens to workloads: CI/CD, cloud runtimes, SPIFFE |
+| **Setup** | [Client credentials](/product/admin/service-principals/client-credentials) | [Workload federation](/product/admin/service-principals/workload-federation) |
+
+Scoped roles, IP allowlists, and DPoP apply to both methods. See [Security controls](/product/admin/service-principals/security).
+
+## Before you begin
+
+You need:
+
+- **Super Admin** permissions in C1.
+{/* TODO: confirm whether the AI connections tenant setting gates service principal access to C1 MCP. */}
+- The C1 MCP URL for your tenant, `https://<tenant>-mcp.conductor.one/v1`.
+
+## Set up the service principal
+
+Create the agent's identity and decide what it can do before you write any code.
+
+<Steps>
+  <Step>
+    Create a service principal for the agent. Name it after the agent, for example "Access digest agent". See [Create a service principal](/product/admin/service-principals/client-credentials#step-1-create-a-service-principal).
+  </Step>
+  <Step>
+    Assign the C1 roles the agent needs. Roles decide which built-in C1 tools the agent sees and which C1 data those tools return.
+  </Step>
+  <Step>
+    **Optional.** Grant toolset entitlements to the service principal's account to give the agent tools from MCP servers registered in [AI access management](/product/admin/aiam-overview). See [Entitlements](/product/admin/service-principals/manage#entitlements).
+  </Step>
+  <Step>
+    Create a credential or a federation trust for the service principal. Use [scoped roles](/product/admin/service-principals/security#scoped-roles) and an [IP allowlist](/product/admin/service-principals/security#ip-allowlists) to narrow what the agent can do from where it runs.
+  </Step>
+</Steps>
+
+The service principal is ready for the agent to connect.
+
+<Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
+
+## Get an access token for C1 MCP
+
+Request a token from the C1 token endpoint. Set `resource` to the C1 MCP URL so the token is issued for C1 MCP. The value must match the URL exactly, or the token endpoint returns `invalid_target`.
+
+```bash
+curl -s -X POST "https://yourcompany.conductor.one/auth/v1/token" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=clever-fox-42195@yourcompany.conductor.one/spc" \
+  -d "client_secret=secret-token:YOUR_SECRET_HERE" \
+  -d "resource=https://yourcompany-mcp.conductor.one/v1"
+```
+
+For workload federation, send the token-exchange request described in [Set up workload federation](/product/admin/service-principals/federation-setup) instead. The response has the same shape either way: an `access_token`, a `token_type` of `Bearer`, and `expires_in` in seconds.
+
+Access tokens are short-lived and come without a refresh token. The agent keeps its credential, or its access to platform identity tokens, and requests a new access token before the current one expires. Most OAuth client libraries do this for you.
+
+<Note>
+If the credential has **Require DPoP** turned on, the token endpoint and C1 MCP reject requests without a DPoP proof. Use a client that signs DPoP proofs, or create a separate credential without DPoP for the agent.
+</Note>
+
+## Connect from an agent platform
+
+Agent platforms that support MCP servers with OAuth client credentials connect the same way. Enter these values in the platform's MCP or connection settings:
+
+| Setting | Value |
+| :--- | :--- |
+| MCP server URL | `https://<tenant>-mcp.conductor.one/v1` |
+| Token URL | `https://<tenant>.conductor.one/auth/v1/token` |
+| Grant type | Client credentials |
+| Client ID | The service principal credential's client ID, ending in `/spc` |
+| Client secret | The credential's secret, including the `secret-token:` prefix |
+| Resource | `https://<tenant>-mcp.conductor.one/v1` |
+
+Platforms that discover OAuth settings automatically read them from `https://<tenant>.conductor.one/.well-known/oauth-authorization-server`.
+
+## Control which tools the agent sees
+
+C1 MCP shows a service principal two kinds of tools:
+
+- **Built-in C1 tools.** The service principal's roles decide which of these it sees and what data they return. A new service principal starts with the **Read-Only Administrator** role.
+- **Tools from registered MCP servers.** The service principal sees a toolset's tools once its account holds that toolset's entitlement.
+
+Role and entitlement changes reach C1 MCP within a few minutes. An open session picks them up without reconnecting.
+
+## Monitor and revoke agent access
+
+The system log records every tool call under the service principal's identity, so you can tell the agent's activity apart from any person's. See [System log events](/product/admin/service-principals/security#system-log-events).
+
+To cut the agent off, [revoke its credential](/product/admin/service-principals/manage#revoking-credentials) or delete its federation trust. C1 MCP rejects the agent's existing tokens within seconds.
+
+Service principal sessions are separate from AI clients. They don't appear under **AI access management** > **AI clients**, and AI client type policy and per-client overrides don't apply to them. Use the service principal's roles, entitlements, and credentials to control the agent.
+
+## Troubleshoot C1 MCP connections from a service principal
+
+| Symptom | Cause and fix |
+| :--- | :--- |
+| Token endpoint returns `invalid_client` | The client ID or secret is wrong, or the credential is revoked or expired. Include the `secret-token:` prefix in the secret. |
+| Token endpoint returns `invalid_target` | The `resource` value doesn't match the C1 MCP URL. Copy the URL exactly, with no trailing slash. |
+| C1 MCP returns 401 | The token expired or the credential was revoked. Request a new token. |
+| A tool is missing from the tool list | The service principal lacks the role or toolset entitlement for it, or a recent grant hasn't reached C1 MCP yet. Wait a few minutes and list tools again. |
+| Requests fail with a DPoP error | The credential requires DPoP. Use a client that signs DPoP proofs, or create a credential without DPoP for the agent. |
+
+## Next steps
+
+- [Security controls](/product/admin/service-principals/security) -- scoped roles, IP allowlists, DPoP
+- [Workload federation](/product/admin/service-principals/workload-federation) -- connect without a stored secret
+- [Govern tools and toolsets](/product/admin/tools-and-toolsets) -- decide which MCP server tools an agent can use
