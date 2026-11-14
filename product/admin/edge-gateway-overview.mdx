@@ -1,0 +1,84 @@
+---
+title: Edge Gateway overview
+description: Give people and workloads governed access to AI models through an Edge Gateway, using your organization's provider keys, with every request attributed to the caller.
+og:title: Edge Gateway overview - C1 docs
+og:description: Give people and workloads governed access to AI models through an Edge Gateway, using your organization's provider keys, with every request attributed to the caller.
+sidebarTitle: Overview
+---
+
+{/* Editor Refresh: 2026-10-28 */}
+
+<Warning>
+**Early access.** This feature is in early access, which means it's undergoing ongoing testing and development while we gather feedback, validate functionality, and improve outputs. Contact the C1 Support team if you'd like to try it out or share feedback.
+</Warning>
+
+Use an Edge Gateway to give coding tools, agents, and apps access to AI models without handing out provider API keys. Callers sign in as themselves, C1 checks that they're entitled to the Edge, and the Edge calls the model provider with your organization's key. Every request is attributed to the person or service principal who made it.
+
+## What an Edge Gateway does
+
+An Edge is a gateway that belongs to an application in C1. An Edge can serve **models**, **egress** (outbound internet access), or both. These pages cover serving models.
+
+For models, an Edge:
+
+- Holds your provider keys in a C1 vault, so callers never see them.
+- Publishes **routes**: the model names callers send, each mapped to one or more provider models.
+- Grants access through two entitlements on its parent app: **List models** (`inference.models.read`) and **Call models** (`inference.invoke`).
+- Accepts OpenAI-compatible and Anthropic-compatible requests, such as `/v1/models`, `/v1/chat/completions`, `/v1/responses`, and `/v1/messages`, and forwards them to the provider.
+
+## How a request flows through an Edge Gateway
+
+A caller never presents a provider key. The flow for every request is:
+
+1. The caller signs in to C1 as a person or a service principal.
+2. The caller gets a short-lived token for the Edge, scoped to the Edge's **inference resource** and the scopes it was granted.
+3. The caller sends the model request to the Edge's inference endpoint with that token.
+4. The Edge checks the token and the route, then calls the provider with the key stored on the route.
+
+C1 Multipass gets short-lived credentials for people on their own devices and for enrolled service hosts. Long-lived inference API keys are an advanced option for clients that can't use Multipass.
+
+## Set up an Edge Gateway
+
+Admins set up an Edge in this order. Each step has its own page:
+
+| Step | What you do | Page |
+| :--- | :--- | :--- |
+| 1 | Add an Edge to an app, link the runtime identity, add models, and turn the Edge on | [Set up an Edge for inference](/product/admin/edge-gateway-setup) |
+| 2 | Grant people or service principals List models and Call models | [Grant access to an Edge](/product/admin/edge-gateway-access) |
+| 3 | Share the guide for the caller's tool or application | Choose a connection method below |
+
+For route formats, provider targets, and failover, see [Configure inference routes](/product/admin/edge-gateway-inference-routing).
+
+Callers then connect with one of these methods:
+
+| Method | Best for | Page |
+| :--- | :--- | :--- |
+| C1 Multipass key helper for Claude Code | Claude Code on macOS, without enabling local routing | [Use Claude Code with Edge Gateway](/product/admin/claude-code-edge-gateway-multipass) |
+| C1 Multipass credentials for Codex | Codex on macOS or an enrolled Linux server, using a Responses-native route | [Use Codex with Edge Gateway](/product/admin/edge-gateway-codex) |
+| C1 Multipass local endpoints | Other tools, SDKs, and enrolled service hosts | [Route other tools through C1 Multipass](/product/admin/connect-edge-gateway-multipass) |
+| Application token exchange | Your own application using the caller's C1 identity | [Connect your own application](/product/admin/edge-gateway-connect) |
+| Long-lived inference API key | Clients that can't use C1 Multipass; requires **Allow long-lived API keys** | [Use long-lived API keys](/product/admin/inference-api-keys) |
+
+## Before you set up an Edge Gateway
+
+Confirm the following before you start:
+
+- Edge Gateway is enabled for your tenant. It's in early access; contact the C1 Support team to turn it on.
+- You have a C1 admin role that can manage applications, service principals, and vaults.
+- You have an API key for at least one supported model provider: Anthropic, OpenAI, Gemini Developer API, Together, or Fireworks. AWS Bedrock uses AWS workload identity instead of a key.
+- Make sure **Cross-App Access** is on under **AI** > **Cross-App Access** so C1 can issue Edge tokens. The Edge's **Overview** warns if it's off. If the setting isn't available, contact the C1 Support team. See [Enable enterprise-managed authorization](/product/admin/enterprise-managed-authorization/enable).
+
+## Frequently asked questions about Edge Gateway
+
+<AccordionGroup>
+  <Accordion title="Which application should own the Edge?">
+    Any application in C1. The Edge's entitlements, List models and Call models, live on that application, so choose the app whose owners should govern model access. You can't move an Edge to another app after you create it.
+  </Accordion>
+
+  <Accordion title="Can callers see or use the provider key?">
+    No. Keys stay in a C1 vault that only the Edge's runtime identity can read. Callers only ever hold short-lived C1 tokens or an inference API key.
+  </Accordion>
+
+  <Accordion title="Can one Edge serve several providers?">
+    Yes. An Edge can publish up to 40 routes, and routes can use different providers. A single route can also fail over between providers.
+  </Accordion>
+</AccordionGroup>
