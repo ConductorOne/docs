@@ -8,6 +8,90 @@ sidebarTitle: Release notes
 ---
 {/* Editor Refresh: 2026-10-27 */}
 
+<Update label="November 13, 2026">
+
+## Product digest: November 13, 2026
+
+{/* DRAFT (Session 1) assembled by /release-notes-batch finalize, 2026-11-16. Window: 2026-10-30 12:00 PT to 2026-11-13 12:00 PT. Every bullet below was reviewed and decided by Mindy in a batch pass; TODO and QUESTION tags are the Session 2 verify list. Remove this comment before publish. */}
+
+### Debug connector syncs with C1AI
+
+When a sync fails or its record counts drop, you no longer have to work out why on your own.
+
+**Ask the C1AI assistant what went wrong with a connector sync.** Open the connector's details page and choose **Debug sync with AI**. The assistant reads the connector's sync history and status, its error summaries, and its recorded counts, then explains what it found. It can also review a recent timeline of changes, so you can see what shifted between syncs.
+
+The assistant is read-only. It can't change credentials, confirm a data drop, or take any other action on the connector. {/* PR #28862 */}
+{/* QUESTION: who sees the button? Code gate is the connector's integration owner or the System Owner role (Super Administrator); the button itself is not role-gated, so a non-owner sees it and gets denied on use. Confirm wording before adding "connector owners and Super Administrators". */}
+{/* QUESTION: the PR lists rollout and privacy acceptance as human decisions. Confirm with the flag owner or PM that those were signed off and that the AI assistant is on for customers before publish. */}
+{/* TODO: screenshot of the Debug sync with AI button on a connector details page. */}
+{/* TODO: docs update: no docs page covers this. Needs a short section (likely on the connector details or troubleshooting page). */}
+
+### Automation improvements
+
+- **Automations that create an account and then grant access no longer stall until the next sync.** When a **Create account** step uses **Custom** values, C1 now links the new account to its user right away, including for apps that use custom account mapping, so the **Grant entitlements** step that follows can finish instead of waiting. The link happens only when the account matches the user under the app's identity-matching rules. Accounts that don't match still wait for the next sync. See [Create account](/product/admin/automations-steps-reference#create-account). {/* PR #28857, #29373 */}
+  {/* QUESTION: code read says the binder runs for any create, not only Custom values. Confirm whether the "Custom values" qualifier is needed (From C1 user data may already link). */}
+  {/* QUESTION: a waiting task shows the generic "Awaiting provisioning" status, with no specific reason. Confirm that is the wording we want customers to see. */}
+  {/* TODO: docs update: automations-steps-reference Create account section says nothing about linking or the wait for sync. */}
+
+- **Failed connector actions in automations now tell you why.** The step's error now includes the connector's own error message instead of only "app action failed." You can see it in the automation run's **Run info** drawer. {/* PR #29501 */}
+
+### Access review and request improvements
+
+- **Know how much review work is left before you hit Submit.** The **Submit reviews** confirmation now shows how many of your open reviews in the campaign you're submitting, along with your certified, denied, and left-to-decide counts. See [Finalize and submit your decisions](/product/how-to/review-tasks#step-5-finalize-and-submit-your-decisions). {/* PR #28683 */}
+  {/* TODO: docs update: review-tasks.mdx describes the old summary (certified and denied breakdown only). Add the open and left-to-decide counts. */}
+  {/* QUESTION: the PR notes the summary copy still needs a design review. Also unconfirmed whether delegated reviews count as "open". Ask the PR author. */}
+
+- **Hiding the justification field on an access request no longer takes a dummy form field.** A request form can now be saved with no fields as long as it hides the **Justification** field. See [Create a new request form](/product/admin/customize-requests#create-a-new-request-form). {/* PR #29346 */}
+  {/* TODO: docs update: customize-requests.mdx covers **Hide justification field** but not that a form may now have no fields. */}
+  {/* QUESTION: who can create forms? The RPC is Editor-level and the docs say Super Administrator; the role mapping was not traced. */}
+
+- **Route approvals using what the requester typed on a request form.** Approval policy expressions and conditions can now read a requestable automation's form answers as `task.form_data.<field key>`, such as sending a new-hire request to the manager of the person picked in a user-picker field. See the [Task object reference](/product/admin/expressions-reference#task-object). {/* PR #28878 */}
+  {/* TODO: docs update: add form_data to the Task object table in expressions-reference.mdx, with a note that values come from the requester so optional fields should be guarded with has(). */}
+  {/* QUESTION: where does the form builder show a field's key? The key appears to be generated from the label (for example manager becomes manager_0), which is from the PR's browser run only. Docs need this before an admin can use the variable. */}
+  {/* QUESTION: policy-editing role is inferred as Super Administrator from one grep; confirm. */}
+
+- **Finding entitlements by name is more forgiving.** Paste a full dotted name, such as an Active Directory group name, or type part of one, and the entitlement pickers for access profiles, requests, and provisioning find it. Campaign scoping now also matches entitlement names, not just app and resource names. {/* PR #28691, #28673 */}
+  {/* QUESTION: the PR also claims Explore resource lists gain entitlement-name matching and calls the view "Explore, Resources." The UI label is "All resources" and the nav path was not confirmed, so Explore is left out of the bullet until verified. */}
+  {/* QUESTION: "other objects" and "151 call sites" are from the PR text. Only the three pickers it names are listed here. */}
+
+### Findings improvements
+
+- **You can now accept a finding's risk with no expiry.** Previously every accepted risk reopened on a date, even for risks you plan to carry permanently. Choose **No expiry** under **Accept for** and the finding stays risk-accepted until someone reopens it. Snooze and **Accept risk** now share the same duration picker, with presets or a custom date. See [Work with a finding](/product/admin/findings#work-with-a-finding). {/* PR #28635 */}
+  {/* TODO: docs update: findings.mdx says Accept risk "requires a justification and an expiration date." That is now wrong. */}
+  {/* QUESTION: findings.mdx still carries an "Early access" warning although Findings is generally available. Is that warning still wanted? */}
+
+- **Spot risky OAuth grants without leaving C1.** Shadow app account lists now show each account's last OAuth event, the scopes granted, and the last known IP address, for Google Workspace. See [Discover shadow apps](/product/admin/shadow-apps#discover-shadow-apps). {/* PR #28190 */}
+  {/* TODO: docs update: shadow-apps.mdx names no account columns. Labels in the UI are Last OAuth event, Scopes, and Last known IP. */}
+  {/* QUESTION: minimum Google Workspace connector version needed, and whether older accounts stay blank until a new event arrives. Ask the PR author. */}
+
+### MCP server improvements
+
+- **Custom MCP servers that use OAuth2 client credentials can now send extra token request parameters, such as `audience` or `resource`.** Providers like Auth0 that require them no longer reject the token request. Scopes for client credentials and JWT bearer are now entered as chips. See [Configure authentication](/product/admin/mcp-servers#configure-authentication). {/* PR #29216 */}
+  {/* TODO: docs update: mcp-servers.mdx lists no token request parameters for client credentials. The field is **Token request parameters (optional)**. */}
+  {/* QUESTION: no flag found and AI governance is generally available, but confirm with the PM that custom-server client credentials is GA. */}
+
+### Usability improvements
+
+- **Lifecycle actions in access controls are now easier to tell apart.** The **Lifecycle action** picker now lists each connector action by its own name, such as **Suspend user** and **Deactivate user**, instead of repeating "Disable account" for each one. {/* PR #29105 */}
+  {/* NOTE: candidate to move to the trimmed-items doc if the digest runs long (Mindy, 2026-11-06). */}
+  {/* QUESTION: role gate for the access-controls step was not checked in code. */}
+
+{/* No breaking changes this cycle. */}
+
+{/* REMOVED: VIRTUAL_MCP_SERVER DEV_MANUAL and MCP_CONNECTOR_SYNC_WORKFLOW SKU_MANUAL, checked 2026-11-06 and 2026-11-13 (Virtual MCP denial bodies, MCP connector sync workflow, endpoint-unavailable status). Mindy also cut the MCP refresh behavior items (closed-connection invalid_grant, DPoP nonce on refresh) entirely on 2026-11-06. */}
+{/* REMOVED: CONNECTOR_AUTHORING_C1AW SKU_MANUAL, checked 2026-11-13 (custom connectors on the Connectors page: Build custom connector, Drafts, Custom chip, Source filter). Deferred by Mindy on 2026-11-06 until user-facing. The ungated Add connector to Browse connectors rename was deferred with it. */}
+{/* REMOVED: APP_USER_MERGE DEV_MANUAL, checked 2026-11-13 (merge accounts, phase 0). */}
+{/* REMOVED: STEP_UP_AUTH SKU_MANUAL and MS_TEAMS SKU_MANUAL, checked 2026-11-13 (Teams Approve in C1 button, bulk approve step-up count, assistant step-up link, no new step-up on access review policies). Cut by Mindy on 2026-11-13 although step-up is already documented. */}
+{/* REMOVED: CUSTOM_FORM_ENHANCEMENTS SKU_MANUAL, checked 2026-11-13 (conditional form fields in the Requested data step). */}
+{/* REMOVED: GO_LINKS DEV_MANUAL, checked 2026-11-13 (short links, including the route rename). */}
+{/* REMOVED: C1AW_PUBLIC_WEB_REQUEST SKU_MANUAL, checked 2026-11-13 (assistant web request limits). SOD_V2 DEV_MANUAL, checked 2026-11-13 (duty catalog, also merged after the cutoff). */}
+
+### Connector updates
+
+Learn about recent connector updates and our latest batch of new connectors in the [connector release notes](/baton/_release-notes).
+
+</Update>
+
 <Update label="October 30, 2026">
 
 ## Product digest: October 30, 2026
