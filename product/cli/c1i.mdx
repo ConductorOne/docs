@@ -6,7 +6,7 @@ description: Install c1i and connect it to your C1 tenant to automate C1 from sc
 sidebarTitle: "Install c1i"
 ---
 
-{/* Editor Refresh: 2026-10-09 */}
+{/* Editor Refresh: 2026-11-16 */}
 
 Install c1i, point it at your tenant, and log in once; every command after that uses the stored credential.
 
@@ -48,7 +48,7 @@ brew install conductorone/baton/c1i
 # Go
 go install github.com/ConductorOne/c1i@latest
 
-# Container image (tags omit the leading "v", for example 0.9.1)
+# Container image (tags omit the leading "v", for example 0.10.1)
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
 
@@ -157,7 +157,7 @@ Before a script makes changes, run `c1i auth whoami --fields tenant` to confirm 
 
 c1i reads credentials from the first source that has them, in this order:
 
-1. Environment variables: set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, along with `C1I_URL`, for scripts, CI runners, and containers. Set both; c1i ignores one without the other. c1i doesn't store these credentials.
+1. Environment variables: set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, along with `C1I_URL`, for scripts, CI runners, and containers. Set both: if only one is set, c1i exits with code 2, except for `auth login` and `auth logout`, which still run and warn on stderr. c1i doesn't store these credentials.
 2. OS keyring: Keychain on macOS, Credential Manager on Windows, and Secret Service (such as gnome-keyring or KeePassXC) on Linux. c1i uses it whenever one is available.
 3. File fallback: a `0600` file under your config directory: `~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/` on macOS, and `%AppData%\c1i\credentials\` on Windows. c1i uses it when no OS keyring is available, which is typical on headless Linux servers, containers, CI runners, and WSL without a desktop environment.
 
@@ -181,6 +181,10 @@ c1i docs endpoint /api/v1/users
 
 # Fetch a full documentation page by its path
 c1i docs page product/admin/campaigns
+
+# Print the README or CHANGELOG embedded in the c1i binary
+c1i docs readme
+c1i docs changelog
 ```
 
 The endpoint commands read the public API spec, which c1i caches for 24 hours. See [Docs commands](/product/cli/c1i-commands#docs) for the spec source and cache location.
@@ -240,10 +244,13 @@ c1i output is built for programs to parse:
 
 - List and search commands, such as `users list` and `apps list`, output NDJSON: one JSON object per line.
 - Single-object commands, such as `users get` and `auth whoami`, output formatted JSON.
+- Commands that change something, such as `apps create` and `tasks approve`, print the API's response as formatted JSON, unwrapped the same way the matching `get` command unwraps it. Read an ID with `jq -er .id`; the ID path differs for a few commands, such as `.connectorId` for an MCP server. Deletes and other empty responses print `{}`, and exit code `0` means success. `--fields` isn't allowed on these commands.
 - `auth login`, `auth status`, and `auth logout` print plain text.
 - The `api` command outputs formatted JSON, or NDJSON when you add `--paginate`.
-- The `docs` commands vary by subcommand: NDJSON for `search` and `endpoints`, Markdown for `page`, JSON for `endpoint`, and YAML for `openapi`.
+- The `docs` commands vary by subcommand: NDJSON for `search` and `endpoints`, Markdown for `page`, `readme`, and `changelog`, JSON for `endpoint`, and YAML for `openapi`.
 
 List commands fetch every page by default. To page manually, pass `--page-token`. To cap the number of results, pass `--limit`; c1i requests only as many results as it needs.
+
+With `--error-format json`, every line c1i writes to stderr is one JSON object (NDJSON). `--dry-run` prints one JSON object that previews the requests, with credentials redacted. See [Errors and exit codes](/product/cli/c1i-commands#errors-and-exit-codes) and [Dry run](/product/cli/c1i-commands#dry-run) in the command reference.
 
 See the [c1i command reference](/product/cli/c1i-commands) for every command, subcommand, and flag.

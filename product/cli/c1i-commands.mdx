@@ -6,7 +6,7 @@ description: A comprehensive reference for all c1i commands, subcommands, and fl
 sidebarTitle: "c1i commands"
 ---
 
-{/* Editor Refresh: 2026-10-09 */}
+{/* Editor Refresh: 2026-11-16 */}
 
 <Tip>
 Run `c1i help` to list all commands, and `c1i <command> --help` (or `-h`) for help with a specific command.
@@ -16,7 +16,7 @@ Run `c1i help` to list all commands, and `c1i <command> --help` (or `-h`) for he
 
 Use this reference to find the command, flags, and output format for any c1i task, from managing identities, apps, and access to policies, automations, and MCP servers.
 
-List and search commands output NDJSON, one JSON object per line. Most other commands output formatted JSON, but some mutation commands, such as `requests create grant`, `apps set-owners`, `apps delete`, and `tasks approve`, print a one-line confirmation instead. See [Output conventions](/product/cli/c1i#output-conventions) for `auth`, `docs`, and `api` output.
+List and search commands output NDJSON, one JSON object per line. Other commands output formatted JSON. Mutation commands, such as `apps create`, `requests create grant`, and `tasks approve`, print the API's response unwrapped the same way the matching `get` command unwraps it, so you read an ID with `.id` rather than `.app.id`. Deletes and other empty responses print `{}`; exit `0` means success. A few responses carry a different ID path, such as `.connectorId` for an MCP server. See [Output conventions](/product/cli/c1i#output-conventions) for `auth`, `docs`, and `api` output.
 
 | Command | Description |
 | :--- | :--- |
@@ -24,9 +24,9 @@ List and search commands output NDJSON, one JSON object per line. Most other com
 | [`auth`](#auth) | Manage authentication. |
 | [`roles`](#roles) | List and inspect IAM roles (find role IDs for `auth login --scoped-role`). |
 | [`users`](#users) | Search, list, and get C1 users. |
-| [`apps`](#apps) | Manage applications and their owners. |
+| [`apps`](#apps) | Create, update, and delete applications, and manage their owners. |
 | [`accounts`](#accounts) | Manage application accounts. |
-| [`entitlements`](#entitlements) | Search, get, and create application entitlements, and manage entitlement-to-entitlement proxy bindings. |
+| [`entitlements`](#entitlements) | Search, get, create, update, and delete application entitlements, manage their owners, and manage entitlement-to-entitlement proxy bindings. |
 | [`grants`](#grants) | Query access grants: who has access to what. |
 | [`tasks`](#tasks) | Manage access request tasks. |
 | [`requests`](#requests) | Create, list, and inspect access requests. |
@@ -36,11 +36,12 @@ List and search commands output NDJSON, one JSON object per line. Most other com
 | [`access-reviews`](#access-reviews) | Manage access-review campaigns and their generated reports. |
 | [`findings`](#findings) | Manage security findings, the rules that route and transform them, and the tasks that remediate them. |
 | [`role-mining`](#role-mining) | Manage role mining analyses, suggestions, and the access profiles generated from them. |
-| [`automations`](#automations) | List automations, inspect one, and query its execution history. |
+| [`automations`](#automations) | List, inspect, update, and delete automations, and query their execution history. |
 | [`functions`](#functions) | Inspect C1 functions: metadata, commit history, callers, and source. |
 | [`export`](#export) | Export bulk data, such as system log (audit) events. |
 | [`upgrade`](#upgrade) (alias `update`) | Check for and install a newer c1i release. |
 | [`service-principals`](#service-principals) (aliases `service-principal`, `sp`) | Manage service principals (non-human identities), their client credentials, and their subject bindings. |
+| [`webhooks`](#webhooks) (alias `webhook`) | Manage outbound webhooks: the https endpoints that policies and automations call. |
 | [`mcp gateway`](#mcp-gateway) | Call the C1 MCP gateway directly: list and invoke tools end to end. |
 | [`mcp servers`](#mcp-servers) | Register, configure, and inspect MCP servers. |
 | [`mcp tools`](#mcp-tools) | Manage the MCP tools discovered from a server. |
@@ -58,14 +59,60 @@ Every command accepts these flags.
 | Flag | Description |
 | :--- | :--- |
 | `--url string` | C1 tenant URL; https required. Precedence: `--url`, `C1I_URL`, then `~/.c1i.yaml`. |
-| `--fields string` | Comma-separated JSON fields to keep in read output (dot-paths). Prefer it over `jq` for simple projection. |
+| `--fields string` | Comma-separated JSON fields to keep in read output (dot-paths). Prefer it over `jq` for simple projection. On a mutation command it's a usage error (exit 2), because mutation output is never projected. |
 | `--max-retries int` | Retries for transient API failures (429/5xx); 0 disables (default 4). |
-| `--error-format string` | Error output format: `text` or `json` (default `text`). |
-| `--dry-run` | Preview C1 REST mutations (method, path, body) without sending them. `mcp gateway call` and `auth login` reject it (exit 2). |
+| `--error-format string` | Stderr format: `text` or `json` (default `text`). With `json`, every stderr line is one JSON object (NDJSON). See [Errors and exit codes](#errors-and-exit-codes). |
+| `--dry-run` | Preview C1 REST mutations (method, URL, body) without sending them. See [Dry run](#dry-run). `mcp gateway call` and `auth login` reject it (exit 2). |
 | `--debug` | Trace HTTP requests (method, URL, status, timing) to stderr. |
 | `-h`, `--help` | Help for any command. |
 
-Each global flag also reads a `C1I_*` environment variable: `C1I_URL`, `C1I_FIELDS`, `C1I_MAX_RETRIES`, `C1I_ERROR_FORMAT`, `C1I_DRY_RUN`, and `C1I_DEBUG`.
+Each global flag also reads a `C1I_*` environment variable: `C1I_URL`, `C1I_FIELDS`, `C1I_MAX_RETRIES`, `C1I_ERROR_FORMAT`, `C1I_DRY_RUN`, and `C1I_DEBUG`. A flag on the command line overrides its variable. A non-empty `C1I_DRY_RUN`, `C1I_DEBUG`, `C1I_MAX_RETRIES`, or `C1I_ERROR_FORMAT` value that doesn't parse exits with code 2 before any request, as does a negative `--max-retries`.
+
+## Dry run
+
+`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and sends nothing. The preview is one JSON object on stdout with two keys, `dryRun` and `requests`. `requests` lists each request in send order, with its `method`, full `url`, and the `body` as sent (omitted when the request has no body). A notice on stderr, `dry run: nothing was sent`, accompanies every preview.
+
+```json
+{
+  "dryRun": true,
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://example.conductor.one/api/v1/task/grant",
+      "body": {
+        "appEntitlementId": "E1",
+        "appId": "A1",
+        "identityUserId": "U1"
+      }
+    }
+  ]
+}
+```
+
+- Credential fields appear as `[redacted]`: fields whose names end in `token`, `secret`, `password`, `signature`, or `apikey`, header values, a URL's username or password, and secret-named URL parameters. A body that isn't JSON prints as `"[redacted: not JSON]"`.
+- A preview needs a configured URL (exit 2 without one), and an empty, `.`, or `..` ID is refused with exit 2, as it is for a real request. A preview needs no credentials, except where c1i must look up a value the body needs: a task's current policy step, a hosted MCP server's catalog ID, or the caller for `requests create`.
+- A preview has no `id`. If an inherited `C1I_DRY_RUN=1` turns a script's writes into previews, `jq -r .id` prints `null` and the script carries on. Extract IDs with `jq -er`, which fails on a preview.
+- `upgrade --dry-run` is the exception: it prints plain `[dry-run]` text lines.
+
+## Errors and exit codes
+
+On failure, c1i writes an error to stderr and exits with a code you can branch on.
+
+| Code | Meaning |
+| :--- | :--- |
+| `0` | Success. |
+| `1` | Unclassified error, or a failed write to stdout (such as a full disk). On a mutation, the change was already applied, so verify before you retry. |
+| `2` | Usage error: bad flags or arguments, a blank required flag or ID, an empty, `.`, or `..` ID, an unreadable or wrong-shape `--*-file` input, a refused redirect, or an API `4xx` other than `401`, `403`, `404`, `408`, `429`, and `499`. |
+| `3` | Not authenticated, or the API returned `401` or `403`. |
+| `4` | The API returned `404`. |
+| `5` | The API returned `429`. Back off and retry. |
+| `6` | C1 failed: a `5xx`, a redirect chain that never settled, a `200` response whose body isn't JSON, or a list command whose pagination cursor stopped advancing. |
+| `7` | `mcp gateway call` completed, but the tool reported an error. |
+| `8` | A system beyond C1 failed: an unreachable upstream connector or gateway, an unreachable external MCP server, a protocol-level gateway error, or any failure of the documentation site for `docs search` and `docs page`, whatever the HTTP status. |
+
+With `--error-format json`, stderr is NDJSON: each line is one object with an `error`, `notice`, `progress`, or `debug` key. Select errors with `jq 'select(.error)'`. API errors include `status`, `method`, `path`, and `body`.
+
+An error from a command that writes also carries `"applied"`: `false` when nothing reached the server, `true` when the change was applied, and `"unknown"` when the request may have reached the server, including when a retry then failed. `mcp tools approve` adds an error object for each failed ID and a summary object with `notAttempted`. A batch can exit non-zero after it applied some changes.
 
 ## Docs
 
@@ -80,8 +127,12 @@ Explore C1 API documentation and schemas. These commands don't require authentic
 | `c1i docs openapi` | Dump the raw OpenAPI spec in YAML format. |
 | [`c1i docs guide`](#docs-guide) | Print an embedded, task-oriented runbook for a common workflow. |
 | [`c1i docs agents`](#docs-agents) (alias `skill`) | Print agent-facing conventions: output contracts, exit codes, and pagination. |
+| [`c1i docs readme`](#docs-readme-and-docs-changelog) | Print the README embedded in the c1i binary: the full reference. |
+| [`c1i docs changelog`](#docs-readme-and-docs-changelog) | Print the CHANGELOG embedded in the c1i binary, including migration notes under "Upgrading from" headings. |
 
 `docs endpoints`, `docs endpoint`, and `docs openapi` read the public spec at `https://www.c1.ai/api/openapi.yaml`, which includes the MCP, service principal, and access review operations. c1i caches the spec for 24 hours at `~/.c1i/cache/api-openapi.yaml`. If a fetch fails, c1i serves the stale cache and prints a one-line warning on stderr. Each refresh deletes other files in `~/.c1i/cache/`, so keep your own files elsewhere.
+
+`docs search` and `docs page` exit with code 8 when the documentation site fails, whatever the cause: an unreachable site, a non-200 response, an unparseable body, or a redirect loop. With no cached spec to fall back on, a redirect loop on `docs openapi`, `docs endpoints`, or `docs endpoint` also exits 8.
 
 ### `docs guide`
 
@@ -95,7 +146,7 @@ c1i docs guide [name]
 
 ### `docs agents`
 
-Print a short, agent-facing document covering the conventions that `--help` text can't: getting the tenant right, output contracts, exit codes, pagination, and when to prefer a first-class command over `c1i api`. It doesn't list every command or flag; run `c1i --help`, `c1i <group> --help`, or `c1i <group> <command> --help` for those.
+Print a concise, agent-facing document covering the conventions that `--help` text can't: getting the tenant right, output contracts, exit codes, pagination, and when to prefer a first-class command over `c1i api`. It doesn't list every command or flag; run `c1i --help`, `c1i <group> --help`, or `c1i <group> <command> --help` for those.
 
 The output opens with a YAML front-matter block (name, description, version, and required binaries) that some agent harnesses parse automatically, followed by plain Markdown. `skill` remains an alias for backward compatibility, so `c1i docs skill` still works.
 
@@ -114,6 +165,16 @@ c1i docs agents -o .cursor/rules/c1i.md
 ```
 
 For step-by-step setup instructions for Claude Code, Cursor, and other agents, see [Use c1i with AI agents](/product/cli/c1i-agent-skills).
+
+### `docs readme` and `docs changelog`
+
+Print the README or CHANGELOG embedded in the c1i binary, unmodified. They make no network call and need no credentials. Release archives ship only the binary, so these are how an installed c1i reads its own full reference. `docs agents` stays the concise guide for agents; the README is the full reference.
+
+Relative links in the printed text don't resolve. A notice on stderr gives the version-pinned GitHub URL that renders the Markdown.
+
+| Flag | Description |
+| :--- | :--- |
+| `-o`, `--output string` | Write to a file instead of stdout. `-` means stdout. |
 
 <Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
 
@@ -204,17 +265,21 @@ Manage C1 users.
 | `--query string` | Search query. |
 | `--email string` | Filter by email address. |
 | `--status string` | Filter by status: `enabled`, `disabled`, or `deleted`. |
+| `--origin stringArray` | Filter by user origin: `directory`, `local`, `system`, or `all` (repeatable). A `USER_ORIGIN_*` value, as a row's `origin` prints it, is also accepted. |
+
+With no `--origin`, the list includes only directory-origin users. It omits local-origin users, such as service principals, and system users. Pass `--origin all` to list every user. Rows carry `origin` when the server reports one.
 
 ## Apps
 
-Create, inspect, and delete applications, and manage their owners.
+Create, inspect, update, and delete applications, and manage their owners.
 
 | Command | Description |
 | :--- | :--- |
 | `c1i apps list` | List applications. [Paginates](#pagination-and-limits). |
 | `c1i apps get <app-id>` | Get a single app by ID. |
 | [`c1i apps create`](#apps-create) | Create a new app. |
-| `c1i apps delete <app-id>` | Soft-delete an app by ID. The app is marked deleted and drops out of normal listings, but the record is retained for audit. |
+| [`c1i apps update`](#apps-update) | Update an app's name, description, policies, or identity matching. |
+| `c1i apps delete <app-id>` | Soft-delete an app by ID. The app is marked deleted and drops out of `apps list`, but `apps get` still returns it with `deletedAt` set. Prints `{}`. |
 | [`c1i apps owners`](#apps-owners) | List an app's owners. |
 | [`c1i apps add-owner`](#apps-add-owner) | Add one owner to an app. |
 | [`c1i apps remove-owner`](#apps-remove-owner) | Remove one owner from an app. |
@@ -222,7 +287,7 @@ Create, inspect, and delete applications, and manage their owners.
 
 ### `apps create`
 
-Create a new app — a plain, unmanaged container you can register MCP servers under. Only `--display-name` is required; app owners are managed separately via `set-owners`, not at create time.
+Create a new app — a plain, unmanaged container you can register MCP servers under. Only `--display-name` is required. C1 assigns the caller as an owner of the new app; manage owners afterward with `add-owner`, `remove-owner`, or `set-owners`.
 
 **Usage:**
 
@@ -232,16 +297,49 @@ c1i apps create --display-name <name> [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--display-name string` | Display name for the new app. (Required.) |
+| `--display-name string` | Display name for the new app. Can't be blank. (Required.) |
 | `--description string` | Description for the new app. |
+| `--grant-policy-id string` | Grant policy ID to bind; must exist and be a grant policy. Omit for the server's default. |
+| `--revoke-policy-id string` | Revoke policy ID to bind; must exist and be a revoke policy. Omit for the server's default. |
+| `--certify-policy-id string` | Certify policy ID to bind; must exist and be a certify policy. |
+| `--identity-matching string` | How app users are matched to C1 users: `strict`, `display-name`, or `custom`. |
 
-The created app is returned as formatted JSON under an `app` key.
+Before sending, c1i checks each policy ID. An ID that doesn't exist, is deleted, or is the wrong type exits with code 2 and sends nothing. `--dry-run` skips this check. An empty policy ID is a usage error.
+
+The created app is returned as formatted JSON, unwrapped like `apps get`, so the app's ID is `.id`.
 
 **Example:**
 
 ```bash
-APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
+APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -er .id)
 ```
+
+### `apps update`
+
+Update an app's display name, description, policies, or identity matching. c1i builds the update mask from the flags you pass: an omitted flag is left alone, and an explicit empty value is a change.
+
+**Usage:**
+
+```bash
+c1i apps update <app-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | New display name. Can't be blank. |
+| `--description string` | New description. Pass an empty value to clear it. |
+| `--grant-policy-id string` | Grant policy ID to bind; must exist and be a grant policy. |
+| `--revoke-policy-id string` | Revoke policy ID to bind; must exist and be a revoke policy. |
+| `--certify-policy-id string` | Certify policy ID to bind; must exist and be a certify policy. |
+| `--unbind-policy stringArray` | Unbind a policy: `grant`, `revoke`, or `certify` (repeatable). |
+| `--identity-matching string` | How app users are matched to C1 users: `strict`, `display-name`, or `custom`. |
+| `--app-user-mapper-file string` | JSON object that replaces the app's whole user mapper (file, or `-` for stdin). |
+
+Each policy ID is checked before anything is sent, as for `apps create`. An empty policy ID is a usage error rather than an unbind, so pass `--unbind-policy` to remove a policy. You can't set and unbind the same kind in one call.
+
+`--app-user-mapper-file` takes an object such as `{"mappingCases":[{"userKeyCel":"subject.email","appUserKeyCel":"account.email"}]}`. `userKeyCel` runs against the C1 user as `subject`, and `appUserKeyCel` runs against the app user as `account`. `mappingCases` must be non-empty, and the API offers no way to remove a mapper.
+
+The updated app is returned as formatted JSON, unwrapped like `apps get`.
 
 ### `apps owners`
 
@@ -253,7 +351,7 @@ APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
 c1i apps owners <app-id> [flags]
 ```
 
-Use this to verify an owner change. Owner provisioning is asynchronous, so a change can take roughly 45 to 150 seconds to appear. Most apps already have at least one owner, because `apps create` assigns its caller as an owner. A well-formed app ID that doesn't exist returns zero rows and exits `0`, not `4`.
+Use this to verify an owner change. Owner changes are applied asynchronously and can take several minutes to appear. Most apps already have at least one owner, because `apps create` assigns its caller as an owner. A well-formed app ID that doesn't exist returns zero rows and exits `0`, not `4`.
 
 ### `apps add-owner`
 
@@ -262,14 +360,14 @@ Add one user as an app owner without changing the rest of the owner list. Unlike
 **Usage:**
 
 ```bash
-c1i apps add-owner <user-id> --app-id <app-id>
+c1i apps add-owner <app-id> --user-id <user-id>
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--app-id string` | Application ID to add the owner to. (Required.) |
+| `--user-id string` | C1 user ID to add as owner. One per call; use `set-owners` for several. (Required.) |
 
-Owner changes are provisioned asynchronously; verify with `c1i apps owners <app-id>`.
+An unknown app ID exits with code 4. Owner changes are applied asynchronously; verify with `c1i apps owners <app-id>`. Prints `{}`; exit `0` means success.
 
 ### `apps remove-owner`
 
@@ -278,14 +376,14 @@ Remove one user as an app owner without changing the rest of the owner list. The
 **Usage:**
 
 ```bash
-c1i apps remove-owner <user-id> --app-id <app-id>
+c1i apps remove-owner <app-id> --user-id <user-id>
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| `--app-id string` | Application ID to remove the owner from. (Required.) |
+| `--user-id string` | C1 user ID to remove as owner. One per call; use `set-owners` for several. (Required.) |
 
-Owner changes are provisioned asynchronously; verify with `c1i apps owners <app-id>`.
+An unknown app ID exits with code 4. Owner changes are applied asynchronously; verify with `c1i apps owners <app-id>`. Prints `{}`; exit `0` means success.
 
 ### `apps set-owners`
 
@@ -298,10 +396,12 @@ c1i apps set-owners <app-id> --user-id <user-id> [flags]
 | Flag | Description |
 | :--- | :--- |
 | `--user-id stringArray` | C1 user ID to set as owner (repeatable; replaces the full owner list). (Required.) |
-| `--wait` | Block and poll until every requested owner appears, or `--wait-timeout` elapses. |
+| `--wait` | Block and poll until the owner set equals the requested owners, or `--wait-timeout` elapses. A timeout exits with code 1, though the write was accepted. |
 | `--wait-timeout duration` | Max time to wait with `--wait` (default `4m0s`). |
 
-Owner changes are provisioned asynchronously, so the command returns once the request is accepted and new owners can take a few minutes to appear. Pass `--wait` to block until they do.
+Before it sends the request, c1i looks up each distinct `--user-id`. An unknown user exits with code 2, naming the ID, and nothing is sent. The lookup needs user-read access, so a credential without it exits with code 3. `--dry-run` skips the lookups. c1i sends a repeated `--user-id` once.
+
+Owner changes are applied asynchronously, so the command returns once the request is accepted and new owners can take several minutes to appear. Pass `--wait` to block until the owner set equals the request, including removals. `--wait` progress goes to stderr, and the command prints the API's JSON response on stdout.
 
 **Example:**
 
@@ -346,13 +446,19 @@ c1i accounts set-owner <app-user-id> --app-id <app-id> --user-id <user-id>
 
 ## Entitlements
 
-Find, inspect, and create app entitlements, and link entitlements to each other with proxy bindings.
+Find, inspect, create, update, and delete app entitlements, manage their owners, and link entitlements to each other with proxy bindings.
 
 | Command | Description |
 | :--- | :--- |
 | [`c1i entitlements list`](#entitlements-list) | Search and list application entitlements. |
 | [`c1i entitlements get`](#entitlements-get) | Get a single app entitlement by ID. |
 | [`c1i entitlements create`](#entitlements-create) | Create an app entitlement, with its resource type and resource. |
+| [`c1i entitlements update`](#entitlements-update) | Update an entitlement's name, description, policies, or maximum grant duration. |
+| [`c1i entitlements delete`](#entitlements-delete) | Soft-delete an app entitlement. |
+| [`c1i entitlements owners`](#entitlements-owners) | List an entitlement's owners. |
+| [`c1i entitlements add-owner`](#entitlements-add-owner) | Add one owner to an entitlement. |
+| [`c1i entitlements remove-owner`](#entitlements-remove-owner) | Remove one owner from an entitlement. |
+| [`c1i entitlements set-owners`](#entitlements-set-owners) | Set the owners of an entitlement, replacing the full owner list. |
 | [`c1i entitlements proxy-bindings`](#entitlements-proxy-bindings) | Manage entitlement proxy bindings. |
 
 An entitlement ID is only unique within an app, so always key on the app ID and the entitlement ID together. Some built-in entitlements, such as the base `Access` entitlement, use the same ID in every app that has one.
@@ -380,7 +486,7 @@ c1i entitlements get <entitlement-id> --app-id <app-id>
 
 ### `entitlements create`
 
-Create an app entitlement, plus the app resource type and resource it points at, as up to three requests in order. Pass `--resource-type-id` to reuse an existing resource type, and `--resource-id` to reuse an existing resource. Outputs formatted JSON under `appEntitlementView`.
+Create an app entitlement, plus the app resource type and resource it points at, as up to three requests in order. Pass `--resource-type-id` to reuse an existing resource type, and `--resource-id` to reuse an existing resource. Outputs the created entitlement as formatted JSON, unwrapped like `entitlements get`, so its ID is `.id`. The output echoes `appResourceTypeId` and `appResourceId` and expands both objects.
 
 **Usage:**
 
@@ -391,12 +497,16 @@ c1i entitlements create --app-id <app-id> --display-name <name> [flags]
 | Flag | Description |
 | :--- | :--- |
 | `--app-id string` | Application ID to create the entitlement on. (Required.) |
-| `--display-name string` | Display name for the new entitlement; also names the resource type and resource that c1i creates. (Required.) |
+| `--display-name string` | Display name for the new entitlement; also names the resource type and resource that c1i creates. Can't be blank. (Required.) |
 | `--description string` | Description for the new entitlement. |
 | `--alias string` | Alias for the new entitlement; exact-match queryable. |
 | `--slug string` | Slug for the new entitlement, such as `member`. |
-| `--duration-grant string` | Maximum grant duration as a protobuf duration in seconds, such as `3600s`; omit for standing access. `1h` is refused. |
+| `--duration-grant string` | Maximum grant duration, as a whole-number Go duration such as `8h` or a protobuf duration such as `3600s`; c1i sends it in seconds. Omit for standing access. A sign, decimal, or leading zero (`-1h`, `1.5h`, `01h`) exits with code 2. |
 | `--owner-id stringArray` | C1 user ID to own the new entitlement (repeatable). |
+| `--grant-policy-id string` | Grant policy ID to bind; must exist and be a grant policy. |
+| `--revoke-policy-id string` | Revoke policy ID to bind; must exist and be a revoke policy. |
+| `--certify-policy-id string` | Certify policy ID to bind; must exist and be a certify policy. |
+| `--emergency-grant-policy-id string` | Emergency grant policy ID to bind; must exist and be a grant policy. |
 | `--resource-type string` | Kind of resource type to create: `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`, `CUSTOM`, `VAULT`, or `PROFILE_TYPE` (default `CUSTOM`). |
 | `--resource-type-display-name string` | Display name for the resource type this command creates (default: `--display-name`). |
 | `--resource-type-id string` | Existing app resource type to reuse instead of creating one. |
@@ -405,7 +515,9 @@ c1i entitlements create --app-id <app-id> --display-name <name> [flags]
 
 Passing `--resource-type` or `--resource-type-display-name` together with `--resource-type-id` is a usage error (exit 2), as is `--resource-id` without `--resource-type-id`. Only the `CUSTOM` resource type can repeat on one app, so reuse an existing type with `--resource-type-id` for any other kind.
 
-There is no rollback. If a later request fails, the objects that earlier ones created still exist; the error names them and the flags that reuse them. `--dry-run` previews every request in the sequence. Owner provisioning is asynchronous.
+Before the first request, c1i checks each policy ID and each `--owner-id`. An unknown policy or user exits with code 2 and creates nothing. The owner check reads the user, so a credential without user-read access exits with code 3. c1i sends a repeated `--owner-id` once. `--dry-run` skips these checks.
+
+There is no rollback. If a later request fails, the objects that earlier ones created still exist; the error names them and the flags that reuse them. `--dry-run` previews every request in the sequence, and where an ID exists only after an earlier request, the preview shows `NEW_APP_RESOURCE_TYPE_ID` or `NEW_APP_RESOURCE_ID` in its place. Owner changes are applied asynchronously.
 
 **Example:**
 
@@ -414,6 +526,128 @@ c1i entitlements create --app-id "$APP_ID" \
   --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
   --slug member --alias payroll_admin
 ```
+
+### `entitlements update`
+
+Update an entitlement's display name, description, policies, or maximum grant duration. c1i builds the update mask from the flags you pass, so an omitted flag is left alone.
+
+**Usage:**
+
+```bash
+c1i entitlements update <entitlement-id> --app-id <app-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+| `--display-name string` | New display name. Can't be blank. |
+| `--description string` | New description. Pass an empty value to clear it. |
+| `--grant-policy-id string` | Grant policy ID to bind; must exist and be a grant policy. |
+| `--revoke-policy-id string` | Revoke policy ID to bind; must exist and be a revoke policy. |
+| `--certify-policy-id string` | Certify policy ID to bind; must exist and be a certify policy. |
+| `--emergency-grant-policy-id string` | Emergency grant policy ID to bind; must exist and be a grant policy. |
+| `--emergency-grant-enabled` | Enable or disable emergency grants. Enabling requires `--emergency-grant-policy-id` in the same call. |
+| `--unbind-policy stringArray` | Unbind a policy: `grant`, `revoke`, `certify`, or `emergency-grant` (repeatable). |
+| `--duration-grant string` | Maximum grant duration, as a whole-number Go duration such as `8h` or a protobuf duration such as `3600s`. |
+| `--duration-unset` | Remove the maximum grant duration, which gives standing access. Can't be combined with `--duration-grant`. |
+
+Each policy ID is checked before anything is sent. An ID that doesn't exist, is deleted, or is the wrong type exits with code 2. An empty policy ID is a usage error rather than an unbind, so pass `--unbind-policy` to remove a policy. `--dry-run` skips the check.
+
+`--emergency-grant-enabled` needs `--emergency-grant-policy-id` in the same call, even when the entitlement already has a policy stored, or c1i exits with code 2. The server doesn't refuse unbinding the emergency policy while emergency grants stay enabled, so pass `--emergency-grant-enabled=false` alongside `--unbind-policy emergency-grant`.
+
+The updated entitlement is returned as formatted JSON, unwrapped like `entitlements get`.
+
+**Example:**
+
+```bash
+c1i entitlements update <entitlement-id> --app-id <app-id> \
+  --grant-policy-id <policy-id> --duration-grant 8h
+```
+
+### `entitlements delete`
+
+Delete an app entitlement. The delete is soft: `entitlements get` still returns the entitlement with `deletedAt` set. `apps delete` leaves an app's entitlements live, so delete them with this command first. Prints `{}`; exit `0` means success.
+
+**Usage:**
+
+```bash
+c1i entitlements delete <entitlement-id> --app-id <app-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+
+### `entitlements owners`
+
+List an entitlement's owners as NDJSON, in the same row shape as `apps owners`. [Paginates](#pagination-and-limits).
+
+**Usage:**
+
+```bash
+c1i entitlements owners <entitlement-id> --app-id <app-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+
+Use this to verify an owner change. Owner changes are applied asynchronously and can take several minutes to appear. A well-formed entitlement or app ID that doesn't exist returns zero rows and exits `0`, so an empty result means either no owners or a wrong ID.
+
+### `entitlements add-owner`
+
+Add one user as an entitlement owner without changing the rest of the owner list. Adding a user who is already an owner exits `0`.
+
+**Usage:**
+
+```bash
+c1i entitlements add-owner <entitlement-id> --app-id <app-id> --user-id <user-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+| `--user-id string` | C1 user ID to add as owner. One per call; use `set-owners` for several. (Required.) |
+| `--wait` | Block and poll until the owner appears, or `--wait-timeout` elapses. |
+| `--wait-timeout duration` | Maximum time to wait with `--wait` (default `4m0s`). |
+
+An unknown user, entitlement, or app exits with code 4. A `--wait` that reaches `--wait-timeout` exits with code 1, though the write was accepted. `--wait` progress goes to stderr, and the command prints the API's JSON response on stdout. With `--dry-run`, `--wait` never polls.
+
+### `entitlements remove-owner`
+
+Remove one user as an entitlement owner without changing the rest of the owner list. Unlike `set-owners`, it can remove the last owner.
+
+**Usage:**
+
+```bash
+c1i entitlements remove-owner <entitlement-id> --app-id <app-id> --user-id <user-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+| `--user-id string` | C1 user ID to remove as owner. One per call; use `set-owners` for several. (Required.) |
+
+A user who was never an owner exits with code 4, the same as an unknown user, entitlement, or app, so exit 4 can't tell those cases apart. A user who was an owner and is already removed exits `0`. Prints `{}`; exit `0` means success.
+
+### `entitlements set-owners`
+
+Set the complete list of owners for an entitlement, replacing any existing owners. It refuses an empty list, because the API treats an empty list as "remove every owner."
+
+**Usage:**
+
+```bash
+c1i entitlements set-owners <entitlement-id> --app-id <app-id> --user-id <user-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--app-id string` | Application ID the entitlement belongs to. (Required.) |
+| `--user-id stringArray` | C1 user ID to set as owner (repeatable; replaces the full owner list). (Required.) |
+| `--wait` | Block and poll until the owner set equals the requested owners, or `--wait-timeout` elapses. A timeout exits with code 1, though the write was accepted. |
+| `--wait-timeout duration` | Maximum time to wait with `--wait` (default `4m0s`). |
+
+Before it sends the request, c1i looks up each distinct `--user-id`. An unknown user exits with code 2, naming the ID, and nothing is sent, because the API would accept the unknown ID and silently drop it, possibly leaving no owners. The lookup needs user-read access. `--dry-run` skips the lookups. c1i sends a repeated `--user-id` once, because the API answers a duplicate with a 500.
 
 ### `entitlements proxy-bindings`
 
@@ -483,6 +717,7 @@ List access request tasks and act on them: approve, deny, comment, reassign, or 
 | Command | Description |
 | :--- | :--- |
 | [`c1i tasks list`](#tasks-list) | Search and list tasks. |
+| [`c1i tasks get`](#tasks-get) | Get a single task by ID. |
 | [`c1i tasks approve`](#tasks-approve) | Approve a task. |
 | [`c1i tasks deny`](#tasks-deny) | Deny a task. |
 | [`c1i tasks comment`](#tasks-comment) | Add a comment to a task. |
@@ -504,6 +739,16 @@ List access request tasks and act on them: approve, deny, comment, reassign, or 
 | `--query string` | Search query. |
 | `--assigned-to-me` | Only show tasks assigned to the current user. |
 
+### `tasks get`
+
+Get a single task by ID: the full task view, including its current policy step and outcome, as formatted JSON. It reads the same endpoint as `c1i requests get`, because access requests are tasks. Use it to re-read a task after an action, since action output reports the task's state from before the action.
+
+**Usage:**
+
+```bash
+c1i tasks get <task-id>
+```
+
 ### `tasks approve`
 
 **Usage:**
@@ -517,7 +762,7 @@ c1i tasks approve <task-id> [flags]
 | `--comment string` | Comment to include with the approval. |
 | `--policy-step-id string` | Policy step to approve (defaults to the task's current step). |
 
-If you omit `--policy-step-id`, c1i fetches and uses the task's currently executing step. If it can't determine the step, the command errors and asks you to pass `--policy-step-id`.
+If you omit `--policy-step-id`, c1i fetches and uses the task's currently executing step. If the task has no current step, the command exits with code 2 and tells you to re-read the task with `c1i tasks get`; `--policy-step-id` can't supply a step the task doesn't have.
 
 ### `tasks deny`
 
@@ -532,7 +777,7 @@ c1i tasks deny <task-id> [flags]
 | `--comment string` | Comment to include with the denial. |
 | `--policy-step-id string` | Policy step to deny (defaults to the task's current step). |
 
-Unlike `approve`, `deny` doesn't require a step: if c1i can't determine the current step, it sends the denial without one.
+Unlike `approve`, `deny` doesn't require a step: if the task has no current step, c1i sends the denial without one. `deny` and `restart` on an unknown task exit with code 4 and send nothing.
 
 ### `tasks comment`
 
@@ -570,7 +815,7 @@ Use it on a task that looks stuck; it asks C1 to re-run policy evaluation withou
 c1i tasks process <task-id>
 ```
 
-Processing is asynchronous. Re-read the task with `c1i requests get <task-id>` to see the result.
+Processing is asynchronous. Re-read the task with `c1i tasks get <task-id>` to see the result.
 
 ### `tasks reassign`
 
@@ -584,7 +829,7 @@ c1i tasks reassign <task-id> --to-user-id <user-id> [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| `--to-user-id stringArray` | User ID to reassign the step to (repeatable). (Required.) |
+| `--to-user-id stringArray` | User ID to reassign the step to (repeatable). c1i looks up each ID, and an unknown user exits with code 2 and sends nothing. (Required.) |
 | `--comment string` | Comment to include with the reassignment. |
 | `--policy-step-id string` | Policy step to reassign (defaults to the task's current step). |
 
@@ -644,12 +889,12 @@ c1i tasks update-grant-duration <task-id> --duration <duration>
 
 | Flag | Description |
 | :--- | :--- |
-| `--duration string` | Grant duration as a protobuf duration in seconds, such as `3600s`; `1h` is refused. (Required.) |
+| `--duration string` | Grant duration, as a whole-number Go duration such as `8h` or a protobuf duration such as `3600s`; c1i sends it in seconds. A sign, decimal, or leading zero (`-1h`, `1.5h`, `01h`) exits with code 2. (Required.) |
 
-The new value lands on the task as `grantDuration`; read it back with `c1i requests get <task-id>`.
+The new value lands at `.type.grant.grantDuration` on the task; read it back with `c1i tasks get <task-id>`.
 
 <Note>
-The action subcommands (`close`, `process`, `reassign`, `reset`, `restart`, `skip-step`, and `update-grant-duration`) confirm only the task ID, and the step for those that act on one. They never report a task state, because the action endpoints echo the task's state from before the action.
+Every task action prints the task as formatted JSON, unwrapped like `tasks get`, so the task's ID is `.id`. The action endpoints return the task as it was before the action, so `.state` is a snapshot, not the outcome: closing an open task prints an open state. Re-read the task with `c1i tasks get` before you act on it. When c1i looks up a policy step for you, it reports the step on stderr (`Resolved policy step: <id>`) rather than in the JSON.
 </Note>
 
 ## Requests
@@ -672,7 +917,7 @@ List access requests: the grant and revoke tasks a requester files. By default i
 | `--all` | List every access request in the tenant, not just yours. |
 | `--user-id string` | Scope to requests opened by or about this user (default: you). |
 | `--app-id string` | Filter to requests targeting this application. |
-| `--entitlement-id string` | Filter to requests for this entitlement. |
+| `--entitlement-id string` | Filter to requests for this entitlement. Requires `--app-id`, because an entitlement ID repeats across apps. |
 | `--type string` | Filter by request type: `grant` or `revoke` (default: both). |
 | `--state string` | Filter by state: `open` or `closed`. |
 
@@ -690,7 +935,7 @@ c1i requests create grant --app-id <app-id> --entitlement-id <entitlement-id> \
 | `--app-id string` | Application ID. (Required.) |
 | `--entitlement-id string` | Entitlement ID. (Required.) |
 | `--user-id string` | User ID (defaults to current user). |
-| `--duration string` | Requested access duration as a protobuf duration in seconds, such as `86400s`. C1 refuses `24h` or `7d` with "invalid google.protobuf.Duration value". |
+| `--duration string` | Requested access duration, as a whole-number Go duration such as `24h` or a protobuf duration such as `86400s`; c1i sends it in seconds. A sign, decimal, or leading zero exits with code 2, and so does a day unit such as `7d`. |
 | `--description string` | Justification for the request. |
 | `--emergency` | Request emergency access. |
 
@@ -709,6 +954,8 @@ c1i requests create revoke --app-id <app-id> --entitlement-id <entitlement-id> \
 | `--entitlement-id string` | Entitlement ID. (Required.) |
 | `--user-id string` | User ID (defaults to current user). |
 | `--description string` | Justification for the request. |
+
+Both `create` commands print the created task unwrapped like `tasks get`, so the task's ID is `.id`. Its `.state` is a snapshot from creation, not the outcome. When you omit `--user-id`, c1i resolves the caller, so a `--dry-run` preview then needs credentials.
 
 ## Connectors
 
@@ -920,12 +1167,12 @@ c1i access-profiles create --display-name <name> [flags]
 | `--unenrollment-behavior string` | Unenrollment behavior: `leave-access-as-is`, `revoke-all`, `revoke-unjustified`, `unspecified`, or a full `REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_*` enum value. |
 | `--unenrollment-entitlement-behavior string` | Unenrollment entitlement revoke-policy behavior: `bypass`, `enforce`, `unspecified`, or a full `REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_*` enum value. |
 
-Only `--display-name` is required; every other field is omitted from the request unless you pass it, so the server's own defaults apply. The created profile is returned under `requestCatalogView` — read the ID from `.requestCatalogView.requestCatalog.id`.
+Only `--display-name` is required; every other field is omitted from the request unless you pass it, so the server's own defaults apply. c1i prints the created profile unwrapped like `get`, so read the ID from `.id` and the member count from `.memberCount`.
 
 **Example:**
 
 ```bash
-CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -r .requestCatalogView.requestCatalog.id)
+CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -er .id)
 ```
 
 ### `access-profiles update`
@@ -947,7 +1194,7 @@ c1i access-profiles update <access-profile-id> [flags]
 | `--unenrollment-behavior string` | Unenrollment behavior (same values as `create`). |
 | `--unenrollment-entitlement-behavior string` | Unenrollment entitlement revoke-policy behavior (same values as `create`). |
 
-This is a partial update: only the fields you pass are changed, and the update mask is derived automatically from which flags you supplied — there's no separate `--update-mask` flag here. An explicit `--description ""` is itself a change (it clears the description); an omitted flag is left alone.
+This is a partial update: only the fields you pass are changed, and the update mask is derived automatically from which flags you supplied — there's no separate `--update-mask` flag here. An explicit `--description ""` is itself a change (it clears the description); an omitted flag is left alone. The updated profile is printed unwrapped, like `create`.
 
 ### `access-profiles delete`
 
@@ -1130,7 +1377,7 @@ c1i access-reviews reports generate <campaign-id> [flags]
 | `--format string` | Report format: `json`, `csv`, or `xlsx`. Mutually exclusive with `--body-file`. |
 | `--body-file string` | Full report-generation request JSON object (file, or `-` for stdin). Mutually exclusive with `--format`. |
 
-The response confirms that generation was requested, not that the report is ready — use `reports list` to find the report's state and its time-limited `downloadUrl`.
+The command prints `{}`, which confirms that generation was requested, not that the report is ready — use `reports list` to find the report's state and its time-limited `downloadUrl`.
 
 ## Findings
 
@@ -1200,12 +1447,14 @@ Mutations and searches take JSON request objects through `--body-file` so profil
 
 ## Automations
 
-List C1 automations, inspect one, and query the run history of their executions. `executions list` is the usual starting point for "did this automation run?" and "why did it fail?".
+List C1 automations, inspect, update, or delete one, and query the run history of their executions. `executions list` is the usual starting point for "did this automation run?" and "why did it fail?".
 
 | Command | Description |
 | :--- | :--- |
 | [`c1i automations list`](#automations-list) | List automations. |
 | `c1i automations get <automation-id>` | Get a single automation. |
+| [`c1i automations update`](#automations-update) | Update an automation's name, description, or enabled state, or any other field from a JSON object. |
+| [`c1i automations delete`](#automations-delete) | Soft-delete an automation. |
 | [`c1i automations executions list`](#automations-executions-list) | Stream automation execution history. |
 
 ### `automations list`
@@ -1216,6 +1465,45 @@ List C1 automations, inspect one, and query the run history of their executions.
 | :--- | :--- |
 | `--enabled-only` | Only emit automations that are currently enabled. |
 | `--calls-function string` | Only emit automations that invoke the given function ID, in any step. |
+
+### `automations update`
+
+Update an automation's display name, description, or enabled state. c1i builds the update mask from the flags you pass, so an explicit `--enabled=false` or an empty `--description` is a change, and an omitted flag is left alone. These flags leave the automation's steps and triggers unchanged.
+
+**Usage:**
+
+```bash
+c1i automations update <automation-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | New display name. Can't be blank. |
+| `--description string` | New description. Pass an empty value to clear it. |
+| `--enabled` | Enable the automation, or disable it with `--enabled=false`. |
+| `--body-file string` | Automation JSON object, sent verbatim (file, or `-` for stdin). Requires `--update-mask`, and can't be combined with the flags above. |
+| `--update-mask string` | Comma-separated camelCase field paths to update. Required with `--body-file`; without `--body-file` it exits with code 2. |
+
+To change anything else, such as triggers, steps, or draft fields, pass an automation object with `--body-file` and name the fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `isDraft` and `draftTriggers` stay as they were.
+
+The updated automation is returned as formatted JSON, unwrapped like `automations get`. `webhookCapabilityUrl` and `webhookHmacSecret` stay top-level fields.
+
+**Example:**
+
+```bash
+c1i automations update <automation-id> --enabled=false
+c1i automations update <automation-id> --body-file automation.json --update-mask triggers
+```
+
+### `automations delete`
+
+Soft-delete an automation. It leaves `automations list`, but `automations get` still returns it at exit `0`, with no field marking it deleted. Deleting it again exits `0` again. Prints `{}`; exit `0` means success.
+
+**Usage:**
+
+```bash
+c1i automations delete <automation-id>
+```
 
 ### `automations executions list`
 
@@ -1341,15 +1629,15 @@ A service principal is an identity; a client credential on it is what a caller a
 | `c1i service-principals get <sp-id>` | Get a single service principal by ID. |
 | `c1i service-principals create --display-name <name>` | Create a service principal. |
 | `c1i service-principals update <sp-id> --display-name <name>` | Update a service principal's display name. |
-| `c1i service-principals delete <sp-id>` | Delete a service principal and all its credentials. Prints a one-line confirmation, not JSON. |
+| `c1i service-principals delete <sp-id>` | Delete a service principal and all its credentials. Prints `{}`. |
 | `c1i service-principals credentials list <sp-id>` | List a service principal's client credentials. The secret itself is never part of a row — it's returned only once, at creation. [Paginates](#pagination-and-limits). |
 | `c1i service-principals credentials get <credential-id> --service-principal-id <sp-id>` | Get a single client credential. |
 | [`c1i service-principals credentials create`](#service-principals-credentials-create) | Create a client credential (the secret is shown once). |
 | `c1i service-principals credentials update <credential-id> --service-principal-id <sp-id> --display-name <name>` | Update a client credential's display name. |
-| `c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>` | Revoke (delete) a client credential. Prints a one-line confirmation, not JSON. |
+| `c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>` | Revoke (delete) a client credential. Prints `{}`. |
 | [`c1i service-principals bindings add`](#service-principals-bindings-add) | Bind a subject to a service principal. |
 | `c1i service-principals bindings list [subject flags]` | List the service principals a subject is bound to. Takes the same subject flags as `bindings add`. [Paginates](#pagination-and-limits). |
-| `c1i service-principals bindings delete --service-principal-id <sp-id> [subject flags]` | Remove a subject's binding to a service principal. Takes the same flags as `bindings add`. Idempotent; prints a one-line confirmation, not JSON. |
+| `c1i service-principals bindings delete --service-principal-id <sp-id> [subject flags]` | Remove a subject's binding to a service principal. Takes the same flags as `bindings add`. Idempotent; prints `{}`. |
 
 `delete` and `credentials revoke` are soft: `get` and `credentials get` still return the record at exit `0` with nothing marking it as deleted. `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`. Only `list` and `credentials list` omit deleted records.
 
@@ -1366,12 +1654,14 @@ c1i service-principals credentials create <sp-id> --display-name <name> [flags]
 | `--display-name string` | Display name for the new credential. (Required.) |
 | `--scoped-role stringArray` | Restrict the credential to a role ID from [`c1i roles list`](#roles) (repeatable). |
 | `--allow-cidr stringArray` | Restrict the credential to a source CIDR (repeatable). |
-| `--expires string` | Time until the credential expires, as a Go duration (for example `720h`); the server accepts the range `(0s, 4320h]` (up to 180 days). |
+| `--expires string` | Time until the credential expires, as a whole-number Go duration (for example `720h`) or a protobuf duration (`3600s`); a sign, decimal, or leading zero exits with code 2. The server accepts the range `(0s, 4320h]` (up to 180 days). |
 | `--require-dpop` | Require DPoP proof-of-possession for token exchange. |
+
+c1i prints the credential unwrapped, with the secret as a sibling field: read `.id`, `.clientId`, and `.clientSecret`. The secret appears only in this output, so capture it now.
 
 ### `service-principals bindings add`
 
-Idempotent; prints a one-line confirmation, not JSON.
+Idempotent; prints `{}`.
 
 **Usage:**
 
@@ -1395,6 +1685,72 @@ Exactly one subject must be given, and an app-scoped subject (`--sso-application
 
 <Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
 
+## Webhooks
+
+Manage outbound webhooks: the registered https endpoints that C1 calls, for example from a policy's webhook approval or provision step. The group is aliased as `webhook`. A webhook has no signing secret, so `create` and `get` return the same fields.
+
+| Command | Description |
+| :--- | :--- |
+| `c1i webhooks list` | List webhooks. Deleted webhooks are omitted. [Paginates](#pagination-and-limits). |
+| `c1i webhooks get <webhook-id>` | Get a single webhook by ID. A deleted webhook is still returned, with `deletedAt` set. |
+| [`c1i webhooks create`](#webhooks-create-and-update) | Create a webhook. |
+| [`c1i webhooks update`](#webhooks-create-and-update) | Update a webhook's display name, URL, description, or callback timeout. |
+| [`c1i webhooks test`](#webhooks-test) | Queue a test delivery to a webhook's URL. |
+| [`c1i webhooks delete`](#webhooks-delete) | Soft-delete a webhook. |
+
+`webhooks list` returns pages larger than `--page-size`: the server raises a size below 5 to 5 and returns one row more than that, so use `--limit` for an exact count.
+
+### `webhooks create` and `webhooks update`
+
+**Usage:**
+
+```bash
+c1i webhooks create --display-name <name> --destination-url <url> [flags]
+c1i webhooks update <webhook-id> [flags]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--display-name string` | Display name. Can't be blank, and the server requires 3-100 characters. (Required for `create`.) |
+| `--destination-url string` | Destination URL. It must be an absolute `https` URL with a host; an IPv6 literal host is refused. (Required for `create`.) |
+| `--description string` | Description. On `update`, an empty value clears it. |
+| `--callback-timeout string` | Time to wait for an asynchronous callback, as a whole-number Go duration such as `10m` or a protobuf duration such as `600s`; c1i sends it in seconds. Accepts `0` to `720h`. |
+
+The endpoint flag is `--destination-url`, not `--url`, which stays the global tenant flag. These cases exit with code 2 before c1i sends anything: a `--destination-url` that isn't `https`, has no host, or uses an IPv6 literal host; a blank `--display-name`; a `--callback-timeout` with a sign or decimal (`-1h`, `1.5h`); and an `update` with no field flag.
+
+`update` sends only the flags you pass. Updating a soft-deleted webhook exits `0` and changes it, and it stays deleted.
+
+Both commands print the webhook as formatted JSON, unwrapped like `webhooks get`, so its ID is `.id`.
+
+**Example:**
+
+```bash
+c1i webhooks create --display-name "ticketing-bridge" \
+  --destination-url https://hooks.example.com/c1
+```
+
+### `webhooks test`
+
+Queue a test delivery to a webhook's URL.
+
+**Usage:**
+
+```bash
+c1i webhooks test <webhook-id>
+```
+
+The delivery is asynchronous. The command prints the queued delivery with `"state": "WEBHOOK_STATE_PENDING"` and exits `0` whether or not the endpoint is reachable, so exit `0` doesn't mean the endpoint answered. In the output, `.id` is the delivery and `.webhookId` is the webhook you tested.
+
+### `webhooks delete`
+
+Soft-delete a webhook. It leaves `webhooks list`, but `webhooks get` still returns it at exit `0` with `deletedAt` set. Deleting it again exits `0` again. Prints `{}`; exit `0` means success.
+
+**Usage:**
+
+```bash
+c1i webhooks delete <webhook-id>
+```
+
 ## MCP gateway
 
 Call the C1 MCP gateway directly over its MCP transport — the same handshake an MCP host performs — to verify what a registered server actually exposes. This closes the configure-then-verify loop: register a server, approve its tools, then list or call them here.
@@ -1407,11 +1763,12 @@ The gateway accepts your stored c1i credentials, so no extra setup is needed.
 
 ### `mcp gateway list-tools`
 
-Run the MCP handshake against the gateway and list the tools it exposes to you. Outputs NDJSON: one row per tool (name, description).
+Run the MCP handshake against the gateway and list the tools it exposes to you. Outputs NDJSON: one row per tool (name, description). A gateway cursor that never ends exits with code 8.
 
 | Flag | Description |
 | :--- | :--- |
 | `--full` | Include each tool's input JSON schema in the row. |
+| `--limit int` | Print only the first N tools; `0` prints all (default `0`). A negative value exits with code 2. |
 
 ### `mcp gateway call`
 
@@ -1622,7 +1979,7 @@ c1i mcp servers resync-tools <connector-id> --app-id <app-id>
 
 ### `mcp servers test-connection`
 
-Probe whether an external MCP server is reachable with the credentials you supply. Outputs formatted JSON with `reachable` (whether the MCP initialize and `tools/list` calls both succeeded), `toolCount`, and a sanitized `failureReason`. Hosted servers return `test connection is only supported for external MCP servers`.
+Probe whether an external MCP server is reachable with the credentials you supply. Outputs formatted JSON with `reachable` (whether the MCP initialize and `tools/list` calls both succeeded), `toolCount`, and a sanitized `failureReason`. Hosted servers return `test connection is only supported for external MCP servers`. When the server is unreachable, c1i still prints the JSON, then exits with code 8 and says `MCP server is unreachable` on stderr, so check the exit code and not just `reachable`.
 
 The command has two modes. In create mode, supply the config to probe with `--server-url` and optional auth flags, or with `--external-config-file`. In edit mode, pass a connector ID with `--app-id` to probe an existing server, naming any changed fields in `--update-mask`; omit the mask to probe the stored config.
 
@@ -1701,7 +2058,7 @@ c1i mcp tools search --app-id <app-id> --connector-id <connector-id> [flags]
 
 ### `mcp tools approve`
 
-Approve MCP tools by setting each tool's state to approved, which lets the MCP gateway proxy calls to them. Pass one or more tool IDs. The API has no batch approve, so c1i sends each ID as its own request and prints a confirmation line for each. If one fails, c1i still attempts the rest and exits non-zero.
+Approve MCP tools by setting each tool's state to approved, which lets the MCP gateway proxy calls to them. Pass one or more tool IDs. The API has no batch approve, so c1i sends each ID as its own request and prints one compact JSON line for each applied tool, with its `.id` and `.state`. If one fails, c1i still attempts the rest and exits non-zero with the first failure's code, while the IDs before it stay approved. A failed write to stdout stops the batch with exit code 1. With `--error-format json`, each failed ID gets its own error object, and a summary lists the IDs c1i never sent in `notAttempted`.
 
 **Usage:**
 
@@ -2039,7 +2396,7 @@ c1i api --path <path> [flags]
 | `--header stringArray` | Extra request header as `key=value` (repeatable). |
 | `--query stringArray` | Query parameter as `key=value` (repeatable). |
 | `--paginate` | Automatically follow pagination to fetch all pages, and output results as NDJSON. |
-| `--list-key string` | Force the response field name to drain as the list (default: the first array-valued field, such as `list`, `automationExecutions`, or `automations`). |
+| `--list-key string` | Force the response field name to drain as the list (default: the first array-valued field, such as `list`, `automationExecutions`, or `automations`). A misspelled key exits with code 2, and the error names the page's array fields. |
 | `--limit int` | With `--paginate`, cap the total number of NDJSON rows emitted (0 = unlimited). Errors if used without `--paginate`. |
 
 **Examples:**
@@ -2079,6 +2436,10 @@ c1i users list --limit 5
 # Cap a wide query — useful for cost control or quick previews
 c1i tasks list --state open --limit 25
 ```
+
+A blank `--page-token` (empty, whitespace-only, or invisible-only) exits with code 2. Without that check, an unset shell variable would turn off auto-pagination and return only the first page.
+
+If a server's pagination cursor stops advancing, c1i doesn't loop forever. A cursor counts as stuck when `nextPageToken` repeats, when two or more pages in a row (25 or more rows in all) hold only rows c1i has already seen, or after 100 empty pages in a row. c1i keeps the rows it already printed, warns on stderr that results are INCOMPLETE, and exits with code 6. A list page that is HTML, an array, empty, or truncated also exits with code 6.
 
 `c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
 
