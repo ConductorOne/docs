@@ -56,11 +56,21 @@ The assistant is read-only. It can't change credentials, confirm a data drop, or
 
 ### c1i v0.10.1
 
-This is the first published 0.10 release. It adds `tasks get`, entitlement management with `entitlements update`, `delete`, and the `owners`, `add-owner`, `remove-owner`, and `set-owners` commands, `apps update`, `automations update` and `delete`, the `webhooks` command family, and an `--origin` filter on `users list`. Input checks are stricter, so blank or invalid flags and IDs are refused before a request is sent, and list commands now warn and stop when pagination gets stuck instead of looping.
+This is the first published 0.10 release. It adds new c1i commands: `tasks get` to read a single task, `entitlements update`, `delete`, `owners`, `add-owner`, `remove-owner`, and `set-owners` to update or delete an entitlement and manage its owners, `apps update`, `automations update` and `delete`, and a `webhooks` command group. `users list` also gains an `--origin` filter.
 
-This release includes breaking changes to command output, flags, and exit codes. Read the [0.10.0 upgrade notes](https://github.com/ConductorOne/c1i/blob/v0.10.1/CHANGELOG.md#upgrading-from-092) before upgrading from 0.9.x.
+It's also safer to script against. c1i now refuses blank or malformed IDs and flags before it sends anything, hides credentials in `--dry-run` previews, and warns and stops when a list stops advancing instead of looping. A dry-run setting c1i can't parse, such as `C1I_DRY_RUN=yes`, now fails instead of silently sending the change you meant to preview.
 
-See the [v0.10.1](https://github.com/ConductorOne/c1i/releases/tag/v0.10.1) release notes for the full changelog, and [Install c1i](/product/cli/c1i) for setup instructions. See the [c1i command reference](/product/cli/c1i-commands) for the commands. 
+**Breaking changes:**
+- Commands that create, update, or delete something now print the API response without its wrapper key, and a delete prints `{}`. Update any jq paths that read the id, such as `.app.id` to `.id` for `apps create` and `.policy.id` to `.id` for `policies create`. Commands that used to print a text line now print JSON.
+- `--dry-run` now prints one JSON object, `{"dryRun":true,"requests":[...]}`, instead of text, and shows credential values as `[redacted]`.
+- Passing `--fields` to a command that changes something is now an error.
+- `--error-format json` now makes everything c1i writes to stderr NDJSON, including notices and progress, not just errors. Select errors with `jq 'select(.error)'`.
+- `apps add-owner` and `apps remove-owner` now take the app as the first argument and the user as `--user-id`. The old argument order exits with an error and sends nothing.
+- Several exit codes changed. Invalid input, such as a blank ID, an ID of `.` or `..`, a malformed input file, or an unparseable `C1I_DRY_RUN`, `C1I_DEBUG`, or `C1I_MAX_RETRIES` value, now exits `2`. Stuck pagination exits `6`, and a failure reaching the docs site exits `8`.
+
+Read the [0.10.0 upgrade notes](https://github.com/ConductorOne/c1i/blob/v0.10.1/CHANGELOG.md#upgrading-from-092) for the full list of affected commands and jq paths before upgrading from 0.9.x.
+
+See the [v0.10.1](https://github.com/ConductorOne/c1i/releases/tag/v0.10.1) release notes for the full changelog, and [Install c1i](/product/cli/c1i) for setup instructions. See the [c1i command reference](/product/cli/c1i-commands) for the new commands.
 {/* TODO: docs update: confirm c1i-commands.mdx covers the new commands (tasks get, entitlements update/delete/owner commands, apps update, automations update/delete, webhooks, users list --origin) and the changed apps add-owner / remove-owner shape. Not checked. */}
 
 ### Connector updates
