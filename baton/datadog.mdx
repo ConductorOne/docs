@@ -33,7 +33,7 @@ Credential issuance targets a Datadog service account only. C1 re-checks at issu
 Revoking a service account application key needs the owning service account as well as the key. C1 does not supply it today, so the connector reads it from the key's own owner record instead. A revoke is refused only when that lookup cannot name an owner either.
 </Warning>
 
-‡Organization API key issuance and revocation both require **Allow organization API key deletion**, which is off by default and is separate from **Sync secrets**. An organization API key belongs to the whole organization rather than to the person it was issued to, and it cannot be scoped, so C1 will not mint one it has no permission to revoke. With the setting off, organization API keys still sync; they simply cannot be issued or deleted.
+‡Organization API key issuance and revocation both require **Allow organization API key deletion**, which is off by default and is separate from **Sync secrets**. An organization API key belongs to the whole organization rather than to the person it was issued to, and it cannot be scoped, so C1 will not mint one it has no permission to revoke. Issued organization API keys and service account application keys are both delivered as Multipass API key JSON (`application/vnd.multipass.api_key_v2+json`) with the fields `key_id`, `key_value`, `base_url`, `header_name`, and `provider` (always `datadog`). The header is `DD-API-KEY` for an organization API key and `DD-APPLICATION-KEY` for an application key. An application key's JSON also carries `scopes` when Datadog reports them. With the setting off, organization API keys still sync; they simply cannot be issued or deleted.
 
 *Schedules and service account application keys are not enabled by default. Enable **Sync schedules** for schedules; enable **Sync secrets** *and* **Sync service account application keys** for application keys — **Sync secrets** alone syncs organization API keys only.
 
@@ -48,6 +48,8 @@ Connector actions are custom capabilities that extend C1 automations with app-sp
 | enable_user | `user_id` (string, required) | Re-enables a previously disabled Datadog user. |
 | disable_user | `user_id` (string, required) | Disables a Datadog user. Datadog has no permanent delete, so the account is retained and can be re-enabled later. |
 | update_user | `user_id` (string, required), `name` (string, optional), `email` (string, optional), `title` (string, optional) | Updates the user's display name, email and/or job title. At least one optional field must be provided. |
+| issue_organization_api_key | None | Creates a Datadog organization API key and returns it as Multipass API key JSON. The key is named `c1-<UTC timestamp>-<random suffix>`. Registered only when **Sync secrets** and **Allow organization API key deletion** are both enabled. |
+| issue_service_account_application_key | `service_account_id` (user resource, required), `scopes` (list of strings, optional) | Creates an application key for a Datadog service account and returns it as Multipass API key JSON. Omit `scopes` for an unscoped key; an empty list is refused. The key is named `c1-<UTC timestamp>-<random suffix>`. Registered only when **Sync secrets** and **Sync service account application keys** are both enabled. |
 
 ## Gather Datadog credentials
 
