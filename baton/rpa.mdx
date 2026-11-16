@@ -53,6 +53,86 @@ Extraction uses one of three strategies, chosen per resource type:
 
 For the complete YAML syntax, see the Playbook Reference.
 
+## Build a playbook with an AI agent
+
+You don't need to write the playbook by hand. The `baton-rpa` binary includes an [MCP](https://modelcontextprotocol.io/) server, `baton-rpa mcp`. It gives a local coding agent such as Claude Code the tools to explore the application, write the playbook, and test it. The only thing you do is sign in to the application.
+
+<Warning>
+Never give your password, API key, or session cookie to the agent. Type credentials only into the browser window the agent opens, where the agent can't see them.
+</Warning>
+
+<Steps>
+  <Step>
+    Install Google Chrome or Chromium, then download the `baton-rpa` binary for your platform from the [ConductorOne distribution center](https://dist.conductorone.com/ConductorOne/baton-rpa). The MCP server needs v0.0.9 or later.
+
+    ```bash
+    brew install --cask chromium        # macOS (or: brew install --cask google-chrome)
+    # apt-get install -y chromium       # Debian/Ubuntu
+    ```
+  </Step>
+
+  <Step>
+    Register the MCP server with your agent. For Claude Code:
+
+    ```bash
+    claude mcp add --transport stdio baton-rpa -- /path/to/baton-rpa mcp
+    ```
+
+    For other MCP clients, add a stdio server whose command is the path to `baton-rpa` and whose argument is `mcp`.
+
+    Optionally, point Baton RPA at a specific browser instead of the auto-detected one. Export the path before you start the agent so the MCP server inherits it. Syncs use it too:
+
+    ```bash
+    export BATON_RPA_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"   # macOS
+    # export BATON_RPA_CHROME_PATH=/usr/bin/chromium                                           # Linux
+    ```
+
+    Some applications reject the auto-detected Chromium as out of date. If the login page is blank or asks you to update your browser, set `BATON_RPA_CHROME_PATH` to Google Chrome as shown above, or ask the agent to use it.
+  </Step>
+
+  <Step>
+    Start the agent in a folder where it can save the playbook, and give it the application's login URL:
+
+    ```
+    build https://login.example.com/
+    ```
+
+    The agent opens a browser window on that page.
+  </Step>
+
+  <Step>
+    Sign in to the application in that browser window, completing any MFA or SSO prompts. Use an admin account, so the agent can see every user, group, and role.
+
+    When you reach the application's home or admin page, tell the agent:
+
+    ```
+    I've logged in
+    ```
+
+    The agent works in your signed-in session. It finds the pages and API calls that list users, groups, and roles, writes the playbook YAML file, validates it, and test-extracts data with it. When it's done, it closes the browser and reports what it built and what it couldn't verify.
+  </Step>
+
+  <Step>
+    Test the connector yourself. The agent's tests reuse your signed-in browser, so they never run the playbook's login steps. To test those, run a full sync with your own credentials.
+
+    Set the credentials in your shell so the agent never sees them. The variable names are listed at the top of the playbook. This example uses `EXAMPLE_EMAIL` and `EXAMPLE_PASSWORD`, and `playbook.yaml` stands for the playbook the agent wrote:
+
+    ```bash
+    read "EXAMPLE_EMAIL?Email: "; export EXAMPLE_EMAIL
+    read -s "EXAMPLE_PASSWORD?Password: "; echo; export EXAMPLE_PASSWORD
+
+    /path/to/baton-rpa --config-path playbook.yaml -f example.c1z
+
+    baton resources -f example.c1z
+    baton grants -f example.c1z
+    ```
+
+    These `read` commands are for zsh, the macOS default shell. In bash, use `read -p "Email: " EXAMPLE_EMAIL` and `read -s -p "Password: " EXAMPLE_PASSWORD`.
+
+    Add `BATON_RPA_HEADLESS=false` to watch the browser, and `--log-level debug` for detailed logs. If the sync fails, paste the log into the agent and it will fix the playbook. Run the sync again until the resources and grants match what you see in the application.
+  </Step>
+</Steps>
+
 ## Gather application credentials
 
 <Warning>
