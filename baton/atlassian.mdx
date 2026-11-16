@@ -10,6 +10,7 @@ sidebarTitle: "Atlassian"
 
 | Resource | Sync | Provision | Delete |
 | :--- | :--- | :--- | :--- |
+| Organization | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |  |
 | Accounts | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Workspaces | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 | Groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
@@ -27,14 +28,40 @@ During the 14-day grace period, the deleted account stays on the app's **Account
 
 If you deprovision an account that is not managed by your organization, Atlassian rejects the request with `403 Forbidden: Caller must be a verified org admin of targeted account or be the targeted account`, and C1 falls back to manual deprovisioning.
 
+### Account status
+
+C1 sets each account's status from the status Atlassian reports for the user in your organization:
+
+| Atlassian status | Meaning | C1 status |
+| :--- | :--- | :--- |
+| `active` | Account and organization membership are both active | Enabled |
+| `suspended` | Access to the organization's apps is suspended | Disabled |
+| `not_invited` | Account has no membership in the organization | Disabled |
+| `deactivated` | Account is deactivated | Disabled |
+| `for_deletion` | Account is scheduled for deletion and can still be restored | Disabled |
+
+If Atlassian reports any other status, C1 marks the account Enabled only when both the account and the membership are active, Disabled when either one is inactive, closed, suspended or missing a membership, and leaves the status unspecified when it can't tell.
+
 ### Connector actions
 
-Connector actions are custom capabilities that extend C1 automations with app-specific operations. You can use connector actions in the [Perform connector action](/product/admin/automations-steps-reference#perform-connector-action) automation step.
+Connector actions are custom capabilities that extend C1 automations with app-specific operations.
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| Account lifecycle action | `enable_user`, `disable_user`, `activate_user`, `deactivate_user` | The step's own target-account selector — either the account in context or a specific account. C1 resolves `user_id` from that account. |
 
 | Action name | Additional fields | Description |
 |-------------|-------------------|-------------|
 | enable_user | `user_id` (string, required) | Restore an Atlassian user's access to the organization |
 | disable_user     | `user_id` (string, required) | Suspend an Atlassian user's access to the organization |
+| activate_user | `user_id` (string, required) | Reactivate a deactivated Atlassian account |
+| deactivate_user | `user_id` (string, required) | Deactivate a managed Atlassian account across all organizations |
+
+`disable_user` and `enable_user` suspend and restore access to this organization only. `deactivate_user` and `activate_user` act on the whole Atlassian account, blocking or restoring access to every Atlassian app in any organization. They only work for managed accounts (accounts on a domain your organization has verified). For accounts provisioned from an identity provider, including accounts this connector creates through SCIM account provisioning, Atlassian requires deactivating them in the identity provider. For those accounts, use `disable_user` and `enable_user` instead.
+
+The two pairs are independent: `activate_user` does not lift an organization suspension, and `enable_user` does not reactivate a deactivated account. To fully restore a user who may be either or both, run `activate_user` and then `enable_user`. In our tests, both succeeded on accounts already in the target state. A user restored with only `activate_user` while still suspended, or with only `enable_user` while still deactivated, can show as enabled in C1 until the next sync but still has no access.
+
+Neither pair restores an account pending deletion (`for_deletion`): `activate_user` fails with a 409. To keep that account, cancel its deletion in Atlassian within the 14-day grace period.
 
 ## Gather Atlassian credentials
 
@@ -110,7 +137,7 @@ If you want to provision workspace roles with the connector, you must raise an A
     </Step>
     <Step>
     In the **Summarize your issue** box, enter:
-	I need access to three Atlassian Administration Cloud API endpoints. The documentation states that access should be requested from the support team.
+	I need access to two Atlassian Administration Cloud API endpoints. The documentation states that access should be requested from the support team.
     </Step>
     <Step>
     From the **What is the impact to your business?** drop-down, select **Level 3**.
@@ -122,7 +149,6 @@ If you want to provision workspace roles with the connector, you must raise an A
     I need access to the following endpoints of the Atlassian Administration Cloud API:
     * Grant User Access: https://developer.atlassian.com/cloud/admin/organization/rest/api-group-directory/\#api-v1-orgs-orgid-users-userid-roles-assign-post
     * Revoke User Access: https://developer.atlassian.com/cloud/admin/organization/rest/api-group-directory/\#api-v1-orgs-orgid-users-userid-roles-revoke-post
-    * Invite User to Org: https://developer.atlassian.com/cloud/admin/organization/rest/api-group-directory/\#api-v1-orgs-orgid-users-invite-post
     I'm working with an API client and I need to be able to use these endpoints on my Atlassian organization.
     My organization ID is: <ATLASSIAN_ORGANIZATION_ID>
     Thanks in advance for your help!
@@ -253,11 +279,11 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
 
   # Atlassian credentials
-  BATON_API_TOKEN: <Atlassian organization API access token>
-  BATON_ORG: <Atlassian org ID>
+  BATON_ACCESS_TOKEN: <Atlassian organization API access token>
+  BATON_ORGANIZATION_ID: <Atlassian org ID>
 
   # Optional: include if you want C1 to provision access using this connector
-  BATON_PROVISIONING: true
+  BATON_PROVISIONING: "true"
 
   # Optional: include for account provisioning (creating new users)
   BATON_SCIM_TOKEN: <Atlassian SCIM token>
@@ -284,7 +310,7 @@ spec:
     metadata:
       labels:
         app: baton-atlassian
-        baton: true
+        baton: "true"
         baton-app: atlassian
     spec:
       containers:
