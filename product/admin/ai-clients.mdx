@@ -5,24 +5,55 @@ og:title: Manage AI clients - C1 docs
 og:description: Understand how AI clients register with C1, the lifecycle states they move through, and the controls available to admins.
 ---
 
-{/* Editor Refresh: 2026-09-02 */}
+{/* Editor Refresh: 2026-11-04 */}
 
 An **AI client** is any registered AI agent that talks to C1 MCP — Claude Desktop, Claude Code, Cursor, ChatGPT, Copilot, custom agents, and so on. This page covers how clients are registered, the lifecycle states they move through, the controls you have over them, and the tenant policy that governs which client types are allowed in your tenant.
 
 ## How clients register
 
-C1 supports two registration methods:
+C1 supports two registration methods that the AI client chooses, and one that an admin does:
 
 - **Dynamic Client Registration (DCR)** — the AI client registers itself with C1 by calling the registration endpoint, receives a unique client ID and secret, and then authenticates the user. Each client instance gets its own credentials.
 - **Client ID Metadata Document (CIMD)** — the AI client presents a metadata URL as its client ID (for example, `https://claude.ai/oauth/mcp-oauth-client-metadata`). C1 fetches and validates the metadata document on the fly. No per-instance registration step is needed — all instances of the same client share a single published identity.
+- **Manual registration** — an admin creates the client in C1 and hands its client ID and secret to whoever configures the client software. See [Register a client manually](#register-a-client-manually).
 
-The registration method is determined by the AI client, not by the admin. Some clients (for example, Claude Desktop and Claude AI) use CIMD; others (for example, Cursor) use DCR. Both methods result in an AI connection bound to the authenticating user.
+For DCR and CIMD, the registration method is determined by the AI client, and end users may complete registration themselves. Some clients (for example, Claude Desktop and Claude AI) use CIMD; others (for example, Cursor) use DCR. All three methods result in an AI connection bound to the authenticating user.
 
-End users complete registration themselves — no admin action is required. Admins control:
+Admins control:
 
 - **Which client types are allowed** (tenant-wide; see [Enable AI access management](/product/admin/enable-ai-access-management))
 - **Which access profiles each user has** (which determines what tools each client can call)
 - **Per-client overrides** (kill switch, lifecycle override; see below)
+
+## Register a client manually
+
+An admin creates the client in C1, then gives its client ID and secret to whoever configures the client software. Everyone using it shares that identity. This needs **Super Administrator** or **AI Governance Administrator**.
+
+<Steps>
+<Step>
+Go to **AI > C1 Gateway**, open **Connected clients**, and switch to the **AI clients** view.
+</Step>
+<Step>
+Select **Add AI client**, then **Manually register a client**.
+</Step>
+<Step>
+Enter a **Client name** and **Redirect URIs**, choose an **Authentication method**, then select **Add**.
+</Step>
+<Step>
+Copy the **Client ID** and **Client secret** from the **Client registered** dialog.
+</Step>
+</Steps>
+
+The client appears on **AI clients** with a registration type of **Manual**. Set the fields deliberately, because the redirect URIs and the authentication method cannot be changed without registering again:
+
+- **Redirect URIs** must match the client exactly, up to 10 HTTPS URLs, or sign-in fails with `redirect_uri not registered for this client`.
+- **Authentication method** is **Client secret basic**, **Client secret post**, or **Private key JWT**. Private key JWT takes a **Public JWKS** instead of returning a secret.
+
+The secret is shown once. If you lose it, use **Rotate secret** under the client's **Credentials**; the old one stops working for everyone.
+
+<Warning>
+Deleting a client disconnects every user of it. To remove one person instead, select **Revoke** on their row in the **AI connections** view.
+</Warning>
 
 ## View registered clients
 
