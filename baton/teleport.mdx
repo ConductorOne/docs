@@ -22,6 +22,27 @@ Due to Teleport's security rules, it is not possible to auto-generate and assign
 
 This connector does not support account deprovisioning. You must deprovision accounts directly in Teleport.
 
+### Connector actions
+
+The connector exposes two actions that you can run from a C1 automation using the **Connector action** step. Locking requires Teleport Enterprise (Identity Governance).
+
+| Action | Arguments | Description |
+| :--- | :--- | :--- |
+| `lock_user` | `user` (required): Teleport username. `duration` (optional): positive duration such as `30m` or `24h` (a bare number is read as seconds; days are not supported); omit for a lock that never expires. `message` (optional): message shown to the locked-out user. | Locks the user. New requests are rejected and active sessions are terminated. The user must exist. Each call creates a new lock named `c1-<uuid>`. Repeated calls create separate locks, each with its own expiry. The user stays blocked until the last non-expired lock expires or is removed. The action refuses to lock the connector's own Teleport user (the user the connector authenticates as). It fails closed: if the connector cannot determine its own user, it returns an error and creates no lock. Returns `lock_name` and `expires`. |
+| `unlock_user` | `user` (required): Teleport username. | Deletes every non-expired lock that targets exactly this user, whatever the lock name or creator, including locks that people created with `tctl`. Expired locks are ignored. Locks on roles, devices or compound targets (for example user and role) are not deleted. The user does not need to exist. The connector logs the name of each deleted lock. Returns `deleted_locks` and `deleted_lock_names`. |
+
+To use these actions, the Teleport role used by the connector needs the following rule, plus read access to users:
+
+```yaml
+rules:
+  - resources: [lock]
+    verbs: [list, create, read, update, delete]
+```
+
+The user resource status reflects only the Teleport login lockout (`user.status.is_locked`), which Teleport sets after repeated failed logins. It does not reflect locks that `lock_user` creates, or any other Teleport lock resource. A user that is locked with `lock_user` still syncs as enabled.
+
+Example arguments for `lock_user`: `{"user": "jane-doe", "duration": "24h", "message": "Locked pending investigation"}`.
+
 ## Configure the Teleport connector
 
 This connector only supports a self-hosted setup. **Follow these instructions to use the Teleport connector, hosted and run in your own environment.**

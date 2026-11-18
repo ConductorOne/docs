@@ -21,21 +21,44 @@ sidebarTitle: "Sigma Computing"
 
 The Sigma Computing connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
+### Connector actions
+
+Connector actions are custom capabilities that extend C1 automations with app-specific operations.
+
+| Automation step | Actions offered | How the target is selected |
+|-----------------|-----------------|----------------------------|
+| [Account lifecycle action](/product/admin/automations-steps-reference#account-lifecycle-action) | `enable_user`, `disable_user` | The step's own target-account selector, either the account in context or a specific account. C1 resolves `user_id` from that account. |
+
+| Action name | Additional fields | Description |
+|-------------|-------------------|-------------|
+| `enable_user` | `user_id` (string, required) | Reactivates a deactivated Sigma member |
+| `disable_user` | `user_id` (string, required) | Deactivates a Sigma member |
+
+The `user_id` value is the account's Sigma member ID (`memberId`), which the connector also uses as the account's ID.
+
 **Notes:**
 
-- Team Admin access is sync-only. You can review Team Admin access in C1, but Sigma's API does not support granting or revoking it.
+- Team Admin access is sync-only. You can review Team Admin access in C1, but the connector does not grant or revoke it. A Team Admin already belongs to the team and needs no Team Member grant, so granting Team Member access to a member who is already a Team Admin of that team fails with an error that names the member as a Team Admin. To change a member's Team Admin status, update it in Sigma.
 - The connector syncs your organization's Sigma account types, including any custom account type you created, and shows each account type name exactly as Sigma stores it. Each account type offers **Assigned** access that your users can request and that C1 can provision.
 - A Sigma member holds one account type at a time, so account types are mutually exclusive: granting one replaces the account type the member currently holds. Granting the account type the member already holds changes nothing.
 - Sigma has no unassigned state for account types, so C1 cannot revoke a member's current account type. To change a member's access, grant the replacement account type instead. Revoking an account type the member no longer holds succeeds without any change.
 - New accounts default to the account type value `view` when **Account Type** is empty. Account type grants do not change that default.
 - The account creation form retains **User Kind** and **Send Invitation** for compatibility, but changing these fields has no effect. Sigma's defaults apply, including sending an invitation email to non-embed users.
-- Account sync excludes archived and inactive members. Deleting an account archives it, reassigns its documents to the credential owner, and removes it from later syncs.
+- Sigma has no hard delete. Deleting an account deactivates the Sigma member and reassigns its documents to the credential owner. Account sync includes deactivated members and shows them as disabled.
+- Sigma doesn't document that reactivating a member gives back the documents it reassigned at deactivation. Expect them to stay with the new owner unless they are moved back.
+- Provisioning an account for an email that belongs to a deactivated member reactivates that member instead of creating a new one. The member keeps its account type unless the account creation form sets **Account Type**.
+- A deactivated account stays in C1 as disabled after sync. To restore access, run **Enable User** on the account. The member keeps its account type, so grant a different account type only if it needs one. Granting an account type to a deactivated member does not reactivate it.
+- If Sigma reports that an email is already in use but the connector cannot match it to exactly one member, account provisioning fails with an error instead of waiting. Check that member in Sigma and then retry the request.
+- The **Enable User** and **Disable User** actions reactivate and deactivate a member. Members deactivated through SCIM can only be reactivated in your identity provider, so enabling them fails. Sigma advises against deactivating SCIM-provisioned members through its API, so deactivate those in your identity provider too.
 - Revoke Team Member access before deleting or deactivating an account because Sigma does not allow team membership changes for inactive members.
+- Granting Team Member to a deactivated member who is not already in the team fails with an error that says how to reactivate it. The grant does not reactivate the member.
 
 ## Gather Sigma Computing credentials
 
 <Warning>
 Sigma free trials do not support API keys or API actions. The API credentials must be owned by a user with the Admin account type because Sigma restricts the account-type list API to Admin-owned credentials. The credential owner also needs permissions to read and manage members, teams, and team membership.
+
+Do not delete the credential owner's account or run **Disable User** on it. Sigma deactivates the client credentials owned by a deactivated member and does not transfer them to a new owner. Sigma documents that requests using those credentials then fail with an invalid request error.
 </Warning>
 
 ### Create API client credentials
