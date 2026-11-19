@@ -188,9 +188,17 @@ to sync them under, and enabling this setting does nothing.
 Each value below is a scope Azure documents as directly role-assignable. Everything listed here
 syncs as an Azure resource — the values select which kinds are included, not which resource types
 exist. Select only the ones you need: **on every sync, each selected value costs extra API calls
-to list the sub-resources in each parent resource, plus one call per synced sub-resource to read
-its role assignments.** Parents with many sub-resources, such as a storage account with thousands
-of blob containers, can noticeably lengthen the sync.
+to list the sub-resources in each parent resource.** Parents with many sub-resources, such as a
+storage account with thousands of blob containers, can noticeably lengthen the sync.
+
+Role assignments for Azure resources and sub-resources are read once per subscription, not once
+per resource. The connector instead reads them resource by resource, which is much slower when
+there are many sub-resources, in two cases:
+
+- The connector's credentials cannot list role assignments for the whole subscription. Granting
+  **Reader** at the subscription level, as described above, avoids this.
+- Azure returns more role assignments for the subscription than its limits allow. This is not
+  expected; the connector logs a warning if it happens.
 
 | Value | Syncs, as an Azure resource | Nested under |
 | :--- | :--- | :--- |
@@ -221,17 +229,18 @@ Assignments made at those scopes are only visible in C1 if the sub-resource itse
 With this setting disabled, access granted on an individual container does not appear anywhere,
 even though the storage account above it syncs normally.
 
-The trade-off is API calls: each selected type costs one additional request per parent resource
-per sync — selecting all three storage types means three extra calls for every storage account in
-the tenant. That is why nothing is selected by default, and why the types are chosen individually
-rather than with a single on/off switch.
+The trade-off is the API cost described above, which is why nothing is selected by default and
+why the types are chosen individually rather than with a single on/off switch.
 
 <Note>
-If a resource cannot be listed because it does not offer that sub-resource at all — a disabled
-storage account, or a Premium account that has no queue or table service — the connector skips it
-and continues syncing everything else. A permissions error is different: if the connector is not
-allowed to list a resource's children, the sync fails, because silently syncing less access than
-exists would be misleading.
+The connector skips a parent that does not offer the sub-resource at all — a disabled storage
+account, or a Premium account with no queue or table service — and continues syncing everything
+else. A request the service rejects outright fails the sync.
+
+Azure answers a sub-resource list that your credential may not read with an empty result rather
+than with an error, so the connector cannot tell it apart from a parent that genuinely has no
+children. Grant the Reader role at the scopes you sync, as described above. A credential narrowed
+below Reader can produce a sync that succeeds while reporting fewer sub-resources than exist.
 </Note>
 
 ## Configure the Azure connector
@@ -362,11 +371,14 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
   
   # Azure credentials
-  BATON_ENTRA_CLIENT_ID: <Azure application (client) ID>
-  BATON_ENTRA_CLIENT_SECRET: <Azure client secret>
-  BATON_ENTRA_TENANT_ID: <Azure directory (tenant) ID>
-  BATON_EXTERNAL_SYNC_MODE: true
+  BATON_AZURE_CLIENT_ID: <Azure application (client) ID>
+  BATON_AZURE_CLIENT_SECRET: <Azure client secret>
+  BATON_AZURE_TENANT_ID: <Azure directory (tenant) ID>
+
+  # External identities. Users, groups and service principals come from a
+  # Microsoft Entra bundle; role assignments resolve their principals from it.
   BATON_EXTERNAL_RESOURCE_C1Z: <The path to the c1z file to sync external Baton resources with>
+  BATON_EXTERNAL_RESOURCE_TRAITS: user,group,app
   BATON_EXTERNAL_RESOURCE_ENTITLEMENT_ID_FILTER: <Optional. The entitlement that external users, groups must have access to sync external Baton resources>
 
   # Optional: include if you want C1 to provision access using this connector

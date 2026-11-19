@@ -1,13 +1,15 @@
 ---
 title: "FireHydrant"
-description: "Syncs users, teams, team memberships, default incident roles, and on-call schedules from FireHydrant, and provisions accounts and team membership via SCIM 2.0."
+description: "Syncs users, teams, team memberships, default incident roles, and on-call schedules from FireHydrant; provisions accounts and team membership via SCIM 2.0; opens and reads FireHydrant incidents as Baton tickets."
 ---
 
 # FireHydrant
 
 The FireHydrant connector syncs identities and access from
-[FireHydrant](https://firehydrant.com/) and provisions accounts and team
-membership through the FireHydrant SCIM 2.0 endpoints.
+[FireHydrant](https://firehydrant.com/), provisions accounts and team
+membership through the FireHydrant SCIM 2.0 endpoints, and surfaces
+FireHydrant incidents as Baton tickets so access-request workflows can open
+and read incidents.
 
 ## Synced resources
 
@@ -22,6 +24,27 @@ Team resources expose a `member` grant for each membership and a dynamic
 has a default incident role on that team. On-call schedule resources expose a
 `member` grant for everyone on the schedule and an `on-call-now` grant for the
 user with an active shift.
+
+## Ticketing
+
+FireHydrant incidents are surfaced as Baton tickets through a single
+`incident` schema. The schema is populated from the live tenant on demand:
+
+- Ticket types come from `GET /v1/severities` (each severity slug is a type).
+- Ticket statuses are the fixed set of standard FireHydrant lifecycle
+  milestone slugs (FireHydrant exposes no catalog endpoint for milestones;
+  org-specific custom milestones will appear on returned incidents but not
+  in the schema's status picklist).
+- The `priority` custom field is a picklist sourced from `GET /v1/priorities`.
+- The `incident_type` custom field is a picklist sourced from
+  `GET /v1/incident_types`.
+
+Creating a ticket calls `POST /v1/incidents`, mapping the ticket display name,
+description, type (severity), labels (tag list), priority, and incident type
+onto the FireHydrant incident contract. Reading a ticket calls
+`GET /v1/incidents/{id}` and maps the incident back into the Baton ticket
+shape, including the current milestone as the ticket status and a deep link
+to the FireHydrant incident page as the ticket URL.
 
 ## Configuration
 
