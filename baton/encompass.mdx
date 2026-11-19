@@ -19,6 +19,7 @@ We recommend closely monitoring workflows that use this connector and contacting
 | Account | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Group | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Organization | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | |
+| Persona | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 
 **Additional functionality:**
 
@@ -26,7 +27,19 @@ We recommend closely monitoring workflows that use this connector and contacting
 
 <Icon icon="square-check" iconType="solid"  color="#c937ae"/> When a new account is created by C1, the account's password will be sent to a [vault](/product/admin/vaults)
 
-**Organizations:** Organizations are synced read-only and each one is shown under its parent organization, with a single member entitlement for the users placed in the organization and, inherited, those of its child organizations. A group membership that a user has through an organization shows in C1 as inherited from that organization and cannot be revoked from C1. To remove it, remove the user from that organization, or the organization from the group, in Encompass Admin. Group memberships that come from an organization only show up when the Organization resource type is synced.
+**Notes:**
+
+- The connector syncs Encompass internal users and personas. It does not sync external users or loan roles.
+- The connector syncs organizations read-only. C1 shows each organization under its parent organization, with a single member entitlement for the users placed in the organization and, inherited, the users of its child organizations.
+- An organization that is a member of a group makes its users members of that group. At the **Current** level, only the users placed directly in the organization become members. At the **Recursive** level, the users of its child organizations become members too.
+- C1 shows a group membership that comes from an organization as inherited from that organization, and only when the Organization resource type is synced.
+- C1 offers **Revoke** on a group membership inherited from an organization. The revoke task completes, but Encompass does not change and the membership returns on the next sync. To remove an inherited membership, remove the user from that organization, or the organization from the group, in Encompass Admin.
+- C1 does not revoke organization memberships. When a revoke, such as **Revoke all access**, includes an organization membership, C1 creates a manual task for it. Complete it by removing the user from the organization in Encompass Admin.
+- Encompass requires at least one persona per user, so revoking the last persona of a user fails. To replace it, assign the new persona first, then revoke the old one.
+- To create an account, C1 asks for a first name, last name, email, username, working folder, organization and persona. **Organization** takes the ID of an Encompass organization (`0` is the root organization), and **Personas** takes the ID of a single persona. **Job Title** and **Employee ID** are optional.
+- The connector generates a random password of 8 to 50 characters for each new account.
+- Creating an account for a username that already exists in Encompass returns the existing account instead of creating a new one.
+- Deprovisioning an account deletes the user from Encompass. It does not disable the user.
 
 ## Gather Encompass configuration information
 
@@ -40,7 +53,11 @@ Here's the information you'll need:
 - Password
 - Username, in the format `user_name@encompass:instance_id`
 
-The Encompass user needs the **Super Administrator** or **Administrator** persona and must belong to the root organization.
+<Warning>
+The Encompass user needs the **Super Administrator** or **Administrator** persona and must belong to the root organization. Encompass returns only the users of the caller's organization and its child organizations, so a user outside the root organization syncs only part of your users. If no users come back, the sync fails with `the users list is empty although the configured user is itself a user; check that it belongs to the root organization`.
+
+The connector requests the `lp` (Lending Platform) scope, so the API key and the user need access to it.
+</Warning>
 
 See the Encompass docs for information on how to acquire credentials: [View the documentation](https://developer.icemortgagetechnology.com/developer-connect/docs/authentication#resource-owner-password-credentials)
 
