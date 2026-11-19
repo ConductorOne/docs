@@ -1,11 +1,11 @@
 ---
 title: Add instructions and request forms to access requests
 og:title: Add instructions and request forms to access requests - C1 docs
-og:description: Use these tools to provide instructions on how to request access, and to collect needed information from requestors. 
-description: Use these tools to provide instructions on how to request access, and to collect needed information from requestors. 
+og:description: Provide instructions on how to request access, and build request forms that collect the right information from requestors, show fields only when they apply, and check text answers against a pattern.
+description: Provide instructions on how to request access, and build request forms that collect the right information from requestors, show fields only when they apply, and check text answers against a pattern.
 sidebarTitle: Add instructions and custom forms
 ---
-{/* Editor Refresh: 2026-05-29 */}
+{/* Editor Refresh: 2026-11-19 */}
 
 ## Provide instructions to requestors
 
@@ -45,13 +45,11 @@ Click **Save**.
 
 ## Collect additional information from requestors using request forms 
 
-You can set up customized request forms that require requestors to provide additional information when making an access request. Request forms now also appear in the [C1 app for Slack](/product/admin/integration-for-Slack)'s request and extend-access modals, so Slack requesters answer the same fields as the web UI. (Request forms are not currently supported in Teams.) 
+Request forms collect the extra information an approver or provisioner needs when someone requests access. You can make a field required, show it only when earlier answers make it relevant, and check text answers against a pattern before the request is submitted. Request forms also appear in the [C1 app for Slack](/product/admin/integration-for-Slack)'s request and extend-access modals, so Slack requesters answer the same fields as the web UI. (Request forms are not currently supported in Teams.) 
 
 <Frame>
 <img src="/images/product/assets/custom-forms-1.png" alt="Two screenshots side by side, with the left one displaying the request form creation drawer, and the right one showing the request form on an access request."/>
 </Frame>
-
-Adding request forms to your access requests allows you to collect specific, contextual information from users when they request access. This helps IT and security teams make informed decisions, automates workflows, and supports compliance efforts. 
 
 Request forms can help with: 
 
@@ -76,15 +74,228 @@ Click the settings (gear) icon on the **Platform > Forms** page to open a drawer
 - **Require and show justification field for access requests** — require requestors to provide a justification.
 - **Maximum entitlements per bulk request** — the most entitlements a user can select in a single bulk access request, from 1 to 100. Defaults to 10.
 
-### Add a request form to an entitlement
+### Create a new request form
+
+<Warning>
+A **Super Admin** in C1 must complete this task. 
+</Warning>
+
+Each entitlement can use only one request form at a time, and a form can be reused across apps and entitlements, so name it for its purpose.
+
+<Steps>
+<Step>
+Navigate to **Platform > Forms**.
+</Step>
+<Step>
+Click **New form**. The form creation drawer opens.
+</Step>
+<Step>
+Give the new form a name and description. 
+
+   Remember that this form will be available as an option across your C1 installation, so choose a name that will help your colleagues understand the form's purpose. 
+</Step>
+<Step>
+**Optional.** If you want to hide the default **Justification** field when this request form is in use, click to enable **Hide justification field**. If you leave this disabled, the **Justification** field will be included in the request form.  
+</Step>
+<Step>
+Select the data type for your first field. See [Field types](#field-types) for the options.
+</Step>
+<Step>
+Fill in the field label and provide dropdown options, helper text, a default value, and a placeholder, as needed. Helper text supports markdown — use it to add links, bold text, or lists to guide requesters. The required and available elements vary by field type. Here's an overview of how and where these elements are shown in the access request:
+
+   <Frame>
+   <img src="/images/product/assets/custom-forms-2.png" alt="A screenshot showing a request modal on the Requests page with a request form showing the four field types. Each field element is labeled with its type: the text field's field label reads Text field label, the placeholder value is Placeholder, and so on."/>
+   </Frame>
+
+   For **Text** and **Text area** fields, you can also fill in the **Character limit (optional)** field. Requesters can't submit a value longer than the limit. To check answers against a pattern, see [Validate text answers with a regex](#validate-text-answers-with-a-regex).
+
+   For a **Date** field, set an earliest and latest allowed date, if needed. Each bound can be a fixed calendar date or a number of days relative to today — for example, capping a contractor's access end date at no more than a year out stays accurate over time instead of going stale. You can also set the field to default to today's date.
+
+   For a **User** field, choose whether requesters can select one user or several (with optional minimum and maximum selection limits). Narrow the searchable list with an allowlist or exclude list of specific users, and choose whether deactivated users are selectable.
+</Step>
+<Step>
+Choose whether the field is required. A user cannot submit a request if a required field has not been filled out. 
+
+<Tip>
+**C1 will always gather required information.** If a request is created without collecting the required information, the request task will be assigned to the user so they can provide the required information before the request approval process begins. This can happen when a request is created in Microsoft Teams (which does not currently support request forms), or when multiple entitlements are requested at once. 
+{/* QUESTION: The original Tip said Slack doesn't support request forms, which contradicts the intro (Slack modals show request forms). Changed to Teams; confirm the fallback still applies in Slack, e.g. for bulk requests. */}
+</Tip>
+</Step>
+<Step>
+**Optional.** To show a field only when earlier answers make it relevant, see [Show fields only when conditions are met](#show-fields-only-when-conditions-are-met).
+</Step>
+<Step>
+As needed, click **Add field** and repeat the steps above to add additional fields. 
+</Step>
+<Step>
+When you're satisfied, click **Save**. 
+</Step>
+</Steps>
+
+**Done.** To apply the new form to entitlements, see [Apply a request form to entitlements](#apply-a-request-form-to-entitlements).
+
+<Tip>
+You can also open the form creation drawer from within an entitlement: navigate to the entitlement's **Access requests** section, click **Edit**, then select **Create new** from the **Request form** dropdown.
+</Tip>
+
+### Field types
+
+| Field type | What requesters see | Can trigger a condition | Supports regex validation |
+|---|---|---|---|
+| **Text** | A single-line text field | Yes | Yes |
+| **Text area** | A multi-line text field | Yes | Yes |
+| **Checkbox** | A checkbox | Yes | No |
+| **Dropdown** | A list of options you define | Yes | No |
+| **Date** | A date picker | Yes | No |
+| **User** | A searchable dropdown of C1 users | Yes | No |
+
+{/* QUESTION: Confirm the full field-type list in the builder (the old page listed these six; source shows Password and multi-value chips field types exist but can't be condition triggers. Are they offered in the request form builder?). */}
+
+### Show fields only when conditions are met
+
+<Warning>
+A **Super Admin** in C1 must complete this task. 
+</Warning>
+
+A long form asks every requester every question, including the ones that don't apply to them. A conditional field appears only when answers to earlier fields meet a condition you set. For example, show **Justification** only when **Reason** is `Testing` or `Other`, or ask for a **Ticket link** only when **Change request** is checked.
+
+{/* TODO: screenshot custom-forms-conditional-requester.png: requester form with a conditional field shown (and the same form with it hidden). */}
+
+Conditions work on request forms. A field can have several conditions, and it appears only when all of them are met.
+
+#### Set a condition on a field
+
+You set conditions on the field that should appear or disappear, not on the field that triggers it. The first field in a form can't have a condition, because there are no earlier fields to look at.
+
+<Steps>
+<Step>
+Navigate to **Platform > Forms** and open the form, or create a new one.
+</Step>
+<Step>
+Click the field you want to show conditionally. The field's drawer opens.
+</Step>
+<Step>
+Select **Show this field only when previous fields match a condition**. 
+
+   {/* TODO: screenshot custom-forms-condition-checkbox.png: field drawer with the checkbox selected and the "No conditions configured" chip. */}
+   {/* QUESTION: Does checking the box open the condition drawer automatically, or must the admin click the pencil (Edit conditions) icon? */}
+</Step>
+<Step>
+Click the **Edit conditions** (pencil) icon. The **Show *field name* when** drawer opens.
+</Step>
+<Step>
+In the **Field** list, choose the earlier field to check. The list shows only fields above this one.
+</Step>
+<Step>
+In the **Condition** list, choose how that field must be answered. The options depend on the field's type (see [Condition types](#condition-types)).
+</Step>
+<Step>
+If you chose **is one of**, enter one or more entries in **Values**. Press Enter after each entry, or for a Dropdown field, pick from that field's options. The field appears when the answer matches any of the values.
+</Step>
+<Step>
+**Optional.** To require another earlier field as well, click **Add condition** and repeat the previous three steps. The field appears only when all conditions are met. Each earlier field can be used in one condition.
+</Step>
+<Step>
+Click **Save**. 
+</Step>
+<Step>
+Click **Save** in the form drawer.
+</Step>
+</Steps>
+
+**Done.** The field now shows a note on its card, and requesters see it only when the conditions are met. 
+
+{/* TODO: screenshot custom-forms-condition-drawer.png: the "Show {field} when" drawer with an "is one of" row. */}
+
+To change a condition, reopen the field and click the **Edit conditions** icon. To remove all conditions, clear the **Show this field only when previous fields match a condition** checkbox.
+
+#### Condition types
+
+The conditions you can choose depend on the type of the field you're checking:
+
+| Field being checked | Conditions available |
+|---|---|
+| **Text** | **is filled in**, **is one of** |
+| **Dropdown** | **is filled in**, **is one of** (choose from the dropdown's own options) |
+| **Checkbox** | **is checked**, **is unchecked** |
+| **Text area**, **Date**, **User** | **is filled in** |
+
+Matching for **is one of** is exact and case-sensitive: `Testing` doesn't match `testing`. For Text fields, list every spelling you want to accept, or use a Dropdown as the trigger so requesters can't vary the answer.
+
+{/* QUESTION: confirm password and multi-value fields are simply absent from the Field list (source: never offered as triggers), and whether admins can even add them in the request form builder. */}
+
+#### How conditions behave
+
+- **Only earlier fields can be used.** If you try to move a field above one its condition depends on, or move a field below one that depends on it, C1 prevents the move. Reorder the fields or change the condition first.
+- **Conditions chain.** A hidden field counts as unfilled for conditions that come after it. If field B shows only when field A is filled in, and field C shows only when field B is filled in, hiding A hides B and C.
+- **Hidden fields aren't required and aren't validated.** A required field that's hidden doesn't block the request. C1 ignores any value sent for a hidden field and leaves it out of the request data, including data sent to [external ticketing](/product/admin/external-ticketing).
+- **Requesters keep what they typed.** If a requester changes an earlier answer so a field disappears, then changes it back, the field returns with their earlier answer.
+- **Approvers see only what the requester saw.** The **Requested data** view on a task omits fields that were hidden from the requester.
+- **Edits keep conditions consistent.** Renaming a field's label updates the conditions that use it. Removing a field, changing its type, or removing a dropdown option that a condition uses removes or updates that condition.
+- **Changes apply everywhere the form is used.** Changing a form's conditions updates every entitlement that uses it.
+
+{/* QUESTION: "Removes or updates" — source says conditions are "cleaned up" when a field is removed, retyped, or loses an option. Verify exact outcome (condition row dropped vs. whole condition dropped) in the dev tenant. */}
+{/* QUESTION: Policy form steps and resource-action screens render without conditions in the UI (PR notes them as not covered), though the server validates policy form steps. Check whether later work changed this, and whether the page needs a note about where conditions apply. */}
+
+#### Conditions in Slack
+
+{/* QUESTION: HOLD for #29631. Slack live show/hide runs only for tenants with the feature enabled; with it off, Slack shows every field and makes conditional fields optional. Confirm final behavior once #29631 merges and the feature is generally available. The text below assumes GA, where Slack behaves like the web UI. */}
+
+In the Slack request and extend-access modals, conditional fields appear and disappear as the requester answers earlier fields. A field a condition hides isn't required, and C1 ignores any value for it. Slack redraws the modal as the answers change, so a requester typing in a Text field may notice the form update while they type.
+
+{/* TODO: optional screenshot custom-forms-slack-conditional.png */}
+
+### Validate text answers with a regex
+
+<Warning>
+A **Super Admin** in C1 must complete this task. 
+</Warning>
+
+Use a regular expression (regex) when an answer has to follow a format, such as a ticket ID (`CHG-` followed by digits), a cost center code, or a company email domain. C1 checks the answer as the requester types and again when they submit, and blocks the request if the answer doesn't match. Regex validation is available on **Text** and **Text area** fields.
+
+{/* TODO: screenshot custom-forms-regex-field.png: Text field drawer showing "Input validation (via regex)" and "Custom error message". */}
+
+<Steps>
+<Step>
+Navigate to **Platform > Forms** and open the form, or create a new one.
+</Step>
+<Step>
+Click a **Text** or **Text area** field, or add one. 
+</Step>
+<Step>
+In **Input validation (via regex)**, enter your pattern. For example, `^CHG-[0-9]{6}$` accepts `CHG-123456` and rejects everything else.
+</Step>
+<Step>
+**Optional.** In **Custom error message**, enter the text requesters see when their answer doesn't match. For example, `Enter a change ticket ID like CHG-123456.` If you leave this blank, C1 shows a default message that includes the pattern itself.
+</Step>
+<Step>
+Click **Save**. If the pattern isn't valid, C1 rejects it with an error that describes the problem.
+</Step>
+</Steps>
+
+**Done.** Requesters see your message beneath the field whenever their answer doesn't match.
+
+{/* TODO: screenshot custom-forms-regex-error.png: requester form with the custom error under a field. */}
+
+#### Regex rules and limits
+
+- **C1 uses RE2 syntax.** RE2 doesn't support lookahead, lookbehind, or backreferences. A pattern that uses them is rejected when you save.
+- **A pattern matches anywhere in the answer.** To require the whole answer to match, anchor the pattern with `^` at the start and `$` at the end. Without anchors, `[0-9]{6}` accepts `abc123456xyz`.
+- **Patterns are limited to 512 characters, and error messages to 256.**
+- **Existing patterns stay enforced.** Forms that already had a pattern keep validating answers.
+
+{/* QUESTION: Empty optional answers: does pattern validation skip a blank optional field? Unverified, so not documented. Check in the dev tenant. */}
+{/* QUESTION: The resource-action text field drawer (app resource actions) also gets "Input validation" and "Custom error message". Does this docs set cover resource-action forms anywhere that needs the same note? grep found no existing page. */}
+
+### Apply a request form to entitlements
+
+#### Apply a form to one entitlement
 
 <Warning>
 A **Super Admin** or an application owner with the **Application Admin** role in C1 must complete this task. 
 </Warning>
 
-Request forms are set on individual entitlements, so users are asked for information specific to the access they're requesting. Request forms can be reused across apps and entitlements in C1, so you don't have to create them from scratch each time.
-
-To add an existing request form to an entitlement:
+Request forms are set on individual entitlements, so users are asked for information specific to the access they're requesting. 
 
 <Steps>
 <Step>
@@ -95,13 +306,12 @@ On the **Managed apps** tab, select an application, then click **Entitlements**.
 </Step>
 <Step>
 Locate and click on the name of an entitlement you want to add a request form to. 
-
 </Step>
 <Step>
 On the entitlement's details page, locate the **Access requests** section and click **Edit**. 
 </Step>
 <Step>
-In the **Request form** section, use the dropdown to select an existing request form that will be applied to this entitlement. (Instructions for creating a new request form are provided below.) 
+In the **Request form** section, use the dropdown to select an existing request form that will be applied to this entitlement. To create a new form instead, see [Create a new request form](#create-a-new-request-form). 
 </Step>
 <Step>
 When you're ready, click **Save** to apply your chosen form to access requests for the entitlement. 
@@ -110,7 +320,7 @@ When you're ready, click **Save** to apply your chosen form to access requests f
 
 **Done.** The request form will now be shown whenever a user requests this entitlement via the **Requests** page or the **New request** form. 
 
-### Add a request form to several entitlements in an app 
+#### Apply a form to several entitlements in an app
 
 You can use a bulk-actions shortcut to set the same request form on multiple entitlements: 
 
@@ -131,73 +341,8 @@ Find the **Request form** area at the bottom of the configuration drawer and sel
 Click **Submit**.
 </Step>
 </Steps>
-**Done.** The request form will now be shown whenever a user requests one of the selected entitlement via the **Requests** page or the **New request** page. 
 
-### Create a new request form
-
-<Warning>
-A **Super Admin** in C1 must complete this task. 
-</Warning>
-
-When designing and setting up request forms, remember that each entitlement can use only one request form at a time. 
-
-<Steps>
-<Step>
-Navigate to **Platform > Forms**.
-</Step>
-<Step>
-Click **New form**. The form creation drawer opens.
-</Step>
-<Step>
-Give the new form a name and description. 
-
-   Remember that this form will be available as an option across your C1 installation, so choose a name that will help your colleagues understand the form's purpose. 
-</Step>
-<Step>
-**Optional.** If you want to hide the default **Justification** field when this request form is in use, click to enable **Hide justification field**. If you leave this disabled, the **Justification** field will be included in the request form.  
-</Step>
-<Step>
-Select the data type for your first field. The current options are: 
-* Text (a single-line text field)
-* Checkbox 
-* Text area (a multi-line text field)
-* Dropdown 
-* Date (a date picker)
-* User (a searchable dropdown of C1 users)
-</Step>
-<Step>
-Fill in the field label and provide dropdown options, helper text, a default value, and a placeholder, as needed. Helper text supports markdown — use it to add links, bold text, or lists to guide requesters. The required and available elements vary by field type. Here's an overview of how and where these elements are shown in the access request:
-
-   <Frame>
-   <img src="/images/product/assets/custom-forms-2.png" alt="A screenshot showing a request modal on the Requests page with a request form showing the four field types. Each field element is labeled with its type: the text field's field label reads Text field label, the placeholder value is Placeholder, and so on."/>
-   </Frame>
-
-   For **Text** and **Text area** fields, you can also fill in the **Character limit (optional)** field. Requesters can't submit a value longer than the limit.
-
-   For a **Date** field, set an earliest and latest allowed date, if needed. Each bound can be a fixed calendar date or a number of days relative to today — for example, capping a contractor's access end date at no more than a year out stays accurate over time instead of going stale. You can also set the field to default to today's date.
-
-   For a **User** field, choose whether requesters can select one user or several (with optional minimum and maximum selection limits). Narrow the searchable list with an allowlist or exclude list of specific users, and choose whether deactivated users are selectable.
-</Step>
-<Step>
-Choose whether the field is required. A user cannot submit a request if a required field has not been filled out. 
-
-<Tip>
-**C1 will always gather required information.** If a request is created without collecting the required information, the request task will be assigned to the user so they can provide the required information before the request approval process begins. This can happen when a request is created in Slack (which does not currently support request forms), or when multiple entitlements are requested at once. 
-</Tip>
-</Step>
-<Step>
-As needed, click **Add field** and repeat the steps above to add additional fields. 
-</Step>
-<Step>
-When you're satisfied, click **Save**. 
-</Step>
-</Steps>
-
-**Done.** To apply the new form to entitlements, see [Add a request form to an entitlement](#add-a-request-form-to-an-entitlement).
-
-<Tip>
-You can also open the form creation drawer from within an entitlement: navigate to the entitlement's **Access requests** section, click **Edit**, then select **Create new** from the **Request form** dropdown.
-</Tip>
+**Done.** The request form will now be shown whenever a user requests one of the selected entitlements via the **Requests** page or the **New request** page. 
 
 ### Modify a request form 
 
@@ -213,7 +358,7 @@ Navigate to **Platform > Forms**.
 Click the name of the form you want to modify. The editing drawer opens.
 </Step>
 <Step>
-When you're ready, click **Save** to exit the editing drawer.
+Make your changes, including to [conditions](#show-fields-only-when-conditions-are-met) and [regex validation](#validate-text-answers-with-a-regex). When you're ready, click **Save** to exit the editing drawer.
 </Step>
 </Steps>
 
@@ -222,12 +367,3 @@ When you're ready, click **Save** to exit the editing drawer.
 <Tip>
 You can also open the editing drawer from within an entitlement: navigate to the entitlement's **Access requests** section, click **Edit**, select a form from the **Request form** dropdown, then click **Modify**.
 </Tip>
-
-
-
-
-
-
-
-
-
