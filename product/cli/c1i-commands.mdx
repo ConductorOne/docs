@@ -9,8 +9,10 @@ sidebarTitle: "c1i commands"
 {/* Editor Refresh: 2026-11-20 */}
 
 <Tip>
-This reference covers c1i v0.12.0. The CLI is authoritative: run `c1i <command> --help` (or `-h`) for the exact flags, and `c1i docs map` (or `c1i docs map --json`) to print every command path this build accepts, with the family, command, and leaf counts, for a quick comparison. Each command family below expands to its command table, flags, and notes; use the table of contents or a deep link to open one.
+This reference covers c1i v0.12.0. The CLI is authoritative: run `c1i <command> --help` (or `-h`) for the exact flags, and `c1i docs map` (or `c1i docs map --json`) to print every command path this build accepts, with the family, command, and leaf counts, for a quick comparison. Each command family below expands to its command table, flags, and notes. A link to a specific command opens its family; a link to a family heading (including the table of contents) jumps there with the family still folded.
 </Tip>
+
+New to c1i? [Install it](/product/cli/c1i) and point it at your tenant before using this reference.
 
 ## Overview of c1i commands
 
@@ -74,8 +76,8 @@ Find the command to start with for a common c1i task.
 | Grant a manually managed entitlement directly | [`grants add`](#grants-add). This skips request policy and approval. |
 | Register and govern an MCP server | [`mcp servers register`](#mcp-servers-register) with `--wait`, [`mcp tools approve`](#mcp-tools-approve), then [`mcp toolsets`](#mcp-toolsets). |
 | Promote a connector-discovered app | [`apps managed-state`](#apps-managed-state) after finding the resource type with [`apps resource-types list`](#apps-resource-types). |
-| Investigate a connector that isn't syncing | [`connectors sync-status`](#connectors), then [`connectors sync-history`](#connectors) and [`connectors sync-errors`](#connectors). `c1i docs guide diagnose-connector-sync` checks the same ground in order. |
-| Register cross-app access for a third-party system | Create the resource server with [`xaa resource-servers create`](#xaa), declare its scopes with [`xaa scopes create`](#xaa), then bundle them with [`xaa access-profiles create`](#xaa). `c1i docs guide configure-cross-app-access` walks through it. |
+| Investigate a connector that isn't syncing | [`connectors sync-status`](#connectors-sync-status), then [`connectors sync-history`](#connectors-sync-history) and [`connectors sync-errors`](#connectors-sync-errors). `c1i docs guide diagnose-connector-sync` checks the same ground in order. |
+| Register cross-app access for a third-party system | Create the resource server with [`xaa resource-servers create`](#xaa-resource-servers-create), declare its scopes with [`xaa scopes create`](#xaa-scopes-create), then bundle them with [`xaa access-profiles create`](#xaa-access-profiles-create). `c1i docs guide configure-cross-app-access` walks through it. |
 | Explore C1 docs and API schemas without credentials | [`docs`](#docs): `docs search`, `docs endpoints`, `docs endpoint`, and `docs page`. |
 | Find the exact commands a build accepts | `c1i docs map` for the tree and counts; `c1i docs map --json` for full paths and aliases. |
 
@@ -86,7 +88,7 @@ Every command accepts these flags.
 | Flag | Description |
 | :--- | :--- |
 | `--url string` | C1 tenant URL; https required. Precedence: `--url`, `C1I_URL`, then `~/.c1i.yaml`. |
-| `--fields string` | Comma-separated JSON fields to keep in read output (dot-paths). Prefer it over `jq` for simple projection. On a mutation command it's a usage error (exit 2), because mutation output is never projected, as it is on the raw reads `mcp gateway call`, `findings settings show`, `findings settings edge show`, and `settings ai-governance tenant-defaults`. |
+| `--fields string` | Comma-separated JSON fields to keep in read output (dot-paths). Prefer it over `jq` for simple projection. On a mutation command it's a usage error (exit 2), because mutation output is never projected; it is also a usage error on the raw reads `mcp gateway call`, `findings settings show`, `findings settings edge show`, and `settings ai-governance tenant-defaults`. |
 | `--max-retries int` | Retries for transient API failures (429/5xx); 0 disables (default 4). |
 | `--error-format string` | Stderr format: `text` or `json` (default `text`). With `json`, every stderr line is one JSON object (NDJSON). See [Errors and exit codes](#errors-and-exit-codes). |
 | `--dry-run` | Preview C1 REST mutations (method, URL, body) without sending them. See [Dry run](#dry-run). `mcp gateway call`, `auth login`, and `auth logout` reject it (exit 2). |
@@ -94,6 +96,39 @@ Every command accepts these flags.
 | `-h`, `--help` | Help for any command. |
 
 Each global flag also reads a `C1I_*` environment variable: `C1I_URL`, `C1I_FIELDS`, `C1I_MAX_RETRIES`, `C1I_ERROR_FORMAT`, `C1I_DRY_RUN`, and `C1I_DEBUG`. A flag on the command line overrides its variable. A non-empty `C1I_DRY_RUN`, `C1I_DEBUG`, `C1I_MAX_RETRIES`, or `C1I_ERROR_FORMAT` value that doesn't parse exits with code 2 before any request, as does a negative `--max-retries`. The same keys in `~/.c1i.yaml` are validated alike.
+
+List commands also take `--page-size`, `--page-token`, and `--limit`; see [Pagination and limits](#pagination-and-limits).
+
+
+## Pagination and limits
+
+Commands marked "Paginates" (and `c1i api --paginate`) auto-paginate by default — they keep fetching pages until the cursor is empty, so you don't have to manage tokens manually.
+
+Each of those commands takes three flags that control how much data flows:
+
+| Flag | Effect |
+| :--- | :--- |
+| `--page-size N` | Rows to request per API page (max 100). The server may return more than asked, so use `--limit` for an exact count. Default is 50. `policies search` defaults to 25. The history commands (`mcp tools history`, `mcp resources history`, `mcp bindings history`) accept up to 200, `connectors debuggable` up to 50, and `mcp prompts history` caps at 100. A value above the maximum is clamped, not an error, and `--page-size 0` asks for the server's default. |
+| `--page-token TOKEN` | Resume from a specific cursor. When set, c1i fetches a single page and exits — auto-pagination is disabled. |
+| `--limit N` | Cap the *total* number of results emitted across all pages (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached, and c1i tightens the per-call request size when `--limit` is smaller than `--page-size` so it doesn't over-fetch. |
+
+**Examples:**
+
+```bash
+# Peek at the first 5 users without fetching everyone
+c1i users list --limit 5
+
+# Cap a wide query — useful for cost control or quick previews
+c1i tasks list --state open --limit 25
+```
+
+A blank `--page-token` (empty, whitespace-only, or invisible-only) exits with code 2. Without that check, an unset shell variable would turn off auto-pagination and return only the first page.
+
+If a server's pagination cursor stops advancing, c1i doesn't loop forever. A cursor counts as stuck when `nextPageToken` repeats, when two or more pages in a row (25 or more rows in all) hold only rows c1i has already seen, or after 100 empty pages in a row. c1i keeps the rows it already printed, warns on stderr that results are INCOMPLETE, and exits with code 6. A list page that is HTML, an array, empty, or truncated also exits with code 6.
+
+A few list commands send one request instead of paginating, and warn on stderr with `partial result` when the server reports more pages: `role-mining suggestions|runs|custom-analysis list`, `findings routing-rules|transformation-rules list`, `apps routing-rules list`, `attribute-types list`, `bridges services`, `grants accounts`, and `settings ai-governance history`.
+
+`c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
 
 ## Dry run
 
@@ -116,7 +151,7 @@ Each global flag also reads a `C1I_*` environment variable: `C1I_URL`, `C1I_FIEL
 }
 ```
 
-- Credential fields appear as `[redacted]`: fields whose names end in `token`, `secret`, `password`, `signature`, or `apikey`, header values, a URL's username (except `git`) or password, the user of an scp-form git remote (so `ghp_x@github.com:repo.git` prints as `[redacted]@github.com:repo.git`), and secret-named URL parameters. A value that merely looks like an email, such as a display name, prints as sent. A body that isn't JSON prints as `"[redacted: not JSON]"`.
+- Credential fields appear as `[redacted]`: fields with a credential-shaped name (a best-effort rule by name, not by value: suffixes such as `token`, `secret`, `password`, `passphrase`, `privateKey`, `accessKey`, `credential`, and `bearer`, plus exact names such as `code`, `jwt`, `cookie`, `auth`, and `dsn`), header values, a URL's username (except `git`) or password, the user of an scp-form git remote (so `ghp_x@github.com:repo.git` prints as `[redacted]@github.com:repo.git`), and secret-named URL parameters. A value that merely looks like an email, such as a display name, prints as sent. A body that isn't JSON prints as `"[redacted: not JSON]"`.
 - A preview needs a configured URL (exit 2 without one), and an empty, `.`, or `..` ID is refused with exit 2, as it is for a real request. A preview needs no credentials unless c1i must look something up: a task's current policy step, a hosted MCP server's catalog ID, the caller for `requests create`, a function's commit or current display name, or an app, user, policy, or app account read before sending. Those reads run on a preview too, so the preview needs the matching read access: an unknown app on `apps update`, `apps set-owners`, `apps add-owner`, `apps remove-owner`, or `mcp servers register` exits `4` on a preview, and an app that exists but is soft-deleted exits `2`.
 - A preview doesn't prove an ID exists. A command with no read before sending sends no `GET`, so an unknown ID previews at exit `0` and exits `4` for real. To confirm an ID, read it with the family's `get` or `list` command.
 - A preview has no `id`. If an inherited `C1I_DRY_RUN=1` turns a script's writes into previews, `jq -r .id` prints `null` and the script carries on. Extract IDs with `jq -er`, which fails on a preview.
@@ -149,7 +184,7 @@ An error from a command that writes also carries `"applied"`: `false` when nothi
 ## Docs
 Explore C1 API documentation and schemas. These commands don't require authentication.
 
-<Accordion title="Commands and flags">
+<Accordion title="Docs commands (10)">
 
 | Command | Description |
 | :--- | :--- |
@@ -246,7 +281,7 @@ Log in, check which identity and credential c1i is using, and mint access tokens
 
 c1i reads credentials from `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, then the OS keyring, then a `0600` file, and caches each access token it mints until it's close to expiry; see [Credential storage](/product/cli/c1i#credential-storage). `auth token` and `mcp gateway` always mint a fresh token. A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once.
 
-<Accordion title="Commands and flags">
+<Accordion title="Auth commands (5)">
 
 | Command | Description |
 | :--- | :--- |
@@ -318,7 +353,7 @@ List and inspect IAM roles, including the role IDs that `c1i auth login --scoped
 ## Users
 Manage C1 users.
 
-<Accordion title="Commands and flags">
+<Accordion title="Users commands (4)">
 
 | Command | Description |
 | :--- | :--- |
@@ -378,7 +413,7 @@ The command prints the binding unwrapped from the response's `.item`, or the res
 ## Apps
 Create, search, inspect, update, and delete applications, manage their owners, and manage what hangs off an app: its resource types and resources, entitlement routing rules, and usage controls. Apps a connector discovered can be promoted to managed apps.
 
-<Accordion title="Commands and flags">
+<Accordion title="Apps commands (36)">
 
 | Command | Description |
 | :--- | :--- |
@@ -731,7 +766,7 @@ The usage-controls endpoint answers an unknown app as it does an app with no con
 ## Accounts
 Manage application accounts (app users): the accounts C1 syncs from an app, the identity user each one maps to, and the account's profile. Every command takes `--app-id`, the application ID.
 
-<Accordion title="Commands and flags">
+<Accordion title="Accounts commands (3)">
 
 | Command | Description |
 | :--- | :--- |
@@ -799,7 +834,7 @@ c1i looks the `--user-id` user up before sending, `--dry-run` included: an unkno
 ## Attribute types
 List the user fields an attribute mapping can write to, such as Department, Job Title, or Manager Email. Type IDs are tenant-specific, so look a type up by display name; `attribute-mappings create --type` does the same.
 
-<Accordion title="Commands and flags">
+<Accordion title="Attribute types commands (1)">
 
 ### `attribute-types list`
 
@@ -824,7 +859,7 @@ Map an app's synced profile attributes onto C1 user fields. A mapping copies one
 
 Precedence when two apps map the same attribute type was not tested — do not add a mapping for a type another app already maps on users that overlap.
 
-<Accordion title="Commands and flags">
+<Accordion title="Attribute mappings commands (5)">
 
 | Command | Description |
 | :--- | :--- |
@@ -928,7 +963,7 @@ List, search, create, and delete the tenant's attribute values: the entries unde
 
 A value has no update; delete it and create another. The API's per-type routes (`/api/v1/attributes/compliance_frameworks`, `/api/v1/attributes/risk_levels`, and so on) are the same operations restricted to one type, so they have no commands here; use [`c1i api`](#api) for them.
 
-<Accordion title="Commands and flags">
+<Accordion title="Attributes commands (6)">
 
 | Command | Description |
 | :--- | :--- |
@@ -1024,7 +1059,7 @@ c1i attributes create --type "Risk Level" --value High
 ## Entitlements
 Find, inspect, create, update, and delete app entitlements; list their grants; manage their owners; and configure what hangs off an entitlement: its membership automation, its account-provisioning policy, and entitlement-to-entitlement proxy bindings.
 
-<Accordion title="Commands and flags">
+<Accordion title="Entitlements commands (22)">
 
 | Command | Description |
 | :--- | :--- |
@@ -1374,7 +1409,7 @@ c1i entitlements proxy-bindings delete --source-app-id <app-id> \
 ## Grants
 Query access grants, the bindings between accounts or users and entitlements, to answer "who has access to what". You can also change them directly: add a user to a manually managed entitlement, remove one account's membership, and set or clear when a grant is revoked automatically.
 
-<Accordion title="Commands and flags">
+<Accordion title="Grants commands (6)">
 
 | Command | Description |
 | :--- | :--- |
@@ -1521,7 +1556,7 @@ An unknown app, entitlement, or account, or an account without this grant, exits
 ## Tasks
 List access request tasks and act on them: approve, deny, comment, reassign, escalate, or move them through their policy, and read a task's audit trail.
 
-<Accordion title="Commands and flags">
+<Accordion title="Tasks commands (16)">
 
 | Command | Description |
 | :--- | :--- |
@@ -1807,7 +1842,7 @@ Every task action prints the task as formatted JSON, unwrapped like `tasks get`,
 ## Requests
 File grant, revoke, action, and resource-action requests, track their status, and optionally wait for the created grant.
 
-<Accordion title="Commands and flags">
+<Accordion title="Requests commands (6)">
 
 | Command | Description |
 | :--- | :--- |
@@ -1920,7 +1955,7 @@ All four `create` commands print the created task unwrapped like `requests get`,
 ## Connectors
 Manage connectors: the per-app objects that sync a system's accounts, entitlements, and grants into C1, run provisioning, and back an MCP server. A connector belongs to exactly one app, so almost every command takes `--app-id` plus the connector ID positionally. `connectors debuggable` is the exception — it lists connectors across all apps and takes no scope flag.
 
-<Accordion title="Commands and flags">
+<Accordion title="Connectors commands (18)">
 
 | Command | Description |
 | :--- | :--- |
@@ -2324,7 +2359,7 @@ Prints `{}`; exit `0` means success.
 ## Policies
 Manage policies — the objects that describe how C1 processes a task (an access request, a certification, a provisioning action): who approves it, what happens on escalation or timeout, and how the underlying resource gets provisioned.
 
-<Accordion title="Commands and flags">
+<Accordion title="Policies commands (8)">
 
 | Command | Description |
 | :--- | :--- |
@@ -2485,7 +2520,7 @@ Manage access profiles — the objects that control which entitlements are reque
 
 The API calls this object a request catalog and routes it under `/api/v1/catalogs`, so its JSON keys and the IDs you pass here say "catalog" — the two names refer to the same object. Not to be confused with an app catalog, the per-user list of what one user can request, derived from the access profiles they belong to.
 
-<Accordion title="Commands and flags">
+<Accordion title="Access profiles commands (19)">
 
 | Command | Description |
 | :--- | :--- |
@@ -2709,7 +2744,7 @@ Manage access-review campaigns — the governance campaigns the API calls access
 
 `create` takes the complete request body as JSON, since campaign scope is a large nested oneof shape; `update` takes a partial access-review object plus an explicit `--update-mask`.
 
-<Accordion title="Commands and flags">
+<Accordion title="Access reviews commands (27)">
 
 | Command | Description |
 | :--- | :--- |
@@ -3122,7 +3157,7 @@ Manage security findings and the public API surfaces that govern them: routing r
 
 `create`, `state`, `assignee`, the bulk commands, routing/transformation-rule management, and the settings updates all take JSON files so oneof actions and nested rule documents reach the API unchanged. Pass `--body-file -` to read JSON from standard input.
 
-<Accordion title="Commands and flags">
+<Accordion title="Findings commands (24)">
 
 | Command | Description |
 | :--- | :--- |
@@ -3231,7 +3266,7 @@ Mutations print the API's response. `suggestions state` prints the suggestion, a
 
 `suggestions search --body-file` and `suggestions users --body-file` are required and refuse paging keys in the file (`pageSize`/`page_size`, `pageToken`/`page_token`); `suggestions users` also refuses `suggestionId`/`suggestion_id` unless it equals `<suggestion-id>`. Paging belongs to `--page-size` and `--page-token`. Any other `--body-file` in this family (`suggestions state`, `config update`, `custom-analysis trigger|evaluate`, `access-profiles create`) is a required JSON object.
 
-<Accordion title="Commands and flags">
+<Accordion title="Role mining commands (16)">
 
 | Command | Description |
 | :--- | :--- |
@@ -3257,7 +3292,7 @@ Mutations print the API's response. `suggestions state` prints the suggestion, a
 ## Automations
 List C1 automations, inspect, create, update, execute, or delete one, query the run history of their executions, and clear a tripped circuit breaker. `executions list` is the usual starting point for "did this automation run?" and "why did it fail?".
 
-<Accordion title="Commands and flags">
+<Accordion title="Automations commands (12)">
 
 | Command | Description |
 | :--- | :--- |
@@ -3454,7 +3489,7 @@ Prints `{"bulkActionId": "..."}`; the response also carries the deprecated `paus
 ## Functions
 Manage C1 functions: the serverless TypeScript modules that run inside C1's sandbox, invoked as automation steps, from the UI, or through the API. A function's code lives in commits; the published commit is the one that runs.
 
-<Accordion title="Commands and flags">
+<Accordion title="Functions commands (11)">
 
 | Command | Description |
 | :--- | :--- |
@@ -3656,7 +3691,7 @@ c1i functions invocations get <invocation-id> --function-id <function-id>
 ## Export
 Export bulk data from C1. `export events` dumps the audit log to stdout as an NDJSON stream, for archiving or shipping to another system. `export exporters` manages system log exporters, which write the same events continuously to a datasource without a CLI run per batch.
 
-<Accordion title="Commands and flags">
+<Accordion title="Export commands (8)">
 
 | Command | Description |
 | :--- | :--- |
@@ -3847,7 +3882,7 @@ Manage service principals — tenant-owned non-human identities. The group is al
 
 A service principal is an identity; a client credential on it is what a caller authenticates with (a client ID and secret). A binding lets another subject — a function, SSO application, AuthZEN server, or edge — act as the principal. The bindings surface is a draft API and may change. A trust instead lets an external workload's own JWT act as the principal, when the token comes from a provider registered with [`workload-federation providers`](#workload-federation) and its claims satisfy the trust's CEL condition; see [Workload federation](/product/admin/service-principals/workload-federation).
 
-<Accordion title="Commands and flags">
+<Accordion title="Service principals commands (20)">
 
 | Command | Description |
 | :--- | :--- |
@@ -4008,7 +4043,7 @@ Manage workload federation: an external workload — a CI job, a SPIFFE workload
 
 A provider registers an external JWT issuer for the tenant. A trust, created per service principal with [`service-principals trusts`](#service-principals), names a provider and a CEL condition over the token's claims; the API documents a trust's effective permissions as `min(service principal roles, trust scoped roles)`. See [Workload federation](/product/admin/service-principals/workload-federation) for the product view, and [`test-cel`](#workload-federation-test-cel) to try a condition before you create a trust.
 
-<Accordion title="Commands and flags">
+<Accordion title="Workload federation commands (6)">
 
 | Command | Description |
 | :--- | :--- |
@@ -4129,7 +4164,7 @@ Resource servers, scopes and access profiles take `--app-id`; client audience ma
 
 Mutations print the object unwrapped like the matching `get`, so read `.id`; deletes and `resync-scopes` print `{}`, and `--fields` is a usage error on a mutation. `history` streams one NDJSON record per change, `{"snapshot": {...}, "metadata": {...}}`, where the metadata carries `id`, `changeKind`, `createdAt`, `actor`, `annotations`, `traceId` and `syslogEventId`; the snapshot has the shape the matching `get` prints. An unknown id on `history` lists nothing and exits `0`, and a well-formed but unknown `--app-id` on `list` returns zero rows at exit `0`.
 
-<Accordion title="Commands and flags">
+<Accordion title="XAA commands (31)">
 
 | Command | Description |
 | :--- | :--- |
@@ -4605,7 +4640,7 @@ c1i xaa client-audience-mappings history <client-key> --resource-server-id <id> 
 ## Bridges
 Manage tunnel bridges: the tenant-side record a tunnel appliance authenticates against. A bridge's appliance presents a client credential created on the bridge, and reports the services it announces behind it. The group is aliased as `bridge`, and its credential subgroup as `credentials`, `credential`, or `creds`.
 
-<Accordion title="Commands and flags">
+<Accordion title="Bridges commands (9)">
 
 | Command | Description |
 | :--- | :--- |
@@ -4693,7 +4728,7 @@ Prints `{}`; exit `0` is the success signal.
 ## Webhooks
 Manage outbound webhooks: the registered https endpoints that C1 calls, for example from a policy's webhook approval or provision step. The group is aliased as `webhook`. A webhook has no signing secret, so `create` and `get` return the same fields.
 
-<Accordion title="Commands and flags">
+<Accordion title="Webhooks commands (7)">
 
 | Command | Description |
 | :--- | :--- |
@@ -4784,7 +4819,7 @@ Manage hooks: customer-configured interception points for tool calls. A hook fir
 
 The flags build a function hook. A built-in pattern or JSON patch hook, whose configs the flags don't model, goes through `--body-file`: a full Hook object. A hook is created disabled unless you pass `--enabled`, and only an enabled hook intercepts tool calls.
 
-<Accordion title="Commands and flags">
+<Accordion title="Hooks commands (5)">
 
 | Command | Description |
 | :--- | :--- |
@@ -4899,7 +4934,7 @@ A boolean flag is tri-state: omit it to leave the field unchanged, pass `--flag`
 
 Two operations replace a whole list rather than editing it: the repeatable list flags (`--allowed-client-type`, `--enabled-signing-algorithm`, the contact email flags) send exactly the values you give, and `settings domains set` replaces the entire domain set.
 
-<Accordion title="Commands and flags">
+<Accordion title="Settings commands (24)">
 
 | Command | Description |
 | :--- | :--- |
@@ -5152,7 +5187,7 @@ Manage saved reports of the C1 reporting service: a question, the program that a
 
 These commands are not the access-review reports of [`access-reviews reports generate`](#access-reviews-reports-generate).
 
-<Accordion title="Commands and flags">
+<Accordion title="Reports commands (7)">
 
 | Command | Description |
 | :--- | :--- |
@@ -5280,7 +5315,7 @@ Find tool names and their input schemas with `c1i mcp gateway list-tools --full`
 ## MCP servers
 Register, configure, and inspect the MCP servers under a C1 app. C1 models an MCP server as a connector under an app, so you address one with `--app-id` plus its connector ID. Hosted servers run inside C1 from a catalog entry; external servers point at a third-party MCP URL. C1 seals auth secrets server-side, so reads only return `*_configured` booleans.
 
-After you register a server, its tools start in the pending-review state. Approve them with [`c1i mcp tools approve`](#mcp-tools) before the gateway proxies calls to them.
+After you register a server, its tools start in the pending-review state. Approve them with [`c1i mcp tools approve`](#mcp-tools-approve) before the gateway proxies calls to them.
 
 <Accordion title="Commands and flags">
 
@@ -5848,7 +5883,7 @@ c1i mcp toolsets get-by-entitlement <app-entitlement-id> --app-id <app-id>
 
 ### `mcp toolsets create`
 
-Create an MCP toolset (access profile) under a connector. After creating it, attach tools with [`c1i mcp bindings create`](#mcp-bindings).
+Create an MCP toolset (access profile) under a connector. After creating it, attach tools with [`c1i mcp bindings create`](#mcp-bindings-create).
 
 **Usage:**
 
@@ -6145,36 +6180,6 @@ If you call a POST-only endpoint with GET (for example a `/search/*` path with n
 <Note>
 c1i sends `--body` to the API verbatim — it does not wrap or reshape the payload. If the endpoint's schema nests fields under a top-level key (for example, `POST /api/v1/iam/personal_clients/{id}` expects `{"client": {"displayName": "...", "scopedRoles": ["..."]}, "updateMask": "displayName,scopedRoles"}`), your `--body` must include that wrapper. Use `c1i docs endpoint <path>` to see the exact request shape before calling.
 </Note>
-
-## Pagination and limits
-
-Commands marked "Paginates" (and `c1i api --paginate`) auto-paginate by default — they keep fetching pages until the cursor is empty, so you don't have to manage tokens manually.
-
-Each of those commands takes three flags that control how much data flows:
-
-| Flag | Effect |
-| :--- | :--- |
-| `--page-size N` | Rows to request per API page (max 100). The server may return more than asked, so use `--limit` for an exact count. Default is 50. `policies search` defaults to 25. The history commands (`mcp tools history`, `mcp resources history`, `mcp bindings history`) accept up to 200, `connectors debuggable` up to 50, and `mcp prompts history` caps at 100. A value above the maximum is clamped, not an error, and `--page-size 0` asks for the server's default. |
-| `--page-token TOKEN` | Resume from a specific cursor. When set, c1i fetches a single page and exits — auto-pagination is disabled. |
-| `--limit N` | Cap the *total* number of results emitted across all pages (0 = unlimited). Auto-pagination stops fetching new pages once the cap is reached, and c1i tightens the per-call request size when `--limit` is smaller than `--page-size` so it doesn't over-fetch. |
-
-**Examples:**
-
-```bash
-# Peek at the first 5 users without fetching everyone
-c1i users list --limit 5
-
-# Cap a wide query — useful for cost control or quick previews
-c1i tasks list --state open --limit 25
-```
-
-A blank `--page-token` (empty, whitespace-only, or invisible-only) exits with code 2. Without that check, an unset shell variable would turn off auto-pagination and return only the first page.
-
-If a server's pagination cursor stops advancing, c1i doesn't loop forever. A cursor counts as stuck when `nextPageToken` repeats, when two or more pages in a row (25 or more rows in all) hold only rows c1i has already seen, or after 100 empty pages in a row. c1i keeps the rows it already printed, warns on stderr that results are INCOMPLETE, and exits with code 6. A list page that is HTML, an array, empty, or truncated also exits with code 6.
-
-A few list commands send one request instead of paginating, and warn on stderr with `partial result` when the server reports more pages: `role-mining suggestions|runs|custom-analysis list`, `findings routing-rules|transformation-rules list`, `apps routing-rules list`, `attribute-types list`, `bridges services`, `grants accounts`, and `settings ai-governance history`.
-
-`c1i api --path X --limit N` without `--paginate` errors immediately — the non-paginated path returns a single response, so there's nothing to cap.
 
 ## Version
 
