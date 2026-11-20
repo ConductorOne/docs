@@ -29,9 +29,18 @@ _None._
 
 Configuring the connector requires you to pass in information from Delinea. Gather these configuration details before you move on.
 
+The connector supports two ways to sign in. Pick the one that matches your deployment:
+
+- **Delinea Platform** (default) — for Secret Server Cloud, or Secret Server connected to a Delinea Platform tenant. The connector signs in through a Delinea Platform service user.
+- **Standalone Secret Server** — for an on-premises Secret Server that is not connected to a Delinea Platform tenant. The connector signs in directly to Secret Server with a Secret Server application account.
+
+Both options read the same data from Secret Server; only the sign-in differs.
+
+### Option 1: Delinea Platform
+
 Here's the information you'll need:
 
-- **Secret Server Base URL** — your Secret Server base URL, i.e. the server root only. For Secret Server Cloud this looks like `https://<your-tenant>.secretservercloud.com`.
+- **Secret Server Base URL** — your Secret Server base URL, including the application path if it has one. For Secret Server Cloud this looks like `https://<your-tenant>.secretservercloud.com`.
 - **Delinea Platform URL** — your Delinea Platform tenant URL (e.g. `https://<your-tenant>.delinea.app`). This is used only to sign the connector in, and is different from the Secret Server base URL.
 - **Client ID** — the username/client ID of a Delinea Platform service user.
 - **Client Secret** — that service user's password/client secret.
@@ -47,6 +56,34 @@ To create the service user:
 When the service user is created, a matching application account is automatically created in Secret Server, so no extra setup is needed there.
 
 For more detail, see the Delinea documentation on [adding users](https://docs.delinea.com/online-help/delinea-platform/users/add-users.htm) and [using Secret Server APIs from the Delinea Platform](https://docs.delinea.com/online-help/platform-api/secret-server-apis-from-platform.htm).
+
+### Option 2: Standalone Secret Server
+
+Here's the information you'll need:
+
+- **Secret Server Base URL** — your Secret Server base URL, including the application path if it has one (for example, `https://secret.example.com/SecretServer`).
+- **Secret Server Username** — the username of a Secret Server application account for the connector.
+- **Secret Server Password** — that account's password.
+
+To create the application account:
+
+1. In Secret Server, create a role for the connector (for example, "C1 Read Only") with these role permissions:
+   - **View Users**
+   - **View Groups**
+   - **View Roles**
+   - **View Group Roles**
+   - **View Teams**
+   - **Unrestricted by Teams**, so the connector can see users and groups outside its own teams
+2. Search for **Users**, select **Create User**, choose the **Local** domain, set a username and password, and select the **Application Account** checkbox. Creating application accounts requires the **Administer Create Application Accounts** role permission.
+3. Assign the new account to the role you created.
+
+<Note>
+Use an application account. Since Secret Server 12.1, the **Prevent Direct API Authentication** setting is on by default for new installations, and it blocks regular user accounts from signing in to the API with a username and password. Application accounts are exempt.
+
+Active Directory (domain) accounts and accounts that require two-factor authentication aren't supported for standalone sign-in.
+</Note>
+
+If your Secret Server uses a certificate issued by an internal certificate authority, the connector must trust that CA. See [Trust an internal certificate authority](#trust-an-internal-certificate-authority) in the self-hosted instructions.
 
 ## Configure the Delinea connector
 
@@ -87,7 +124,7 @@ To complete this task, you'll need:
   Find the **Settings** area of the page and click **Edit**.
   </Step>
   <Step>
-  Enter the configuration information from the previous section.
+  Choose the sign-in method (**Delinea Platform** or **Standalone Secret Server**) and enter the configuration information from the previous section.
   </Step>
   <Step>
   Click **Save**.
@@ -162,11 +199,20 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
 
   # Delinea config
-  BATON_SECRET_SERVER_BASE_URL: <Secret Server root URL, e.g. https://your-tenant.secretservercloud.com>
+  BATON_SECRET_SERVER_BASE_URL: <Secret Server base URL, e.g. https://your-tenant.secretservercloud.com or https://secret.example.com/SecretServer>
+
+  # Option 1: Delinea Platform (default)
   BATON_DELINEA_PLATFORM_URL: <Delinea Platform URL, e.g. https://your-tenant.delinea.app>
   BATON_DELINEA_CLIENT_ID: <Delinea Platform service user client ID>
   BATON_DELINEA_CLIENT_SECRET: <Delinea Platform service user client secret>
+
+  # Option 2: Standalone Secret Server (use instead of Option 1)
+  # BATON_AUTH_METHOD: secret-server
+  # BATON_SECRET_SERVER_USERNAME: <Secret Server username>
+  # BATON_SECRET_SERVER_PASSWORD: <Secret Server password>
 ```
+
+For a standalone Secret Server, `BATON_AUTH_METHOD: secret-server` is required. Without it the connector uses Delinea Platform sign-in and reports the Platform fields as missing.
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
 
@@ -202,6 +248,44 @@ spec:
         - secretRef:
             name: baton-delinea-secrets
 ```
+
+#### Trust an internal certificate authority
+
+If your Secret Server's certificate is issued by an internal CA, the connector fails with `x509: certificate signed by unknown authority` until it trusts that CA. Give the container a CA bundle and point `SSL_CERT_FILE` at it.
+
+The file at `SSL_CERT_FILE` can take the place of the container's default CA file, and the connector must still reach C1 over public TLS. Build the bundle by appending your internal CA certificate (and any intermediates) to a standard public CA bundle, not by using your CA alone.
+
+1. Create a ConfigMap from the PEM-encoded bundle:
+
+   ```bash
+   kubectl create configmap baton-delinea-ca --from-file=ca-bundle.pem=./ca-bundle.pem
+   ```
+
+2. Mount it and set `SSL_CERT_FILE` in the deployment:
+
+   ```yaml
+   spec:
+     template:
+       spec:
+         containers:
+         - name: baton-delinea
+           # ...image, env and envFrom as above...
+           env:
+           - name: BATON_HOST_ID
+             value: baton-delinea
+           - name: SSL_CERT_FILE
+             value: /etc/ssl/custom/ca-bundle.pem
+           volumeMounts:
+           - name: internal-ca
+             mountPath: /etc/ssl/custom
+             readOnly: true
+         volumes:
+         - name: internal-ca
+           configMap:
+             name: baton-delinea-ca
+   ```
+
+Don't disable certificate verification to work around this error.
 
 ### Step 3: Deploy the connector
 
