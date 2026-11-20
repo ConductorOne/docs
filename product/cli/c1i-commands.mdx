@@ -9,7 +9,7 @@ sidebarTitle: "c1i commands"
 {/* Editor Refresh: 2026-11-20 */}
 
 <Tip>
-This reference covers c1i v0.12.0. The CLI is authoritative: run `c1i <command> --help` (or `-h`) for the exact flags, and `c1i docs map` (or `c1i docs map --json`) to print every command path this build accepts, with the family, command, and leaf counts, for a quick comparison.
+This reference covers c1i v0.12.0. The CLI is authoritative: run `c1i <command> --help` (or `-h`) for the exact flags, and `c1i docs map` (or `c1i docs map --json`) to print every command path this build accepts, with the family, command, and leaf counts, for a quick comparison. Each command family below expands to its command table, flags, and notes; use the table of contents or a deep link to open one.
 </Tip>
 
 ## Overview of c1i commands
@@ -147,8 +147,9 @@ With `--error-format json`, stderr is NDJSON: each line is one object with an `e
 An error from a command that writes also carries `"applied"`: `false` when nothing reached the server, `true` when the change was applied, and `"unknown"` when the request may have reached the server, including when a retry then failed. `mcp tools approve` adds an error object for each failed ID and a summary object with `notAttempted`. A batch can exit non-zero after it applied some changes.
 
 ## Docs
-
 Explore C1 API documentation and schemas. These commands don't require authentication.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -238,11 +239,14 @@ Relative links in the printed text don't resolve. A notice on stderr gives the v
 
 <Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
 
-## Auth
+</Accordion>
 
+## Auth
 Log in, check which identity and credential c1i is using, and mint access tokens.
 
 c1i reads credentials from `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`, then the OS keyring, then a `0600` file, and caches each access token it mints until it's close to expiry; see [Credential storage](/product/cli/c1i#credential-storage). `auth token` and `mcp gateway` always mint a fresh token. A cached token the server rejects (clock skew, or a revocation) is dropped and re-minted automatically, once.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -300,6 +304,8 @@ curl -H "Authorization: Bearer $(c1i auth token)" \
 
 The token is audience-scoped to the C1 API host.
 
+</Accordion>
+
 ## Roles
 
 List and inspect IAM roles, including the role IDs that `c1i auth login --scoped-role` accepts.
@@ -310,8 +316,9 @@ List and inspect IAM roles, including the role IDs that `c1i auth login --scoped
 | `c1i roles get <role-id>` | Get a single IAM role, including its permissions. |
 
 ## Users
-
 Manage C1 users.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -366,9 +373,12 @@ Observed against a tenant: an unknown delegate answered `404` (exit `4`), an exp
 
 The command prints the binding unwrapped from the response's `.item`, or the response as is (`{"item": null}`) when clearing.
 
-## Apps
+</Accordion>
 
+## Apps
 Create, search, inspect, update, and delete applications, manage their owners, and manage what hangs off an app: its resource types and resources, entitlement routing rules, and usage controls. Apps a connector discovered can be promoted to managed apps.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -716,9 +726,12 @@ Output is unwrapped: `appId`, `notify`, `notifyAfterDays`, `revoke`, and `revoke
 
 The usage-controls endpoint answers an unknown app as it does an app with no controls, so c1i reads the app first: an unknown app exits `4` and a deleted one `2`. There is no `update` command.
 
-## Accounts
+</Accordion>
 
+## Accounts
 Manage application accounts (app users): the accounts C1 syncs from an app, the identity user each one maps to, and the account's profile. Every command takes `--app-id`, the application ID.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -781,9 +794,12 @@ The updated app user is returned as formatted JSON, unwrapped like the reads: th
 
 c1i looks the `--user-id` user up before sending, `--dry-run` included: an unknown ID exits `4` and nothing is sent, and the lookup needs user-read access (exit `3` without it).
 
-## Attribute types
+</Accordion>
 
+## Attribute types
 List the user fields an attribute mapping can write to, such as Department, Job Title, or Manager Email. Type IDs are tenant-specific, so look a type up by display name; `attribute-mappings create --type` does the same.
+
+<Accordion title="Commands and flags">
 
 ### `attribute-types list`
 
@@ -801,11 +817,14 @@ Rows include `id`, `display_name`, and `config_kind`: `app` (a value read from t
 
 A mapping's `config_kind` decides which key flags it accepts. A `cel_expression` type cannot be created with the convenience flags; use `--body-file`.
 
-## Attribute mappings
+</Accordion>
 
+## Attribute mappings
 Map an app's synced profile attributes onto C1 user fields. A mapping copies one value from an app (a profile key, or a value the app itself reports such as manager email) into a structured C1 user field, and its `display_name` is set by the server, not by a flag. Values are copied verbatim, so `Full-Time` stays `Full-Time` and a CEL comparison against a lowercase literal will not match. Evaluation is asynchronous and no response signals completion: re-read the user.
 
 Precedence when two apps map the same attribute type was not tested — do not add a mapping for a type another app already maps on users that overlap.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -902,11 +921,14 @@ c1i attribute-mappings delete <mapping-id>
 
 After the delete, `get` exits `4` and an unknown ID exits `4`, but deleting the same ID again exits `0`. Prints `{}`; exit `0` means success.
 
-## Attributes
+</Accordion>
 
+## Attributes
 List, search, create, and delete the tenant's attribute values: the entries under an attribute type, such as the Compliance Framework values (`SOC2`, `HIPAA`) and Risk Level values (`Low`, `High`). This is a separate resource from [attribute types](#attribute-types) and [attribute mappings](#attribute-mappings), which describe the user fields a mapping writes to.
 
 A value has no update; delete it and create another. The API's per-type routes (`/api/v1/attributes/compliance_frameworks`, `/api/v1/attributes/risk_levels`, and so on) are the same operations restricted to one type, so they have no commands here; use [`c1i api`](#api) for them.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -997,9 +1019,12 @@ The server treats a repeated value, including one that differs only in case, as 
 c1i attributes create --type "Risk Level" --value High
 ```
 
-## Entitlements
+</Accordion>
 
+## Entitlements
 Find, inspect, create, update, and delete app entitlements; list their grants; manage their owners; and configure what hangs off an entitlement: its membership automation, its account-provisioning policy, and entitlement-to-entitlement proxy bindings.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -1344,9 +1369,12 @@ c1i entitlements proxy-bindings delete --source-app-id <app-id> \
   --destination-entitlement-id <entitlement-id>
 ```
 
-## Grants
+</Accordion>
 
+## Grants
 Query access grants, the bindings between accounts or users and entitlements, to answer "who has access to what". You can also change them directly: add a user to a manually managed entitlement, remove one account's membership, and set or clear when a grant is revoked automatically.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -1488,9 +1516,12 @@ At the end time C1 starts the revoke. In testing on a manually managed entitleme
 
 An unknown app, entitlement, or account, or an account without this grant, exits `4` from the server. For a grant still being requested, use [`tasks update-grant-duration`](#tasks-update-grant-duration) instead.
 
-## Tasks
+</Accordion>
 
+## Tasks
 List access request tasks and act on them: approve, deny, comment, reassign, escalate, or move them through their policy, and read a task's audit trail.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -1771,9 +1802,12 @@ The task is not read first, so `<task-id>` must be the 27-character ID; the nume
 Every task action prints the task as formatted JSON, unwrapped like `tasks get`, so the task's ID is `.id`. The action endpoints return the task as it was before the action, so `.state` is a snapshot, not the outcome: closing an open task prints an open state. Re-read the task with `c1i tasks get` before you act on it. When c1i looks up a policy step for you, it reports the step on stderr (`Resolved policy step: <id>`) rather than in the JSON. Actions that look up the current policy step — `approve`, `deny`, `reassign`, `restart`, `skip-step`, `escalate`, and `retry-provisioning` — send the task ID that lookup returns, so a numeric task ID that `tasks get` accepts also works for them.
 </Note>
 
-## Requests
+</Accordion>
 
+## Requests
 File grant, revoke, action, and resource-action requests, track their status, and optionally wait for the created grant.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -1881,9 +1915,12 @@ All four `create` commands print the created task unwrapped like `requests get`,
 
 `create grant` and `create revoke` resolve the caller when you omit `--user-id`, so a `--dry-run` preview then needs credentials. An explicit `--user-id` is looked up before sending; an unknown user exits with code `4`, including under `--dry-run`.
 
-## Connectors
+</Accordion>
 
+## Connectors
 Manage connectors: the per-app objects that sync a system's accounts, entitlements, and grants into C1, run provisioning, and back an MCP server. A connector belongs to exactly one app, so almost every command takes `--app-id` plus the connector ID positionally. `connectors debuggable` is the exception — it lists connectors across all apps and takes no scope flag.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -2282,9 +2319,12 @@ c1i connectors credentials revoke <credential-id> \
 
 Prints `{}`; exit `0` means success.
 
-## Policies
+</Accordion>
 
+## Policies
 Manage policies — the objects that describe how C1 processes a task (an access request, a certification, a provisioning action): who approves it, what happens on escalation or timeout, and how the underlying resource gets provisioned.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -2438,11 +2478,14 @@ Quote the expression as one argument, or pass several unquoted words; they are j
 
 An expression that doesn't compile is answered by the server with a `500` carrying the CEL error text, which exits `6`, not `2`: c1i does not check CEL itself. Use `policies validate-cel` for compile checks of rule conditions.
 
-## Access profiles
+</Accordion>
 
+## Access profiles
 Manage access profiles — the objects that control which entitlements are requestable, and by whom. Admins create them to grant birthright access or to make access requestable by a chosen audience.
 
 The API calls this object a request catalog and routes it under `/api/v1/catalogs`, so its JSON keys and the IDs you pass here say "catalog" — the two names refer to the same object. Not to be confused with an app catalog, the per-user list of what one user can request, derived from the access profiles they belong to.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -2659,11 +2702,14 @@ c1i access-profiles bundle-automation run <access-profile-id> [flags]
 | :--- | :--- |
 | `--refs-file string` | JSON array of `{"appId":"...","id":"..."}` objects to run (file, or `-` for stdin). Omit to run against the automation's configured entitlements. |
 
-## Access reviews
+</Accordion>
 
+## Access reviews
 Manage access-review campaigns — the governance campaigns the API calls access reviews — and the templates they are built from. A campaign defines a scope of users and entitlements to certify, who reviews them, and reports export the campaign's results.
 
 `create` takes the complete request body as JSON, since campaign scope is a large nested oneof shape; `update` takes a partial access-review object plus an explicit `--update-mask`.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3069,11 +3115,14 @@ c1i access-reviews templates excluded-entitlements add <template-id> \
 Every template and campaign scope verb looks up each referenced entitlement, resource type, policy, and user before sending, `--dry-run` included: an unknown ID exits `4`, a soft-deleted object exits `2`. `--fields` is a usage error on these mutations; extract IDs with `jq -er`, which fails on a `--dry-run` preview.
 </Note>
 
-## Findings
+</Accordion>
 
+## Findings
 Manage security findings and the public API surfaces that govern them: routing rules, transformation rules, detector settings (including the Edge categories), and the audit/occurrence search surfaces behind them.
 
 `create`, `state`, `assignee`, the bulk commands, routing/transformation-rule management, and the settings updates all take JSON files so oneof actions and nested rule documents reach the API unchanged. Pass `--body-file -` to read JSON from standard input.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3171,8 +3220,9 @@ A body without a non-empty `settings` or `subcategorySettings` exits with code 2
 
 A referenced policy is looked up first: an unknown ID exits `4` and a deleted one exits `2` before anything is sent, and the credential needs policy read (else exit `3`), `--dry-run` included.
 
-## Role mining
+</Accordion>
 
+## Role mining
 Manage role mining: analyses that cluster users into cohorts sharing similar entitlements, the suggestions those analyses produce, and the access profiles you can generate from a cohort.
 
 Mutations and searches take JSON request objects through `--body-file` so profile filters, entitlement selections, and full configuration documents reach the API unchanged; pass `--body-file -` to read JSON from standard input. The fixed `list` commands (`suggestions list`, `runs list`, `custom-analysis list`) return a single, fixed-size page capped only by `--limit`.
@@ -3180,6 +3230,8 @@ Mutations and searches take JSON request objects through `--body-file` so profil
 Mutations print the API's response. `suggestions state` prints the suggestion, and `config update` the configuration, unwrapped like `config show`; the rest keep their own shape — `.runId` for `trigger`, `.id` for `custom-analysis trigger`, and `.accessProfileId` for `access-profiles create`. `--fields` is a usage error on those mutations.
 
 `suggestions search --body-file` and `suggestions users --body-file` are required and refuse paging keys in the file (`pageSize`/`page_size`, `pageToken`/`page_token`); `suggestions users` also refuses `suggestionId`/`suggestion_id` unless it equals `<suggestion-id>`. Paging belongs to `--page-size` and `--page-token`. Any other `--body-file` in this family (`suggestions state`, `config update`, `custom-analysis trigger|evaluate`, `access-profiles create`) is a required JSON object.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3200,9 +3252,12 @@ Mutations print the API's response. `suggestions state` prints the suggestion, a
 | `c1i role-mining custom-analysis evaluate <analysis-id> --body-file <file>` | Evaluate an entitlement selection against an analysis from a JSON object. |
 | `c1i role-mining access-profiles create --body-file <file>` | Create an access profile from a role mining cohort's JSON object. |
 
-## Automations
+</Accordion>
 
+## Automations
 List C1 automations, inspect, create, update, execute, or delete one, query the run history of their executions, and clear a tripped circuit breaker. `executions list` is the usual starting point for "did this automation run?" and "why did it fail?".
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3394,9 +3449,12 @@ c1i automations circuit-breaker resolve-paused <automation-id> \
 
 Prints `{"bulkActionId": "..."}`; the response also carries the deprecated `pausedCount` and `erroredCount`, which were always `0` in the runs checked even when executions were resolved.
 
-## Functions
+</Accordion>
 
+## Functions
 Manage C1 functions: the serverless TypeScript modules that run inside C1's sandbox, invoked as automation steps, from the UI, or through the API. A function's code lives in commits; the published commit is the one that runs.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3593,9 +3651,12 @@ c1i functions invocations get <invocation-id> --function-id <function-id>
 | :--- | :--- |
 | `--function-id string` | Function the invocation belongs to. (Required.) |
 
-## Export
+</Accordion>
 
+## Export
 Export bulk data from C1. `export events` dumps the audit log to stdout as an NDJSON stream, for archiving or shipping to another system. `export exporters` manages system log exporters, which write the same events continuously to a datasource without a CLI run per batch.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3743,6 +3804,8 @@ c1i reads the exporter first, so an unknown ID exits `4` — the API answers a w
 c1i export exporters events <export-id> [flags]
 ```
 
+</Accordion>
+
 ## Upgrade
 
 Check for and install a newer c1i release. The command is aliased as `update`.
@@ -3780,10 +3843,11 @@ With the global `--dry-run` flag, `upgrade` fetches and verifies the release (in
 `upgrade` treats the distribution center as a system beyond C1. A distribution center `404`, `429`, or `5xx` exits `4`, `5`, or `6`, and a same-path redirect loop exits `6`. Any other `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature, or checksum failure exits `8`.
 
 ## Service principals
-
 Manage service principals — tenant-owned non-human identities. The group is aliased as `service-principal` and `sp`, and its `credentials` subgroup as `credential` and `creds`.
 
 A service principal is an identity; a client credential on it is what a caller authenticates with (a client ID and secret). A binding lets another subject — a function, SSO application, AuthZEN server, or edge — act as the principal. The bindings surface is a draft API and may change. A trust instead lets an external workload's own JWT act as the principal, when the token comes from a provider registered with [`workload-federation providers`](#workload-federation) and its claims satisfy the trust's CEL condition; see [Workload federation](/product/admin/service-principals/workload-federation).
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -3937,11 +4001,14 @@ The API's report always prints: `overallResult`, `decodedClaimsJson`, and one ob
 
 <Callout icon="globe" color="#c937ae" iconType="regular">These examples use `conductor.one`. If your organization is on the EU data residency instance, substitute `c1eu.ai` in URLs, client IDs, and hostnames.</Callout>
 
-## Workload federation
+</Accordion>
 
+## Workload federation
 Manage workload federation: an external workload — a CI job, a SPIFFE workload — exchanges its own JWT for a C1 token that acts as a service principal, so no client secret is stored anywhere. The group is aliased as `wf`.
 
 A provider registers an external JWT issuer for the tenant. A trust, created per service principal with [`service-principals trusts`](#service-principals), names a provider and a CEL condition over the token's claims; the API documents a trust's effective permissions as `min(service principal roles, trust scoped roles)`. See [Workload federation](/product/admin/service-principals/workload-federation) for the product view, and [`test-cel`](#workload-federation-test-cel) to try a condition before you create a trust.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -4053,13 +4120,16 @@ The API's answer always prints, with `matched`, `error` and `expression`:
 c1i workload-federation test-cel --expression 'claims.sub == "x"' --claims '{"sub":"x"}'
 ```
 
-## XAA
+</Accordion>
 
+## XAA
 Manage an app's cross-app access (XAA) objects: resource servers (the third-party authorization servers C1 mints grants for), their OAuth scopes, access profiles (requestable bundles of one resource server's scopes), the scopes bound to each profile, and each resource server's client audience mappings.
 
 Resource servers, scopes and access profiles take `--app-id`; client audience mappings take `--resource-server-id` instead, because their routes carry no app. The tenant-wide switch, default grant lifetime and ID-token lifetime are in `c1i settings cross-app-access`. `xaa access-profiles` is not the request catalog that [`access-profiles`](#access-profiles) manages: an XAA profile bundles one resource server's scopes, and the API gives it a backing entitlement (`appEntitlementId`) — that entitlement is the thing users request. See [Resource servers](/product/admin/enterprise-managed-authorization/resource-servers) and [Scopes and access profiles](/product/admin/enterprise-managed-authorization/scopes-and-profiles) for the product view.
 
 Mutations print the object unwrapped like the matching `get`, so read `.id`; deletes and `resync-scopes` print `{}`, and `--fields` is a usage error on a mutation. `history` streams one NDJSON record per change, `{"snapshot": {...}, "metadata": {...}}`, where the metadata carries `id`, `changeKind`, `createdAt`, `actor`, `annotations`, `traceId` and `syslogEventId`; the snapshot has the shape the matching `get` prints. An unknown id on `history` lists nothing and exits `0`, and a well-formed but unknown `--app-id` on `list` returns zero rows at exit `0`.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -4530,9 +4600,12 @@ c1i xaa client-audience-mappings history <client-key> --resource-server-id <id> 
 
 [Paginates](#pagination-and-limits). One NDJSON record per change, newest first. An unknown id lists nothing and exits `0`.
 
-## Bridges
+</Accordion>
 
+## Bridges
 Manage tunnel bridges: the tenant-side record a tunnel appliance authenticates against. A bridge's appliance presents a client credential created on the bridge, and reports the services it announces behind it. The group is aliased as `bridge`, and its credential subgroup as `credentials`, `credential`, or `creds`.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -4615,9 +4688,12 @@ c1i bridges delete <bridge-id>
 
 Prints `{}`; exit `0` is the success signal.
 
-## Webhooks
+</Accordion>
 
+## Webhooks
 Manage outbound webhooks: the registered https endpoints that C1 calls, for example from a policy's webhook approval or provision step. The group is aliased as `webhook`. A webhook has no signing secret, so `create` and `get` return the same fields.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -4701,11 +4777,14 @@ Soft-delete a webhook. It leaves `webhooks list`, but `webhooks get` still retur
 c1i webhooks delete <webhook-id>
 ```
 
-## Hooks
+</Accordion>
 
+## Hooks
 Manage hooks: customer-configured interception points for tool calls. A hook fires on an event (`pre-tool-use`, `post-tool-use`, or `pre-output`), optionally narrowed by a CEL filter, and runs exactly one of a function, a built-in pattern, or a JSON patch. The group is aliased as `hook`.
 
 The flags build a function hook. A built-in pattern or JSON patch hook, whose configs the flags don't model, goes through `--body-file`: a full Hook object. A hook is created disabled unless you pass `--enabled`, and only an enabled hook intercepts tool calls.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -4809,8 +4888,9 @@ c1i hooks delete <hook-id>
 
 Soft-deletes the hook: it leaves `hooks list`, but `hooks get` still returns it at exit `0`. The Hook has no `deletedAt`, so nothing in the returned object marks it deleted. Deleting it again exits `0`. Prints `{}`; exit `0` is the success signal. The API says a hook that a guardrail rule references cannot be deleted until that reference is removed.
 
-## Settings
+</Accordion>
 
+## Settings
 Inspect and update tenant-wide settings: AI governance, session security, the SSO provider, cross-app access, contacts, access requests, verified domains, notifications, and the AWS external id.
 
 Each area is a singleton, so no area has an id. `show` prints it as pretty JSON, unwrapped from its envelope, and `update` prints the updated object the same way. Masked updates take field flags, and c1i derives the update mask from the flags you pass. Anything the flags don't cover goes through `--body-file` — the object `show` prints — with an explicit `--update-mask` of camelCase paths. A field the mask doesn't name is left alone.
@@ -4818,6 +4898,8 @@ Each area is a singleton, so no area has an id. `show` prints it as pretty JSON,
 A boolean flag is tri-state: omit it to leave the field unchanged, pass `--flag` to set it `true`, or `--flag=false` to set it `false`.
 
 Two operations replace a whole list rather than editing it: the repeatable list flags (`--allowed-client-type`, `--enabled-signing-algorithm`, the contact email flags) send exactly the values you give, and `settings domains set` replaces the entire domain set.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5063,11 +5145,14 @@ c1i settings aws-external-id show
 
 Prints `{"externalId": "..."}`: the external ID to put in an IAM role trust policy for an AWS connector.
 
-## Reports
+</Accordion>
 
+## Reports
 Manage saved reports of the C1 reporting service: a question, the program that answers it, and the parameters a re-run may vary. There is no `create`: the API saves a report only from an already-rendered reporting surface, which needs a session in the C1 UI. Per the API, reports are not scoped by author: any caller holding the permission may delete any report in the tenant.
 
 These commands are not the access-review reports of [`access-reviews reports generate`](#access-reviews-reports-generate).
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5150,9 +5235,12 @@ c1i reports delete <report-id>
 
 Deletes the report. Per the API, its saved program is removed with it, so it can no longer be run. Prints `{}`; exit `0` is the success signal.
 
-## MCP gateway
+</Accordion>
 
+## MCP gateway
 Call the C1 MCP gateway directly over its MCP transport — the same handshake an MCP host performs — to verify what a registered server actually exposes. This closes the configure-then-verify loop: register a server, approve its tools, then list or call them here.
+
+<Accordion title="Commands and flags">
 
 | Flag | Description |
 | :--- | :--- |
@@ -5187,11 +5275,14 @@ Find tool names and their input schemas with `c1i mcp gateway list-tools --full`
 
 `call` rejects the global `--dry-run` flag.
 
-## MCP servers
+</Accordion>
 
+## MCP servers
 Register, configure, and inspect the MCP servers under a C1 app. C1 models an MCP server as a connector under an app, so you address one with `--app-id` plus its connector ID. Hosted servers run inside C1 from a catalog entry; external servers point at a third-party MCP URL. C1 seals auth secrets server-side, so reads only return `*_configured` booleans.
 
 After you register a server, its tools start in the pending-review state. Approve them with [`c1i mcp tools approve`](#mcp-tools) before the gateway proxies calls to them.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5430,9 +5521,12 @@ Rows include `service_name`, `base_url`, `default_tool_prefix`, `stable`, and `r
 | :--- | :--- |
 | `--query string` | Filter catalog entries by display name. |
 
-## MCP tools
+</Accordion>
 
+## MCP tools
 Manage the MCP tools that C1 discovers from a registered server. Newly discovered tools land in the pending-review state, and an admin approves them before the MCP gateway proxies calls to them. Every command requires `--app-id` and `--connector-id` to identify the server.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5504,11 +5598,14 @@ c1i mcp tools history <tool-id> --app-id <app-id> \
   --connector-id <connector-id> [flags]
 ```
 
-## MCP prompts
+</Accordion>
 
+## MCP prompts
 Review the MCP prompts a connector's server exposes. Prompt metadata comes from discovery, and the API spec says only state is editable, so the only change these commands make is the approval state, with `mcp prompts approve`. There is no `update` and no `delete`. Every command takes `--app-id` and `--connector-id` to identify the server.
 
 A tenant without the prompts feature answers a well-formed prompts request with a `403 feature not enabled` (exit `3`); a malformed ID gets the server's `400` first (exit `2`).
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5607,9 +5704,12 @@ c1i mcp prompts approve <prompt-id>... --app-id <app-id> \
 | `--connector-id string` | Connector ID. (Required.) |
 | `--state string` | Target state: `pending`, `approved`, or `disabled` (default `approved`). |
 
-## MCP resources
+</Accordion>
 
+## MCP resources
 Review the MCP resources a connector's server exposes. Resources are discovered by sync, and the API spec calls resource metadata "discovery-owned and read-only", so the only change these commands make is the approval state, with `mcp resources approve`. There is no `update` and no `delete`. Every command takes `--app-id` and `--connector-id` to identify the server.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5719,9 +5819,12 @@ c1i mcp resources approve $(c1i mcp resources search --app-id <app-id> \
   --app-id <app-id> --connector-id <connector-id>
 ```
 
-## MCP toolsets
+</Accordion>
 
+## MCP toolsets
 Manage MCP toolsets: admin-curated groupings of tools, each bound to a single app entitlement so users can request and receive the whole bundle at once. Every command except `get-by-entitlement` and `requestable-connectors` requires `--app-id` and `--connector-id` to identify the server; `get-by-entitlement` requires only `--app-id`.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5775,9 +5878,12 @@ c1i mcp toolsets update <toolset-id> --app-id <app-id> \
 | `--display-name string` | New display name (omit to leave unchanged). |
 | `--description string` | New description (omit to leave unchanged). |
 
-## MCP bindings
+</Accordion>
 
+## MCP bindings
 Inspect and manage bindings between MCP tools and MCP toolsets (access profiles): which tools are members of which toolset. This is a different object from an entitlement proxy binding (entitlement to entitlement), which you manage with [`c1i entitlements proxy-bindings`](#entitlements-proxy-bindings). Every command requires `--app-id` and `--connector-id` to identify the server.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5848,13 +5954,16 @@ c1i mcp bindings history --app-id <app-id> --connector-id <connector-id> \
 | `--toolset-id string` | MCP toolset (access profile) ID. |
 | `--tool-id string` | MCP tool ID. |
 
-## MCP classifiers
+</Accordion>
 
+## MCP classifiers
 Manage the AI-governance classifier surfaces used with the MCP gateway (formerly called guardrails in c1i's user-facing CLI).
 
 A classifier is a reusable, ordered rule cascade evaluated first-match-wins. Bind a classifier to an enforcement surface with `bindings create`; rules may reference tool gates. Templates instantiate curated classifiers (and their dependent gates) into a tenant-owned, editable classifier. The singleton `policy` surface — the tenant's one agent classifier policy — is separate from named classifiers.
 
 `create` and `update` take JSON objects through `--body-file` (or `-` for stdin), preserving nested CEL rules, hooks, gates, and template parameters without a lossy flag translation. Updates require an explicit `--update-mask` as a safeguard — including `rules` in the mask replaces the entire ordered cascade.
+
+<Accordion title="Commands and flags">
 
 | Command | Description |
 | :--- | :--- |
@@ -5993,6 +6102,8 @@ c1i mcp classifiers tool-gates update <tool-gate-id> --body-file <file> \
 | :--- | :--- |
 | `--body-file string` | Complete tool-gate JSON object (file, or `-` for stdin). (Required.) |
 | `--update-mask string` | Comma-separated camelCase field paths to update. (Required.) |
+
+</Accordion>
 
 ## API
 
