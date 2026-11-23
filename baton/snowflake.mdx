@@ -40,6 +40,25 @@ C1 selects one of the supported options each time it creates an account. There i
 
 With a vault on the provision policy or personal credentials for the user, C1 sets a random password. Without either, it creates the user with no password.
 
+### Accounts that already exist
+
+When Snowflake reports that the user already exists, the connector uses the exact requested `name` only to look up that account. Linking requires a matching email or login and no contradictory identifier, as well as the readability and person-account checks below. A name alone never establishes an identity match. The connector does not modify the existing user: fields in the request, such as `email`, `login`, `display_name`, or enabled state, are not applied to the linked account. If the existing user needs them, set them in Snowflake.
+
+**A linked account comes with no new credential.** The credential options above apply only when the connector creates an account. On a link, the requester receives no password or other credential, so they need a credential they already hold or a non-password sign-in method such as SSO.
+
+Failures need different fixes:
+
+| What happened | Error | What to do |
+| :--- | :--- | :--- |
+| The user with the exact requested name is confirmed missing after a create conflict | `failed to fetch existing user` (`AlreadyExists`) | Verify the user and requested `name` in Snowflake, then resubmit. |
+| The connector's role cannot read the existing user's properties (a masked read) | `user already exists but its properties could not be read` (`AlreadyExists`) | Grant `MONITOR USER ON ACCOUNT` to the connector's role, or use ownership of that user, or `MONITOR` on it together with `MANAGE GRANTS` on the account. `MONITOR` alone can return only the name; the connector refuses that masked read. |
+| The existing user is a Snowflake service user (`SERVICE`, `SERVICE_AGENT`, or `LEGACY_SERVICE`) | `user already exists but is a service user, not a person` (`AlreadyExists`) | Request a different `name`. The connector creates person users; it does not link a service account to the requester. |
+| The profile's `email` or `login` differs from the existing user's | `user already exists but its email differs from the request` or `user already exists but its login differs from the request` (`AlreadyExists`) | Request a different `name`, or correct that field in the profile or on the existing Snowflake user, then resubmit. The error names only the field, not either value. |
+| No email or login matches, including a profile with neither identifier or no comparable identifier pair | `a user with that name already exists but no email or login matched; link the account manually` (`AlreadyExists`) | Verify the account belongs to the requester and link it manually. The connector never links on the name alone. |
+| The existing-user lookup fails for another reason | `failed to fetch existing user` (retains the lookup error code) | Correct the lookup failure before resubmitting; retryable failures retain their retry behavior. For a permission failure, use the read privileges above. |
+
+Email is checked first, then login, case-insensitively. Each identifier is compared only when both the profile and existing user have a non-empty value. Either contradiction refuses the link, even when the other identifier matches. After those checks, at least one email or login pair must positively match; otherwise the request fails and the account must be linked manually. Snowflake's literal `null` for an unset property is treated as empty, not as an email address. An existing user without email can link only when the requested login matches. The existing user's login must still be readable.
+
 ### Issuing programmatic access tokens
 
 Enable **Issue credentials** to let the connector issue a Snowflake [programmatic access token](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) for an existing user, and revoke one it has issued. Issued tokens appear as **Programmatic access token** resources alongside the user they belong to once that resource type is enabled (see the note below).
