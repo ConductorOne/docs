@@ -48,25 +48,85 @@ These actions act on the account-level user, so disabling a user blocks them in 
 
 The connector authenticates with **OAuth** — an account-level service principal's client ID and secret. This is the only authentication method the connector supports.
 
+### Optional: faster updates between syncs
+
+By default, the Databricks connector picks up access changes on its regular sync schedule. You can optionally turn on incremental sync, which checks Databricks' activity log between full syncs so that changes like new group members, new service principals, and admin role changes on service principals show up in C1 sooner. Full syncs still run as usual and remain the source of truth. Removed group memberships are picked up incrementally too, but deleted users, groups, and service principals are only reflected after the next full sync.
+
+Role assignments that Databricks stores in access-control rule sets are also only reflected after the next full sync. These are group roles such as group manager, service principal roles, and the account `marketplace.admin` role.
+
+Incremental sync is turned on by providing the ID of a Databricks SQL warehouse (the **SQL Warehouse ID** setting, `BATON_SQL_WAREHOUSE_ID`) and turned off by leaving it empty — there is no separate on/off switch. Ask your connector operator or C1 support contact to enable it for you.
+
+#### Incremental sync requirements
+
+Your Databricks account must meet all of the following:
+
+- **Unity Catalog.** The SQL warehouse must be in a workspace enabled for Unity Catalog, and the metastore must be on Unity Catalog Privilege Model Version 1.0. Databricks enables most workspaces created after November 2023 for Unity Catalog automatically.
+- **System tables.** The connector reads Databricks' audit log system table, `system.access.audit`. Databricks currently offers this table as a Public Preview.
+- **A SQL warehouse, preferably serverless.** You don't need to create a new one: Databricks creates a **Starter Warehouse** in each workspace automatically, and any SQL warehouse works. See the recommendation below about the warehouse type.
+- **Permissions for the connector's service principal**, in addition to the **Account admin** role it already needs:
+  - `USE CATALOG` on the `system` catalog
+  - `USE SCHEMA` and `SELECT` on the `system.access` schema
+  - **Can use** on the SQL warehouse
+
+<Note>
+**We recommend a serverless SQL warehouse.** It starts in seconds, while a pro or classic warehouse can take several minutes to start. The connector waits up to about 6 minutes for the warehouse to start and each query to finish, so a slower start can delay updates until the next one. Serverless SQL warehouses require the Premium plan or above.
+</Note>
+
+<Warning>
+**Incremental sync covers one cloud region.** Databricks keeps workspace activity in the audit log of the region where each workspace is deployed. The connector only receives incremental updates for workspaces in the same region as the SQL warehouse. Workspaces in other regions are still updated by full syncs.
+</Warning>
+
+#### Set up incremental sync
+
+<Warning>
+A Databricks user with the **Account admin** role, and the **Metastore admin** role or the right to grant access to the `system` catalog, must perform this task.
+</Warning>
+
+<Steps>
+  <Step>
+  Choose a SQL warehouse in a Unity Catalog-enabled workspace, in the same region as the workspaces you want to update incrementally. In that workspace, go to **SQL Warehouses**, open the warehouse, and copy its ID. Check its type: if it isn't **Serverless**, switch it to serverless if your plan allows it (see the recommendation above).
+  </Step>
+  <Step>
+  On the **SQL Warehouses** page, click the kebab menu (three-dot icon) next to the warehouse, click **Permissions**, and give the connector's service principal the **Can use** permission.
+  </Step>
+  <Step>
+  In the same workspace, run the following in the SQL editor, replacing `<application-id>` with the service principal's application (client) ID:
+
+  ```sql
+  GRANT USE CATALOG ON CATALOG system TO `<application-id>`;
+  GRANT USE SCHEMA, SELECT ON SCHEMA system.access TO `<application-id>`;
+  ```
+  </Step>
+  <Step>
+  Enter the warehouse ID in the connector's **SQL Warehouse ID** setting (`BATON_SQL_WAREHOUSE_ID`).
+  </Step>
+</Steps>
+
+The SQL warehouse can live in any workspace in that region that is not listed in **Exclude Workspaces**, including a workspace outside **Workspaces** — the connector finds it automatically. **Workspaces** and **Exclude Workspaces** also limit which workspaces incremental sync updates, as they do for full syncs. Changes reach C1 roughly four hours after they happen: Databricks delivers audit log entries with a delay, so the connector waits before reading them.
+
+<Note>
+The incremental sync setup isn't checked when the connector starts, so a problem with it never blocks full syncs or provisioning. If something is missing, such as a permission or a warehouse that can't be found, every incremental update fails and the connector logs an error that names the cause until you fix it.
+</Note>
+
 ## Gather Databricks credentials
 
 Configuring the connector requires you to pass in credentials generated in Databricks. Gather these credentials before you move on.
 
 <Warning>
-A user with the **Account admin** role in each Databricks workspace you want to sync must perform this task.
+A user with the **Account admin** role in your Databricks account must perform this task. Account admin is an account-level role, managed in the Databricks account console.
 </Warning>
 
 ### Look up your Databricks account ID
 
 <Steps>
   <Step>
-  Ensure that your Databricks user account has the **Account admin** role and is assigned to each Databricks workspace you want to sync to C1.
+  Log in to the Databricks account console with a user that has the **Account admin** role.
   </Step>
   <Step>
   In the Databricks account console, open the menu that appears next to your username in the upper right corner.
   </Step>
   <Step>
-  Carefully and copy and save account ID.
+  Carefully copy and save the account ID.
   </Step>
 </Steps>
 
@@ -80,6 +140,9 @@ The Databricks connector authenticates with OAuth, which syncs info from all Dat
   </Step>
   <Step>
   Carefully copy and save the OAuth client ID and secret.
+  </Step>
+  <Step>
+  Give the service principal the **Account admin** role: in the account console, go to **User management** > **Service principals**, click the service principal, and on the **Roles** tab select **Account admin**. Databricks requires this role for any service principal that calls account-level APIs, and the connector fails validation without it.
   </Step>
 </Steps>
 
@@ -214,7 +277,7 @@ stringData:
   BATON_CLIENT_ID: <C1 client ID>
   BATON_CLIENT_SECRET: <C1 client secret>
   
-  # Databricks account ID (required for both credential options below)
+  # Databricks account ID (required)
   BATON_ACCOUNT_ID: <Databricks account ID>
 
   # Databricks credentials: OAuth
@@ -229,7 +292,11 @@ stringData:
   # Optional: exclude specific workspaces from the sync
   # (workspace name, deployment name, or numeric ID).
   # Mutually exclusive with BATON_WORKSPACES — set one or the other, never both.
-  BATON_DATABRICKS_EXCLUDE_WORKSPACES: <workspace-a,workspace-b>
+  # BATON_DATABRICKS_EXCLUDE_WORKSPACES: <workspace-a,workspace-b>
+
+  # Optional: setting this enables incremental sync; leave it unset to disable it.
+  # ID of the SQL warehouse used to query the system.access.audit log between full syncs.
+  # BATON_SQL_WAREHOUSE_ID: <SQL warehouse ID>
 
   # Optional: include if you want C1 to provision access using this connector
   BATON_PROVISIONING: true
