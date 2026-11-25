@@ -6,23 +6,23 @@ description: C1 provides identity governance and just-in-time provisioning for W
 sidebarTitle: Workday Account
 ---
 
-## Which Workday connector should I use? 
+## Which Workday connector should I use?
 
 C1 offers two Workday connectors: Workday and Workday Accounts. How you want to work with Workday in C1 will determine which one you should set up.
 
-* **[Workday connector](/baton/workday)**: This connector is the best choice if you want to use Workday as a [directory](/product/admin/directory). You’ll also need it if you want to enable access requests for Workday role and group assignments. 
+* **[Workday connector](/baton/workday)**: This connector is the best choice if you want to use Workday as a [directory](/product/admin/directory). You’ll also need it if you want to enable access requests for Workday role and group assignments. It syncs accounts, roles, and security groups. Configured with a custom report, it can also pull in the account owner’s organization, title, and manager.
 
-* **[Workday Accounts connector](/baton/workday-wql)**: This connector utilizes the Workday Query Language (WQL), which allows it to pull a different data set than the Workday connector. Workday Accounts is the best choice if you want to review who has what kind of access to Workday in your organization, including account type and service center assignments. 
+* **[Workday Accounts connector](/baton/workday-wql)**: This connector utilizes the Workday Query Language (WQL), which allows it to pull a different data set than the Workday connector. Workday Accounts is the best choice if you want to review who has what kind of access to Workday in your organization, including security groups, organization roles, account type, and service center assignments. Organization role assignments can be granted and revoked. The capabilities table lists what this connector syncs and what it provisions.
 
-| Resource                                          | Workday connector\* | Workday Accounts connector |
+| Resource | Workday connector | Workday Accounts connector |
 | :--- | :--- | :--- |
-| Accounts                                          | Sync                | Sync                             |
-| Roles                                             | Sync                |                                  |
-| Security groups                                   | Sync, Provision\*\* | Sync                             |
-| Account type (Implementers and Integration Users) |                     | Sync                             |
-| Service centers                                   |                     | Sync                             |
-
-*If the Workday connector is configured using a custom report, it can also pull in information on the account owner’s organization, title, and manager.
+| Accounts | Sync | Sync |
+| Roles | Sync | |
+| Security groups | Sync. Provisions user-based membership, with a JSON custom report | Sync. Provisions user-based membership |
+| Organization roles (opt-in) | | Sync, Provision |
+| Account type (Implementers and Integration Users) | | Sync |
+| Service centers | | Sync |
+| AI agents | Sync, with a JSON custom report and an API client | |
 
 ## Capabilities
 
@@ -31,16 +31,60 @@ C1 offers two Workday connectors: Workday and Workday Accounts. How you want to 
 | Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |       
 | Security groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   | 
 | User-based security groups | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>  | 
+| Organizations (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   |
+| Assignable roles (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   |
+| Organization roles (opt-in) | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>  | 
 | Account type    | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   | 
 | Service center  | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>    |   | 
 
-The connector provisions only user-based security groups, and only their direct assignments.
+The connector provisions organization role assignments and user-based security group membership. For user-based security groups, it provisions direct assignments only.
 
 The connector surfaces the following entitlements:
 
-* **Security groups** and **user-based security groups**: a `Member` entitlement, granted to each account that belongs to the group.
+* **Security groups** and **user-based security groups**: a `Member` entitlement, granted to each account that belongs to the group. Role-based security groups are synced for review only. Their `Member` entitlement cannot be granted or revoked, and C1 does not offer that action. Workday derives those memberships from an organization role assignment, so grant and revoke the **Assigned** entitlement on the organization role.
+* **Organizations**: one resource per active organization. The parent is the superior organization.
+* **Assignable roles**: one resource per assignable role referenced by a role-based security group in the type filter.
+* **Organization roles**: a scope binding for one assignable role on one organization, with an **Assigned** entitlement you can grant and revoke. See [Organization roles (opt-in)](#organization-roles-opt-in).
 * **Service centers**: a `Representative` entitlement, granted to each account that represents the service center.
 * **Account type**: `Implementer` and `Integration User` role assignments, granted to the matching accounts.
+
+## Organization roles (opt-in)
+
+An organization role assignment is a scope binding: one assignable role on one organization. The organization is the scope, and the role is the role side. The connector emits a binding only where a worker holds the role on that organization, and grants the **Assigned** entitlement to that worker.
+
+Workday passes a role assignment down from an organization to the organizations below it. The connector keeps only holders Workday marks as **Assigned**, because those are the only ones it can revoke. A holder who has the role by inheritance or by default on a sub-organization is not a grant there. That access still appears in C1 through the role-based security groups the role feeds.
+
+### Turn organization roles on
+
+<Steps>
+<Step>
+Add the role-based security group types to the **Other security group types** list, for example `Role-Based Security Group (Unconstrained)` and `Role-Based Security Group (Constrained)`. The names are case-sensitive, and one wrong character matches nothing. Get the list right before the first sync: the connector refuses a run only when C1 names the resource types to sync, and C1 does not name them on the first sync of a deployment, or at all on some tenants. When it names them, an empty list stops the connector before it calls Workday, and a list whose security groups name no assignable role fails the assignable role and organization role syncs. When it does not, the three types sync with nothing in them, and C1 reads that as a deletion. The **Other security groups** list narrows the same set and can empty it the same way.
+</Step>
+<Step>
+Enable **Organization**, **Assignable Role**, and **Organization Role** together under **Capabilities & configuration** > **Resource capabilities**. C1 leaves the three types off until you enable them, and a binding needs the other two: they are its role and its scope.
+</Step>
+<Step>
+Give the integration system user the domain rows in [Create a new security group](#create-a-new-security-group) and the [Assign Roles business process permission](#allow-the-integration-system-user-to-start-assign-roles).
+</Step>
+</Steps>
+
+<Note>
+The same **Other security group types** list selects which security groups sync. A list that names only the role-based types drops every other security group type.
+</Note>
+
+### Grant and revoke
+
+Grant assigns one worker to the role on the organization. Revoke removes that worker.
+
+<Warning>
+A Workday role can be restricted to a single assignment. On such a role, Assign Roles accepts a grant even when another worker already holds the role on that organization, removes that worker, and returns success. The connector therefore checks the current holder first and refuses the grant, naming the position that holds the role. Revoke the current assignment first, or transfer the role in Workday. The check needs Get on the Manage: Organization Roles domain. Without it, a grant on a single-assignment role fails with "The task submitted is not authorized".
+</Warning>
+
+<Note>
+Workday requires the `Update_Later_Dated_Assignments` option on a removal, so a revoke also updates later-dated assignments. Review scheduled role changes in Workday before you revoke.
+</Note>
+
+If the Assign Roles business process definition has an approval step, the assignment stays pending and the grant does not complete. An assignable role can also restrict who is allowed to assign it; the integration system security group has to be allowed on that role. See the [Workday Assign Roles reference](https://community.workday.com/sites/default/files/file-hosting/productionapi/Staffing/v45.0/Assign_Roles.html) for the service's validation rules.
 
 ## Gather Workday credentials 
 
@@ -71,7 +115,7 @@ In Workday, use the search bar to look up "Register API Client for Integrations"
 In the modal that appears, give the new API client a name, such as "C1 integration". 
 </Step>
 <Step>
-In the **Scopes** box, select **Custom Objects** and search for "System". Select **System** and click **OK**. The System scope is required to access the WQL API.
+In the **Scopes** box, select **Custom Objects** and add **System**, **Organizations and Roles**, and **Staffing**. System is required for the WQL API. Organizations and Roles is required for Get Organizations; without it, that call returns "not authorized". Staffing is required for Get Workers, Assign Roles, and Get Role Assignments For Role Assigners.
 </Step>
 <Step>
 The newly created client's client ID and client secret are shown. Carefully copy and save these credentials. 
@@ -125,24 +169,47 @@ Click the **+** icon to create new rows, and fill them out as follows:
 | :--- | :--- | :--- | :--- |
 | View Only          | WQL for Workday Extend                    | System           | (Required) WQL API Access              |
 | View Only          | Workday Accounts                          | System           | (Required) Accounts, Implementers      |
-| View Only          | Worker Data: Public Worker Reports        | Staffing         | Worker Info (title, managers)          |
+| View Only          | Worker Data: Public Worker Reports        | Staffing         | Worker name, email, manager, and job title |
+| Get Only           | Worker Data: Public Worker Reports        | Staffing         | Whether an organization role was assigned |
 | View Only          | Security Configuration                    | System           | Security Groups                        |
-| View Only          | Security Administration                   | System           | Account: Most Recent Sign-on            |
+| View Only          | Security Administration                   | System           | Most recent sign-on, and the assignable role catalog |
 | View Only          | Manage: Service Center                    | System           | Service Centers                        |
 | Get and Put        | User-Based Security Group Administration  | System           | User-Based Security Group Provisioning |
+| Get                | Manage: Organization Integration          | Organizations and Roles | Organization role sync, when enabled (Get Organizations) |
+| Get                | Manage: Organization Roles                | Organizations and Roles | Organization role grants, to read the holder of a role restricted to a single assignment (Get Role Assignments For Role Assigners) |
 </Step>
 <Step>
-Click **OK**. 
+Click **OK**.
 
-   Security group permissions will not take effect until they are activated in the following steps.
+   Worker Data needs both rows. **Maintain Permissions for Security Group** offers one access choice per domain, so add them from the domain: search for **Domain Security Policies for Functional Area**, choose **Staffing**, open **Worker Data: Public Worker Reports**, and choose **Edit Permissions**. **View Only** goes on **Report/Task Permissions**. **Get Only** goes on **Integration Permissions**.
 </Step>
 </Steps>
 
-#### Activate pending security policy changes 
+#### Allow the integration system user to start Assign Roles
+
+Grant and revoke run the Assign Roles web service. That permission is a business process security policy, not a domain row in the table above.
 
 <Steps>
 <Step>
-Next, activate the security policy changes. Search for "Activate Pending Security Policy Changes". 
+In Workday, search for "Edit Business Process Security Policy". Older tenants name this task "Maintain Business Process Security Policy".
+</Step>
+<Step>
+Select the initiating action **Assign Roles (Web Service)**.
+</Step>
+<Step>
+Add the integration system security group you created above, and click **OK**.
+</Step>
+</Steps>
+
+Use that integration system security group. Adding the integration system user to a user-based security group can start an approval. While the approval is pending the group stays empty, and Assign Roles returns "not authorized".
+
+#### Activate pending security policy changes
+
+Activate after the domain rows and after the Assign Roles policy. Neither takes effect until you do. Before activation, Assign Roles returns "The task submitted is not authorized".
+
+<Steps>
+<Step>
+Search for "Activate Pending Security Policy Changes". 
 </Step>
 <Step>
 Add a comment about the change you're making and click **OK**. 
@@ -229,7 +296,7 @@ To complete this task, you'll need:
       * If you select this option, you may enter an optional list of the user-based security groups that you want to sync in the **User-based security groups (optional)** field. 
    </Step>
    <Step>
-   **Optional.** Enter the list of (non-user-based) security group types you want to sync in the **Other security group types (optional)** field. Remember that security group type names are case-sensitive. 
+   **Optional.** Enter the list of (non-user-based) security group types you want to sync in the **Other security group types (optional)** field. The names are case-sensitive. Organization roles need the role-based types included in that list, for example `Role-Based Security Group (Unconstrained)` and `Role-Based Security Group (Constrained)`. A list that names only those two stops syncing every other security group type.
    </Step>
    <Step>
    **Optional.** Enter the list of (non-user-based) security groups you want to sync in the **Other security groups (optional)** field. Remember that security group names are case-sensitive.  
@@ -244,6 +311,9 @@ To complete this task, you'll need:
    </Step>
    <Step>
    Click **Save**.
+   </Step>
+   <Step>
+   **Optional.** To sync organization roles, open **Capabilities & configuration**, click **Edit**, and enable **Organization**, **Assignable Role**, and **Organization Role** together. See [Organization roles (opt-in)](#organization-roles-opt-in).
    </Step>
    <Step>
    The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
@@ -336,8 +406,11 @@ stringData:
   # Optional: include if you want to limit the synced security groups to the groups listed here
   BATON_SECURITY_GROUP_FILTER: <List of the names of other security groups to sync>
 
-  # Optional: include if you want to limit the synced security groups to the types listed here
-  BATON_SECURITY_GROUP_TYPE_FILTER: <List of other security group types to sync>
+  # Optional: include if you want to limit the synced security group types to the types listed here; add the role-based types to sync organization roles
+  BATON_SECURITY_GROUP_TYPE_FILTER: <types you already sync>,Role-Based Security Group (Unconstrained),Role-Based Security Group (Constrained)
+
+  # Optional: include if you want to limit the sync to the resource types listed here; leaving it unset syncs every type
+  # BATON_SYNC_RESOURCE_TYPES: user,account_type,service_center,user_based_security_group,security_group,organization,assignable_role,organization_role
 
   # Optional: include to add inherited members to security group grants and to optimize listing them for large tenants;
   # users must be synced in the same sync; a revoke removes only a direct assignment (default is false)
