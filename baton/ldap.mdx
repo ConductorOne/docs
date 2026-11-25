@@ -24,7 +24,9 @@ A group's membership lives in `member` (a DN), `uniqueMember` (a DN) or `memberU
 - Every write is confirmed by re-reading the entry on the connection that accepted it, and asking the same question sync asks -- is this principal a member? A write the server accepted but that cannot be confirmed is a retryable failure, and is never followed by a write to a second attribute.
 - **Revoke** removes the membership from wherever it actually is, deleting the exact stored values from every attribute that holds the principal in one request. A revoke never acts on a guess or on a configured pin.
 - A revoke acts on the group's own attributes and on nothing else, so a membership held only through a nested group is not revoked here: it answers `GrantAlreadyRevoked`, changes nothing in the directory, and reappears on the next sync — revoke it at the source group instead. The one membership the connector *does* report and cannot remove with a write to the group is the user's primary group, minted from the user entry's own `gidNumber`; that one is reported as an error naming it, whether or not this call also removed a direct membership. Otherwise the result is a plain success (a direct membership was removed) or `GrantAlreadyRevoked` (there was none).
-- Set `--group-member-attribute` to `member`, `uniqueMember` or `memberUid` (default `auto`) to pin the attribute a **grant** writes, for directories the connector cannot learn from -- notably one with schema checking disabled, so that no attribute is ever rejected. The pin governs grants only; revokes still act on where the membership actually is. See the connector README for the full behavior and its limits.
+- If the group is a user's **primary group**, the connector reports that membership from the user entry's `gidNumber`, and a revoke can't remove it: the user stays a member, and the next sync reports the grant again. The revoke tells you this and says what to change instead, so change the user's primary group in the directory.
+- Removing the last member of a `groupOfNames` can be rejected by the directory, because `member` is a required attribute of that class.
+- Set `--group-member-attribute` to `member`, `uniqueMember` or `memberUid` (default `auto`) to pin the attribute a **grant** writes, for directories the connector cannot learn from -- notably one with schema checking disabled, so that no attribute is ever rejected. The pin governs grants only; revokes still act on where the membership actually is.
 
 ### POSIX account provisioning
 
@@ -166,15 +168,14 @@ When running in service mode on Kubernetes, a self-hosted connector maintains an
 
 ### Resources
 
-* [Official download center](https://dist.conductorone.com/ConductorOne/baton-ldap): For stable binaries (Windows/Linux/macOS) and container images.
+* [Official connector registry](https://dist.conductorone.com/ConductorOne/baton-ldap): For stable binaries (Windows/Linux/macOS) and container images.
 
-* [GitHub repository](https://github.com/conductorone/baton-ldap): Access the source code, report issues, or contribute to the project.
 
 ### Step 1: Set up a new LDAP connector
 
 <Steps>
 <Step>
-In C1, navigate to **Apps** > **Connectors** > **Add connector**.
+In C1, navigate to **Apps** > **Connectors** and click **Browse connectors**.
 </Step>
 <Step>
 Search for **Baton** and click **Add**.
@@ -189,6 +190,8 @@ Set the connector's **Name** and, optionally, a **Description**.
 </Step>
 <Step>
 Click the pencil icon next to **Owners** to choose who can configure and manage this connector.
+
+Make sure any user who you select as a connector owner has either the Connector Admin or Super Admin user role in C1, as this is required to manage the connector.
 </Step>
 <Step>
 Click **Add**. The connector is created and its configuration page opens.
@@ -230,7 +233,7 @@ stringData:
   BATON_PROVISIONING: true
 ```
 
-See the connector's README or run `--help` to see all available configuration flags and environment variables.
+Run `--help` to see all available configuration flags and environment variables.
 
 #### Deployment configuration
 
@@ -272,7 +275,7 @@ spec:
 Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
 </Step>
 <Step>
-Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Managed apps** tab, locate and click the name of the application you added the LDAP connector to. LDAP data should be found on the **Entitlements** and **Accounts** tabs.
+Check that the connector data uploaded correctly. In C1, click **Apps**. On the **Applications** tab, locate and click the name of the application you added the LDAP connector to. LDAP data should be found on the **Entitlements** and **Accounts** tabs.
 </Step>
 </Steps>
 
