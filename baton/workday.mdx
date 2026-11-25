@@ -1,8 +1,8 @@
 ---
 title: Set up a Workday connector
 og:title: Set up a Workday connector - C1 docs
-og:description: "C1 provides identity governance for Workday. Integrate your Workday instance with C1 for unified visibility and governance over user access."
-description: "C1 provides identity governance for Workday. Integrate your Workday instance with C1 for unified visibility and governance over user access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Workday. Integrate your Workday instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+description: "C1 provides identity governance and just-in-time provisioning for Workday. Integrate your Workday instance with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
 sidebarTitle: "Workday"
 ---
 
@@ -48,10 +48,10 @@ The Workday connector supports provisioning membership in **user-based security 
 | Security groups |  |  |
 | AI agents | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |  |
 
-\*\*AI agents sync only when the custom report is configured with an API Client. With Basic Auth, turning on AI agents fails the sync.
+\*\*AI agents sync only when the custom report is configured with an API Client. With Basic Auth, leave **AI Agent** turned off: if it's on, the whole sync fails with an error saying AI agents need API Client credentials. Turn it off and sync again to recover. For a self-hosted connector, turning it off in C1 is not enough: also set `BATON_SYNC_RESOURCE_TYPES` to a list without `agent` (see [Secrets configuration](#secrets-configuration)).
 
 <Note>
-**AI agents are opt-in.** The connector syncs the agents registered in Workday's Agent System of Record (ASOR), including each agent's provider, platform, version, and skills. Enable the AI agents resource type in C1 after the API client's security group has the ASOR domain access described below. If the API client lacks that access, a sync that includes AI agents fails with an error naming the missing scope. Agents are synced as standalone resources and are not yet linked to the Agent System User accounts they run as.
+**AI agents are opt-in.** The connector syncs the agents registered in Workday's Agent System of Record (ASOR), including each agent's provider, platform, version, and skills. Turn on the **AI Agent** resource type in C1 after the API client has the ASOR access described below. Without the **Agent System of Record** scope or the **Setup: Agents** domain, the whole sync fails with an error naming the missing access. Agents are synced as standalone resources and are not yet linked to the Agent System User accounts they run as.
 </Note>
 
 ### Connector actions
@@ -71,9 +71,12 @@ To use this action:
   - Permission to initiate **Change Work Contact Information (Web Service)** in the **Work Contact Change** business process security policy
 - If you authenticate with an API client (Options 2 and 3 below), also add the **Contact Information** scope to the API client.
 - With a custom report, the report's `user_id` column must hold the worker's **Employee ID** or **Contingent Worker ID**.
+- In the **Perform connector action** automation step, set the user to the **C1 resource ID** of the worker's account in C1, not the Workday worker ID. A Workday ID fails with `resource <worker ID> with type user was not found`.
 
 <Note>
-**A phone can be updated, not added.** The worker must already have a primary work phone, and the new number keeps that phone's country and device type. Send the number with or without its country code; a number with a different country code is rejected. Clearing the email or phone isn't supported.
+Home (personal) email addresses and phones aren't changed.
+
+**A phone can be updated, not added.** The worker must already have a primary **work** phone, or the action fails with `the worker has no primary work phone to update`. The new number keeps that phone's country and device type. Send the number with or without its country code. A country code that differs from the current phone's, or any country code when the current phone has none, fails with `phone number's country code doesn't match the current work phone; send the number without the country code`. Clearing the email or phone isn't supported.
 </Note>
 
 <Tip>
@@ -146,11 +149,20 @@ Notes:
 - The `Column Heading Override XML Alias` value MUST match `Column Heading Override`.
 - You may substitute the suggested Workday object fields with alternatives as long as they provide equivalent data.
 - To sync extra worker attributes (such as cost center or location), add them as columns and enter their **Column Heading Override XML Alias** values in **Additional report fields** when you configure the connector.
+- The connector skips a worker with neither a `first_name` nor a `last_name` value. It logs the skip at debug level, which the default log level hides, or as a warning if the row has no `user_id`, `email` or name at all.
 
 <Warning>
    **CSV custom reports are deprecated.** Connectors already set up with a CSV report URL keep syncing, but new connectors should use a JSON report. To move a connector from CSV to JSON, create a **new** report with the fields above and switch the connector to its JSON URL in the same change.
 
-   Don't edit the existing CSV report in place. Until the URL changes, the connector reads that report as CSV, by column position, so any sync in between gives every account the wrong ID and C1 deletes and recreates all accounts and their grants. Changing only the URL is not enough either: the sync returns no accounts, because a CSV report's columns don't match the fields above. After the switch, role IDs change, so C1 recreates the roles and their grants, and security groups start syncing.
+   In the new report, `user_id` must hold the same Employee ID values as the CSV report's **Employee ID** column. With any other identifier, C1 deletes and recreates every account and its grants.
+
+   Do not edit the existing CSV report in place. Until the URL changes, the connector reads that report as CSV, by column position. If the edited report has fewer than 8 columns, every sync fails with `custom report have less columns than expected`, and C1 keeps the existing accounts. With 8 or more columns, the sync gives every account the wrong ID, and C1 deletes and recreates all accounts and their grants. The anomaly pause in C1 does not hold this sync, since the account count does not drop.
+
+   Changing only the URL is not enough either. A CSV report's columns do not match the fields above, so the sync fails with `report has <N> rows but none has a first_name or last_name`, and C1 keeps the existing accounts.
+
+   After the switch, role IDs change, so C1 recreates the roles and their grants. Turn on the **Security Group** resource type for the connector in C1 if it is off. Security groups do not sync while it is off. For a self-hosted connector with `BATON_SYNC_RESOURCE_TYPES` set, also add `group` to it.
+
+   To switch back to the CSV report, turn off **Security Group** first, while the JSON URL is still set. For a self-hosted connector, also remove `group` from `BATON_SYNC_RESOURCE_TYPES` if it is set. With **Security Group** on, every CSV sync fails with `invalid resource type 'group' in filter`, and the **Security Group** row no longer appears under **Resource capabilities**. If you already switched back, set the JSON URL again, turn off **Security Group**, remove `group` from `BATON_SYNC_RESOURCE_TYPES` if you set it, then switch to the CSV URL.
 </Warning>
 
 ### Security group provisioning
@@ -182,7 +194,9 @@ Connectors still on a CSV report need these fields **in this order**:
    * Organization
    * Organization Type
 
-   These columns are read by position, so their headers don't matter. To sync extra worker attributes (such as cost center or location), add them as columns after **Organization Type** and enter their column headers in **Additional report fields** when you configure the connector. Workday uses each column's **Column Heading Override XML Alias** as its CSV header (for example `Cost_Center`), so enter that value. Values are read from each worker's first row, and blank values are left out of the profile. If a header matches a built-in profile key (`first_name`, `last_name` or `security_group`), the built-in value is kept.
+   These columns are read by position, so their headers don't matter. To sync extra worker attributes (such as cost center or location), add them as columns after **Organization Type** and enter their column headers in **Additional report fields** when you configure the connector. Workday uses each column's **Column Heading Override XML Alias** as its CSV header (for example `Cost_Center`), so enter that value. Values are read from each worker's first row and trimmed, and blank or whitespace-only values are left out of the profile. If a header matches a built-in profile key (`first_name`, `last_name`, `security_group` or `email`), the built-in value is kept.
+
+   Each name in **Additional report fields** must match a CSV column header exactly. Matching is case-sensitive and spaces are not trimmed. If a name doesn't match any column, the sync fails with `configured additional fields not found in report: [...]`; correct or remove the names it lists. A name that matches no column doesn't fail the sync if it's a built-in profile key (`first_name`, `last_name`, `security_group`, `email`) or a standard JSON report field name (such as `manager_email`); it's skipped.
 
 <Tip>
    The fields needed in custom reports can vary depending on how your Workday installation is configured. Contact C1 support if you need help figuring out which fields to include.   
@@ -580,30 +594,37 @@ stringData:
   BATON_CLIENT_SECRET: <C1 client secret>
 
   # Option 1: Custom report with Basic Auth
-  BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: true
+  BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: "true"
   BATON_WORKDAY_REPORT_URL: <Workday custom report URL>
   BATON_WORKDAY_REPORT_USERNAME: <Workday username of the user who created the report>
   BATON_WORKDAY_REPORT_PASSWORD: <Workday password of the user who created the report>
   BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday custom report (their XML aliases) to include in user profiles>
 
   # Option 2: Custom report with OAuth (refresh token must belong to the report owner)
-  BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: true
+  BATON_WORKDAY_FETCH_USERS_FROM_CUSTOM_REPORT: "true"
   BATON_WORKDAY_REPORT_URL: <Workday custom report URL>
   BATON_WORKDAY_CLIENT_ID: <Workday API client ID>
   BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret>
-  BATON_WORKDAY_REFRESH_TOKEN: <Refresh token generated for the report owner>
+  BATON_REFRESH_TOKEN: <Refresh token generated for the report owner>
   BATON_TENANT_NAME: <Workday tenant name>
   BATON_WORKDAY_ADDITIONAL_REPORT_FIELDS: <List of additional field names from the Workday custom report (their XML aliases) to include in user profiles>
 
   # Option 3: API client with OAuth
   BATON_WORKDAY_CLIENT_ID: <Workday API client ID>
   BATON_WORKDAY_CLIENT_SECRET: <Workday API client secret>
-  BATON_WORKDAY_REFRESH_TOKEN: <Workday API client refresh token>
+  BATON_REFRESH_TOKEN: <Workday API client refresh token>
   BATON_WORKDAY_URL: <Workday API URL>
   BATON_TENANT_NAME: <Workday tenant name>
+
+  # Optional: include if you want C1 to provision access using this connector
+  BATON_PROVISIONING: "true"
 ```
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+<Note>
+A self-hosted run with no resource type selection includes AI agents, so it fails with Basic Auth (Option 1) or without the ASOR access above. To leave agents out, set `BATON_SYNC_RESOURCE_TYPES` (`--sync-resource-types` on the CLI): `user,role,group` for JSON custom reports, `user,role` for CSV, or `user` for API client (Option 3). Separate the types with commas and no spaces: `user, role` fails with `invalid resource type ' role' in filter`.
+</Note>
 
 #### Deployment configuration
 
@@ -623,7 +644,7 @@ spec:
     metadata:
       labels:
         app: baton-workday
-        baton: true
+        baton: "true"
         baton-app: workday
     spec:
       containers:
@@ -667,3 +688,23 @@ Make sure that **Worker Data: Public Worker Reports** is shown in the **Domain S
 </Steps>
 </Tab>
 </Tabs>
+
+## Troubleshooting AI agent sync
+
+### AI agent sync fails with "AI agents need API Client credentials"
+
+The **AI Agent** resource type is turned on for an app that uses Basic Auth (Option 1). Basic Auth can't call Workday's Agent System of Record API, so the whole sync fails, not only AI agents.
+
+To fix it, do one of the following, then sync again:
+
+- Turn off **AI Agent** for the connector in C1. For a self-hosted connector, also set `BATON_SYNC_RESOURCE_TYPES` to a list without `agent` (see [Secrets configuration](#secrets-configuration)).
+- Switch to a custom report with API Client (Option 2) or to API client (Option 3).
+
+### AI agent sync fails with "the API client needs the Agent System of Record scope"
+
+The API client can't read the Agent System of Record, so the whole sync fails, not only AI agents.
+
+To fix it, do one of the following, then sync again:
+
+- Add the **Agent System of Record** scope to the API client, and give the account it runs as View access to the **Setup: Agents** domain (see [Gather Workday credentials](#gather-workday-credentials)).
+- Turn off **AI Agent** for the connector in C1. For a self-hosted connector, also set `BATON_SYNC_RESOURCE_TYPES` to a list without `agent` (see [Secrets configuration](#secrets-configuration)).

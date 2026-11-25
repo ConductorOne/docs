@@ -46,7 +46,17 @@ These actions act on the account-level user, so disabling a user blocks them in 
 
 ## Authentication methods
 
-The connector authenticates with **OAuth** — an account-level service principal's client ID and secret. This is the only authentication method the connector supports.
+The connector authenticates as an account-level service principal, named by its client ID. It proves it is that service principal in one of three ways:
+
+- **OAuth client secret** (default): the service principal's client ID and secret.
+- **Workload identity federation**: the connector presents an externally issued JWT that identifies the workload, such as a SPIFFE JWT-SVID or a Kubernetes projected service account token, and Databricks exchanges it for a short-lived token. No long-lived secret is stored, and the Databricks administrator controls access through a service principal federation policy. This fits a deployment where the platform running the connector already issues it a workload identity token.
+- **Workload identity federation (C1-hosted)**: C1 signs a short-lived JWT for this connector, and Databricks exchanges it for a short-lived token. No credential is stored, and the hosted runtime selects this method.
+
+The authentication method selects the credential. There is no personal access token (PAT), workspace token, or username and password option.
+
+<Warning>
+The token file method is for a connector you run yourself, on the command line or in service mode. Select it with `--auth-method workload-identity-file`. A C1-hosted connector uses workload identity too, but C1 issues the JWT and the runtime selects the method.
+</Warning>
 
 ### Optional: faster updates between syncs
 
@@ -132,7 +142,7 @@ A user with the **Account admin** role in your Databricks account must perform t
 
 ### Generate Databricks credentials
 
-The Databricks connector authenticates with OAuth, which syncs info from all Databricks workspaces the service principal can access.
+The Databricks connector authenticates as a service principal, which syncs info from all Databricks workspaces that service principal can access.
 
 <Steps>
   <Step>
@@ -151,6 +161,34 @@ The Databricks connector authenticates with OAuth, which syncs info from all Dat
 - Account ID
 - OAuth client ID
 - OAuth client secret
+
+### Use workload identity federation instead of a secret
+
+You can skip the OAuth secret and have the connector present an externally issued JWT instead. The connector must be able to read that JWT where it runs, so this suits a deployment whose platform injects a workload identity token.
+
+<Steps>
+  <Step>
+  Create the service principal as described above, but do not generate an OAuth secret.
+  </Step>
+  <Step>
+  Follow the [Databricks OAuth token federation documentation](https://docs.databricks.com/aws/en/dev-tools/auth/oauth-federation-exchange) to add a service principal federation policy that trusts the issuer, subject and audience of the JWT your workload receives.
+  </Step>
+  <Step>
+  Make the JWT available to the connector, ideally as a file that your platform rotates.
+  </Step>
+</Steps>
+
+**Done.** In this case the credentials are the account ID, the OAuth client ID, and the JWT, in place of the OAuth client secret.
+
+#### C1-hosted connectors
+
+A C1-hosted connector needs no JWT from you. C1 signs one for the connector, valid for 10 minutes, and your tenant needs the `WORKLOAD_IDENTITY_OIDC_ISSUER` feature flag. Add a federation policy to the service principal with these values:
+
+| Policy value | Value |
+| --- | --- |
+| Issuer | `<tenant endpoint>/auth/v1/workload-identity`. C1 publishes its keys at `<tenant endpoint>/auth/v1/workload-identity/.well-known/openid-configuration`, so Databricks can discover them. |
+| Audience | The service principal's OAuth client ID. |
+| Subject | `c1:tenant/<tenant id>/app/<app id>/connector/<connector id>`. Use it to limit the policy to one connector. |
 
 Next, move on to the instructions for your chosen setup method.
 
@@ -284,6 +322,18 @@ stringData:
   BATON_DATABRICKS_CLIENT_ID: <OAuth client ID>
   BATON_DATABRICKS_CLIENT_SECRET: <OAuth client secret>
 
+  # Alternative to BATON_DATABRICKS_CLIENT_SECRET: workload identity federation.
+  # Both variables below are required together. Without BATON_AUTH_METHOD the
+  # connector validates against the client secret method and fails on the
+  # missing secret.
+  # Point the file at a projected service account token, or any other externally
+  # issued JWT your federation policy trusts. It is read again on every token
+  # refresh, so a rotated token needs no restart.
+  # Nothing creates this file for you: uncomment the matching volume and
+  # volumeMount in the Deployment below, or mount the JWT there yourself.
+  # BATON_AUTH_METHOD: workload-identity-file
+  # BATON_DATABRICKS_OIDC_TOKEN_FILE: /var/run/secrets/databricks/token
+
   # Optional: limit the sync to specific workspaces
   # (workspace name, deployment name, or numeric ID).
   # Mutually exclusive with BATON_DATABRICKS_EXCLUDE_WORKSPACES — set one or the other, never both.
@@ -307,7 +357,7 @@ stringData:
 </Warning>
 
 <Note>
-OAuth requires a reachable account API. If the account API check fails at startup, the connector fails validation instead of falling back to a workspace-only sync, even when `BATON_WORKSPACES` is set.
+Both credential options require a reachable account API. If the account API check fails at startup, the connector fails validation instead of falling back to a workspace-only sync, even when `BATON_WORKSPACES` is set.
 </Note>
 
 See the connector's README or run `--help` to see all available configuration flags and environment variables.
@@ -343,6 +393,21 @@ spec:
         envFrom:
         - secretRef:
             name: baton-databricks-secrets
+        # Only for BATON_DATABRICKS_OIDC_TOKEN_FILE: mount the JWT at the path the
+        # secret points to. Leave this out when you use the client secret.
+        # volumeMounts:
+        # - name: databricks-oidc-token
+        #   mountPath: /var/run/secrets/databricks
+        #   readOnly: true
+      # volumes:
+      # - name: databricks-oidc-token
+      #   projected:
+      #     sources:
+      #     - serviceAccountToken:
+      #         path: token
+      #         # Must match the audience of the Databricks federation policy.
+      #         audience: <federation policy audience>
+      #         expirationSeconds: 3600
 ```
 
 ### Step 3: Deploy the connector

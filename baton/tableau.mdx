@@ -39,11 +39,27 @@ In Tableau, licensing is role-based: each user's **site role** determines their 
 When your Tableau site has per-tier seat capacities configured, C1 tracks the purchased and consumed seat counts for each license tier, so you can review license utilization alongside who holds each tier.
 </Note>
 
-Because a tier is a view of the user's single site role, several roles can satisfy one tier (for example, a Site Administrator Creator counts as Creator), and the four tiers are mutually exclusive in C1 with no default tier or ranking. Granting a tier the user already holds changes nothing and keeps their current role. Administrators are refused when you grant them a different tier: change their role through the Site Role entitlement instead. For any other user, granting a tier sets their site role to that tier's base role, and C1 replaces their previous tier grant when the previous role belonged to a recognized tier. Granting to a user that no longer exists returns a not-found error.
+Because a tier is a view of the user's single site role, several roles can satisfy one tier (for example, a Site Administrator Creator counts as Creator), and the four tiers are mutually exclusive in C1, with no ranking among them. Granting a tier the user already holds changes nothing and keeps their current role. Administrators are refused when you grant them a different tier: change a Site Administrator's role through the Site Role entitlement instead, and ask a server administrator to change a Server Administrator's role in Tableau. For any other user, granting a tier sets their site role to that tier's base role, and C1 replaces their previous tier grant when the previous role belonged to a recognized tier. Granting to a user that no longer exists returns a not-found error.
 
-Revoking a tier a user still holds sets them to Unlicensed, including users with an administrator role. Revoking from a user who no longer exists, or who no longer holds the tier, changes nothing; the same applies to revoking Unlicensed from an Unlicensed user, and the next sync still shows that user as Unlicensed. To give a revoked administrator their role back, assign it through the Site Role entitlement. Server Administrator exists only on Tableau Server and this connector cannot assign it, so a revoked Server Administrator stays Unlicensed until a server administrator restores the role in Tableau. Revoke also fails if the user belongs to a group with a "Grant role on sign in" minimum site role; remove them from that group first.
+Revoking a tier a user still holds sets them to Unlicensed, including users with an administrator role; the Unlicensed tier may only appear in C1 after a later sync. Revoking from a user who no longer exists, or who no longer holds the tier, changes nothing; the same applies to revoking Unlicensed from an Unlicensed user, and the next sync still shows that user as Unlicensed. To give a revoked administrator their role back, assign it through the Site Role entitlement. Server Administrator exists only on Tableau Server and this connector cannot assign it, so a revoked Server Administrator stays Unlicensed until a server administrator restores the role in Tableau. The connector also refuses to change the role of the account it signs in as, so it cannot lock itself out. Revoke also fails if the user belongs to a group with a "Grant role on sign in" minimum site role; remove them from that group first.
+
+## Site roles
+
+A user has one site role, so the Site Role entitlements are mutually exclusive in C1. Roles are compared exactly, with no hierarchy. The connector reads the user's current role before every Grant or Revoke:
+
+- Granting the role the user already holds, including Unlicensed, changes nothing; C1 is told the grant already exists.
+- Granting a different role sets exactly that role and, once the write succeeds, tells C1 which site-role grant was replaced. This includes replacing a Site Administrator, Site Administrator Creator, or Site Administrator Explorer: a Site Role grant is the explicit way to change those roles.
+- Revoking a role the user no longer holds, or for a user that no longer exists, changes nothing and never overwrites their current role.
+- Revoking the role the user holds sets them to Unlicensed, including a held administrator role or Server Administrator; the Unlicensed role may only appear in C1 after a later sync. Revoking Unlicensed from an Unlicensed user changes nothing, and the next sync still shows them as Unlicensed.
+- Server Administrator exists only on Tableau Server and the connector cannot assign it. Granting another role to a Server Administrator is refused and nothing is written. If you revoke Server Administrator, the connector cannot restore it: a server administrator has to restore it in Tableau.
+- The connector never changes the role of the account it signs in as. A grant or revoke that would do so is refused and nothing is written, so the connector cannot lock itself out.
+
 <Note>
 Revoking a license fails if the user belongs to a group with a **Grant role on sign in** minimum site role. Tableau returns `Site role of link user that belongs to license upon login cannot be lower than minimum site role of group`. Remove the user from that group first, then revoke the license.
+</Note>
+
+<Note>
+A site role and a license tier are two views of the same Tableau setting. When you change one, the other changes too, but C1 only updates the grant you changed. The other grant (the license or the site role) is corrected on the next sync.
 </Note>
 
 ## Permission inheritance

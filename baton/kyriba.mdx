@@ -16,11 +16,21 @@ The Kyriba connector syncs the following resources:
 | Resource | Sync | Provision |
 | :--- | :--- | :--- |
 | Users | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
-| Access Profiles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Access Profiles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 | Data Permission Profiles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 | User Groups | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
 
 {/* AUTO-GENERATED:END - capabilities */}
+
+### Access profile provisioning
+
+Access profile grants assign or replace a user's single access profile. The connector reads the complete user with `GET /v1/users/{ref}`, changes only `accessProfile`, and sends the complete user back with `PUT /v1/users/{ref}` to preserve all other fields. This uses the existing `user-scope` permission with user-update access; no new permission or OAuth token scope is needed.
+
+Access profile assignments are mutually exclusive. Assigning the current profile is an idempotent success; assigning a different profile replaces the previous assignment. Revoke moves the user to **Access profile revoke fallback code**, unless **Access profile revoke fallback map** supplies a `PROFILE_CODE=FALLBACK_CODE` override for the revoked profile. Map keys match case-insensitively, including profiles discovered by UUID, and overrides can be used without a default. Copy codes exactly and choose existing profiles with appropriate minimal access: this assigns access rather than disabling the account. A missing fallback or a fallback equal to the revoked profile returns `FailedPrecondition` without a write. If the assignment is already absent or has been replaced, revocation succeeds without a write, including on retry.
+
+If Kyriba omits the current profile's code, revoke returns `FailedPrecondition` without a write because it cannot safely apply overrides or rule out a self-fallback.
+
+The [Kyriba Users OpenAPI specification](https://developer.kyriba.com/static/apis/users/users.yaml) requires an `accessProfile` reference in `UpdatableUser`, so it cannot be cleared; the connector replaces it with the configured fallback code. The update operation documents no ETag or `If-Match` support. Reads bypass the HTTP cache, but GET/PUT is not atomic: avoid concurrent user changes during provisioning. Kyriba allows one concurrent request per API client, 50 calls per 30 seconds, and 15,000 calls per day per environment. On 429, the connector returns a retryable error with Kyriba's reset time for SDK-managed retries.
 
 ### Connector actions
 
@@ -64,11 +74,11 @@ The connector authenticates using OAuth2 client credentials. You will need:
 
     | Access permission | Used for |
     | :--- | :--- |
-    | `user-scope` | Sync users and access profiles; create and delete users; assign data permission profiles |
+    | `user-scope` | Sync users and access profiles; create and delete users; assign access profiles and data permission profiles |
     | `user-group-scope` | Sync user groups; add and remove members |
     | `data-permission-profile-scope` | Sync data permission profiles |
 
-    These are Kyriba access permissions granted to the API user, not OAuth `scope` parameters — the connector does not send a `scope` value on the token request. For sync-only (read) access, all three are still required. Provisioning requires write access on the relevant permissions: `user-scope` for account creation/deletion, the `enable_user`/`disable_user` actions, and data permission profile assignment; `user-group-scope` for group membership changes. Note that user **update and deletion** — used for the `enable_user`/`disable_user` actions and data-permission-profile assignment (`PUT /v1/users/{ref}`), and account deprovisioning (`DELETE /v1/users/{ref}`) — require broader user-management permission than user creation. A credential granted only create + read access may sync and create users successfully but return `403 Forbidden` on updates, deletes, and the enable/disable actions; grant full user-management permission if you need deprovisioning, enable/disable, or data-permission-profile assignment.
+    These are Kyriba access permissions granted to the API user, not OAuth `scope` parameters — the connector does not send a `scope` value on the token request. For sync-only (read) access, all three are still required. Provisioning requires write access on the relevant permissions: `user-scope` for account creation/deletion, the `enable_user`/`disable_user` actions, access profile assignment, and data permission profile assignment; `user-group-scope` for group membership changes. Note that user **update and deletion** — used for the `enable_user`/`disable_user` actions and access-profile or data-permission-profile assignment (`PUT /v1/users/{ref}`), and account deprovisioning (`DELETE /v1/users/{ref}`) — require broader user-management permission than user creation. A credential granted only create + read access may sync and create users successfully but return `403 Forbidden` on updates, deletes, and the enable/disable actions; grant full user-management permission if you need these operations.
   </Step>
 
   <Step>
@@ -121,6 +131,9 @@ The connector authenticates using OAuth2 client credentials. You will need:
         - **Token URL**: The OAuth2 token endpoint URL (for example, `https://<your-tenant-host>/gateway/oauth/token`; the host may differ from the API host)
         - **Kyriba Client ID**: Your OAuth2 client ID from the Kyriba Developer Portal
         - **Kyriba Client Secret**: Your OAuth2 client secret from the Kyriba Developer Portal
+        - **Access profile codes**: Optional codes to sync even when no users are assigned. Adding a profile that already has users changes its ID in ConductorOne. Copy codes exactly.
+        - **Access profile revoke fallback code**: Optional default profile code to assign when revoking a user's current access profile, for example `MINIMAL`.
+        - **Access profile revoke fallback map**: Optional `PROFILE_CODE=FALLBACK_CODE` overrides, for example `ADMIN=READONLY`. Keys match case-insensitively. Duplicate or malformed entries are rejected at startup.
       </Step>
 
 {/* AUTO-GENERATED:END - config-params */}
@@ -269,7 +282,11 @@ The connector authenticates using OAuth2 client credentials. You will need:
 
 ## Known Limitations
 
-**Access profiles with no assigned users** — The Kyriba API does not expose a standalone list endpoint for access profiles. ConductorOne derives access profile resources from user-assignment data. Any access profile that exists in Kyriba but has no users currently assigned to it will not appear in the ConductorOne catalog until at least one user is assigned to it and a sync completes.
+**Access profiles with no assigned users** — The Kyriba API does not expose a list endpoint for access profiles, so the connector discovers access profiles from the users assigned to them. To sync an access profile that has no users, so that it can be added to request policies and requested, add its code to **Access profile codes** in the connector configuration. Profiles listed there are always synced and are identified by their code, so they keep the same identity in ConductorOne as users are assigned and removed. Enter codes as they appear in Kyriba; grants send the code as entered. Users' profiles are matched to codes regardless of case. Codes are not checked against Kyriba: a mistyped code, or the code of a profile that was renamed or deleted in Kyriba, syncs as an access profile with no users and requests for it fail, so keep the list up to date. Access profiles that are not listed appear only while at least one user is assigned to them.
+
+Adding or removing a code changes the identity of a profile that is already in ConductorOne. After the next sync, the profile appears as a new resource and its grants move to it, so re-add it to any request policies, bundles, and access reviews that used the old one. A removed profile with no users disappears.
+
+Leaving **Access profile codes** empty changes nothing. To avoid moving existing grants, list only profiles that have no users yet. Copy codes exactly.
 
 ---
 
