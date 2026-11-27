@@ -1,0 +1,377 @@
+---
+title: "Set up an Amazon SageMaker connector"
+og:title: "Set up an Amazon SageMaker connector"
+description: "C1 provides identity governance and just-in-time provisioning for Amazon SageMaker. Integrate your Amazon SageMaker AI domains with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+og:description: "C1 provides identity governance and just-in-time provisioning for Amazon SageMaker. Integrate your Amazon SageMaker AI domains with C1 to run user access reviews (UARs), enable just-in-time access requests, and automatically provision and deprovision access."
+sidebarTitle: "Amazon SageMaker"
+---
+
+{/* AUTO-GENERATED:START - capabilities
+     Generated from baton_capabilities.json. Do not edit manually. */}
+
+## Capabilities
+
+The Amazon SageMaker connector syncs the following resources:
+
+| Resource | Sync | Provision |
+| :--- | :--- | :--- |
+| User profiles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+| Domains | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Spaces | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | |
+| Execution roles | <Icon icon="square-check" iconType="solid" color="#c937ae"/> | <Icon icon="square-check" iconType="solid" color="#c937ae"/> |
+
+{/* AUTO-GENERATED:END - capabilities */}
+
+The Amazon SageMaker connector syncs the SageMaker AI domains, user profiles, and Studio spaces in each AWS Region you choose, plus the IAM roles that SageMaker AI can assume (execution roles). Domain membership (every user profile in a domain), space ownership, and each user profile's execution role sync as access. A user profile without its own execution role shows the domain's default execution role. In a domain that uses IAM Identity Center, a user profile's login is the user's IAM Identity Center user name, and it's also the email when the user name is an email address. In a domain that uses IAM authentication, user profile names are free text, so those user profiles have no login or email and aren't matched to C1 identities. Service-linked roles and roles from other AWS accounts aren't synced, so a user profile running as one of those shows no execution role grant.
+
+The connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning): it creates a user profile in the domain you choose and deletes user profiles. Membership in a domain comes from having a user profile in it, so there is no separate grant or revoke for domains. Space ownership can't be changed after a space is created, so spaces are sync only.
+
+The connector can also change a user profile's execution role. Granting an execution role replaces the profile's current one. Revoking an execution role sets the profile's execution role to the domain's current default execution role, so a later change to the domain default doesn't reach that profile. Creating, deleting, and changing a user profile finish only once SageMaker AI reports the operation done. Each wait is bounded to two minutes. If the profile ends in a failed state, or SageMaker AI hasn't finished in time, the task fails. A user profile's execution role applies only to the private spaces the user creates; shared spaces use the domain's default space execution role.
+
+<Note>
+**The domain default execution role can't be revoked.** C1 marks that grant as one it can't revoke directly, whether the user profile inherits the default or has it set explicitly. Revoking also fails when the domain has no default execution role to fall back to, or when the profile's last execution role change failed in SageMaker AI. Grant a different execution role instead.
+</Note>
+
+<Warning>
+**Deleting a user profile removes the user's access to their home EFS volume, including data, notebooks, and other artifacts** ([DeleteUserProfile](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DeleteUserProfile.html)). To remove a user's access, delete the user profile; the connector has no enable or disable actions.
+</Warning>
+
+<Note>
+**Deleting a user profile fails while it still has apps or spaces.** A user profile can't be deleted while it still has [apps that haven't failed](https://docs.aws.amazon.com/sagemaker/latest/dg/gs-studio-delete-domain.html) or spaces it owns. Delete the profile's apps and spaces in SageMaker AI first.
+</Note>
+
+## Gather Amazon SageMaker credentials
+
+<Warning>
+**The cloud-hosted connector isn't available yet, so set the connector up self-hosted for now.** The steps below describe the cloud-hosted setup. For a self-hosted connector, create the same role, but trust your own IAM user or host role instead of `ConductorOneService`, and use an external ID of your choosing instead of one from C1. See the **Self-hosted** tab below.
+</Warning>
+
+<Warning>
+To configure the connector, you need permission to create IAM roles in the AWS account that holds your SageMaker AI domains.
+</Warning>
+
+C1 reaches your AWS account through an IAM role that you create and that trusts C1. This is the only option for a C1-hosted connector; the access key fields are not offered there.
+
+<Steps>
+  <Step>
+    In C1, open the connector's **Settings** and copy the value of **External ID**. You will paste it into the trust policy below.
+  </Step>
+
+  <Step>
+    Navigate to the [IAM Dashboard](https://us-east-1.console.aws.amazon.com/iamv2/home?) and select **Roles** > **Create role**.
+  </Step>
+
+  <Step>
+    Select **Custom trust policy** and paste the following into the trust policy JSON editor, replacing `EXTERNAL_ID_FROM_C1` with the External ID you copied from C1:
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "AWS": "arn:aws:iam::765656841499:role/ConductorOneService"
+          },
+          "Action": "sts:AssumeRole",
+          "Condition": {
+            "StringEquals": {
+              "sts:ExternalId": "EXTERNAL_ID_FROM_C1"
+            }
+          }
+        }
+      ]
+    }
+    ```
+
+    **Notes on the trust policy:**
+
+    **`"Principal"`**: `arn:aws:iam::765656841499:role/ConductorOneService` is C1's isolated AWS service account. It is the only entity this policy trusts, so no other account can assume the role.
+
+    **`"Action": "sts:AssumeRole"`**: the only action allowed, and it lets C1 take a temporary session in your account rather than hold a standing credential.
+
+    **`"Condition"`** on `sts:ExternalId`: a shared identifier confirming which trust relationship is in use, which is what prevents the [confused deputy problem](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html). It must match character for character.
+  </Step>
+
+  <Step>
+    Click **Next**, then attach the read-only sync policy below. It is all the connector needs to sync:
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "sagemaker:ListDomains",
+            "sagemaker:DescribeDomain",
+            "sagemaker:ListUserProfiles",
+            "sagemaker:DescribeUserProfile",
+            "sagemaker:ListSpaces",
+            "iam:ListRoles",
+            "iam:GetRole"
+          ],
+          "Resource": "*"
+        }
+      ]
+    }
+    ```
+  </Step>
+
+  <Step>
+    (Optional) **Permissions for provisioning**: if C1 should create and delete user profiles or change their execution roles, attach this second policy to the role too. Skip it for a sync-only setup:
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "sagemaker:CreateUserProfile",
+            "sagemaker:DeleteUserProfile",
+            "sagemaker:UpdateUserProfile"
+          ],
+          "Resource": "*"
+        },
+        {
+          "Effect": "Allow",
+          "Action": "iam:PassRole",
+          "Resource": "*",
+          "Condition": {
+            "StringEquals": { "iam:PassedToService": "sagemaker.amazonaws.com" }
+          }
+        }
+      ]
+    }
+    ```
+
+    The `iam:PassRole` statement is needed only to change execution roles. To limit which roles C1 can assign, replace its `"Resource": "*"` with the ARNs of those roles.
+  </Step>
+
+  <Step>
+    Give the role a name and click **Create role**. Open the new role and copy its **ARN**; that is the value for **Role ARN** in C1.
+  </Step>
+
+  <Step>
+    Note the AWS Regions of your SageMaker AI domains, for example `us-east-1` and `eu-west-1`. AWS GovCloud and AWS China are not supported.
+  </Step>
+</Steps>
+
+<Note>
+**A sync that fails with `AccessDenied` on `sts:AssumeRole` usually means the external ID doesn't match or the trust policy doesn't allow C1.** Check that the External ID in C1 matches the trust policy character for character. Regenerating the External ID in C1 means updating the trust policy too.
+</Note>
+
+## Account provisioning fields
+
+When you set up account provisioning in C1, map these fields:
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| Region | Yes | AWS Region of the SageMaker AI domain, for example `us-east-1`. It must be one of the connector's configured Regions. |
+| Domain ID | Yes | ID of the SageMaker AI domain, for example `d-xxxxxxxxxxxx`. |
+| User profile name | Yes | Name of the new user profile. Up to 63 characters: letters, numbers, and hyphens, starting and ending with a letter or number. Must be unique within the domain, ignoring case (`Jane-Doe` and `jane-doe` are the same name). |
+| IAM Identity Center user name | For IAM Identity Center domains | The user name of an existing user in your IAM Identity Center directory. Must be empty for domains that use IAM authentication. To link an existing user profile, the name must match the profile's user name exactly, including case. |
+
+If a user profile with the same name already exists in the domain and is usable, C1 links to it instead of creating a new one. In a domain that uses IAM Identity Center, C1 links to it only if it belongs to the same IAM Identity Center user, and fails otherwise.
+
+<Note>
+**In a domain that uses IAM Identity Center, give the user access to the domain.** Add an IAM Identity Center group that contains the user to the domain in the domain's settings in the SageMaker AI console. See [Onboard to Amazon SageMaker AI domain using IAM Identity Center](https://docs.aws.amazon.com/sagemaker/latest/dg/onboard-sso-users.html).
+</Note>
+
+## Configure the Amazon SageMaker connector
+
+<Tabs>
+  <Tab title="Cloud-hosted">
+    <Warning>
+    **The cloud-hosted connector isn't available yet.** C1 can't yet assume the role in your AWS account for this connector. Use the self-hosted connector until it is.
+    </Warning>
+
+    Follow these instructions to use a built-in, no-code connector hosted by C1.
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** and click **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Amazon SageMaker** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Amazon SageMaker connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        Find the **Settings** area of the page and click **Edit**.
+      </Step>
+
+{/* AUTO-GENERATED:START - config-params
+     Generated from config_schema.json. Do not edit manually. */}
+
+      <Step>
+        Enter the Amazon SageMaker credentials:
+
+        - **Role ARN**: the ARN of the role you created.
+        - **External ID**: generated by C1. Its value must match the `sts:ExternalId` condition in the role's trust policy.
+        - **Regions**: the AWS Regions of your SageMaker AI domains.
+      </Step>
+
+{/* AUTO-GENERATED:END - config-params */}
+
+      <Step>
+        Click **Save**.
+      </Step>
+
+      <Step>
+        The connector's label changes to **Syncing**, followed by **Connected**. You can view the logs to ensure that information is syncing.
+      </Step>
+    </Steps>
+
+    **Done.** Your Amazon SageMaker connector is now pulling access data into C1.
+  </Tab>
+
+  <Tab title="Self-hosted">
+    Follow these instructions to use the [Amazon SageMaker](https://github.com/conductorone/baton-amazon-sagemaker) connector, hosted and run in your own environment.
+
+    When running in service mode on Kubernetes, a self-hosted connector maintains an ongoing connection with C1, automatically syncing and uploading data at regular intervals.
+
+    A self-hosted connector can't use C1's service role, so it assumes the role you created with AWS credentials of your own: an IAM user's access key, or the ambient AWS credentials of the host (an instance profile or an IAM role for service accounts). In the trust policy of the role you created above, replace the C1 principal with the ARN of that IAM user or host role, and keep the `sts:ExternalId` condition with an external ID of your choosing.
+
+    ### Step 1: Set up a new Amazon SageMaker connector
+
+    <Steps>
+      <Step>
+        In C1, navigate to **Integrations** > **Connectors** > **Add connector**.
+      </Step>
+
+      <Step>
+        Search for **Baton** and click **Add**.
+      </Step>
+
+      <Step>
+        Choose how to set up the new Amazon SageMaker connector:
+
+        - Add the connector to a currently unmanaged app
+        - Add the connector to a managed app
+        - Create a new managed app
+      </Step>
+
+      <Step>
+        Set the owner for this connector.
+      </Step>
+
+      <Step>
+        Click **Next**.
+      </Step>
+
+      <Step>
+        In the **Settings** area of the page, click **Edit**.
+      </Step>
+
+      <Step>
+        Click **Rotate** to generate a new Client ID and Secret.
+
+        Carefully copy and save these credentials.
+      </Step>
+    </Steps>
+
+    ### Step 2: Create Kubernetes configuration files
+
+    Create two Kubernetes manifest files for your Amazon SageMaker connector deployment:
+
+    #### Secrets configuration
+
+    ```yaml expandable
+    # baton-amazon-sagemaker-secrets.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: baton-amazon-sagemaker-secrets
+    type: Opaque
+    stringData:
+      # C1 credentials
+      BATON_CLIENT_ID: <C1 client ID>
+      BATON_CLIENT_SECRET: <C1 client secret>
+
+      # Amazon SageMaker credentials
+      BATON_AMAZON_SAGEMAKER_ROLE_ARN: <ARN of the role you created>
+      BATON_AMAZON_SAGEMAKER_EXTERNAL_ID: <external ID in that role's trust policy>
+      BATON_AMAZON_SAGEMAKER_REGIONS: <comma-separated AWS Regions, e.g. us-east-1,eu-west-1>
+
+      # IAM user access key. Omit both to use the host's ambient AWS credentials.
+      BATON_AMAZON_SAGEMAKER_ACCESS_KEY_ID: <AWS access key ID>
+      BATON_AMAZON_SAGEMAKER_SECRET_ACCESS_KEY: <AWS secret access key>
+
+      # Optional: include to create and delete user profiles and change their execution roles
+      BATON_PROVISIONING: "true"
+    ```
+
+    See the connector's README or run `--help` to see all available configuration flags and environment variables.
+
+    #### Deployment configuration
+
+    ```yaml expandable
+    # baton-amazon-sagemaker.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: baton-amazon-sagemaker
+      labels:
+        app: baton-amazon-sagemaker
+    spec:
+      selector:
+        matchLabels:
+          app: baton-amazon-sagemaker
+      template:
+        metadata:
+          labels:
+            app: baton-amazon-sagemaker
+            baton: "true"
+            baton-app: amazon-sagemaker
+        spec:
+          containers:
+          - name: baton-amazon-sagemaker
+            image: public.ecr.aws/conductorone/baton-amazon-sagemaker:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: BATON_HOST_ID
+              value: baton-amazon-sagemaker
+            envFrom:
+            - secretRef:
+                name: baton-amazon-sagemaker-secrets
+    ```
+
+    ### Step 3: Deploy the connector
+
+    <Steps>
+      <Step>
+        Create a namespace in which to run C1 connectors (if desired), then apply the secret config and deployment config files.
+      </Step>
+
+      <Step>
+        Check that the connector data uploaded correctly. In C1, click **Applications**. On the **Managed apps** tab, locate and click the name of the application you added the Amazon SageMaker connector to. Amazon SageMaker data should be found on the **Entitlements** and **Resources** tabs.
+      </Step>
+    </Steps>
+
+    **Done.** Your Amazon SageMaker connector is now pulling access data into C1.
+  </Tab>
+</Tabs>
+
+---
+
+<Tip>
+All versions of this connector are available at [dist.conductorone.com](https://dist.conductorone.com/ConductorOne/baton-amazon-sagemaker).
+</Tip>
