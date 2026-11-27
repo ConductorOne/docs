@@ -4,7 +4,7 @@ og:title: Connect a directory - C1 docs
 og:description: Integrate your directory and designate sources of truth for employee information. 
 description: Integrate your directory and designate sources of truth for employee information. 
 ---
-{/* Editor Refresh: 2026-01-07 */}
+{/* Editor Refresh: 2026-11-23 */}
 
 ## What is a directory?
 
@@ -29,7 +29,7 @@ Every account from every connector takes one of two paths before it becomes — 
 - **[Account](/product/glossary#account)** — A unique record for an actor (a human, a service account, or a system account) inside an application.
 - **[User](/product/glossary#user)** — A human at your organization whose access data is synced to C1 and who can be assigned tasks in C1.
 - **[Directory filter](/product/admin/directory#optional-limit-which-accounts-will-be-pulled-into-c1)** — A CEL expression that decides whether an account from your directory should create (or match) a C1 user.
-- **[User identification rules](/product/admin/directory#configure-merge-matching)** — The merge-matching rules that determine whether an incoming directory account links to an existing C1 user instead of creating a new one.
+- **[User identification rules](/product/admin/directory#configure-merge-matching)** — The directory's ordered matching rules that determine whether an incoming directory account links to an existing C1 user instead of creating a new one.
 - **[Account ownership rules](/product/admin/managing-accounts#auto-match-accounts-with-users)** — The matching strategy (Narrow, Broad, or Custom) used to assign an account from a non-directory app to a C1 user as its owner.
 
 ```mermaid
@@ -102,7 +102,7 @@ On the **Directories** tab, click **Add directory data source**.
 Select an application in the dropdown. Only apps that have been set up and synced at least once are available to select. 
 </Step>
 <Step>
-**Optional.** Follow the docs if you want to [limit which accounts will be pulled into C1](/product/admin/directory#optional-limit-which-accounts-will-be-pulled-into-c1) or [specify a custom merge matching strategy](/product/admin/directory#configure-merge-matching). You can also edit these settings later if you're not ready to configure them now.
+**Optional.** Follow the docs if you want to [limit which accounts will be pulled into C1](/product/admin/directory#optional-limit-which-accounts-will-be-pulled-into-c1) or [configure how accounts are matched to C1 users](/product/admin/directory#configure-merge-matching). You can also edit these settings later if you're not ready to configure them now.
 </Step>
 <Step>
 Click **Create directory**.
@@ -154,9 +154,33 @@ Accounts from various apps integrated with C1 are all tied to the same human use
 
 ## Configure merge matching
 
-By default, C1 matches directory accounts to C1 users by comparing email address and employee ID. Custom merge matching lets you replace those rules with your own ordered set — useful when your directory uses different identifiers or when you need finer control over how accounts are linked.
+When a directory syncs, C1 decides for each account whether to link it to an existing C1 user or create a new one. Each directory has its own ordered list of matching rules that makes this decision. Use it when your directory identifies people by something other than email, or when you need to control which identifier wins.
 
-These settings are available both when adding a new directory and when editing an existing one.
+### How matching rules work
+
+C1 checks a directory's rules from top to bottom for each imported account:
+
+- The first enabled rule that finds a C1 user links the account to that user. Later rules aren't checked.
+- If no rule matches, C1 creates a new C1 user from the account.
+- Accounts without an email address are skipped.
+
+Every directory starts with three default rules:
+
+| Rule | Matches when |
+|---|---|
+| **Primary email** | The account's primary email exactly matches a C1 user's email. |
+| **Additional emails** | One of the account's additional emails matches a C1 user's email. |
+| **Primary email (normalized)** | The account's primary email matches a C1 user's email after normalizing both, for example ignoring case, spaces, and a dot right before the @. |
+
+You can turn default rules on or off and change their order, but you can't delete them. Depending on your configuration, **Additional emails** may start turned off.
+
+You can also add custom rules. A custom rule compares a value from the directory account with a value from the C1 user, using either a preset field (**Primary email**, **All emails**, **Username**, **Display name**, or **Employee ID**) or a [CEL expression](/product/admin/expressions). Values must match exactly. To ignore case, use an expression such as `account.email.lowerAscii()`.
+
+A directory can have up to eight rules, including the default rules.
+
+### Edit a directory's matching rules
+
+Matching rules are part of a directory's settings, so you can set them up when you add a directory or change them later.
 
 <Steps>
 <Step>
@@ -169,28 +193,31 @@ Open directory settings by doing one of the following:
 - To configure during initial setup, click **Add directory data source** and proceed through the setup flow.
 </Step>
 <Step>
-In the **Custom merge matching** section, select **Custom**.
+Click the **Merge matching** step.
 
-The rules list pre-populates with the default rules as a starting point.
+The rules list shows each rule in evaluation order, what it compares, and whether it's on. Default rules are labeled **Default**.
 </Step>
 <Step>
-Configure your rules. Each rule pairs a **Directory source account field** with a **C1 user field**. Available fields are: **Primary email**, **All emails**, **Username**, **Display name**, and **Employee ID**.
+Change the rules as needed:
 
-For email fields, check **Remove + suffix** to normalize addresses before comparing — for example, `user+tag@example.com` is treated as `user@example.com`.
-
-To write a custom [CEL expression](/product/admin/expressions) instead of using a preset field, click the **Switch to CEL expression** icon.
+- To turn a rule on or off, use the switch in its **On** column.
+- To change the order, drag a rule by its handle.
+- To add a custom rule, click **Add rule**, enter a **Rule name** and an optional **Description**, then choose a field or write a CEL expression for both the directory account and the **C1 user**. Click **Apply**.
+- To edit a custom rule, click it, make your changes, then click **Apply**.
+- To delete a custom rule, click its delete icon.
 </Step>
 <Step>
-Add, remove, or reorder rules as needed. Rules are evaluated in order — C1 uses the first rule that produces a match.
-</Step>
-<Step>
-Click **Update**.
+Click **Save**.
+
+If your changes turn off a default rule or delete a custom rule, C1 lists what will change and asks you to confirm.
 </Step>
 </Steps>
 
-**Done.** C1 will use your custom merge rules on the next directory sync.
+The new rules apply to accounts imported after you save. Accounts that are already linked to a C1 user stay linked.
 
-To revert to default matching at any time, select **Default** and click **Update**.
+<Warning>
+Turning off or deleting a rule can cause accounts that it used to match to create new C1 users on the next sync.
+</Warning>
 
 ## Edit user details
 
